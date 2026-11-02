@@ -1,0 +1,26 @@
+/* Site health: uptime dots, Core Web Vitals badges, uptime timeline. */
+.health-strip { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: var(--text-sm); color: var(--text-2); }
+.health-strip .up { display: inline-flex; align-items: center; gap: 5px; margin-right: 4px; font-variant-numeric: tabular-nums; }
+.dot.down { background: var(--critical); }
+.dot.partial { background: var(--warning); }
+
+.cwv { display: inline-flex; align-items: baseline; gap: 4px; padding: 1px 7px; border-radius: 999px; font-size: var(--text-sm); line-height: 18px;
+  border: 1px solid var(--border); background: var(--surface-2); color: var(--text-2); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cwv b { font-weight: 600; }
+.cwv .k { color: var(--text-3); font-size: var(--text-xs); text-transform: uppercase; letter-spacing: 0.02em; }
+.cwv.good { color: var(--good-ink); border-color: color-mix(in srgb, var(--good) 35%, transparent); background: color-mix(in srgb, var(--good) 9%, transparent); }
+.cwv.needs-improvement { color: var(--text); border-color: color-mix(in srgb, var(--warning) 55%, transparent); background: color-mix(in srgb, var(--warning) 14%, transparent); }
+.cwv.poor { color: var(--critical-ink); border-color: color-mix(in srgb, var(--critical) 40%, transparent); background: color-mix(in srgb, var(--critical) 10%, transparent); }
+.cwv.lab { border-style: dashed; }
+
+.uptime-bar { display: flex; gap: 1px; height: 28px; align-items: stretch; }
+.uptime-bar i { flex: 1; min-width: 1px; border-radius: 2px; background: var(--grid); }
+.uptime-bar i.up { background: var(--good); opacity: 0.8; }
+.uptime-bar i.partial { background: var(--warning); }
+.uptime-bar i.down { background: var(--critical); }
+.uptime-axis { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-3); margin-top: 4px; }
+
+.vitals-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
+.vital-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+.vital-head .v { font-size: var(--text-2xl); font-weight: 600; font-variant-numeric: tabular-nums; }
+.health-sites { display: flex; gap: 6px; flex-wrap: wrap; }
