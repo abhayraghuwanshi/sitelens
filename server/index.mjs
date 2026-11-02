@@ -18,6 +18,7 @@ import { createCache } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
+import { detectMcpClients } from './mcp-clients.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
@@ -172,10 +173,12 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     // What an MCP client needs to launch server/mcp.mjs with this install's
     // Node and data folder (in the desktop app, both live inside the bundle).
     ['GET', /^\/api\/mcp\/setup$/, async () => {
+      const mcpPath = join(ROOT, 'server', 'mcp.mjs');
       return {
         command: stableNode(process.execPath),
-        args: ['--no-warnings=ExperimentalWarning', join(ROOT, 'server', 'mcp.mjs')],
+        args: ['--no-warnings=ExperimentalWarning', mcpPath],
         env: { STUDIO_DATA_DIR: store.dir, ...(port !== 4318 ? { STUDIO_URL: `http://127.0.0.1:${port}` } : {}) },
+        clients: await detectMcpClients({ mcpPath, cwd: ROOT }),
       };
     }],
     ['POST', /^\/api\/github\/token$/, async ({ body }) => {

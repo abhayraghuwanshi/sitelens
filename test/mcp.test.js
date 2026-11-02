@@ -148,3 +148,28 @@ test('comment tools post Claude notes and delete only Claude ones', async () => 
   await mcp.callTool('delete_comment', { id: 'note-1' });
   assert.deepEqual(calls[3], { url: 'http://s/api/annotations/note-1?author=claude', method: 'DELETE', body: null });
 });
+
+test('detectMcpClients: connected, stale and missing registrations', async () => {
+  const { detectMcpClients } = await import('../server/mcp-clients.mjs');
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = await mkdtemp(join(tmpdir(), 'studio-clients-'));
+  const mcpPath = join(home, 'app', 'server', 'mcp.mjs');
+  try {
+    await mkdir(join(home, 'app', 'server'), { recursive: true });
+    await writeFile(mcpPath, '');
+    await writeFile(join(home, '.claude.json'), JSON.stringify({ mcpServers: { sitelens: { command: 'node', args: [mcpPath] } } }));
+    const desktopDir = join(home, 'Library', 'Application Support', 'Claude');
+    await mkdir(desktopDir, { recursive: true });
+    await writeFile(join(desktopDir, 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { lens: { command: 'node', args: ['/gone/server/mcp.mjs'] } } }));
+    const found = await detectMcpClients({ mcpPath, home, cwd: '/x' });
+    assert.equal(found.claudeCode.state, 'connected');
+    assert.equal(found.claudeCode.name, 'sitelens');
+    assert.equal(found.claudeDesktop.state, 'stale');
+    const none = await detectMcpClients({ mcpPath, home: join(home, 'nobody') });
+    assert.deepEqual(none, { claudeCode: { state: 'missing' }, claudeDesktop: { state: 'missing' } });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
