@@ -226,6 +226,17 @@ export function createEngines({ auth, bigquery }) {
     };
   }
 
+  // Per session, when each non-automatic event first fired; see funnel-suggest.mjs.
+  async function funnelDiscovery(site, rangeKey, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { meta: meta(site, range), sessions: demo.demoFunnelDiscovery(range) };
+    const result = await run(site, sql.funnelDiscoverySql(requireBq(site), range), flags);
+    return {
+      meta: meta(site, range, [result]),
+      sessions: result.rows.map((r) => ({ landing: r.landing || '', start: Number(r.started_at), events: (r.firsts || []).map((f) => ({ name: f.name, ts: Number(f.ts) })) })),
+    };
+  }
+
   async function cohorts(site, rangeKey, flags) {
     const range = await rangeFor(site, rangeKey);
     let rows;
@@ -351,6 +362,7 @@ export function createEngines({ auth, bigquery }) {
     portfolio,
     paths,
     funnel,
+    funnelDiscovery,
     cohorts,
     sessions,
     events,

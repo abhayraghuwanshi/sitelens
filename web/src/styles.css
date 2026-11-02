@@ -733,3 +733,7 @@ table.data.compact .cell-path { max-width: none; }
   .cal-marks { right: 3px; bottom: 3px; }
   .cal-title { min-width: 0; }
 }
+
+.suggestion { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-sm); min-width: 0; }
+.suggestion.active { border-color: var(--accent); }
+.suggestion-steps { font-size: var(--text-sm); line-height: 1.7; overflow-wrap: anywhere; }

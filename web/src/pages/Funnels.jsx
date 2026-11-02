@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { formatNumber, formatPercent, formatDuration } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
@@ -17,9 +17,24 @@ const ORDINAL = ['var(--seq-6)', 'var(--seq-5)', 'var(--seq-4)', 'var(--seq-3)',
 export function Funnels({ site, range }) {
   const [saved, setSaved] = usePersistent(`funnel:${site.id}`, DEFAULT_STEPS);
   const [steps, setSteps] = useState(saved);
-  const [run, setRun] = useState(saved);
+  // Never edited (still the placeholder): wait for the best suggestion instead of querying placeholder steps.
+  const untouched = JSON.stringify(saved) === JSON.stringify(DEFAULT_STEPS);
+  const [run, setRun] = useState(untouched ? null : saved);
   const events = useAsync(() => api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`), [site.id, range]);
-  const result = useAsync(() => api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }), [site.id, range, JSON.stringify(run)]);
+  const result = useAsync(() => (run ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }) : null), [site.id, range, JSON.stringify(run)]);
+  const suggestions = useAsync(() => api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`), [site.id, range]);
+
+  const use = (next) => {
+    setSteps(next);
+    setRun(next);
+    setSaved(next);
+  };
+  const best = suggestions.data?.funnels[0];
+  useEffect(() => {
+    if (!untouched || !(suggestions.data || suggestions.error)) return;
+    if (best) use(best.steps);
+    else setRun(saved);
+  }, [untouched, suggestions.data, suggestions.error]);
 
   const update = (i, patch) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   const apply = () => {
@@ -41,6 +56,8 @@ export function Funnels({ site, range }) {
         )}
       </Card>
 
+      <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
+      <Suggestions data={suggestions} current={run} onUse={use} />
       <Card title="Steps" actions={<button class="btn primary" type="button" onClick={apply}><Icon name="play" size={13} /> Run</button>}>
         <div class="funnel-steps">
           {steps.map((step, i) => (
@@ -73,7 +90,60 @@ export function Funnels({ site, range }) {
           </p>
         </div>
       </Card>
+      </div>
     </div>
+  );
+}
+
+const stepLabel = (s) => s.value;
+
+// Funnels built from the site's own events (and its code on GitHub); see server/funnel-suggest.mjs.
+function Suggestions({ data, current, onUse }) {
+  const currentKey = JSON.stringify(current);
+  if (data.error) return <Card title="Suggested funnels"><ErrorState error={data.error} onRetry={data.reload} /></Card>;
+  if (!data.data) {
+    return (
+      <Card title="Suggested funnels" sub="Reading your events and your site’s code…">
+        <Loading height={120} />
+      </Card>
+    );
+  }
+  const { funnels, code, sessions } = data.data;
+  return (
+    <Card title="Suggested funnels" sub={`From ${formatNumber(sessions)} sessions${code.repos.length ? ' and your site’s code' : ''}`}>
+      <div class="stack" style={{ gap: '10px' }}>
+        {!funnels.length && (
+          <p class="muted small" style={{ margin: 0 }}>
+            No sign-up, download, purchase or CTA events fired in this range, so there’s nothing to build a funnel toward yet. Try a longer range, or track one with
+            <code> gtag('event', 'sign_up')</code>.
+          </p>
+        )}
+        {funnels.map((f) => {
+          const active = JSON.stringify(f.steps) === currentKey;
+          return (
+            <div key={f.name + f.goal} class={`suggestion${active ? ' active' : ''}`}>
+              <div class="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', gap: '8px' }}>
+                <b class="small">{f.name}</b>
+                <button class={`btn${active ? '' : ' primary'}`} type="button" disabled={active} onClick={() => onUse(f.steps)}>{active ? 'In use' : 'Use'}</button>
+              </div>
+              <div class="suggestion-steps">
+                {f.steps.map((s, i) => (
+                  <span key={i}>{i > 0 && <span class="muted" aria-hidden="true"> → </span>}<code>{stepLabel(s)}</code></span>
+                ))}
+              </div>
+              <p class="muted small" style={{ margin: 0 }}>{f.why}</p>
+            </div>
+          );
+        })}
+        {code.repos.some((r) => r.events) && (
+          <p class="note" style={{ margin: 0 }}>
+            Read {formatNumber(code.tracked)} tracked events from {code.repos.filter((r) => r.events).map((r) => r.name).join(', ')}.
+            {code.unseen.length > 0 && <> In the code but not fired in this range: {code.unseen.map((n, i) => <span key={n}>{i > 0 && ', '}<code>{n}</code></span>)}.</>}
+          </p>
+        )}
+        {code.note && <p class="note" style={{ margin: 0 }}>{code.note}</p>}
+      </div>
+    </Card>
   );
 }
 

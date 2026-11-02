@@ -228,6 +228,34 @@ export function funnelSql(bq, range, steps) {
   return { sql, params };
 }
 
+// GA4's automatic events say nothing about intent, so funnel suggestions skip them.
+export const AUTO_EVENTS = ['page_view', 'session_start', 'first_visit', 'user_engagement', 'scroll'];
+
+// Per session: the landing page and when each other event first fired, for
+// suggesting funnels. Sessions with only automatic events are left out.
+export function funnelDiscoverySql(bq, range) {
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT landing, started_at, firsts FROM (
+  SELECT
+    pages[SAFE_OFFSET(0)] AS landing,
+    started_at,
+    ARRAY(
+      SELECT AS STRUCT SUBSTR(k, 7) AS name, MIN(ts) AS ts
+      FROM UNNEST(seq)
+      WHERE STARTS_WITH(k, 'event:') AND SUBSTR(k, 7) NOT IN UNNEST(@auto_events)
+      GROUP BY k
+      ORDER BY ts
+    ) AS firsts
+  FROM sessions
+)
+WHERE ARRAY_LENGTH(firsts) > 0
+LIMIT 20000`,
+  );
+  return { sql, params: { ...sessionParams(bq), auto_events: AUTO_EVENTS } };
+}
+
 // Weekly new-user cohorts by first-touch week; cell = users active N weeks later.
 export function cohortsSql(bq, range) {
   const activity = `activity AS (

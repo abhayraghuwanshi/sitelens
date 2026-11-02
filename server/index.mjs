@@ -19,6 +19,7 @@ import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
+import { createFunnelSuggest, funnelSuggestRoutes } from './funnel-suggest.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
@@ -85,6 +86,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return sources?.githubToken || env.GITHUB_TOKEN || '';
   }
   const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
+  const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, fetchImpl });
   const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, fetchImpl });
@@ -132,6 +134,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
     ...analystRoutes({ analyst, siteOr404 }),
+    ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
     ['GET', /^\/api\/state$/, async () => {
       return {

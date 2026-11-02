@@ -31,7 +31,7 @@ Each site can have either mode or both. Views a site can't use are marked with a
 ### What the warehouse adds over the GA4 API
 
 - **Paths:** a Sankey diagram of the real page sequence per session (`ga_session_id`), with reloads collapsed. Click a page to re-root the flow, and get exact per-page exit rates. The extension can only guess journeys from `pageReferrer`.
-- **Funnels:** 2–8 steps, each a page or *any* event, strictly ordered within a session, with the average time between steps. No alpha `runFunnelReport`.
+- **Funnels:** 2–8 steps, each a page or *any* event, strictly ordered within a session, with the average time between steps. No alpha `runFunnelReport`. Studio suggests funnels on its own: it finds outcome events (downloads, sign-ups, CTA clicks), keeps the steps that really come before them in that order, and, with a GitHub token, reads the tracking calls in the repo whose homepage is your site to group and name them. The best suggestion is used until you edit the steps.
 - **Retention:** weekly new-user cohorts from `user_first_touch_timestamp`. A cohort only counts toward weeks that have actually elapsed.
 - **Events:** a catalog, daily trend, every parameter key, and a value breakdown, for parameters that were never registered as custom dimensions.
 - **Sessions:** the newest sessions matching a visited page or a fired event, with the full journey.
