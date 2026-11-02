@@ -31,12 +31,27 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
   const single = siteId && siteId !== 'all';
   const comments = useAsync(() => (lo ? api.get(`/annotations${qs({ author: 'claude', from: lo, to: hi, scope: single ? `site:${siteId}` : '' })}`) : { annotations: [] }), [siteId, lo, hi]);
   const status = useAsync(() => api.get('/claude/status'), []);
+  const mcp = useAsync(() => api.get('/mcp/setup').catch(() => null), []);
+  const [copied, setCopied] = useState(false);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const list = [...(comments.data?.annotations || [])].sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt)));
   const hasKey = Boolean(status.data?.source);
   const inputId = `claude-q-${date ? 'day' : 'range'}`;
+  const codeConnected = mcp.data?.clients?.claudeCode?.state === 'connected';
+  // What to paste into Claude Code; it reads through the sitelens MCP tools and comments back here.
+  const ask = `Use the sitelens MCP tools to look at ${single ? `site "${siteId}"` : 'each of my sites'} ${date ? `on ${date}` : `from ${from} to ${to}`}: what moved and why. Leave your analysis as a comment with add_comment.`;
+
+  async function copyAsk() {
+    try {
+      await navigator.clipboard.writeText(ask);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard refused; the text is selectable */
+    }
+  }
 
   async function analyze(e) {
     e.preventDefault();
@@ -100,15 +115,29 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
         {comments.data && !list.length && (
           <p class="muted small" style={{ margin: 0 }}>
             No comments from Claude {date ? 'on this day' : 'in this range'} yet.
-            {!single && ' Pick one site to analyze it.'}
+            {!single && hasKey && ' Pick one site to analyze it here.'}
           </p>
         )}
-        {status.data && !hasKey && (
+        {status.data && !hasKey && mcp.data && (codeConnected ? (
+          <div class="stack" style={{ gap: '6px' }}>
+            <p class="small" style={{ margin: 0 }}>Claude Code is connected. Ask it in any session and its comment shows up here:</p>
+            <div class="snippet">
+              <div class="snippet-head">
+                <span>Claude Code</span>
+                <button class="btn ghost" type="button" onClick={copyAsk}>{copied ? 'Copied' : 'Copy'}</button>
+              </div>
+              <pre style={{ whiteSpace: 'pre-wrap' }}>{ask}</pre>
+            </div>
+            <p class="muted small" style={{ margin: 0 }}>
+              To analyze with a button here instead, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (roughly $0.10–0.40 a run).
+            </p>
+          </div>
+        ) : (
           <p class="note" style={{ margin: 0 }}>
             To analyze here, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (each run costs roughly $0.10–0.40).
-            Or ask Claude Code; it can leave comments here through the <a href="#/settings?i=mcp">SiteLens MCP server</a>.
+            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the SiteLens MCP server.
           </p>
-        )}
+        ))}
       </div>
     </Card>
   );
