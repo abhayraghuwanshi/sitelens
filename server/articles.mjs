@@ -235,7 +235,7 @@ export function articleTotals(rows, { siteSessions = 0, searchLinked = false, co
 
 /* ---------- service ---------- */
 
-export function createArticles({ auth, store, getToken, fetchImpl = fetch, now = Date.now }) {
+export function createArticles({ auth, store, getToken, vercel = null, fetchImpl = fetch, now = Date.now }) {
   const cache = createCache();
   const pageCache = new Map(); // url → { at, value }
   const codeCache = new Map(); // repo → { at, pushedAt, entries }
@@ -310,11 +310,11 @@ export function createArticles({ auth, store, getToken, fetchImpl = fetch, now =
     if (!token) return { files: [], repos: [], read: false, note: 'Add a GitHub token in Settings → GitHub to match articles to their source files.' };
     let repos;
     try {
-      repos = await siteRepos({ store, site, token, fetchImpl });
+      repos = await siteRepos({ store, site, token, vercel, fetchImpl });
     } catch (err) {
       return { files: [], repos: [], read: false, note: `Couldn’t list your GitHub repos: ${err.message}` };
     }
-    if (!repos.length) return { files: [], repos: [], read: false, note: `No GitHub repo has ${site.host} as its homepage.` };
+    if (!repos.length) return { files: [], repos: [], read: false, note: `No GitHub repo has ${site.host} as its homepage. Pick the site’s repos in Settings → Sites.` };
     const files = [];
     const read = [];
     const failed = [];

@@ -28,8 +28,15 @@ export function Product({ id, range, params }) {
   if (list.error) return <ErrorState error={list.error} onRetry={list.reload} />;
   if (!list.data) return <Loading height={360} />;
   const { products, suggestions, options } = list.data;
-  if (!products.length) return <NoProducts suggestions={suggestions} options={options} onAdded={(p) => { list.reload(); navigate(`/product/${p.id}`); }} />;
-  const product = products.find((p) => p.id === id) || products[0];
+  const onAdded = (p) => { list.reload(); navigate(`/product/${p.id}`); };
+  if (!products.length) return <NoProducts suggestions={suggestions} options={options} onAdded={onAdded} />;
+  // From a site's sidebar (?site=), show that site's product, not whichever comes first.
+  const siteId = params?.get('site') || '';
+  const product = siteId ? products.find((p) => p.siteId === siteId) : products.find((p) => p.id === id) || products[0];
+  if (!product) {
+    const site = options.sites.find((s) => s.id === siteId);
+    return <NoProducts site={site} suggestions={suggestions.filter((s) => s.siteId === siteId)} options={options} onAdded={onAdded} />;
+  }
   return (
     <>
       {products.length > 1 && (
@@ -42,7 +49,7 @@ export function Product({ id, range, params }) {
   );
 }
 
-function NoProducts({ suggestions, options, onAdded }) {
+function NoProducts({ site, suggestions, options, onAdded }) {
   const name = (list, id) => list?.find((x) => x.id === id)?.label || id;
   const [error, setError] = useState(null);
   async function add(s) {
@@ -54,7 +61,7 @@ function NoProducts({ suggestions, options, onAdded }) {
   }
   return (
     <>
-      <Empty title="One page per product">
+      <Empty title={site ? `No product for ${site.label} yet` : 'One page per product'}>
         A product joins a site, its GitHub repos and its Chrome extensions on one timeline, so a release, a store spike and a traffic jump line up.
       </Empty>
       {suggestions.map((s) => (
@@ -68,7 +75,7 @@ function NoProducts({ suggestions, options, onAdded }) {
         </Card>
       ))}
       {error && <ErrorState error={error} />}
-      <p class="muted small">Or <a href="#/settings?tab=products&edit=new">set one up stage by stage</a>: domains, hosting, analytics, code, store listings and community.</p>
+      <p class="muted small">Or <a href={`#/settings?tab=products&edit=new${site ? `&site=${site.id}` : ''}`}>set one up stage by stage</a>: domains, hosting, analytics, code, store listings and community.</p>
     </>
   );
 }

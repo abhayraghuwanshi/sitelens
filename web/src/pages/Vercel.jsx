@@ -13,6 +13,8 @@ const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 export function Vercel({ range, params }) {
   const data = useAsync((o) => api.get(`/vercel/projects${qs({ fresh: o?.fresh })}`), []);
   const projectId = params.get('project');
+  // ?site= opens that site's project; ?project= (from the list) wins.
+  const siteId = params.get('site') || '';
 
   if (data.error?.kind === 'needs-vercel') {
     return (
@@ -28,7 +30,8 @@ export function Vercel({ range, params }) {
   if (!data.data) return <><Loading height={92} /><Loading height={300} /></>;
 
   const { projects, sites } = data.data;
-  const project = projects.find((p) => p.id === projectId);
+  const site = !projectId && sites.find((s) => s.id === siteId);
+  const project = projects.find((p) => p.id === (projectId || site?.projectId));
   const siteFor = (id) => sites.find((s) => s.projectId === id);
 
   return (
@@ -37,6 +40,7 @@ export function Vercel({ range, params }) {
         <span><Icon name="layers" size={13} /> {data.data.login || 'Vercel'}{data.data.teamId && <> · <span class="mono">{data.data.teamId}</span></>}</span>
         <span>{projects.length} projects</span>
         {project && <a href="#/vercel">← All projects</a>}
+        {site && !project && <span>{site.label} isn’t matched to a Vercel project. <a href={`#/settings?tab=sites&edit=${site.id}`}>Pick one in Settings → Sites</a></span>}
         <button class="btn ghost" type="button" onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
       </div>
       {project

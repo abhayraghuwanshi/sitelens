@@ -144,6 +144,17 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
     return matchSites(sites, list, cfg.projectMap);
   }
 
+  // The GitHub repo the site's Vercel project deploys from, or '' (no token, no match, not linked).
+  async function repoFor(site) {
+    if (site.demo || !(await config()).tokenSource) return '';
+    try {
+      const id = (await matches([site]))[site.id]?.projectId;
+      return (id && (await projects()).find((p) => p.id === id)?.repo) || '';
+    } catch {
+      return '';
+    }
+  }
+
   async function setMatch(siteId, projectId) {
     const id = String(siteId || '');
     if (!/^[\w-]{1,80}$/.test(id)) throw new EngineError('Unknown site.', { kind: 'validation' });
@@ -279,7 +290,7 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
     return lists.flat();
   }
 
-  return { status, verify, saveToken, projects, matches, setMatch, deployments, analytics, compare, annotations };
+  return { status, verify, saveToken, projects, matches, repoFor, setMatch, deployments, analytics, compare, annotations };
 }
 
 // Project fields Studio shows. The API also returns env vars — never pass those on.

@@ -11,8 +11,8 @@ export const STAGES = [
   {
     key: 'ship', step: 1, label: 'Ship', icon: 'rocket', question: 'What did we change?',
     tabs: [
-      { section: 'github', label: 'GitHub' },
-      { section: 'vercel', label: 'Vercel' },
+      { section: 'github', label: 'GitHub', siteParam: true },
+      { section: 'vercel', label: 'Vercel', siteParam: true },
       { section: 'firebase', label: 'Firebase' },
       { section: 'posts', label: 'My posts' },
       { view: 'articles', label: 'My articles' },
@@ -49,7 +49,7 @@ export const STAGES = [
     tabs: [
       { section: 'outcomes', label: 'Outcomes' },
       { view: 'retention', label: 'Retention' },
-      { section: 'product', label: 'Products' },
+      { section: 'product', label: 'Products', siteParam: true },
       { section: 'extensions', label: 'Extensions' },
     ],
   },
@@ -57,7 +57,8 @@ export const STAGES = [
 
 export const tabId = (tab) => tab.view || tab.section;
 
-// Health picks among sites with a host, so only pass one it can show.
+// Health picks among sites with a host, so only pass one it can show; GitHub,
+// Vercel and Products use it to show just that site's repos, project or product.
 export function tabHref(tab, site) {
   if (tab.view) return `#/site/${site.id}/${tab.view}`;
   return tab.siteParam && site?.host ? `#/${tab.section}?site=${site.id}` : `#/${tab.section}`;

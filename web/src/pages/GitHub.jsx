@@ -28,12 +28,14 @@ export const dayLabel = (iso) => formatDate(iso.replaceAll('-', ''));
 
 export function GitHub({ range, params, sync, onSynced }) {
   const repo = params.get('repo');
+  // ?site= limits the list to that site's repos; without it, every synced repo.
+  const site = params.get('site') || '';
   // Re-mount views after a sync so they refetch.
   const stamp = sync.lastRun || 0;
   return (
     <>
       <SyncBar sync={sync} onSynced={onSynced} />
-      {repo ? <RepoDetail key={`${repo}:${stamp}`} name={repo} range={range} /> : <GitHubOverview key={stamp} range={range} />}
+      {repo ? <RepoDetail key={`${repo}:${stamp}`} name={repo} range={range} site={site} /> : <GitHubOverview key={`${site}:${stamp}`} range={range} site={site} />}
     </>
   );
 }
@@ -66,8 +68,8 @@ function SyncBar({ sync, onSynced }) {
   );
 }
 
-function GitHubOverview({ range }) {
-  const data = useAsync((o) => api.get(`/github/overview${qs({ range, fresh: o?.fresh })}`), [range]);
+function GitHubOverview({ range, site }) {
+  const data = useAsync((o) => api.get(`/github/overview${qs({ range, site, fresh: o?.fresh })}`), [range, site]);
   const notes = useAnnotations(null, data.data?.range.dates);
   const [metric, setMetric] = useState('views');
   const [filter, setFilter] = useState('');
@@ -89,9 +91,23 @@ function GitHubOverview({ range }) {
   const { totals, series } = data.data;
   const labels = data.data.range.dates.map(dayLabel);
   const quiet = repos.length - repos.filter((r) => r.views || r.clones || r.downloads || r.starsGained).length;
+  const scope = data.data.scope;
+  const open = (name) => navigate(`/github${qs({ repo: name, site })}`);
 
   return (
     <>
+      {scope && (
+        <div class="meta-line">
+          <span>
+            {scope.repos.length
+              ? `Repos for ${scope.host || 'this site'}: picked in its settings, linked in a product, or with it as their homepage`
+              : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites, or set a repo’s homepage to the site.`}
+          </span>
+          {scope.note && <span style={{ color: 'var(--critical-ink)' }}>{scope.note}</span>}
+          <a href={`#/settings?tab=sites&edit=${scope.siteId}`}>Pick repos</a>
+          <a href="#/github">Show all repos</a>
+        </div>
+      )}
       <KpiStrip
         items={[
           { label: 'Stars', value: formatNumber(totals.stars), meta: totals.starsGained ? `+${formatNumber(totals.starsGained)} this period` : 'no new stars' },
@@ -101,7 +117,7 @@ function GitHubOverview({ range }) {
           { label: 'Forks', value: formatNumber(totals.forks) },
         ]}
       />
-      <Card title={`${METRICS.find((m) => m.key === metric).label} across all repos`}
+      <Card title={`${METRICS.find((m) => m.key === metric).label} ${scope ? `across ${scope.host || 'this site'}’s repos` : 'across all repos'}`}
         sub={`Last data ${data.data.lastSync || '—'}`}
         actions={<Segmented label="Metric" value={metric} options={METRICS} onChange={setMetric} />}>
         <LineChart labels={labels} series={[{ label: METRICS.find((m) => m.key === metric).label, values: series[metric] }]}
@@ -137,8 +153,8 @@ function GitHubOverview({ range }) {
             </thead>
             <tbody>
               {rows.map((r) => (
-                <tr key={r.name} class="clickable" tabIndex={0} onClick={() => navigate(`/github?repo=${encodeURIComponent(r.name)}`)}
-                  onKeyDown={(e) => e.key === 'Enter' && navigate(`/github?repo=${encodeURIComponent(r.name)}`)}>
+                <tr key={r.name} class="clickable" tabIndex={0} onClick={() => open(r.name)}
+                  onKeyDown={(e) => e.key === 'Enter' && open(r.name)}>
                   <td class="cell-path">
                     <b>{r.name.split('/')[1]}</b> <span class="muted small">{r.name.split('/')[0]}</span>
                     {r.fork && <span class="chip" style={{ marginLeft: '6px' }}>fork</span>}
@@ -162,7 +178,7 @@ function GitHubOverview({ range }) {
   );
 }
 
-function RepoDetail({ name, range }) {
+function RepoDetail({ name, range, site }) {
   const data = useAsync(() => api.get(`/github/repo${qs({ name, range })}`), [name, range]);
   const notes = useAnnotations([`repo:${name}`], data.data?.range.dates);
   const [metric, setMetric] = useState('views');
@@ -184,7 +200,7 @@ function RepoDetail({ name, range }) {
   return (
     <>
       <div class="row">
-        <a class="btn ghost" href="#/github">← All repos</a>
+        <a class="btn ghost" href={`#/github${qs({ site })}`}>← All repos</a>
         <a class="btn ghost" href={`https://github.com/${repo.name}`} target="_blank" rel="noreferrer">Open on GitHub ↗</a>
         {repo.description && <span class="muted small">{repo.description}</span>}
       </div>

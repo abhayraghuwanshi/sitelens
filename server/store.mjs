@@ -92,6 +92,7 @@ const PROJECT_RE = /^[a-z0-9][a-z0-9.:_-]{1,120}$/i;
 const DATASET_RE = /^[A-Za-z0-9_]{1,1024}$/;
 const TABLE_RE = /^[a-z0-9][a-z0-9.:_-]{1,120}\.[A-Za-z0-9_]{1,1024}\.[A-Za-z0-9_$-]{1,1024}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export class ValidationError extends Error {}
 
@@ -139,6 +140,8 @@ export function normalizeSite(input = {}) {
     streamName: text(input.streamName),
     includeSubdomains: Boolean(input.includeSubdomains),
     searchSite: text(input.searchSite, 300),
+    // GitHub repos (owner/name) that hold this site's code, on top of the ones found by homepage.
+    repos: [...new Set((Array.isArray(input.repos) ? input.repos : []).map((r) => text(r, 200)).filter((r) => REPO_RE.test(r)))],
     bq,
     ...(Array.isArray(input.searchGroups) ? { searchGroups: normalizeGroups(input.searchGroups) } : {}),
   };

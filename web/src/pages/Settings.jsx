@@ -3,7 +3,7 @@ import { api } from '../api.js';
 import { useAsync, navigate } from '../hooks.js';
 import { Card, ErrorState, humanBytes } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
-import { ProductsCard } from './settings/Products.jsx';
+import { ProductsCard, Repos } from './settings/Products.jsx';
 import { BingSettings } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
@@ -64,16 +64,17 @@ export function Settings({ state, params, onChange }) {
           {PANELS[panel].render({ state, onChange })}
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
-      {tab === 'sites' && <SitesSettings state={state} onChange={onChange} />}
+      {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} />}
       {tab === 'products' && <ProductsCard params={params} />}
       {tab === 'alerts' && <AlertsSettings />}
     </>
   );
 }
 
-function SitesSettings({ state, onChange }) {
+function SitesSettings({ state, params, onChange }) {
   const { auth, sites } = state;
-  const [editing, setEditing] = useState(null);
+  // ?edit=<site id> opens that site's form, e.g. from a tab that needs a setting.
+  const [editing, setEditing] = useState(() => sites.find((s) => s.id === params.get('edit') && !s.demo) || null);
   return (
     <>
       <Card title="Sites" sub="Each site can use GA4, Search Console and BigQuery independently"
@@ -251,6 +252,10 @@ function ConnectCard({ auth, onChange }) {
   );
 }
 
+const bareHost = (h) => String(h || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^www\./, '');
+// Same rule as the server: the project whose domains include the hostname.
+const servesHost = (project, host) => Boolean(bareHost(host)) && [...project.domains, ...project.vercelDomains].some((d) => bareHost(d) === bareHost(host));
+
 function SiteForm({ initial, auth, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({
     id: initial.id || '',
@@ -260,6 +265,7 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
     streamName: initial.streamName || '',
     includeSubdomains: Boolean(initial.includeSubdomains),
     searchSite: initial.searchSite || '',
+    repos: initial.repos || [],
     bq: { billingProject: '', dataProject: '', dataset: '', location: '', streamId: '', endDate: '', sessionsTable: '', maxBytes: 5e9, ...(initial.bq || {}) },
     useBq: Boolean(initial.bq),
   }));
@@ -270,6 +276,14 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
   const properties = useAsync(() => (live ? api.get('/google/properties') : Promise.resolve([])), [live]);
   const streams = useAsync(() => (live && form.propertyId ? api.get(`/google/streams?property=${form.propertyId}`) : Promise.resolve([])), [live, form.propertyId]);
   const searchSites = useAsync(() => (live ? api.get('/google/search-sites').catch(() => []) : Promise.resolve([])), [live]);
+  const repoNames = useAsync(() => api.get('/github/repo-names').catch(() => []), []);
+  // Vercel is optional: without a token the picker just doesn't show.
+  const vercel = useAsync(() => api.get('/vercel/projects').catch(() => null), []);
+  const vercelMatch = vercel.data?.sites.find((s) => s.id === initial.id);
+  const [vercelPick, setVercelPick] = useState(null); // null = unchanged
+  const vercelValue = vercelPick ?? (vercelMatch?.manual ? vercelMatch.projectId || 'none' : 'auto');
+  const autoProject = vercel.data?.projects.find((p) => servesHost(p, form.host));
+  const vercelProject = vercelValue === 'auto' ? autoProject : vercel.data?.projects.find((p) => p.id === vercelValue);
   const projects = useAsync(() => (live && form.useBq ? api.get('/google/bq-projects').catch(() => []) : Promise.resolve([])), [live, form.useBq]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -282,6 +296,7 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
     try {
       const { useBq, ...rest } = form;
       const site = await api.post('/sites', { ...rest, bq: useBq ? form.bq : null });
+      if (vercelPick !== null) await api.post('/vercel/match', { siteId: site.id, projectId: vercelPick === 'auto' ? null : vercelPick === 'none' ? '' : vercelPick });
       onSaved(site);
     } catch (err) {
       setError(err);
@@ -335,6 +350,23 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
           <label class="check" style={{ alignSelf: 'end', paddingBottom: '8px' }}>
             <input type="checkbox" checked={form.includeSubdomains} onChange={(e) => set({ includeSubdomains: e.currentTarget.checked })} /> Include subdomains
           </label>
+        </div>
+
+        <div class="divider" />
+        <div class="stack">
+          <b>Code &amp; hosting</b>
+          {vercel.data && (
+            <label class="field" style={{ maxWidth: '360px' }}>Vercel project
+              <select value={vercelValue} onChange={(e) => setVercelPick(e.currentTarget.value)}>
+                <option value="auto">Auto{autoProject ? ` (${autoProject.name})` : ' (no match)'}</option>
+                <option value="none">Not on Vercel</option>
+                {vercel.data.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
+              </select>
+              <small>Auto picks the project serving {form.host || 'this hostname'}. Ship → Vercel opens it for this site.</small>
+            </label>
+          )}
+          <small class="muted">GitHub repos that hold this site’s code. Ship → GitHub, Articles and Funnels use these{vercelProject?.repo ? <>, the Vercel project’s repo (<span class="mono">{vercelProject.repo}</span>)</> : ''} and any repo whose homepage is {form.host || 'this site'}.</small>
+          <Repos repos={repoNames.data || []} selected={form.repos} onChange={(repos) => set({ repos })} />
         </div>
 
         <div class="divider" />

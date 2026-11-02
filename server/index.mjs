@@ -19,7 +19,7 @@ import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
-import { createFunnelSuggest, funnelSuggestRoutes } from './funnel-suggest.mjs';
+import { createFunnelSuggest, funnelSuggestRoutes, linkedRepos, siteRepos } from './funnel-suggest.mjs';
 import { createArticles, articleRoutes } from './articles.mjs';
 import { createArticleEditor, articleEditorRoutes } from './article-editor.mjs';
 import { productRoutes, createProducts } from './products.mjs';
@@ -87,15 +87,36 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     const { sources } = await store.get();
     return sources?.githubToken || env.GITHUB_TOKEN || '';
   }
+  const vercel = createVercel({ store, env, fetchImpl });
+  // Which repos belong to a site: the same rule Articles and Funnels use (picked
+  // in the site's settings or a product, its Vercel project's repo, or homepage
+  // set to the site). Cached so the tab stays quick; a changed link list misses.
+  const siteRepoCache = new Map(); // site id → { at, linked, value }
+  async function siteRepoScope(site) {
+    const linked = await linkedRepos({ store, site, vercel });
+    const hit = siteRepoCache.get(site.id);
+    if (hit && hit.linked === linked.join() && Date.now() - hit.at < 10 * 60_000) return hit.value;
+    const token = await githubToken();
+    let value;
+    if (!token) value = { siteId: site.id, host: site.host || '', repos: linked, note: linked.length ? '' : 'Add a GitHub token in Settings → GitHub to find this site’s repos.' };
+    else {
+      try {
+        value = { siteId: site.id, host: site.host || '', repos: (await siteRepos({ store, site, token, vercel, fetchImpl })).map((r) => r.name), note: '' };
+      } catch (err) {
+        return { siteId: site.id, host: site.host || '', repos: linked, note: `Couldn’t list your GitHub repos: ${err.message}` };
+      }
+    }
+    siteRepoCache.set(site.id, { at: Date.now(), linked: linked.join(), value });
+    return value;
+  }
   const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
-  const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, fetchImpl });
-  const articles = createArticles({ auth, store, getToken: githubToken, fetchImpl });
+  const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, vercel, fetchImpl });
+  const articles = createArticles({ auth, store, getToken: githubToken, vercel, fetchImpl });
   const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
   const editor = createArticleEditor({ auth, store, articles, annotations, getToken: githubToken, env, fetchImpl });
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, fetchImpl });
   const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, fetchImpl });
-  const vercel = createVercel({ store, env, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
   annotations.registerSource('mentions', (q) => mentions.annotations(q));
   const firebase = createFirebase({ dbPath: join(store.dir, 'firebase.db'), store, getToken: () => auth.token(), bigquery, fetchImpl });
@@ -208,7 +229,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ['POST', /^\/api\/github\/sync$/, async () => github.sync()],
     ['POST', /^\/api\/github\/import$/, async ({ body }) => ({ imported: github.importFrom(String(body.path || '').trim()) })],
 
-    ['GET', /^\/api\/github\/overview$/, async ({ query }) => githubOverview(githubDb(), query.get('range') || '28d')],
+    ['GET', /^\/api\/github\/overview$/, async ({ query }) => {
+      const range = query.get('range') || '28d';
+      const site = query.get('site') && (await store.sites()).find((s) => s.id === query.get('site'));
+      if (!site) return githubOverview(githubDb(), range);
+      const scope = await siteRepoScope(site);
+      return { ...githubOverview(githubDb(), range, new Set(scope.repos)), scope };
+    }],
+    ['GET', /^\/api\/github\/repo-names$/, async () => (github.hasDb() ? githubOverview(githubDb(), '7d').repos.map((r) => r.name) : [])],
     ['GET', /^\/api\/github\/repo$/, async ({ query }) => githubRepo(githubDb(), query.get('name') || '', query.get('range') || '28d')],
 
     ['GET', /^\/api\/extensions$/, async ({ query }) => {

@@ -15,7 +15,8 @@ export function ProductsCard({ params }) {
 
   useEffect(() => {
     if (!data.data) return;
-    if (editId === 'new') setEditing({});
+    // edit=new&site=<id> starts a product for that site.
+    if (editId === 'new') setEditing(params.get('site') ? { siteId: params.get('site') } : {});
     else if (editId) setEditing(data.data.products.find((p) => p.id === editId) || null);
   }, [editId, data.data]);
 
@@ -382,7 +383,7 @@ function FirebaseBackend({ value, siteId, onChange }) {
   );
 }
 
-function Repos({ repos, selected, onChange }) {
+export function Repos({ repos, selected, onChange }) {
   const [filter, setFilter] = useState('');
   if (!repos.length) return <small class="muted">Add a GitHub token in <a href="#/settings?i=github">Integrations → GitHub</a> to pick repos.</small>;
   const q = filter.trim().toLowerCase();

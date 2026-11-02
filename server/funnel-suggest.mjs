@@ -212,8 +212,16 @@ export async function githubGet(fetchImpl, path, token) {
 }
 
 // Repos whose homepage is this site, plus repos a product links to it.
-export async function siteRepos({ store, site, token, fetchImpl = fetch }) {
-  const linked = ((await store.get()).products || []).filter((p) => p.siteId === site.id).flatMap((p) => p.repos || []);
+// Repos picked in the site's settings or a product, the one its Vercel project deploys from.
+export async function linkedRepos({ store, site, vercel = null }) {
+  const fromVercel = vercel ? await vercel.repoFor(site) : '';
+  const fromProducts = ((await store.get()).products || []).filter((p) => p.siteId === site.id).flatMap((p) => p.repos || []);
+  return [...new Set([...(site.repos || []), ...(fromVercel ? [fromVercel] : []), ...fromProducts])];
+}
+
+// Those, plus any of the user's repos whose homepage is the site.
+export async function siteRepos({ store, site, token, vercel = null, fetchImpl = fetch }) {
+  const linked = await linkedRepos({ store, site, vercel });
   const repos = new Map(linked.map((r) => [r, { name: r, pushedAt: '' }]));
   for (let page = 1; page <= 3; page++) {
     const list = await (await githubGet(fetchImpl, `/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`, token)).json();
@@ -226,7 +234,7 @@ export async function siteRepos({ store, site, token, fetchImpl = fetch }) {
   return [...repos.values()];
 }
 
-export function createFunnelSuggest({ store, engines, getToken, fetchImpl = fetch, now = Date.now }) {
+export function createFunnelSuggest({ store, engines, getToken, vercel = null, fetchImpl = fetch, now = Date.now }) {
   const codeCache = new Map(); // repo → { at, pushedAt, events }
   const gh = (path, token) => githubGet(fetchImpl, path, token);
 
@@ -246,11 +254,11 @@ export function createFunnelSuggest({ store, engines, getToken, fetchImpl = fetc
     if (!token) return { events: new Map(), repos: [], note: 'Add a GitHub token in Settings → GitHub so Studio can also read your site’s code.' };
     let repos;
     try {
-      repos = await siteRepos({ store, site, token, fetchImpl });
+      repos = await siteRepos({ store, site, token, vercel, fetchImpl });
     } catch (err) {
       return { events: new Map(), repos: [], note: `Couldn’t list your GitHub repos: ${err.message}` };
     }
-    if (!repos.length) return { events: new Map(), repos: [], note: `No GitHub repo has ${site.host} as its homepage, so only the data was used.` };
+    if (!repos.length) return { events: new Map(), repos: [], note: `No GitHub repo has ${site.host} as its homepage, so only the data was used. Pick the site’s repos in Settings → Sites.` };
     const events = new Map();
     const read = [];
     const failed = [];
