@@ -16,6 +16,7 @@
     "sync": "node scripts/sync-shared.mjs",
     "check-sql": "node scripts/check-sql.mjs",
     "screenshot": "node scripts/screenshot.mjs",
+    "trailer": "node scripts/record-trailer.mjs",
     "desktop:stage": "vite build && node scripts/stage-desktop.mjs",
     "desktop:build": "npm run desktop:stage && tauri build",
     "desktop:dev": "npm run desktop:stage && tauri dev",

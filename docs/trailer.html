@@ -1,0 +1,578 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SiteLens Studio Trailer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Layout: a fixed 1280×720 film frame scaled to fit, with a scene scrubber beneath. One dark world, the product's orange→teal mark as the only color story. */
+:root {
+  color-scheme: dark;
+  --ink: #0b1110;          /* teal-biased night */
+  --panel: #121a19;
+  --panel-2: #18221f;
+  --line: #24312e;
+  --fg: #eef3f1;
+  --fg-2: #9fb0ab;
+  --fg-3: #687a75;
+  --orange: #db562d;
+  --teal: #14a394;
+  --teal-deep: #0f766e;
+  --amber: #f6c453;
+  --red: #e0574f;
+  --display: "Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif;
+  --body: "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+}
+* { box-sizing: border-box; }
+html, body { background: var(--ink); color: var(--fg); }
+body {
+  font-family: var(--body);
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 24px 40px;
+}
+.wrap { max-width: 1180px; margin: 0 auto; display: grid; gap: 14px; }
+
+/* ---------- Frame ---------- */
+.frame {
+  position: relative; width: 100%; aspect-ratio: 16 / 9; max-width: 100%;
+  border-radius: 14px; overflow: hidden; background: var(--ink);
+  border: 1px solid var(--line);
+  box-shadow: 0 30px 80px -30px rgba(0,0,0,.8);
+}
+.stage { position: absolute; left: 0; top: 0; width: 1280px; height: 720px; transform-origin: 0 0; }
+.stage.paused, .stage.paused * { animation-play-state: paused !important; }
+.glow {
+  position: absolute; inset: -20%; pointer-events: none;
+  background:
+    radial-gradient(40% 50% at 15% 10%, rgba(219,86,45,.20), transparent 70%),
+    radial-gradient(45% 55% at 90% 95%, rgba(20,163,148,.18), transparent 70%);
+  animation: drift 24s ease-in-out infinite alternate;
+}
+@keyframes drift { to { transform: translate(4%, -3%) rotate(3deg); } }
+.grain { position: absolute; inset: 0; pointer-events: none; opacity: .5;
+  background-image: radial-gradient(rgba(255,255,255,.035) 1px, transparent 1px); background-size: 3px 3px; }
+
+.scene { position: absolute; inset: 0; padding: 64px 80px; opacity: 0; visibility: hidden; transition: opacity .5s ease, visibility 0s .5s; }
+.scene.on { opacity: 1; visibility: visible; transition: opacity .5s ease; }
+
+.kicker { font: 600 15px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); }
+.head { font: 800 60px/1.02 var(--display); letter-spacing: -.025em; margin: 16px 0 0; text-wrap: balance; max-width: 900px; }
+.head em { font-style: normal; background: linear-gradient(100deg, var(--orange), var(--teal) 80%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.sub { font: 400 21px/1.45 var(--body); color: var(--fg-2); margin: 16px 0 0; max-width: 640px; }
+
+/* entrance utility: driven by --d delay, only runs inside the active scene */
+.r { opacity: 0; }
+.on .r { animation: rise .85s cubic-bezier(.2,.75,.2,1) both; animation-delay: var(--d, 0s); }
+@keyframes rise { from { opacity: 0; transform: translateY(22px); filter: blur(6px); } to { opacity: 1; transform: none; filter: none; } }
+.on .fade { animation: fade .9s ease both; animation-delay: var(--d, 0s); }
+@keyframes fade { from { opacity: 0; } to { opacity: 1; } }
+
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; }
+.chrome { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); font: 500 13px var(--mono); color: var(--fg-3); }
+.chrome i { width: 10px; height: 10px; border-radius: 50%; background: var(--line); display: block; }
+.chrome b { margin-left: 8px; font-weight: 500; color: var(--fg-2); }
+
+/* ---------- 1. Cold open ---------- */
+.s-open { display: grid; place-content: center; text-align: center; }
+.s-open .line { font: 600 54px/1.15 var(--display); letter-spacing: -.02em; }
+.s-open .line.dim { color: var(--fg-3); }
+.s-open .q { margin-top: 34px; font: 400 18px var(--mono); color: var(--fg-3); }
+.s-open .q span { color: var(--fg-2); }
+
+/* ---------- 2. Logo ---------- */
+.s-logo { display: grid; place-content: center; justify-items: center; text-align: center; }
+.s-logo svg.mark { width: 150px; height: 150px; }
+.on .mark { animation: pop 1.1s cubic-bezier(.2,1.3,.3,1) both; }
+@keyframes pop { from { transform: scale(.4) rotate(-12deg); opacity: 0; } to { transform: none; opacity: 1; } }
+.s-logo .name { font: 800 92px/1 var(--display); letter-spacing: -.035em; margin-top: 28px; }
+.s-logo .name span { color: var(--fg-3); font-weight: 400; }
+.s-logo .tag { font: 400 23px var(--body); color: var(--fg-2); margin-top: 16px; }
+
+/* ---------- 3. Paths ---------- */
+.viz { position: absolute; left: 80px; right: 80px; bottom: 56px; }
+.sankey { width: 100%; height: auto; display: block; }
+.sankey .lk { fill: none; stroke: url(#lk); stroke-opacity: .55; stroke-dasharray: 1; stroke-dashoffset: 1; }
+.sankey .lk.x { stroke: var(--red); stroke-opacity: .28; }
+.on .sankey .lk { animation: draw 1.4s cubic-bezier(.4,0,.2,1) both; animation-delay: var(--d, 0s); }
+@keyframes draw { to { stroke-dashoffset: 0; } }
+.sankey .nd { fill: var(--fg); }
+.sankey .nd.x { fill: var(--red); }
+.sankey .lb { font: 500 14px var(--mono); fill: var(--fg); }
+.sankey .lb tspan { fill: var(--fg-3); }
+.sankey .pill { fill: var(--ink); fill-opacity: .82; }
+.callout { position: absolute; right: 80px; top: 92px; padding: 16px 20px; width: 290px; }
+.callout .big { font: 800 44px/1 var(--display); color: var(--red); }
+.callout p { margin: 8px 0 0; font-size: 15px; line-height: 1.4; color: var(--fg-2); }
+
+/* ---------- 4. Funnel ---------- */
+.funnel { display: grid; gap: 14px; }
+.step { display: grid; grid-template-columns: 260px 1fr 130px; align-items: center; gap: 20px; }
+.step .k { font: 500 16px var(--mono); color: var(--fg-2); }
+.step .k b { color: var(--fg); font-weight: 600; }
+.bar { height: 46px; border-radius: 8px; background: var(--panel-2); position: relative; overflow: hidden; }
+.bar i { position: absolute; inset: 0 auto 0 0; width: var(--w); border-radius: 8px;
+  background: linear-gradient(90deg, var(--orange), var(--teal)); transform-origin: left; transform: scaleX(0); }
+.on .bar i { animation: grow 1.1s cubic-bezier(.2,.8,.2,1) both; animation-delay: var(--d, 0s); }
+@keyframes grow { to { transform: scaleX(1); } }
+.bar span { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); font: 600 17px var(--mono); color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.step .pct { font: 800 30px var(--display); text-align: right; font-variant-numeric: tabular-nums; }
+.gap { margin-left: 280px; font: 400 14px var(--mono); color: var(--fg-3); padding-left: 4px; }
+.gap::before { content: "↓ "; color: var(--amber); }
+
+/* ---------- 5. Retention ---------- */
+.ret { display: grid; grid-template-columns: 150px repeat(9, 1fr); gap: 5px; font: 500 14px var(--mono); }
+.ret .h { color: var(--fg-3); text-align: center; padding-bottom: 4px; }
+.ret .c { color: var(--fg-2); align-self: center; }
+.ret .v { height: 40px; border-radius: 6px; display: grid; place-items: center; font-variant-numeric: tabular-nums;
+  background: rgba(20,163,148,var(--a)); color: var(--fg); opacity: 0; }
+.ret .v.lead { background: var(--panel-2); color: var(--fg-2); }
+.on .ret .v { animation: cell .5s ease both; animation-delay: var(--d); }
+@keyframes cell { from { opacity: 0; transform: scale(.7); } to { opacity: 1; transform: none; } }
+.ret .na { height: 40px; border-radius: 6px; border: 1px dashed var(--line); }
+
+/* ---------- 6. Calendar ---------- */
+.cal-wrap { display: grid; grid-template-columns: 1fr 380px; gap: 28px; align-items: start; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr) 84px; gap: 6px; font: 500 13px var(--mono); }
+.cal .h { color: var(--fg-3); text-align: center; padding-bottom: 2px; }
+.cal .d { height: 62px; border-radius: 8px; background: var(--panel); border: 1px solid var(--line); padding: 7px 8px; position: relative; color: var(--fg-2); opacity: 0; }
+.on .cal .d { animation: cell .45s ease both; animation-delay: var(--d); }
+.cal .d.up { background: rgba(20,163,148,.22); border-color: rgba(20,163,148,.45); }
+.cal .d.up2 { background: rgba(20,163,148,.42); border-color: var(--teal); }
+.cal .d.dn { background: rgba(224,87,79,.18); border-color: rgba(224,87,79,.4); }
+.cal .d .n { position: absolute; left: 8px; bottom: 6px; color: var(--fg); font-size: 14px; }
+.cal .d .dots { position: absolute; right: 7px; top: 7px; display: flex; gap: 3px; }
+.cal .d .dots i { width: 7px; height: 7px; border-radius: 50%; display: block; }
+.cal .d.sum { background: transparent; border-style: dashed; text-align: right; }
+.cal .d.focus { outline: 2px solid var(--amber); outline-offset: 2px; }
+.dot-rel { background: var(--orange); } .dot-post { background: var(--amber); } .dot-dep { background: var(--teal); }
+.story { padding: 22px; }
+.story .when { font: 600 13px var(--mono); color: var(--amber); letter-spacing: .1em; text-transform: uppercase; }
+.story h3 { font: 800 30px/1.1 var(--display); margin: 10px 0 6px; }
+.story .muted { color: var(--fg-2); font-size: 15px; }
+.story dl { margin: 16px 0 0; display: grid; gap: 10px; }
+.story dt { font: 600 12px var(--mono); color: var(--fg-3); letter-spacing: .1em; text-transform: uppercase; }
+.story dd { margin: 3px 0 0; font-size: 15px; line-height: 1.4; }
+.story dd b { color: var(--teal); font-weight: 600; }
+
+/* ---------- 7. SQL ---------- */
+.sql { position: absolute; left: 80px; right: 80px; bottom: 56px; }
+.sql pre { margin: 0; padding: 22px 24px; font: 400 17px/1.6 var(--mono); color: var(--fg); min-height: 200px; white-space: pre-wrap; }
+.sql pre .kw { color: var(--orange); } .sql pre .ph { color: var(--amber); } .sql pre .st { color: var(--teal); }
+.caret { display: inline-block; width: 9px; height: 1.1em; vertical-align: -3px; background: var(--amber); animation: blink 1s steps(1) infinite; }
+@keyframes blink { 50% { opacity: 0; } }
+.dry { display: flex; align-items: center; gap: 18px; padding: 16px 24px; border-top: 1px solid var(--line); font: 500 16px var(--mono); }
+.meter { flex: 1; height: 10px; border-radius: 6px; background: var(--panel-2); position: relative; overflow: hidden; }
+.meter i { position: absolute; inset: 0 auto 0 0; width: 25%; background: var(--teal); border-radius: 6px; transform: scaleX(0); transform-origin: left; }
+.on .meter i { animation: grow 1s ease both; animation-delay: 3.6s; }
+.ok { color: var(--teal); font-weight: 600; }
+.btn-run { padding: 8px 16px; border-radius: 8px; background: var(--fg); color: var(--ink); font-weight: 600; }
+
+/* ---------- 8. MCP ---------- */
+.term { position: absolute; left: 80px; right: 80px; bottom: 56px; }
+.term .body { padding: 22px 24px; font: 400 17px/1.65 var(--mono); }
+.term .body div { opacity: 0; }
+.on .term .body div { animation: fade .35s ease both; animation-delay: var(--d); }
+.term .p { color: var(--amber); }
+.term .tool { color: var(--fg-3); }
+.term .ans { color: var(--fg); }
+.term .ans b { color: var(--teal); font-weight: 600; }
+
+/* ---------- 9. Local ---------- */
+.s-local { display: grid; align-content: center; }
+.pillars { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; margin-top: 46px; }
+.pillar { padding: 24px; }
+.pillar .v { font: 800 34px/1 var(--display); }
+.pillar .v.mono { font: 600 28px var(--mono); color: var(--teal); }
+.pillar p { margin: 10px 0 0; color: var(--fg-2); font-size: 16px; line-height: 1.45; }
+
+/* ---------- 10. End ---------- */
+.s-end { display: grid; place-content: center; justify-items: center; text-align: center; }
+.s-end svg.mark { width: 96px; height: 96px; }
+.s-end .name { font: 800 72px/1 var(--display); letter-spacing: -.03em; margin-top: 22px; }
+.s-end .cmd { margin-top: 30px; padding: 14px 22px; border-radius: 10px; background: var(--panel); border: 1px solid var(--line); font: 500 22px var(--mono); }
+.s-end .cmd span { color: var(--amber); }
+.s-end .fine { margin-top: 18px; color: var(--fg-3); font: 400 16px var(--mono); }
+
+/* ---------- Controls ---------- */
+.controls { display: flex; align-items: center; gap: 12px; }
+.play {
+  flex: none; width: 44px; height: 44px; border-radius: 50%; border: 1px solid var(--line);
+  background: var(--panel); color: var(--fg); display: grid; place-items: center; cursor: pointer;
+}
+.play:hover { background: var(--panel-2); }
+.play:focus-visible, .chip:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.play svg { width: 18px; height: 18px; fill: currentColor; }
+.chips { flex: 1; min-width: 0; display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.chip { all: unset; cursor: pointer; display: grid; gap: 6px; min-width: 0; padding-block: 6px; }
+.chip .t { height: 4px; border-radius: 3px; background: var(--line); overflow: hidden; }
+.chip .t i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, var(--orange), var(--teal)); }
+.chip .l { font: 500 11px var(--mono); color: var(--fg-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; letter-spacing: .04em; }
+.chip.cur .l { color: var(--fg); }
+.time { flex: none; font: 500 12px var(--mono); color: var(--fg-3); font-variant-numeric: tabular-nums; width: 84px; text-align: right; }
+.note { color: var(--fg-3); font-size: 13px; margin: 0; }
+.note kbd { font: 500 12px var(--mono); padding: 1px 6px; border: 1px solid var(--line); border-radius: 4px; color: var(--fg-2); }
+@media (max-width: 640px) { .chip .l { display: none; } .time { width: auto; } }
+@media (prefers-reduced-motion: reduce) {
+  .glow { animation: none; }
+  .on .r, .on .fade, .on .mark, .on .bar i, .on .ret .v, .on .cal .d, .on .meter i, .on .term .body div, .on .sankey .lk { animation-duration: .01s !important; animation-delay: 0s !important; }
+}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <div class="frame" id="frame">
+    <div class="stage" id="stage">
+      <div class="glow"></div>
+      <div class="grain"></div>
+
+      <!-- 1 -->
+      <section class="scene s-open" data-dur="5200" data-label="Open">
+        <div class="line r" style="--d:.1s">GA4 tells you <em style="font-style:normal;color:var(--amber)">how many</em>.</div>
+        <div class="line dim r" style="--d:1.1s">It can't tell you how they got there.</div>
+        <div class="q r" style="--d:2.4s">pageReferrer = <span>"(guessing)"</span></div>
+      </section>
+
+      <!-- 2 -->
+      <section class="scene s-logo" data-dur="4600" data-label="SiteLens">
+        <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+          <defs>
+            <linearGradient id="sl-bg" x1="0" y1="0" x2="1" y2="1.3"><stop offset="0" stop-color="#db562d"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
+            <radialGradient id="sl-hi" cx="0.18" cy="0.08" r="0.62"><stop offset="0" stop-color="#ffab80" stop-opacity=".22"/><stop offset="1" stop-color="#ffab80" stop-opacity="0"/></radialGradient>
+          </defs>
+          <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-bg)"/>
+          <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-hi)"/>
+          <circle cx="29" cy="29" r="16" fill="none" stroke="#fff" stroke-width="4"/>
+          <path d="M41 41l8.5 8.5" stroke="#fff" stroke-width="5.6" stroke-linecap="round"/>
+          <rect x="21" y="30" width="4.6" height="7" rx="2.3" fill="#fff"/>
+          <rect x="26.8" y="25.5" width="4.6" height="11.5" rx="2.3" fill="#fff"/>
+          <rect x="32.6" y="21" width="4.6" height="16" rx="2.3" fill="#fff"/>
+          <circle cx="40.3" cy="17.7" r="3.8" fill="#f6c453"/>
+        </svg>
+        <div class="name r" style="--d:.6s">SiteLens <span>Studio</span></div>
+        <div class="tag r" style="--d:1.2s">Your GA4 BigQuery export, finally readable. Every site, one window.</div>
+      </section>
+
+      <!-- 3 Paths -->
+      <section class="scene" data-dur="7000" data-label="Paths">
+        <div class="kicker r">Paths</div>
+        <h2 class="head r" style="--d:.15s">The <em>real</em> journey,<br>session by session.</h2>
+        <div class="card callout r" style="--d:3.2s">
+          <div class="big">25%</div>
+          <p>of visitors leave from /pricing. An exact exit rate, from <code>ga_session_id</code>, not a guess.</p>
+        </div>
+        <div class="viz">
+          <svg class="sankey" viewBox="0 0 900 340" aria-label="Sankey of page paths">
+            <defs><linearGradient id="lk" x1="0" x2="1"><stop offset="0" stop-color="#db562d"/><stop offset="1" stop-color="#14a394"/></linearGradient></defs>
+            <g transform="translate(0,5)">
+            <!-- col0 → col1 -->
+            <path class="lk" pathLength="1" style="--d:.6s"  stroke-width="100" d="M30,70 C190,70 190,60 350,60"/>
+            <path class="lk" pathLength="1" style="--d:.7s"  stroke-width="60"  d="M30,150 C190,150 190,180 350,180"/>
+            <path class="lk" pathLength="1" style="--d:.8s"  stroke-width="40"  d="M30,200 C190,200 190,290 350,290"/>
+            <path class="lk" pathLength="1" style="--d:.9s"  stroke-width="20"  d="M30,260 C190,260 190,120 350,120"/>
+            <path class="lk" pathLength="1" style="--d:1s"   stroke-width="40"  d="M30,290 C190,290 190,230 350,230"/>
+            <path class="lk" pathLength="1" style="--d:1.1s" stroke-width="20"  d="M30,320 C190,320 190,320 350,320"/>
+            <!-- col1 → col2 -->
+            <path class="lk" pathLength="1" style="--d:1.6s" stroke-width="50" d="M360,35 C520,35 520,35 680,35"/>
+            <path class="lk" pathLength="1" style="--d:1.7s" stroke-width="40" d="M360,80 C520,80 520,120 680,120"/>
+            <path class="lk x" pathLength="1" style="--d:1.8s" stroke-width="30" d="M360,115 C520,115 520,215 680,215"/>
+            <path class="lk" pathLength="1" style="--d:1.9s" stroke-width="40" d="M360,170 C520,170 520,160 680,160"/>
+            <path class="lk x" pathLength="1" style="--d:2s" stroke-width="60" d="M360,220 C520,220 520,260 680,260"/>
+            <path class="lk" pathLength="1" style="--d:2.1s" stroke-width="20" d="M360,280 C520,280 520,70 680,70"/>
+            <path class="lk x" pathLength="1" style="--d:2.2s" stroke-width="40" d="M360,310 C520,310 520,310 680,310"/>
+            <!-- nodes -->
+            <g class="fade" style="--d:.3s">
+              <rect class="nd" x="20" y="20" width="10" height="200" rx="2"/>
+              <rect class="nd" x="20" y="250" width="10" height="80" rx="2"/>
+            </g>
+            <g class="fade" style="--d:1.2s">
+              <rect class="nd" x="350" y="10" width="10" height="120" rx="2"/>
+              <rect class="nd" x="350" y="150" width="10" height="100" rx="2"/>
+              <rect class="nd" x="350" y="270" width="10" height="60" rx="2"/>
+            </g>
+            <g class="fade" style="--d:2.3s">
+              <rect class="nd" x="680" y="10" width="10" height="70" rx="2"/>
+              <rect class="nd" x="680" y="100" width="10" height="80" rx="2"/>
+              <rect class="nd x" x="680" y="200" width="10" height="130" rx="2"/>
+            </g>
+            <!-- labels -->
+            <g class="fade" style="--d:1.4s">
+              <rect class="pill" x="38" y="106" width="118" height="26" rx="5"/><text class="lb" x="46" y="124">/ <tspan>7,104</tspan></text>
+              <rect class="pill" x="38" y="277" width="236" height="26" rx="5"/><text class="lb" x="46" y="295">/blog/ga4-bigquery <tspan>2,842</tspan></text>
+              <rect class="pill" x="368" y="56" width="140" height="26" rx="5"/><text class="lb" x="376" y="74">/pricing <tspan>4,262</tspan></text>
+              <rect class="pill" x="368" y="186" width="164" height="26" rx="5"/><text class="lb" x="376" y="204">/docs/setup <tspan>3,551</tspan></text>
+              <rect class="pill" x="368" y="287" width="158" height="26" rx="5"/><text class="lb" x="376" y="305">/features <tspan>2,131</tspan></text>
+            </g>
+            <g class="fade" style="--d:2.6s">
+              <text class="lb" x="700" y="50">begin_checkout <tspan>2,486</tspan></text>
+              <text class="lb" x="700" y="145">/signup <tspan>2,841</tspan></text>
+              <text class="lb" x="700" y="270" style="fill:var(--red)">exit <tspan>4,619</tspan></text>
+            </g>
+            </g>
+          </svg>
+        </div>
+      </section>
+
+      <!-- 4 Funnels -->
+      <section class="scene" data-dur="6400" data-label="Funnels">
+        <div class="kicker r">Funnels</div>
+        <h2 class="head r" style="--d:.15s">Any step. Any event.<br><em>Strictly in order.</em></h2>
+        <div class="viz funnel">
+          <div class="step r" style="--d:.6s"><div class="k">page <b>/</b></div><div class="bar"><i style="--w:100%;--d:.8s"></i><span>14,212</span></div><div class="pct">100%</div></div>
+          <div class="gap r" style="--d:1.2s">avg 1m 48s</div>
+          <div class="step r" style="--d:1.2s"><div class="k">page <b>/pricing</b></div><div class="bar"><i style="--w:34.4%;--d:1.4s"></i><span>4,890</span></div><div class="pct">34.4%</div></div>
+          <div class="gap r" style="--d:1.8s">avg 3m 02s</div>
+          <div class="step r" style="--d:1.8s"><div class="k">event <b>begin_checkout</b></div><div class="bar"><i style="--w:8.5%;--d:2s"></i><span>1,206</span></div><div class="pct">8.5%</div></div>
+          <div class="gap r" style="--d:2.4s">avg 41s</div>
+          <div class="step r" style="--d:2.4s"><div class="k">event <b>purchase</b></div><div class="bar"><i style="--w:2.9%;--d:2.6s"></i><span>418</span></div><div class="pct" style="color:var(--amber)">2.9%</div></div>
+        </div>
+      </section>
+
+      <!-- 5 Retention -->
+      <section class="scene" data-dur="6000" data-label="Retention">
+        <div class="kicker r">Retention</div>
+        <h2 class="head r" style="--d:.15s">Who came back.<br><em>Week after week.</em></h2>
+        <div class="viz"><div class="ret" id="ret"></div></div>
+      </section>
+
+      <!-- 6 Calendar -->
+      <section class="scene" data-dur="7400" data-label="Calendar">
+        <div class="kicker r">Calendar</div>
+        <h2 class="head r" style="--d:.15s" >Every day tells you <em>why</em>.</h2>
+        <div class="viz cal-wrap">
+          <div class="cal" id="cal"></div>
+          <div class="card story r" style="--d:2.6s">
+            <div class="when">Wed · Oct 14</div>
+            <h3>+47% vs a typical Wednesday</h3>
+            <div class="muted">2,318 sessions · typical 1,577</div>
+            <dl>
+              <div><dt>Why</dt><dd>news.ycombinator.com <b>+612</b> · landing /blog/ga4-bigquery <b>+388</b></dd></div>
+              <div><dt>Context</dt><dd>Release v0.2.0 · launch post · ★ <b>+84</b> stars on GitHub</dd></div>
+            </dl>
+          </div>
+        </div>
+      </section>
+
+      <!-- 7 SQL -->
+      <section class="scene" data-dur="7200" data-label="SQL">
+        <div class="kicker r">SQL console</div>
+        <h2 class="head r" style="--d:.15s">Raw power, <em>with a seatbelt.</em></h2>
+        <div class="card sql r" style="--d:.4s">
+          <div class="chrome"><i></i><i></i><i></i><b>sitelens · demo-site · warehouse</b></div>
+          <pre id="sql"></pre>
+          <div class="dry fade" style="--d:3.4s">
+            <span>dry run</span><span class="ok">1.24 GB</span>
+            <div class="meter"><i></i></div>
+            <span>cap 5 GB</span><span class="ok">✓ within budget</span><span class="btn-run">Run</span>
+          </div>
+        </div>
+      </section>
+
+      <!-- 8 MCP -->
+      <section class="scene" data-dur="8000" data-label="Agents">
+        <div class="kicker r">MCP server</div>
+        <h2 class="head r" style="--d:.15s">Ask your agent.<br><em>It reads your numbers.</em></h2>
+        <div class="card term r" style="--d:.4s">
+          <div class="chrome"><i></i><i></i><i></i><b>~/sitelens-studio</b></div>
+          <div class="body">
+            <div style="--d:.8s"><span class="p">$</span> claude mcp add sitelens -- node server/mcp.mjs</div>
+            <div style="--d:1.8s"><span class="p">&gt;</span> Why did traffic spike on Oct 14?</div>
+            <div class="tool" style="--d:2.8s">  ⏺ sitelens.day_story(date: "2026-10-14")</div>
+            <div class="tool" style="--d:3.3s">  ⏺ sitelens.breakdown(by: "source")</div>
+            <div class="ans" style="--d:4.3s">Sessions were <b>+47%</b> against a typical Wednesday. Most of it came from</div>
+            <div class="ans" style="--d:4.5s">Hacker News (<b>+612</b>), landing on your BigQuery guide the day v0.2.0 shipped.</div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 9 Local -->
+      <section class="scene s-local" data-dur="6200" data-label="Local">
+        <div class="kicker r">Local-first</div>
+        <h2 class="head r" style="--d:.15s">Your data stays <em>yours</em>.</h2>
+        <div class="pillars">
+          <div class="card pillar r" style="--d:.8s"><div class="v mono">127.0.0.1</div><p>Runs on your machine. Talks to Google directly. There is no SiteLens server.</p></div>
+          <div class="card pillar r" style="--d:1.2s"><div class="v">Dry-run first</div><p>Every query is priced before it runs, and refused over your scan cap.</p></div>
+          <div class="card pillar r" style="--d:1.6s"><div class="v">Works offline</div><p>14 months of GA4 and Search Console history kept on disk.</p></div>
+        </div>
+      </section>
+
+      <!-- 10 End -->
+      <section class="scene s-end" data-dur="6000" data-label="Start">
+        <svg class="mark" viewBox="0 0 64 64" aria-hidden="true">
+          <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-bg)"/>
+          <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-hi)"/>
+          <circle cx="29" cy="29" r="16" fill="none" stroke="#fff" stroke-width="4"/>
+          <path d="M41 41l8.5 8.5" stroke="#fff" stroke-width="5.6" stroke-linecap="round"/>
+          <rect x="21" y="30" width="4.6" height="7" rx="2.3" fill="#fff"/>
+          <rect x="26.8" y="25.5" width="4.6" height="11.5" rx="2.3" fill="#fff"/>
+          <rect x="32.6" y="21" width="4.6" height="16" rx="2.3" fill="#fff"/>
+          <circle cx="40.3" cy="17.7" r="3.8" fill="#f6c453"/>
+        </svg>
+        <div class="name r" style="--d:.4s">SiteLens Studio</div>
+        <div class="cmd r" style="--d:1s"><span>$</span> npm install &amp;&amp; npm start</div>
+        <div class="fine r" style="--d:1.6s">Demo site included · 120 days · ~14k sessions · no setup</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="controls">
+    <button class="play" id="play" aria-label="Pause"><svg viewBox="0 0 24 24" id="playIcon"></svg></button>
+    <div class="chips" id="chips"></div>
+    <div class="time" id="time">0:00 / 0:00</div>
+  </div>
+  <p class="note"><kbd>Space</kbd> play / pause · <kbd>←</kbd> <kbd>→</kbd> jump between scenes · Sample figures come from the built-in demo site.</p>
+</div>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const frame = document.getElementById('frame');
+  const scenes = [...stage.querySelectorAll('.scene')];
+  const durs = scenes.map(s => +s.dataset.dur);
+  const total = durs.reduce((a, b) => a + b, 0);
+
+  // Fit the 1280×720 stage into the frame.
+  const fit = () => { stage.style.transform = `scale(${frame.clientWidth / 1280})`; };
+  new ResizeObserver(fit).observe(frame); fit();
+
+  // Retention grid: 8 weekly cohorts, only weeks that have elapsed are filled.
+  const ret = document.getElementById('ret');
+  const cohorts = ['Sep 01', 'Sep 08', 'Sep 15', 'Sep 22', 'Sep 29', 'Oct 06', 'Oct 13', 'Oct 20'];
+  const sizes = [1204, 1131, 1388, 1262, 1190, 1477, 1922, 1310];
+  let html = '<div></div>' + Array.from({ length: 9 }, (_, w) => `<div class="h">W${w}</div>`).join('');
+  cohorts.forEach((c, i) => {
+    html += `<div class="c">${c} <span style="color:var(--fg-3)">${sizes[i].toLocaleString()}</span></div>`;
+    for (let w = 0; w < 9; w++) {
+      const d = (0.7 + i * 0.12 + w * 0.06).toFixed(2) + 's';
+      if (w > 8 - i - 1 + 1) { html += '<div class="na"></div>'; continue; }
+      if (w === 0) { html += `<div class="v lead" style="--d:${d}">100%</div>`; continue; }
+      const v = Math.round(100 * (0.34 * Math.pow(w, -0.55) + 0.02 * ((i * 7 + w * 3) % 5) / 5) * (i === 6 ? 1.18 : 1));
+      html += `<div class="v" style="--a:${(v / 45).toFixed(2)};--d:${d}">${v}%</div>`;
+    }
+  });
+  ret.innerHTML = html;
+
+  // Calendar: Oct 2026 starts on a Thursday. Week sums in the last column.
+  const cal = document.getElementById('cal');
+  const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const tint = { 3: 'dn', 7: 'up', 9: 'up', 14: 'up2', 15: 'up', 18: 'dn', 21: 'up', 24: 'dn', 28: 'up' };
+  const dots = { 6: ['dep'], 14: ['rel', 'post'], 20: ['post'], 27: ['dep'] };
+  let c = days.map(d => `<div class="h">${d}</div>`).join('') + '<div class="h">Week</div>';
+  const weekSums = ['4.1k', '10.9k', '12.8k', '10.6k', '9.9k'];
+  let cell = 0, day = 1;
+  for (let wk = 0; wk < 5; wk++) {
+    for (let dw = 0; dw < 7; dw++) {
+      const d = (0.5 + cell++ * 0.035).toFixed(2) + 's';
+      if ((wk === 0 && dw < 3) || day > 31) { c += `<div class="d" style="--d:${d};visibility:hidden"></div>`; continue; }
+      const cls = [tint[day] || '', day === 14 ? 'focus' : ''].join(' ');
+      const dd = (dots[day] || []).map(k => `<i class="dot-${k}"></i>`).join('');
+      c += `<div class="d ${cls}" style="--d:${d}"><span class="dots">${dd}</span><span class="n">${day}</span></div>`;
+      day++;
+    }
+    c += `<div class="d sum" style="--d:${(0.5 + cell * 0.035).toFixed(2)}s">${weekSums[wk]}</div>`;
+  }
+  cal.innerHTML = c;
+
+  // SQL typing, driven by the scene clock so pausing pauses it.
+  const sqlEl = document.getElementById('sql');
+  const sqlText = `SELECT source, COUNT(*) AS sessions,
+       COUNTIF('event:purchase' IN UNNEST(seq.k)) AS buyers
+FROM {{sessions}}
+WHERE session_date BETWEEN {{start}} AND {{end}}
+GROUP BY source ORDER BY sessions DESC`;
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const paint = s => esc(s)
+    .replace(/\{\{\w+\}\}/g, m => `<span class="ph">${m}</span>`)
+    .replace(/'[^']*'/g, m => `<span class="st">${m}</span>`)
+    .replace(/\b(SELECT|FROM|WHERE|BETWEEN|AND|GROUP BY|ORDER BY|AS|IN|UNNEST|DESC|COUNT|COUNTIF)\b/g, m => `<span class="kw">${m}</span>`);
+  let lastN = -1;
+  const sqlHook = t => {
+    const n = Math.max(0, Math.min(sqlText.length, Math.floor((t - 700) / 14)));
+    if (n === lastN) return; lastN = n;
+    sqlEl.innerHTML = paint(sqlText.slice(0, n)) + '<span class="caret"></span>';
+  };
+  const hooks = { 6: sqlHook };
+
+  // Scrubber
+  const chips = document.getElementById('chips');
+  chips.innerHTML = scenes.map((s, i) => `<button class="chip" data-i="${i}" aria-label="Scene ${i + 1}: ${s.dataset.label}"><span class="t"><i></i></span><span class="l">${s.dataset.label}</span></button>`).join('');
+  const chipEls = [...chips.children];
+  const fills = chipEls.map(c => c.querySelector('i'));
+  chipEls.forEach(c => c.addEventListener('click', () => { go(+c.dataset.i); setPlaying(true); }));
+
+  const playBtn = document.getElementById('play');
+  const icon = document.getElementById('playIcon');
+  const timeEl = document.getElementById('time');
+  const fmt = ms => { const s = Math.floor(ms / 1000); return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
+
+  let idx = 0, t = 0, playing = false, ended = false, last = performance.now();
+
+  function go(i) {
+    idx = Math.max(0, Math.min(scenes.length - 1, i)); t = 0; ended = false; lastN = -1;
+    scenes.forEach(s => s.classList.remove('on'));
+    void stage.offsetWidth; // restart CSS animations
+    scenes[idx].classList.add('on');
+    chipEls.forEach((c, j) => c.classList.toggle('cur', j === idx));
+    hooks[idx]?.(0);
+  }
+  function setPlaying(p) {
+    if (p && ended) { go(0); }
+    playing = p;
+    stage.classList.toggle('paused', !p);
+    playBtn.setAttribute('aria-label', p ? 'Pause' : (ended ? 'Replay' : 'Play'));
+    icon.innerHTML = p ? '<path d="M6 4h4v16H6zM14 4h4v16h-4z"/>'
+      : ended ? '<path d="M12 5V1L7 6l5 5V7a5 5 0 1 1-5 5H5a7 7 0 1 0 7-7z"/>'
+      : '<path d="M7 4l13 8-13 8z"/>';
+  }
+  playBtn.addEventListener('click', () => setPlaying(!playing));
+  addEventListener('keydown', e => {
+    if (e.code === 'Space' && e.target === document.body) { e.preventDefault(); setPlaying(!playing); }
+    if (e.key === 'ArrowRight') { go(idx + 1); }
+    if (e.key === 'ArrowLeft') { go(idx - 1); }
+  });
+
+  function frameLoop(now) {
+    const dt = now - last; last = now;
+    if (playing) {
+      t += dt;
+      if (t >= durs[idx]) {
+        if (idx < scenes.length - 1) go(idx + 1);
+        else { t = durs[idx]; ended = true; setPlaying(false); }
+      }
+    }
+    hooks[idx]?.(t);
+    fills.forEach((f, j) => { f.style.width = j < idx ? '100%' : j > idx ? '0%' : (100 * t / durs[idx]).toFixed(1) + '%'; });
+    const elapsed = durs.slice(0, idx).reduce((a, b) => a + b, 0) + t;
+    timeEl.textContent = `${fmt(elapsed)} / ${fmt(total)}`;
+    requestAnimationFrame(frameLoop);
+  }
+
+  // Frame-exact seeking, used by scripts/record-trailer.mjs to render the GIF.
+  window.__trailer = {
+    total,
+    seek(ms) {
+      if (playing) setPlaying(false);
+      let i = 0, local = ms;
+      while (i < scenes.length - 1 && local >= durs[i]) { local -= durs[i]; i++; }
+      if (i !== idx) go(i);
+      t = Math.min(local, durs[i]);
+      hooks[idx]?.(t);
+      document.getAnimations().forEach(a => {
+        a.pause();
+        a.currentTime = ['drift', 'blink'].includes(a.animationName) ? ms : t;
+      });
+    },
+  };
+
+  const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  go(0); setPlaying(!reduced);
+  requestAnimationFrame(frameLoop);
+})();
+</script>
+
+</body>
+</html>

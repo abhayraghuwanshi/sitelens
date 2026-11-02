@@ -4,6 +4,10 @@ The full-width companion to the [SiteLens extension](../site-analytics-extension
 
 It runs locally (`127.0.0.1`), stores everything in `.data/`, and talks directly to Google. There is no SiteLens server.
 
+![SiteLens Studio trailer](docs/trailer.gif)
+
+<sub>A one-minute tour, using sample figures from the built-in demo site. The interactive version is [`docs/trailer.html`](docs/trailer.html): open it in a browser for play/pause and scene controls. To re-render the GIF after editing it, run `npm run trailer` (needs Chrome and ffmpeg).</sub>
+
 ## Quick start
 
 ```bash
