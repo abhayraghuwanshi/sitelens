@@ -4,7 +4,8 @@ import { METRIC_INFO } from '@shared/insights.js';
 import { countryName, flagForCountry } from '@shared/site.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
-import { Card, KpiStrip, Loading, ErrorState, BarList, Segmented } from '../components/ui.jsx';
+import { Card, KpiStrip, Loading, ErrorState, BarList, Segmented, Delta } from '../components/ui.jsx';
+import { STAGES, tabHref } from '../stages.js';
 import { LineChart } from '../charts/LineChart.jsx';
 import { useAnnotations, AnnotationBar, toIso } from '../components/Annotations.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
@@ -22,6 +23,8 @@ export function Overview({ site, range }) {
   const [metric, setMetric] = useState('sessions');
   const trendDates = (dash.data?.reports.trend || []).map((t) => t.date);
   const notes = useAnnotations([`site:${site.id}`], trendDates);
+  // Search Console is its own source; the journey strip shows it when the site has one.
+  const search = useAsync(() => (site.modes.search ? api.get(`/sites/${site.id}/search${qs({ range })}`) : null), [site.id, range, site.modes.search]);
 
   if (dash.error) return <ErrorState error={dash.error} onRetry={dash.reload} />;
   if (!dash.data) return <><Loading height={92} /><Loading height={300} /></>;
@@ -34,6 +37,8 @@ export function Overview({ site, range }) {
 
   return (
     <>
+      <JourneyMap site={site} cur={cur} prev={prev} notes={notes.annotations} search={search} />
+
       <KpiStrip
         items={[
           { label: 'Live now', value: live ? formatNumber(live.total) : '—', dot: Boolean(live?.total), help: METRIC_INFO.live.help,
@@ -120,6 +125,58 @@ export function Overview({ site, range }) {
 
       {!site.demo && <ServerTrafficCard site={site} range={range} />}
     </>
+  );
+}
+
+// Things you did, as opposed to notes and alerts about them.
+const SHIPPED = new Set(['deploy', 'release', 'post', 'extension']);
+
+// One card per stage, left to right in cause → effect order. The biggest drop is
+// flagged so the eye goes to where the journey breaks; each card opens its stage.
+function JourneyMap({ site, cur, prev, notes, search }) {
+  const shipped = notes.filter((n) => SHIPPED.has(n.kind));
+  const sc = search.data;
+  const cards = {
+    ship: shipped.length
+      ? { value: `${formatNumber(shipped.length)} ${shipped.length === 1 ? 'change' : 'changes'}`, meta: shipped[shipped.length - 1].label }
+      : { value: 'Nothing logged', meta: 'Deploys, releases and posts show here', off: true },
+    found: sc
+      ? { value: `${formatNumber(sc.current.clicks)} search clicks`, raw: sc.current.clicks, previous: sc.previous.clicks, meta: `${formatNumber(sc.current.impressions)} impressions` }
+      : site.modes.search
+        ? { value: search.error ? 'Couldn’t load' : '…', meta: 'Google Search', off: true }
+        : { value: 'Not connected', meta: 'Add Search Console in Settings', off: true },
+    arrive: { value: `${formatNumber(cur.sessions)} sessions`, raw: cur.sessions, previous: prev.sessions, meta: `${formatNumber(cur.activeUsers)} users` },
+    engage: { value: `${formatPercent(cur.engagementRate, 0)} engaged`, raw: cur.engagementRate, previous: prev.engagementRate, meta: `${formatDuration(cur.averageSessionDuration)} avg. session` },
+    payoff: Number.isFinite(cur.keyEvents) && cur.keyEvents > 0
+      ? { value: `${formatNumber(cur.keyEvents)} key events`, raw: cur.keyEvents, previous: prev.keyEvents, meta: 'Conversions in GA4' }
+      : { value: 'No key events', meta: 'Mark a conversion in GA4, or set up Outcomes', off: true },
+  };
+  const change = (c) => (c.previous > 0 && Number.isFinite(c.raw) ? c.raw / c.previous - 1 : null);
+  const worst = Object.entries(cards)
+    .filter(([, c]) => change(c) !== null && change(c) < -0.05)
+    .sort(([, a], [, b]) => change(a) - change(b))[0]?.[0];
+
+  return (
+    <ol class="journey-steps journey-map" aria-label="Visitor journey">
+      {STAGES.filter((s) => s.step).map((s) => {
+        const c = cards[s.key];
+        return (
+          <li key={s.key}>
+            <a class={`journey-step${worst === s.key ? ' bad' : ''}${c.off ? ' off' : ''}`} href={tabHref(s.tabs[0], site)} title={s.question}>
+              <span class="journey-head">
+                <span class="step-num" aria-hidden="true">{s.step}</span>
+                {s.label}
+                {worst === s.key && <span class="journey-flag">Biggest drop</span>}
+              </span>
+              <span class="journey-value">{c.value}</span>
+              <span class="journey-line">
+                {c.previous !== undefined && <Delta current={c.raw} previous={c.previous} />} {c.meta}
+              </span>
+            </a>
+          </li>
+        );
+      })}
+    </ol>
   );
 }
 

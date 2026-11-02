@@ -1,4 +1,3 @@
-import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { api } from './api.js';
 import { useRoute, useAsync, usePersistent, useLoading, navigate, withParam } from './hooks.js';
@@ -30,22 +29,26 @@ import { Firebase } from './pages/Firebase.jsx';
 import { Bing } from './pages/Bing.jsx';
 import { AiSearch } from './pages/AiSearch.jsx';
 import { Calendar } from './pages/Calendar.jsx';
+import { STAGES, tabId, tabHref, locate, nextStage } from './stages.js';
 
-// group: sidebar sub-heading. mode: which connection a view needs. API views share the GA4 range list; warehouse views use 7/28/90d.
+// Per-site views. mode: which connection a view needs. API views share the GA4 range list; warehouse views use 7/28/90d.
+// Where each one sits in the sidebar is decided by STAGES (stages.js).
 export const VIEWS = [
-  { key: 'overview', group: 'Traffic', label: 'Overview', icon: 'chart', mode: 'api', component: Overview },
-  { key: 'pages', group: 'Traffic', label: 'Pages', icon: 'pages', mode: 'api', component: Pages },
-  { key: 'search', group: 'Search', label: 'Search', icon: 'search', mode: 'search', component: Search },
-  { key: 'bing', group: 'Search', label: 'Bing search', icon: 'search', mode: 'bing', component: Bing },
-  { key: 'ai', group: 'Search', label: 'AI search', icon: 'sparkles', mode: 'api', component: AiSearch },
-  { key: 'demand', group: 'Search', label: 'Search demand', icon: 'trend', mode: 'search', component: Demand },
-  { key: 'paths', group: 'Warehouse', label: 'Paths', icon: 'flow', mode: 'warehouse', component: Paths },
-  { key: 'funnels', group: 'Warehouse', label: 'Funnels', icon: 'funnel', mode: 'warehouse', component: Funnels },
-  { key: 'retention', group: 'Warehouse', label: 'Retention', icon: 'cohort', mode: 'warehouse', component: Retention },
-  { key: 'events', group: 'Warehouse', label: 'Events', icon: 'bolt', mode: 'warehouse', component: Events },
-  { key: 'sessions', group: 'Warehouse', label: 'Sessions', icon: 'users', mode: 'warehouse', component: Sessions },
-  { key: 'sql', group: 'Warehouse', label: 'SQL console', icon: 'terminal', mode: 'warehouse', component: Explore },
+  { key: 'overview', label: 'Overview', mode: 'api', component: Overview },
+  { key: 'pages', label: 'Pages', mode: 'api', component: Pages },
+  { key: 'search', label: 'Google search', mode: 'search', component: Search },
+  { key: 'bing', label: 'Bing search', mode: 'bing', component: Bing },
+  { key: 'ai', label: 'AI search', mode: 'api', component: AiSearch },
+  { key: 'demand', label: 'Search demand', mode: 'search', component: Demand },
+  { key: 'paths', label: 'Paths', mode: 'warehouse', component: Paths },
+  { key: 'funnels', label: 'Funnels', mode: 'warehouse', component: Funnels },
+  { key: 'retention', label: 'Retention', mode: 'warehouse', component: Retention },
+  { key: 'events', label: 'Events', mode: 'warehouse', component: Events },
+  { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
+  { key: 'sql', label: 'SQL console', mode: 'warehouse', component: Explore },
 ];
+
+const NEEDS = { warehouse: 'BigQuery', search: 'Search Console', bing: 'a real site (not the sample)', api: 'a GA4 property' };
 
 export function App() {
   const route = useRoute();
@@ -53,6 +56,8 @@ export function App() {
   const [range, setRange] = usePersistent('range', '28d');
   const [theme, setTheme] = usePersistent('theme', '');
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
+  // Last tab opened in each stage, so a stage link returns to it.
+  const [stageTabs, setStageTabs] = usePersistent('stage-tabs', {});
   const systemDark = useSystemDark();
   const loading = useLoading();
   // After a range switch, dim the old numbers until the new ones arrive.
@@ -71,6 +76,11 @@ export function App() {
   useEffect(() => {
     if (routedSite) setLastSite(routedSite);
   }, [routedSite]);
+
+  const here = locate(route.parts[0] || '', route.parts[0] === 'site' ? route.parts[2] || 'overview' : '');
+  useEffect(() => {
+    if (here.stage && stageTabs[here.stage.key] !== tabId(here.tab)) setStageTabs((t) => ({ ...t, [here.stage.key]: tabId(here.tab) }));
+  }, [here.stage?.key, here.tab && tabId(here.tab)]);
 
   useEffect(() => {
     document.querySelector('.sidebar-scroll .nav-item.active')?.scrollIntoView({ block: 'nearest' });
@@ -156,6 +166,14 @@ export function App() {
     body = <Portfolio sites={sites} range={ranges.api.some((r) => r.key === range) ? range : '28d'} auth={auth} />;
   }
 
+  // Site not found keeps its own title, even though its view key belongs to a stage.
+  const stage = section === 'site' && !site ? null : here.stage;
+  const stageLink = (s) => {
+    const tab = s.tabs.find((t) => tabId(t) === stageTabs[s.key]) || s.tabs[0];
+    return tabHref(tab, current);
+  };
+  const next = stage && nextStage(stage);
+
   return (
     <div class="shell">
       <aside class="sidebar">
@@ -173,57 +191,34 @@ export function App() {
           <nav class="nav-group" aria-label="Workspace">
             <NavLink href="#/" icon="grid" active={!section} count={sites.length}>All sites</NavLink>
             <NavLink href="#/calendar" icon="calendar" active={section === 'calendar'}>Calendar</NavLink>
-            <NavLink href="#/product" icon="layers" active={section === 'product'}>Products</NavLink>
-            <NavLink href="#/outcomes" icon="target" active={section === 'outcomes'}>Outcomes</NavLink>
           </nav>
         </div>
 
         {current && (
           <div class="nav-group">
-            <div class="nav-label">Site</div>
+            <div class="nav-label">Journey</div>
             <SiteSwitcher sites={sites} current={current} view={section === 'site' ? view.key : 'overview'} />
-            <nav class="nav-group" aria-label={`${current.label} views`} style={{ marginTop: '6px' }}>
-              {VIEWS.map((v, i) => {
-                const available = current.modes[v.mode];
-                const active = section === 'site' && site?.id === current.id && view.key === v.key;
-                return (
-                  <Fragment key={v.key}>
-                    {v.group !== VIEWS[i - 1]?.group && <div class="nav-sublabel">{v.group}</div>}
-                    <a class={`nav-item${active ? ' active' : ''}`} href={`#/site/${current.id}/${v.key}`}
-                      title={available ? v.label : `${v.label} needs ${v.mode === 'warehouse' ? 'BigQuery' : v.mode === 'search' ? 'Search Console' : v.mode === 'bing' ? 'a real site (not the sample)' : 'a GA4 property'}`}>
-                      <Icon name={v.icon} /> {v.label}
-                      {!available && <span class="lock"><Icon name="lock" size={12} /></span>}
-                    </a>
-                  </Fragment>
-                );
-              })}
+            <nav class="nav-group stage-nav" aria-label={`${current.label} journey`} style={{ marginTop: '6px' }}>
+              {STAGES.map((s) => (
+                <a key={s.key} class={`nav-item${stage === s ? ' active' : ''}`} href={stageLink(s)} title={s.question}
+                  aria-current={stage === s ? 'page' : undefined}>
+                  {s.step ? <span class="step-num" aria-hidden="true">{s.step}</span> : <Icon name={s.icon} />}
+                  <span class="stage-text">
+                    {s.label}
+                    {s.step && <small>{s.question}</small>}
+                  </span>
+                </a>
+              ))}
             </nav>
           </div>
         )}
-
-        <div class="nav-group">
-          <div class="nav-label">Sources</div>
-          <nav class="nav-group" aria-label="Sources">
-            <NavLink href="#/github" icon="github" active={section === 'github'}
-              count={state.data.sources.github.data.ok ? state.data.sources.github.data.repos : 0}>GitHub</NavLink>
-            <NavLink href="#/extensions" icon="puzzle" active={section === 'extensions'} count={state.data.sources.extensions}>Extensions</NavLink>
-            <NavLink href="#/firebase" icon="flame" active={section === 'firebase'}>Firebase</NavLink>
-            <NavLink href="#/vercel" icon="triangle" active={section === 'vercel'}>Vercel</NavLink>
-          </nav>
-        </div>
-
-        <div class="nav-group">
-          <div class="nav-label">Monitoring</div>
-          <nav class="nav-group" aria-label="Monitoring">
-            <NavLink href="#/health" icon="pulse" active={section === 'health'}>Site health</NavLink>
-            <NavLink href="#/mentions" icon="chat" active={section === 'mentions'}>Mentions</NavLink>
-            <NavLink href="#/posts" icon="megaphone" active={section === 'posts'}>My posts</NavLink>
-            <AlertsNavItem active={section === 'alerts'} />
-          </nav>
-        </div>
         </div>
 
         <div class="sidebar-foot">
+          <AlertsNavItem active={section === 'alerts'} />
+          {current && (
+            <NavLink href={`#/site/${current.id}/sql`} icon="terminal" active={section === 'site' && view.key === 'sql'}>SQL console</NavLink>
+          )}
           <NavLink href="#/settings" icon="settings" active={section === 'settings'}>Settings</NavLink>
           <div class="foot-row">
             <div class="conn" title={auth.email || ''}>
@@ -242,15 +237,32 @@ export function App() {
       <main class="main">
         <header class="topbar">
           <div>
-            <h1>{title}</h1>
-            {section === 'site' && site && <div class="crumb">{site.label}{site.demo ? ' · sample data' : ''}</div>}
+            <h1>
+              {stage?.step && <span class="step-num" aria-hidden="true">{stage.step}</span>}
+              {stage ? stage.label : title}
+            </h1>
+            {(stage || (section === 'site' && site)) && (
+              <div class="crumb">
+                {[stage?.step && stage.question, site && `${site.label}${site.demo ? ' · sample data' : ''}`].filter(Boolean).join(' · ')}
+              </div>
+            )}
           </div>
           <span class="spacer" />
           {loading.shown && <span class="loading-label" role="status">Loading…</span>}
           {showRange && <Segmented label="Date range" value={effectiveRange} options={rangeOptions} onChange={pickRange} />}
+          {stage && stage.tabs.length > 1 && <StageTabs stage={stage} active={here.tab} site={current} />}
           {loading.shown && <span class="loading-bar" aria-hidden="true" />}
         </header>
-        <div class={`content${switching && loading.shown ? ' updating' : ''}`} aria-busy={loading.busy ? 'true' : undefined}>{body}</div>
+        <div class={`content${switching && loading.shown ? ' updating' : ''}`} aria-busy={loading.busy ? 'true' : undefined}>
+          {body}
+          {next && (
+            <a class="next-stage" href={stageLink(next)}>
+              <span class="muted small">Next</span>
+              <span><span class="step-num" aria-hidden="true">{next.step}</span> {next.label}: {next.question}</span>
+              <Icon name="chevron" size={14} />
+            </a>
+          )}
+        </div>
       </main>
     </div>
   );
@@ -262,6 +274,25 @@ function NavLink({ href, icon, active, count, children }) {
       <Icon name={icon} /> {children}
       {count > 0 && <span class="count">{count}</span>}
     </a>
+  );
+}
+
+// Sibling pages of one stage. Site views a connection is missing for stay visible, locked.
+function StageTabs({ stage, active, site }) {
+  return (
+    <nav class="stage-tabs" aria-label={`${stage.label} pages`}>
+      {stage.tabs.map((t) => {
+        const mode = t.view && VIEWS.find((v) => v.key === t.view).mode;
+        const locked = mode && !site.modes[mode];
+        return (
+          <a key={tabId(t)} class={`stage-tab${t === active ? ' active' : ''}`} href={tabHref(t, site)}
+            aria-current={t === active ? 'page' : undefined} title={locked ? `${t.label} needs ${NEEDS[mode]}` : undefined}>
+            {t.label}
+            {locked && <Icon name="lock" size={11} />}
+          </a>
+        );
+      })}
+    </nav>
   );
 }
 

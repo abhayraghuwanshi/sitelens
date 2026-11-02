@@ -5,7 +5,6 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
-import { EngineSwitch } from './Bing.jsx';
 
 const METRICS = [
   { key: 'clicks', label: 'Clicks' },
@@ -29,7 +28,6 @@ export function Search({ site, range }) {
 
   return (
     <>
-      <div class="row" style={{ marginBottom: '12px' }}><EngineSwitch site={site} engine="google" /></div>
       <KpiStrip
         items={[
           { label: 'Clicks', value: formatNumber(s.current.clicks), raw: s.current.clicks, previous: s.previous.clicks },
