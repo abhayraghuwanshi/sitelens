@@ -453,6 +453,9 @@ table.data tr.selected td { background: var(--accent-soft); }
 }
 .tabs a:hover { color: var(--text); text-decoration: none; }
 .tabs a.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
+.snippet { border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); min-width: 0; }
+.snippet-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 6px 4px 12px; border-bottom: 1px solid var(--border); font-size: var(--text-xs); color: var(--text-3); }
+.snippet pre { margin: 0; padding: 10px 12px; font-family: var(--mono); font-size: var(--text-sm); line-height: 1.55; overflow-x: auto; user-select: all; }
 .back-link { display: inline-block; margin-bottom: 12px; font-size: var(--text-md); }
 .integration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .integration {

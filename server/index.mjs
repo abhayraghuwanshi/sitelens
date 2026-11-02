@@ -1,6 +1,7 @@
 // SiteLens Studio server: JSON API + the built web app, bound to 127.0.0.1.
 
 import { createServer } from 'node:http';
+import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -163,6 +164,16 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         bing: { source: from(src.bingApiKey, env.BING_WEBMASTER_KEY) },
         anthropic: { source: from(src.anthropicKey, env.ANTHROPIC_API_KEY), weekly: Boolean(saved.aiSearch?.weekly) },
         notifications: { webhook: Boolean(alertSettings.webhookUrl), desktop: Boolean(alertSettings.desktop), enabled: Boolean(alertSettings.enabled) },
+      };
+    }],
+    // What an MCP client needs to launch server/mcp.mjs with this install's
+    // Node and data folder (in the desktop app, both live inside the bundle).
+    ['GET', /^\/api\/mcp\/setup$/, async () => {
+      const port = Number(process.env.PORT) || 4318;
+      return {
+        command: stableNode(process.execPath),
+        args: ['--no-warnings=ExperimentalWarning', join(ROOT, 'server', 'mcp.mjs')],
+        env: { STUDIO_DATA_DIR: store.dir, ...(port !== 4318 ? { STUDIO_URL: `http://127.0.0.1:${port}` } : {}) },
       };
     }],
     ['POST', /^\/api\/github\/token$/, async ({ body }) => {
@@ -414,6 +425,13 @@ async function serveStatic(pathname, res) {
   } catch {
     res.writeHead(503, { 'Content-Type': 'text/plain' }).end('Web app not built yet. Run `npm run build` or use `npm run dev`.');
   }
+}
+
+// Homebrew's execPath is versioned (…/Cellar/node/26.7.0/bin/node) and vanishes on
+// upgrade; prefer the stable bin/node symlink that points at it.
+function stableNode(execPath) {
+  const cellar = execPath.match(/^(.*)\/Cellar\/node(?:@[\d.]+)?\/[^/]+\/bin\/node$/);
+  return cellar && existsSync(join(cellar[1], 'bin', 'node')) ? join(cellar[1], 'bin', 'node') : execPath;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

@@ -12,6 +12,7 @@ import { VercelSettings } from './settings/VercelSettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
 import { IntegrationGrid } from './settings/Integrations.jsx';
+import { McpSettings } from './settings/McpSettings.jsx';
 
 const PUBLIC_SAMPLE = {
   label: 'Google Merchandise Store (public sample)',
@@ -35,6 +36,7 @@ const PANELS = {
   pagespeed: { title: 'PageSpeed & CrUX', render: () => <SiteHealthCard /> },
   bing: { title: 'Bing Webmaster Tools', render: () => <BingSettings /> },
   anthropic: { title: 'Claude', render: () => <AnthropicSettings /> },
+  mcp: { title: 'Claude Code & Claude Desktop', render: () => <McpSettings /> },
 };
 
 // Settings: #/settings?tab=<tab> · #/settings?i=<integration> opens one integration's panel.

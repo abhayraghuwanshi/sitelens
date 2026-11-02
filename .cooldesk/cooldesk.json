@@ -1,0 +1,103 @@
+{
+  "schemaVersion": 1,
+  "project": {
+    "id": "sitelens-studio",
+    "name": "SiteLens Studio",
+    "description": "Local dashboard for GA4, Search Console and the GA4 BigQuery export across all your sites, with a Tauri desktop app and an MCP server for local agents.",
+    "status": "active"
+  },
+  "resources": [
+    {
+      "type": "github",
+      "name": "abhayraghuwanshi/sitelens",
+      "url": "https://github.com/abhayraghuwanshi/sitelens"
+    },
+    {
+      "type": "link",
+      "name": "Trailer (artifact)",
+      "url": "https://claude.ai/artifact/2nSN9hrPA7AEGRCuxA4yMa"
+    },
+    {
+      "type": "link",
+      "name": "Trailer (in repo)",
+      "url": "docs/trailer.html"
+    },
+    {
+      "type": "folder",
+      "name": "API server",
+      "path": "server"
+    },
+    {
+      "type": "folder",
+      "name": "Web app pages",
+      "path": "web/src/pages"
+    },
+    {
+      "type": "folder",
+      "name": "Shared report layer (synced from the extension)",
+      "path": "shared/sitelens"
+    },
+    {
+      "type": "folder",
+      "name": "Desktop app (Tauri)",
+      "path": "src-tauri"
+    },
+    {
+      "type": "folder",
+      "name": "Scripts",
+      "path": "scripts"
+    },
+    {
+      "type": "folder",
+      "name": "Tests",
+      "path": "test"
+    },
+    {
+      "type": "link",
+      "name": "Warehouse session model (SQL)",
+      "url": "server/sql.mjs"
+    },
+    {
+      "type": "link",
+      "name": "MCP server",
+      "url": "server/mcp.mjs"
+    },
+    {
+      "type": "link",
+      "name": "Env template",
+      "url": ".env.example"
+    }
+  ],
+  "dock": {
+    "pinned": [
+      {
+        "type": "command",
+        "ref": "dev"
+      },
+      {
+        "type": "command",
+        "ref": "test"
+      },
+      {
+        "type": "command",
+        "ref": "desktop-dev"
+      },
+      {
+        "type": "service",
+        "ref": "studio"
+      },
+      {
+        "type": "resource",
+        "ref": "abhayraghuwanshi/sitelens"
+      }
+    ]
+  },
+  "sidebar": {
+    "sections": [
+      "todos",
+      "decisions",
+      "notes"
+    ]
+  },
+  "auto": {}
+}

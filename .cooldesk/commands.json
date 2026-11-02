@@ -1,0 +1,14 @@
+{
+  "commands": [
+    { "id": "install", "label": "Install dependencies", "run": "npm install", "cwd": "." },
+    { "id": "dev", "label": "Dev (API :4318 + Vite :5173)", "run": "npm run dev", "cwd": "." },
+    { "id": "start", "label": "Build and serve (http://127.0.0.1:4318)", "run": "npm start", "cwd": "." },
+    { "id": "test", "label": "Run tests (node --test)", "run": "npm test", "cwd": "." },
+    { "id": "check-sql", "label": "Check warehouse SQL", "run": "npm run check-sql", "cwd": "." },
+    { "id": "sync", "label": "Sync shared report layer from the extension", "run": "npm run sync", "cwd": "." },
+    { "id": "mcp", "label": "Run MCP server (stdio)", "run": "npm run mcp", "cwd": "." },
+    { "id": "desktop-dev", "label": "Desktop app (Tauri dev)", "run": "npm run desktop:dev", "cwd": "." },
+    { "id": "desktop-build", "label": "Build desktop app (Tauri)", "run": "npm run desktop:build", "cwd": "." },
+    { "id": "trailer", "label": "Re-render trailer GIF", "run": "npm run trailer", "cwd": "." }
+  ]
+}

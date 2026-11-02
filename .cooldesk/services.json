@@ -1,0 +1,6 @@
+{
+  "services": [
+    { "id": "studio", "label": "Studio (API + built web app)", "url": "http://127.0.0.1:4318", "port": 4318 },
+    { "id": "vite-dev", "label": "Web app (Vite dev server)", "url": "http://127.0.0.1:5173", "port": 5173 }
+  ]
+}

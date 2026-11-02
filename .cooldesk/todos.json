@@ -1,0 +1,16 @@
+{
+  "todos": [
+    {
+      "id": "readme-extension-link",
+      "title": "Fix the README link to the SiteLens extension: ../site-analytics-extension is a local path and is broken on GitHub",
+      "status": "todo",
+      "shared": true
+    },
+    {
+      "id": "share-trailer",
+      "title": "Share the trailer artifact (it's private) or host docs/trailer.html, e.g. on GitHub Pages, so the README's interactive link plays in a browser",
+      "status": "todo",
+      "shared": true
+    }
+  ]
+}
