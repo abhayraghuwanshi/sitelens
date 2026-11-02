@@ -1,7 +1,7 @@
 import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { api } from './api.js';
-import { useRoute, useAsync, usePersistent, navigate, withParam } from './hooks.js';
+import { useRoute, useAsync, usePersistent, useLoading, navigate, withParam } from './hooks.js';
 import { Icon } from './components/icons.jsx';
 import { Logo } from './components/Logo.jsx';
 import { Segmented, Loading, ErrorState } from './components/ui.jsx';
@@ -54,6 +54,12 @@ export function App() {
   const [theme, setTheme] = usePersistent('theme', '');
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
   const systemDark = useSystemDark();
+  const loading = useLoading();
+  // After a range switch, dim the old numbers until the new ones arrive.
+  const [switching, setSwitching] = useState(false);
+  useEffect(() => {
+    if (!loading.busy) setSwitching(false);
+  }, [loading.busy]);
 
   // Opening a link with ?range= makes it the remembered range too (Health has its own ranges).
   const linkedRange = route.parts[0] !== 'health' ? route.params.get('range') : null;
@@ -93,6 +99,8 @@ export function App() {
   const wanted = urlRange && rangeOptions.some((r) => r.key === urlRange) ? urlRange : range;
   const effectiveRange = rangeOptions.some((r) => r.key === wanted) ? wanted : '28d';
   const pickRange = (key) => {
+    if (key === effectiveRange) return;
+    setSwitching(true);
     setRange(key);
     navigate(withParam('range', key));
   };
@@ -238,9 +246,11 @@ export function App() {
             {section === 'site' && site && <div class="crumb">{site.label}{site.demo ? ' · sample data' : ''}</div>}
           </div>
           <span class="spacer" />
+          {loading.shown && <span class="loading-label" role="status">Loading…</span>}
           {showRange && <Segmented label="Date range" value={effectiveRange} options={rangeOptions} onChange={pickRange} />}
+          {loading.shown && <span class="loading-bar" aria-hidden="true" />}
         </header>
-        <div class="content">{body}</div>
+        <div class={`content${switching && loading.shown ? ' updating' : ''}`} aria-busy={loading.busy ? 'true' : undefined}>{body}</div>
       </main>
     </div>
   );
