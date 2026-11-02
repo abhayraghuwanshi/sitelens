@@ -202,31 +202,33 @@ export function suggestFunnels(sessions, code = new Map(), { max = 4 } = {}) {
 
 /* ---------- wiring ---------- */
 
+// GitHub REST call with the user's token; throws on any non-2xx.
+export async function githubGet(fetchImpl, path, token) {
+  const res = await fetchImpl(`${API}${path}`, {
+    headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
+  });
+  if (!res.ok) throw new Error(`GitHub ${res.status} for ${path}`);
+  return res;
+}
+
+// Repos whose homepage is this site, plus repos a product links to it.
+export async function siteRepos({ store, site, token, fetchImpl = fetch }) {
+  const linked = ((await store.get()).products || []).filter((p) => p.siteId === site.id).flatMap((p) => p.repos || []);
+  const repos = new Map(linked.map((r) => [r, { name: r, pushedAt: '' }]));
+  for (let page = 1; page <= 3; page++) {
+    const list = await (await githubGet(fetchImpl, `/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`, token)).json();
+    for (const r of list) {
+      if (repos.has(r.full_name)) Object.assign(repos.get(r.full_name), { pushedAt: r.pushed_at, branch: r.default_branch });
+      else if (!r.archived && homepageMatches(r.homepage, site.host)) repos.set(r.full_name, { name: r.full_name, pushedAt: r.pushed_at, branch: r.default_branch });
+    }
+    if (list.length < 100) break;
+  }
+  return [...repos.values()];
+}
+
 export function createFunnelSuggest({ store, engines, getToken, fetchImpl = fetch, now = Date.now }) {
   const codeCache = new Map(); // repo → { at, pushedAt, events }
-
-  async function gh(path, token) {
-    const res = await fetchImpl(`${API}${path}`, {
-      headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
-    });
-    if (!res.ok) throw new Error(`GitHub ${res.status} for ${path}`);
-    return res;
-  }
-
-  // Repos whose homepage is this site, plus repos a product links to it.
-  async function siteRepos(site, token) {
-    const linked = ((await store.get()).products || []).filter((p) => p.siteId === site.id).flatMap((p) => p.repos || []);
-    const repos = new Map(linked.map((r) => [r, { name: r, pushedAt: '' }]));
-    for (let page = 1; page <= 3; page++) {
-      const list = await (await gh(`/user/repos?per_page=100&page=${page}&sort=pushed&affiliation=owner,collaborator,organization_member`, token)).json();
-      for (const r of list) {
-        if (repos.has(r.full_name)) repos.get(r.full_name).pushedAt = r.pushed_at;
-        else if (!r.archived && homepageMatches(r.homepage, site.host)) repos.set(r.full_name, { name: r.full_name, pushedAt: r.pushed_at });
-      }
-      if (list.length < 100) break;
-    }
-    return [...repos.values()];
-  }
+  const gh = (path, token) => githubGet(fetchImpl, path, token);
 
   async function repoEvents(repo, token) {
     const hit = codeCache.get(repo.name);
@@ -244,7 +246,7 @@ export function createFunnelSuggest({ store, engines, getToken, fetchImpl = fetc
     if (!token) return { events: new Map(), repos: [], note: 'Add a GitHub token in Settings → GitHub so Studio can also read your site’s code.' };
     let repos;
     try {
-      repos = await siteRepos(site, token);
+      repos = await siteRepos({ store, site, token, fetchImpl });
     } catch (err) {
       return { events: new Map(), repos: [], note: `Couldn’t list your GitHub repos: ${err.message}` };
     }

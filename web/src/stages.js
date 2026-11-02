@@ -15,6 +15,7 @@ export const STAGES = [
       { section: 'vercel', label: 'Vercel' },
       { section: 'firebase', label: 'Firebase' },
       { section: 'posts', label: 'My posts' },
+      { view: 'articles', label: 'My articles' },
       { section: 'health', label: 'Site health', siteParam: true },
     ],
   },

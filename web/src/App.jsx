@@ -7,6 +7,7 @@ import { Segmented, Loading, ErrorState } from './components/ui.jsx';
 import { Portfolio } from './pages/Portfolio.jsx';
 import { Overview } from './pages/Overview.jsx';
 import { Pages } from './pages/Pages.jsx';
+import { Articles } from './pages/Articles.jsx';
 import { Search } from './pages/Search.jsx';
 import { Demand } from './pages/Demand.jsx';
 import { Paths } from './pages/Paths.jsx';
@@ -36,6 +37,7 @@ import { STAGES, tabId, tabHref, locate, nextStage } from './stages.js';
 export const VIEWS = [
   { key: 'overview', label: 'Overview', mode: 'api', component: Overview },
   { key: 'pages', label: 'Pages', mode: 'api', component: Pages },
+  { key: 'articles', label: 'My articles', mode: 'content', component: Articles },
   { key: 'search', label: 'Google search', mode: 'search', component: Search },
   { key: 'bing', label: 'Bing search', mode: 'bing', component: Bing },
   { key: 'ai', label: 'AI search', mode: 'api', component: AiSearch },
@@ -48,7 +50,7 @@ export const VIEWS = [
   { key: 'sql', label: 'SQL console', mode: 'warehouse', component: Explore },
 ];
 
-const NEEDS = { warehouse: 'BigQuery', search: 'Search Console', bing: 'a real site (not the sample)', api: 'a GA4 property' };
+const NEEDS = { warehouse: 'BigQuery', search: 'Search Console', bing: 'a real site (not the sample)', content: 'a site address', api: 'a GA4 property' };
 
 export function App() {
   const route = useRoute();

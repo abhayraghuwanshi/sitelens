@@ -153,6 +153,7 @@ export function publicSite(site) {
       search: Boolean(site.demo || site.searchSite),
       warehouse: Boolean(site.demo || site.bq),
       bing: !site.demo && Boolean(site.host),
+      content: Boolean(site.demo || site.host),
     },
   };
 }

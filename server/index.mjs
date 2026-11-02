@@ -20,6 +20,8 @@ import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './searc
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
 import { createFunnelSuggest, funnelSuggestRoutes } from './funnel-suggest.mjs';
+import { createArticles, articleRoutes } from './articles.mjs';
+import { createArticleEditor, articleEditorRoutes } from './article-editor.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
@@ -87,7 +89,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   }
   const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
   const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, fetchImpl });
+  const articles = createArticles({ auth, store, getToken: githubToken, fetchImpl });
   const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
+  const editor = createArticleEditor({ auth, store, articles, annotations, getToken: githubToken, env, fetchImpl });
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, fetchImpl });
   const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, fetchImpl });
@@ -135,6 +139,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
     ...analystRoutes({ analyst, siteOr404 }),
     ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
+    ...articleRoutes({ articles, siteOr404 }),
+    ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
     ['GET', /^\/api\/state$/, async () => {
       return {
