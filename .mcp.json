@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "sitelens-dev": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["--no-warnings=ExperimentalWarning", "server/mcp.mjs"]
+    }
+  }
+}

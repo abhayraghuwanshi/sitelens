@@ -84,6 +84,8 @@ GA4 and Search Console numbers are kept locally, so the calendar loads from disk
 claude mcp add sitelens -- node /path/to/sitelens-studio/server/mcp.mjs
 ```
 
+Inside this repo you don't need to add anything: `.mcp.json` registers it as `sitelens-dev`, reading the repo's `.data/`. Claude Code asks once to approve it. To point an agent at the desktop app instead, copy the command from Settings → Integrations → Claude Code & Claude Desktop.
+
 | Tool | What it returns |
 | --- | --- |
 | `list_sites` | Sites, hosts and connected sources |
