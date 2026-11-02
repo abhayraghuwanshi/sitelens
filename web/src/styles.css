@@ -468,8 +468,11 @@ table.data tr.selected td { background: var(--accent-soft); }
 .claude-mark { flex: none; display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; background: var(--claude); color: var(--surface); margin-top: 1px; }
 .claude-meta { font-size: var(--text-xs); color: var(--text-3); padding-left: 26px; }
 .claude-body { padding-left: 26px; font-size: var(--text-md); line-height: 1.55; color: var(--text-2); }
-.claude-body p, .claude-body ul { margin: 6px 0 0; }
-.claude-body ul { padding-left: 18px; }
+.claude-body p, .claude-body ul, .claude-body ol { margin: 6px 0 0; }
+.claude-body p { white-space: pre-line; overflow-wrap: anywhere; }
+.claude-body li { margin-top: 3px; overflow-wrap: anywhere; }
+.claude-body .claude-h { font-weight: 600; color: var(--text); }
+.claude-body ul, .claude-body ol { padding-left: 18px; }
 .back-link { display: inline-block; margin-bottom: 12px; font-size: var(--text-md); }
 .integration-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 12px; }
 .integration {
@@ -696,7 +699,8 @@ button.cal-day:hover { border-color: var(--border-strong); }
 .cal-legend i.swatch.tone-down { background: color-mix(in srgb, var(--critical) 10%, var(--surface)); }
 .cal-legend i.swatch.tone-down2 { background: color-mix(in srgb, var(--critical) 24%, var(--surface)); }
 .cal-legend i.dot { width: 7px; height: 7px; }
-.cal-story { align-self: start; position: sticky; top: 16px; }
+/* Not sticky: the Claude card sits below it in the same column and would scroll under it. */
+.cal-story { align-self: start; }
 .cal-headline { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
 .tone-text-up2, .tone-text-up { color: var(--good-ink); }
 .tone-text-down2, .tone-text-down { color: var(--critical-ink); }

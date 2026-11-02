@@ -5,18 +5,61 @@ import { useAsync } from '../hooks.js';
 import { Card } from './ui.jsx';
 import { Icon } from './icons.jsx';
 
-// Plain text from Claude: blank lines split paragraphs, "- " lines are bullets.
+// Plain text from Claude (or light Markdown from Claude Code): blank lines split
+// paragraphs, "- " / "1. " lines become lists, "#" lines and lines ending in ":"
+// before a list read as headings, **bold** is kept.
+const BULLET = /^\s*[-•*]\s+/;
+const NUMBERED = /^\s*\d+[.)]\s+/;
+
+function Inline({ text }) {
+  return String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/).map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <b key={i}>{part.slice(2, -2)}</b>;
+    if (/^`[^`]+`$/.test(part)) return <code key={i}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
+function parseBlocks(text) {
+  const blocks = [];
+  let para = [];
+  const flush = () => {
+    if (para.length) blocks.push({ type: 'p', text: para.join('\n') });
+    para = [];
+  };
+  for (const raw of String(text || '').trim().split('\n')) {
+    const line = raw.trimEnd();
+    const list = BULLET.test(line) ? 'ul' : NUMBERED.test(line) ? 'ol' : null;
+    if (!line.trim()) {
+      flush();
+    } else if (list) {
+      flush();
+      const item = line.replace(list === 'ul' ? BULLET : NUMBERED, '');
+      const last = blocks.at(-1);
+      if (last?.type === list) last.items.push(item);
+      else blocks.push({ type: list, items: [item] });
+    } else if (/^#{1,6}\s+/.test(line)) {
+      flush();
+      blocks.push({ type: 'h', text: line.replace(/^#{1,6}\s+/, '') });
+    } else if (/^\s{2,}\S/.test(line) && ['ul', 'ol'].includes(blocks.at(-1)?.type) && !para.length) {
+      blocks.at(-1).items.push(`${blocks.at(-1).items.pop()} ${line.trim()}`); // wrapped list item
+    } else {
+      para.push(line);
+    }
+  }
+  flush();
+  return blocks;
+}
+
 export function CommentBody({ text }) {
-  const blocks = String(text || '').trim().split(/\n\s*\n/);
   return (
     <div class="claude-body">
-      {blocks.map((block, i) => {
-        const lines = block.split('\n');
-        const bullets = lines.filter((l) => /^\s*[-•]\s+/.test(l));
-        if (bullets.length && bullets.length === lines.length) {
-          return <ul key={i}>{bullets.map((l, j) => <li key={j}>{l.replace(/^\s*[-•]\s+/, '')}</li>)}</ul>;
+      {parseBlocks(text).map((b, i) => {
+        if (b.type === 'ul' || b.type === 'ol') {
+          const List = b.type;
+          return <List key={i}>{b.items.map((item, j) => <li key={j}><Inline text={item} /></li>)}</List>;
         }
-        return <p key={i}>{block}</p>;
+        if (b.type === 'h') return <p key={i} class="claude-h"><Inline text={b.text} /></p>;
+        return <p key={i} class={/:$/.test(b.text) && !b.text.includes('\n') ? 'claude-h' : undefined}><Inline text={b.text} /></p>;
       })}
     </div>
   );
