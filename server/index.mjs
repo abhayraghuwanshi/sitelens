@@ -32,6 +32,7 @@ import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes } from './ai-search.mjs';
 import { createCalendar, calendarRoutes } from './calendar.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
+import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'web/dist');
@@ -100,6 +101,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
   const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, env });
+  const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
   function githubDb() {
@@ -128,6 +130,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
+    ...analystRoutes({ analyst, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
     ['GET', /^\/api\/state$/, async () => {
       return {
@@ -169,7 +172,6 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     // What an MCP client needs to launch server/mcp.mjs with this install's
     // Node and data folder (in the desktop app, both live inside the bundle).
     ['GET', /^\/api\/mcp\/setup$/, async () => {
-      const port = Number(process.env.PORT) || 4318;
       return {
         command: stableNode(process.execPath),
         args: ['--no-warnings=ExperimentalWarning', join(ROOT, 'server', 'mcp.mjs')],

@@ -1,12 +1,14 @@
 // MCP server for local agents (Claude Code, Claude Desktop): read-only tools
-// over Studio's data. Speaks MCP's stdio transport (newline-delimited
-// JSON-RPC) directly, so it needs no SDK.
+// over Studio's data, plus comment tools so an agent can leave its analysis in
+// the app (dated Claude notes on charts and the Calendar). Speaks MCP's stdio
+// transport (newline-delimited JSON-RPC) directly, so it needs no SDK.
 //
 //  - Analytics tools call the running Studio server's JSON API (STUDIO_URL,
 //    default http://127.0.0.1:4318), which syncs and owns .data/calendar.db.
 //    Start Studio first (npm start or the desktop app).
 //  - `schema` and `query` open the .data/*.db files read-only and work even
 //    when Studio isn't running. studio.json (tokens, settings) is never exposed.
+//  - Comment tools write only Claude-authored notes, and can only delete those.
 //
 // Register with Claude Code:  claude mcp add sitelens -- node /path/to/sitelens-studio/server/mcp.mjs
 
@@ -74,6 +76,39 @@ export const TOOLS = [
     description: 'Dated events in a range: GitHub releases, Chrome Web Store versions, Vercel/Firebase deploys, your posts, mentions, hand-written notes, plus the alerts that fired. Use with daily_metrics to connect changes to causes.',
     inputSchema: { type: 'object', properties: { from: DATE('First day'), to: DATE('Last day'), site: SITE }, required: ['from', 'to'] },
     path: (a) => `/api/calendar/events?${params(a, ['from', 'to', 'site'])}`,
+  },
+  {
+    name: 'add_comment',
+    description: 'Leave a comment in SiteLens Studio: a dated note marked as written by Claude, shown on every trend chart, in the Calendar, and in the site\'s Claude panel. Use it to record an analysis after you have looked at the data. Give it a short title (it labels the chart marker) and a body with the findings and the numbers behind them. Pin it to the day the finding is about.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        date: DATE('The day the comment is about'),
+        title: { type: 'string', maxLength: 140, description: 'One line, e.g. "HN launch drove +47% sessions".' },
+        body: { type: 'string', maxLength: 4000, description: 'The analysis in plain text. Short paragraphs; lines starting with "- " show as bullets.' },
+        site: { type: 'string', description: 'A site id from list_sites to show it on that site only. Omit to show it everywhere.' },
+      },
+      required: ['date', 'title', 'body'],
+    },
+    method: 'POST',
+    path: () => '/api/annotations',
+    body: (a) => ({ date: a.date, label: a.title, body: a.body, author: 'claude', via: 'mcp', scope: a.site && a.site !== 'all' ? `site:${a.site}` : '' }),
+  },
+  {
+    name: 'list_comments',
+    description: 'Comments Claude has left in SiteLens Studio (from you or from the in-app analysis), newest day last. Check them before adding a comment so you don\'t repeat one.',
+    inputSchema: { type: 'object', properties: { from: DATE('First day'), to: DATE('Last day'), site: { type: 'string', description: 'A site id; its comments plus ones shown everywhere.' } } },
+    path: (a) => `/api/annotations?${params({ ...a, author: 'claude', scope: a.site && a.site !== 'all' ? `site:${a.site}` : '' }, ['from', 'to', 'author', 'scope'])}`,
+    shape: (d) => d.annotations.map(({ id, date, label, body, scope, via, createdAt }) => ({ id, date, title: label, body, scope, via, createdAt })),
+  },
+  {
+    name: 'delete_comment',
+    description: 'Delete a comment Claude left (an id from list_comments). Notes written by the user can\'t be deleted.',
+    write: true,
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: '^[\\w-]+$' } }, required: ['id'] },
+    method: 'DELETE',
+    path: (a) => `/api/annotations/${encodeURIComponent(a.id)}?author=claude`,
   },
   {
     name: 'schema',
@@ -161,10 +196,15 @@ function params(args, keys) {
   return p.toString();
 }
 
-async function studio(baseUrl, path, fetchImpl) {
+async function studio(baseUrl, path, fetchImpl, { method = 'GET', body } = {}) {
   let res;
   try {
-    res = await fetchImpl(`${baseUrl}${path}`, { signal: AbortSignal.timeout(120_000) });
+    res = await fetchImpl(`${baseUrl}${path}`, {
+      method,
+      signal: AbortSignal.timeout(120_000),
+      // Studio refuses writes without X-Studio (a CSRF guard for the browser).
+      ...(method !== 'GET' ? { headers: { 'content-type': 'application/json', 'x-studio': '1' }, body: JSON.stringify(body || {}) } : {}),
+    });
   } catch (err) {
     throw new ToolError(`SiteLens Studio isn't reachable at ${baseUrl} (${err.cause?.code || err.message}). Start it with \`npm start\` in the project or open the desktop app; schema and query work without it.`);
   }
@@ -184,7 +224,8 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
     const tool = TOOLS.find((t) => t.name === name);
     if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     try {
-      const result = tool.local ? tool.local(args, ctx) : await studio(baseUrl, tool.path(args), fetchImpl).then((d) => (tool.shape ? tool.shape(d) : d));
+      const request = { method: tool.method, body: tool.body?.(args) };
+      const result = tool.local ? tool.local(args, ctx) : await studio(baseUrl, tool.path(args), fetchImpl, request).then((d) => (tool.shape ? tool.shape(d) : d));
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 1) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: err instanceof ToolError ? err.message : `Failed: ${err.message}` }], isError: true };
@@ -204,13 +245,13 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {} },
           serverInfo: { name: 'sitelens-studio', version: '0.2.0' },
-          instructions: 'Read-only access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else.',
+          instructions: 'Access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else. When the user wants your analysis kept in the app, record it with add_comment (check list_comments first); that is the only thing you can change.',
         });
       }
       case 'ping':
         return reply({});
       case 'tools/list':
-        return reply({ tools: TOOLS.map(({ name, description, inputSchema }) => ({ name, description, inputSchema, annotations: { readOnlyHint: true } })) });
+        return reply({ tools: TOOLS.map(({ name, description, inputSchema, write }) => ({ name, description, inputSchema, annotations: write ? { readOnlyHint: false, destructiveHint: name.startsWith('delete') } : { readOnlyHint: true } })) });
       case 'tools/call':
         return reply(await callTool(msg.params?.name, msg.params?.arguments || {}));
       default:

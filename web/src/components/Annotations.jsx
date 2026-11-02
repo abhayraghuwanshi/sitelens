@@ -5,7 +5,7 @@ import { useAsync } from '../hooks.js';
 import { kindColor } from '../charts/LineChart.jsx';
 import { Icon } from './icons.jsx';
 
-const toIso = (d) => {
+export const toIso = (d) => {
   const s = String(d || '');
   return /^\d{8}/.test(s) ? `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}` : s.slice(0, 10);
 };
@@ -58,11 +58,11 @@ export function AnnotationBar({ annotations, scope, scopeLabel = 'this chart', o
     <div class="stack" style={{ gap: '6px', marginTop: '8px' }}>
       <div class="row" style={{ gap: '6px' }}>
         {annotations.map((a) => (
-          <span class="chip" key={a.id} title={`${a.date} · ${a.source}`} style={{ gap: '6px' }}>
+          <span class="chip" key={a.id} title={a.kind === 'claude' ? `${a.date} · Claude\n\n${a.body || ''}` : `${a.date} · ${a.source}`} style={{ gap: '6px' }}>
             <i aria-hidden="true" style={{ width: '7px', height: '7px', borderRadius: '50%', background: kindColor(a.kind), display: 'inline-block' }} />
             <span class="muted">{formatDate(a.date.replaceAll('-', ''))}</span>
             {a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.label}</a> : a.label}
-            {a.kind === 'note' && (
+            {(a.kind === 'note' || a.kind === 'claude') && (
               <button type="button" class="btn ghost" aria-label={`Delete note ${a.label}`} onClick={() => remove(a.id)}
                 style={{ padding: '0 4px', minHeight: '0', lineHeight: '1' }}>×</button>
             )}

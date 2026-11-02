@@ -6,7 +6,8 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, BarList, Segmented } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
-import { useAnnotations, AnnotationBar } from '../components/Annotations.jsx';
+import { useAnnotations, AnnotationBar, toIso } from '../components/Annotations.jsx';
+import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { ServerTrafficCard } from './Firebase.jsx';
 
 const TREND_METRICS = [
@@ -76,6 +77,10 @@ export function Overview({ site, range }) {
           )}
         </Card>
       </div>
+
+      {trendDates.length > 0 && (
+        <ClaudeComments siteId={site.id} from={toIso(trendDates[0])} to={toIso(trendDates[trendDates.length - 1])} onChange={notes.reload} />
+      )}
 
       <div class="grid cols-3">
         <Card title="Traffic sources" sub="Sessions by channel">

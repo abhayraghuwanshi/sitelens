@@ -1,12 +1,13 @@
 // Chart annotations: dated markers drawn on every trend chart. They come from
 // pluggable sources merged at read time:
-//  - notes: written by hand, stored in studio.json `annotations`;
+//  - notes: written by hand, or by Claude (author 'claude', with a longer
+//    body), stored in studio.json `annotations`;
 //  - github: releases from .data/github.db (published, non-draft);
 //  - cws: Web Store version changes seen in the daily listing snapshots;
 //  - anything else via registerSource(name, fn) (e.g. Vercel deploys).
 //
-// Annotation: { id, date: 'YYYY-MM-DD', label, kind, source, url?, scope? }
-//   kind: 'release' | 'extension' | 'deploy' | 'note' | 'alert'
+// Annotation: { id, date: 'YYYY-MM-DD', label, kind, source, url?, scope?, body?, author?, via?, model?, createdAt? }
+//   kind: 'release' | 'extension' | 'deploy' | 'note' | 'claude' | 'alert'
 //   scope: 'site:<id>' | 'repo:<owner/name>' | 'ext:<id>'; no scope = global.
 
 import { DatabaseSync } from 'node:sqlite';
@@ -14,7 +15,9 @@ import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './store.mjs';
 
-export const ANNOTATION_KINDS = ['release', 'extension', 'deploy', 'note', 'alert', 'mention', 'post'];
+export const ANNOTATION_KINDS = ['release', 'extension', 'deploy', 'note', 'claude', 'alert', 'mention', 'post'];
+export const NOTE_AUTHORS = ['you', 'claude'];
+const BODY_MAX = 4000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const SCOPE = /^(site|repo|ext):[\w.\-/]{1,120}$/;
 
@@ -25,11 +28,16 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     sources.set(name, fn);
   }
 
-  registerSource('notes', async () => ((await store.get()).annotations || []).map((n) => ({ ...n, kind: 'note', source: 'notes' })));
+  registerSource('notes', async () => ((await store.get()).annotations || []).map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : 'note', source: 'notes' })));
   registerSource('github', async ({ from, to }) => githubReleases(githubDbPath(), { from, to }));
   registerSource('cws', async () => extensionVersions(extensions ? await extensions.list() : (await store.get()).extensions || []));
 
-  async function list({ from = '', to = '', scopes = null } = {}) {
+  async function list({ from = '', to = '', scopes = null, author = '' } = {}) {
+    if (author) {
+      const notes = ((await store.get()).annotations || []).filter((n) => (n.author || 'you') === author)
+        .map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : 'note', source: 'notes' }));
+      return filterAnnotations(notes, { from, to, scopes });
+    }
     const results = await Promise.all([...sources].map(async ([name, fn]) => {
       try {
         return (await fn({ from, to, scopes })) || [];
@@ -46,21 +54,30 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     const date = String(input.date || '').trim();
     const label = String(input.label || '').trim().slice(0, 140);
     const scope = String(input.scope || '').trim();
+    const author = String(input.author || 'you');
+    const body = String(input.body || '').trim();
+    if (!NOTE_AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${NOTE_AUTHORS.join(', ')}.`);
+    if (body.length > BODY_MAX) throw new ValidationError(`Keep the write-up under ${BODY_MAX} characters.`);
     if (!DATE.test(date) || Number.isNaN(Date.parse(date))) throw new ValidationError('Pick a date (YYYY-MM-DD).');
     if (!label) throw new ValidationError('Write a short note.');
     if (scope && !SCOPE.test(scope)) throw new ValidationError('Scope must look like site:<id>, repo:<owner/name> or ext:<id>.');
-    const note = { id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: 'note', source: 'notes', ...(scope ? { scope } : {}) };
+    const note = {
+      id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: author === 'claude' ? 'claude' : 'note', source: 'notes',
+      ...(scope ? { scope } : {}),
+      ...(author === 'claude' ? { author, body, via: input.via === 'app' ? 'app' : 'mcp', createdAt: new Date().toISOString(), ...(input.model ? { model: String(input.model).slice(0, 60) } : {}) } : body ? { body } : {}),
+    };
     await store.update((s) => {
       s.annotations = [...(s.annotations || []), note];
     });
     return note;
   }
 
-  async function removeNote(id) {
+  // `author` limits which notes may go, so Claude can only delete its own.
+  async function removeNote(id, { author = '' } = {}) {
     let found = false;
     await store.update((s) => {
       const before = (s.annotations || []).length;
-      s.annotations = (s.annotations || []).filter((n) => n.id !== id);
+      s.annotations = (s.annotations || []).filter((n) => n.id !== id || (author && (n.author || 'you') !== author));
       found = s.annotations.length < before;
     });
     if (!found) throw new ValidationError('Only notes can be deleted, and that one no longer exists.');
@@ -135,11 +152,11 @@ export function annotationRoutes({ annotations }) {
   return [
     ['GET', /^\/api\/annotations$/, async ({ query }) => {
       const scopes = (query.get('scope') || '').split(',').map((s) => s.trim()).filter(Boolean);
-      return { annotations: await annotations.list({ from: query.get('from') || '', to: query.get('to') || '', scopes: scopes.length ? scopes : null }) };
+      return { annotations: await annotations.list({ from: query.get('from') || '', to: query.get('to') || '', scopes: scopes.length ? scopes : null, author: query.get('author') || '' }) };
     }],
     ['POST', /^\/api\/annotations$/, async ({ body }) => annotations.addNote(body)],
-    ['DELETE', /^\/api\/annotations\/([\w-]+)$/, async ({ match }) => {
-      await annotations.removeNote(match[1]);
+    ['DELETE', /^\/api\/annotations\/([\w-]+)$/, async ({ match, query }) => {
+      await annotations.removeNote(match[1], { author: query?.get('author') || '' });
       return { ok: true };
     }],
   ];

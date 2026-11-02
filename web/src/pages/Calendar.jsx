@@ -2,6 +2,7 @@ import { formatNumber, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, navigate, withParam, usePersistent } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, Segmented, Empty } from '../components/ui.jsx';
+import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { Icon } from '../components/icons.jsx';
 import { LineChart, kindColor } from '../charts/LineChart.jsx';
 
@@ -84,7 +85,10 @@ export function Calendar({ sites, params }) {
           <MonthGrid m={m} metric={useMetric} selected={selected} />
           <Legend />
         </Card>
-        <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} />
+        <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
+          <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} />
+          <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
+        </div>
       </div>
     </>
   );
@@ -172,7 +176,7 @@ function Legend() {
       <span><i class="swatch tone-up" /> 15%+ above</span>
       <span><i class="swatch tone-down" /> 15%+ below</span>
       <span><i class="swatch tone-down2" /> 40%+ below</span>
-      {[['release', 'Release'], ['deploy', 'Deploy'], ['post', 'Post'], ['mention', 'Mention'], ['note', 'Note']].map(([k, l]) => (
+      {[['release', 'Release'], ['deploy', 'Deploy'], ['post', 'Post'], ['mention', 'Mention'], ['note', 'Note'], ['claude', 'Claude']].map(([k, l]) => (
         <span key={k}><i class="dot" style={{ background: kindColor(k) }} /> {l}</span>
       ))}
     </div>
@@ -223,7 +227,7 @@ function DayStory({ date, site, today }) {
         {(d.events.length > 0 || d.eventsBefore.length > 0) && (
           <div class="stack" style={{ gap: '6px' }}>
             <h3 class="cal-sub">Events</h3>
-            {[...d.events.map((e) => ({ ...e, when: '' })), ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' }))].map((e) => (
+            {[...d.events.map((e) => ({ ...e, when: '' })), ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' }))].filter((e) => e.kind !== 'claude').map((e) => (
               <div key={e.id} class="row small" style={{ gap: '8px', flexWrap: 'nowrap' }}>
                 <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
                 <span style={{ minWidth: 0 }}>{e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}</span>

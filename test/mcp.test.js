@@ -36,7 +36,10 @@ test('initialize, tools/list and unknown methods', async () => {
   assert.equal(await mcp.handle({ jsonrpc: '2.0', method: 'notifications/initialized' }), null);
   const list = await mcp.handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
   assert.deepEqual(list.result.tools.map((t) => t.name), TOOLS.map((t) => t.name));
-  assert.ok(list.result.tools.every((t) => t.annotations.readOnlyHint && t.inputSchema.type === 'object'));
+  assert.ok(list.result.tools.every((t) => t.inputSchema.type === 'object'));
+  // Only the comment tools write; delete is the one destructive tool.
+  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment']);
+  assert.equal(list.result.tools.find((t) => t.name === 'delete_comment').annotations.destructiveHint, true);
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'nope' })).error.code, -32601);
   assert.equal((await mcp.handle({ id: 5 })).error.code, -32600);
 });
@@ -119,4 +122,29 @@ test('stdio: newline-delimited JSON-RPC end to end', async () => {
     child.kill();
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test('comment tools post Claude notes and delete only Claude ones', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init = {}) => {
+    calls.push({ url, method: init.method || 'GET', body: init.body && init.method !== 'DELETE' ? JSON.parse(init.body) : null });
+    if (init.method && init.method !== 'GET') assert.equal(init.headers['x-studio'], '1');
+    if (url.includes('/api/annotations?')) {
+      return Response.json({ annotations: [{ id: 'note-1', date: '2026-10-14', label: 'Spike', body: 'HN', scope: 'site:a', via: 'mcp', kind: 'claude' }] });
+    }
+    return Response.json({ id: 'note-2', ok: true });
+  };
+  const mcp = createMcp({ baseUrl: 'http://s', dataDir: '/nowhere', fetchImpl });
+  await mcp.callTool('add_comment', { date: '2026-10-14', title: 'Spike', body: 'From HN', site: 'a' });
+  assert.deepEqual(calls[0], {
+    url: 'http://s/api/annotations', method: 'POST',
+    body: { date: '2026-10-14', label: 'Spike', body: 'From HN', author: 'claude', via: 'mcp', scope: 'site:a' },
+  });
+  await mcp.callTool('add_comment', { date: '2026-10-14', title: 'Global', body: 'x', site: 'all' });
+  assert.equal(calls[1].body.scope, '');
+  const listed = JSON.parse(text(await mcp.callTool('list_comments', { site: 'a' })));
+  assert.equal(calls[2].url, 'http://s/api/annotations?author=claude&scope=site%3Aa');
+  assert.deepEqual(listed[0], { id: 'note-1', date: '2026-10-14', title: 'Spike', body: 'HN', scope: 'site:a', via: 'mcp' });
+  await mcp.callTool('delete_comment', { id: 'note-1' });
+  assert.deepEqual(calls[3], { url: 'http://s/api/annotations/note-1?author=claude', method: 'DELETE', body: null });
 });

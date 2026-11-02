@@ -142,8 +142,11 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
       lines.push({ kind: 'search', text: `${where}Search: ${num(s.search.clicks)} clicks${vs}${top ? `, top query “${top.query}”` : ''}.` });
     }
   }
-  if (events.length) lines.push({ kind: 'event', text: `That day: ${events.map((e) => e.label).join('; ')}.` });
-  if (eventsBefore.length && moved) lines.push({ kind: 'event', text: `The day before: ${eventsBefore.map((e) => e.label).join('; ')}.` });
+  // Claude's comments are analysis of the day, not things that happened on it.
+  const happened = events.filter((e) => e.kind !== 'claude');
+  const happenedBefore = eventsBefore.filter((e) => e.kind !== 'claude');
+  if (happened.length) lines.push({ kind: 'event', text: `That day: ${happened.map((e) => e.label).join('; ')}.` });
+  if (happenedBefore.length && moved) lines.push({ kind: 'event', text: `The day before: ${happenedBefore.map((e) => e.label).join('; ')}.` });
   if (github?.stars) lines.push({ kind: 'github', text: `GitHub: ${signed(github.stars)} stars${github.top ? ` (most on ${github.top})` : ''}.` });
   for (const e of extensions) {
     if (e.users === null || e.users === undefined) continue;

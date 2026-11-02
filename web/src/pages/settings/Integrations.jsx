@@ -84,7 +84,7 @@ const GROUPS = [
     items: [
       {
         key: 'mcp', name: 'Claude Code & Claude Desktop', icon: 'terminal', panel: 'mcp',
-        desc: 'Ask your agent about traffic, search and launches. Read-only access over MCP.',
+        desc: 'Ask your agent about traffic, search and launches, and have it leave comments on your charts.',
         status: () => ({ on: false, text: 'Set up once per agent · no key needed' }),
       },
     ],

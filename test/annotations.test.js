@@ -99,6 +99,34 @@ test('annotations: notes round-trip, custom sources merge, a failing source is s
   }
 });
 
+test('annotations: Claude notes keep a body, filter by author, and Claude can delete only its own', async () => {
+  const dir = await tempDir();
+  try {
+    const store = createStore(dir);
+    const annotations = createAnnotations({ store, log: {} });
+    const mine = await annotations.addNote({ date: '2026-10-14', label: 'Launch day' });
+    const claude = await annotations.addNote({ date: '2026-10-14', label: 'HN drove the spike', body: 'Sessions +47%.\n- news.ycombinator.com +612', author: 'claude', via: 'app', model: 'claude-opus-5-5', scope: 'site:x' });
+    assert.equal(claude.kind, 'claude');
+    assert.equal(claude.via, 'app');
+    assert.match(claude.createdAt, /^\d{4}-/);
+    assert.equal(mine.author, undefined);
+    await assert.rejects(annotations.addNote({ date: '2026-10-14', label: 'x', author: 'robot' }), /Author/);
+    await assert.rejects(annotations.addNote({ date: '2026-10-14', label: 'x', author: 'claude', body: 'y'.repeat(4001) }), /under 4000/);
+
+    const all = await annotations.list({ from: '2026-10-01', to: '2026-10-31' });
+    assert.deepEqual(all.map((a) => a.kind).sort(), ['claude', 'note']);
+    const onlyClaude = await annotations.list({ author: 'claude', scopes: ['site:x'] });
+    assert.deepEqual(onlyClaude.map((a) => a.id), [claude.id]);
+    assert.deepEqual((await annotations.list({ author: 'claude', scopes: ['site:y'] })).map((a) => a.id), []);
+
+    await assert.rejects(annotations.removeNote(mine.id, { author: 'claude' }), /no longer exists/);
+    await annotations.removeNote(claude.id, { author: 'claude' });
+    assert.deepEqual((await store.get()).annotations.map((n) => n.id), [mine.id]);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('placeAnnotations: groups by matching chart date; hourly charts use the first hour', () => {
   const a = { id: 'a', date: '2026-10-02', label: 'A' };
   const b = { id: 'b', date: '2026-10-02', label: 'B' };

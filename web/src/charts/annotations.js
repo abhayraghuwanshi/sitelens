@@ -8,6 +8,7 @@ const KIND_COLORS = {
   mention: 'var(--series-5)',
   post: 'var(--series-2)',
   note: 'var(--text-3)',
+  claude: 'var(--claude)',
 };
 export const kindColor = (kind) => KIND_COLORS[kind] || KIND_COLORS.note;
 

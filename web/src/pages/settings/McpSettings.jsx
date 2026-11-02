@@ -44,7 +44,7 @@ export function McpSettings() {
   const s = setup.data;
 
   return (
-    <Card title="Claude Code & Claude Desktop" sub="Gives local agents read-only access to Studio’s numbers over MCP. Your agent starts the server itself when it needs it, so there’s nothing to keep running here.">
+    <Card title="Claude Code & Claude Desktop" sub="Lets local agents read Studio’s numbers over MCP and leave their analysis as comments on your charts. They can’t change anything else. Your agent starts the server itself when it needs it, so there’s nothing to keep running here.">
       <div class="stack">
         <p class="small" style={{ margin: 0 }}>
           <b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.

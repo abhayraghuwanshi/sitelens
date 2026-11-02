@@ -78,7 +78,7 @@ GA4 and Search Console numbers are kept locally, so the calendar loads from disk
 
 ## MCP server for local agents
 
-`server/mcp.mjs` gives Claude Code, Claude Desktop or any other MCP client read-only access to Studio's data over stdio, with no extra dependencies:
+`server/mcp.mjs` gives Claude Code, Claude Desktop or any other MCP client read access to Studio's data over stdio, with no extra dependencies. The only thing it can change is Claude's own comments (see [Claude comments](#claude-comments)):
 
 ```bash
 claude mcp add sitelens -- node /path/to/sitelens-studio/server/mcp.mjs
@@ -94,9 +94,19 @@ Inside this repo you don't need to add anything: `.mcp.json` registers it as `si
 | `day_story` | The calendar's story for one day |
 | `events` | Releases, deploys, posts, mentions, notes and alerts in a range |
 | `schema` / `query` | Tables of, and one read-only `SELECT` against, any local database: `calendar`, `github`, `posts`, `mentions`, `bing`, `vitals`, `firebase`, `ai-search` |
+| `add_comment` / `list_comments` / `delete_comment` | Leave a dated comment written by Claude, list Claude's comments, or delete one of them. Notes you wrote can't be deleted |
 
 The analytics tools call the running Studio, so start it first (`npm start` or the desktop app). `schema` and `query` read `.data/*.db` directly, through read-only connections, and work without it. `studio.json`, which holds tokens and settings, is never exposed. Set `STUDIO_URL` if Studio runs on another port, and `STUDIO_DATA_DIR` for the desktop app's data folder.
 
+
+## Claude comments
+
+Claude can read a site's numbers and leave its analysis in the app as a **comment**: a dated note marked as written by Claude. Comments appear as orange markers on every trend chart, in the Calendar, and in the **Claude** card on Overview and on each Calendar day, where the full write-up is shown. There are two ways to get one:
+
+- **From Claude Code or Claude Desktop** (no API cost beyond your plan): ask something like "look at last month for cool-desk.com and leave a comment on the biggest change". The MCP server's `add_comment` tool saves it.
+- **In the app:** **Analyze with Claude** on Overview (for the selected range) or **Analyze this day** in the Calendar, with an optional question. Studio runs Claude Opus 5.5 over the same read tools the MCP server has, then saves one comment on the day the main finding is about. It uses the Anthropic API key from Settings → Claude (or `ANTHROPIC_API_KEY`). A run usually takes 20–60 seconds and costs roughly $0.10–0.40.
+
+Comments are stored with your notes in `.data/studio.json`. Delete one with the × on its card or chart chip.
 
 ## Search demand
 
