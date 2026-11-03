@@ -2,11 +2,16 @@
 // name, with the traffic each post likely brought.
 //
 //  - Reddit: /user/<name>/submitted through the official OAuth app from
-//    Settings → Mentions (app-only token; Reddit's anonymous JSON 403s).
+//    Settings → Mentions when there is one (app-only token; Reddit's anonymous
+//    JSON 403s). Without an app, the public submitted.rss feed: same posts, no
+//    scores. A later OAuth sync fills the scores in.
 //  - Hacker News: Algolia, tags=story,author_<name>. No key.
 //  - Dev.to: /api/articles?username=<name>. No key.
 //  - Medium: the public RSS feed medium.com/feed/@<name>. No key, no metrics.
 //  - Product Hunt: GraphQL user(username).madePosts with the developer token.
+//  - Bluesky: the public AppView, app.bsky.feed.getAuthorFeed. No key.
+//  - Mastodon: the instance's public accounts/lookup + statuses API. No key.
+//  - Lobsters: /~<name>/stories.json. No key.
 //  - LinkedIn, X and anything else: added by URL. Their APIs don't let you
 //    read your own posts without partner approval or a paid tier.
 //
@@ -24,6 +29,7 @@ import { ValidationError } from './store.mjs';
 import { historyRange } from './github.mjs';
 import { sourceFamily } from './journey.mjs';
 import { createCache } from './cache.mjs';
+import { UTM_SOURCES } from '../shared/utm.js';
 
 const DAY = 86_400_000;
 const USER_AGENT = 'node:sitelens-studio:0.2 (local analytics dashboard)';
@@ -35,6 +41,9 @@ export const PLATFORMS = {
   devto: { label: 'Dev.to', family: 'dev.to', fetch: true, handle: 'username' },
   medium: { label: 'Medium', family: 'medium.com', fetch: true, handle: '@username' },
   ph: { label: 'Product Hunt', family: 'Product Hunt', fetch: true, handle: 'username' },
+  bluesky: { label: 'Bluesky', family: 'Bluesky', fetch: true, handle: 'name.bsky.social', pattern: /^[a-z0-9.-]{3,253}\.[a-z]{2,}$/i },
+  mastodon: { label: 'Mastodon', family: 'Mastodon', fetch: true, handle: 'name@mastodon.social', pattern: /^[\w.-]{1,40}@[a-z0-9.-]+\.[a-z]{2,}$/i },
+  lobsters: { label: 'Lobsters', family: 'Lobsters', fetch: true, handle: 'username' },
   linkedin: { label: 'LinkedIn', family: 'LinkedIn', fetch: false },
   x: { label: 'X', family: 'X', fetch: false },
   other: { label: 'Other', family: '', fetch: false },
@@ -52,7 +61,18 @@ CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const strip = (s) => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&#x27;/g, '\'').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
-const cleanHandle = (h) => String(h || '').trim().replace(/^https?:\/\/[^/]+\//, '').replace(/^(u\/|user\/|@)/i, '').replace(/[/?#].*$/, '');
+const cleanHandle = (h) => {
+  const raw = String(h || '').trim();
+  // A Mastodon profile URL names the instance too: https://host/@me → me@host.
+  const masto = raw.match(/^https?:\/\/([^/]+)\/@([\w.-]+)/);
+  if (masto && !/bsky\.app$/.test(masto[1])) return `${masto[2]}@${masto[1]}`;
+  return raw.replace(/^https?:\/\/[^/]+\//, '').replace(/^(u\/|user\/|profile\/|@|~)/i, '').replace(/[/?#].*$/, '');
+};
+const decode = (s) => String(s || '').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;|&#x27;/g, '\'').replace(/&amp;/g, '&');
+const firstLine = (text) => {
+  const line = String(text || '').split('\n').map((l) => l.trim()).find(Boolean) || '';
+  return line.length > 120 ? `${line.slice(0, 117)}…` : line;
+};
 
 /* ---------- parsers (unit-tested) ---------- */
 
@@ -142,6 +162,90 @@ export function parsePhMadePosts(json, handle) {
   }));
 }
 
+// Reddit's public Atom feed of a user's submissions. No scores in it.
+export function parseRedditRss(xml, handle) {
+  return String(xml || '').split('<entry>').slice(1).map((raw) => {
+    const tag = (name) => (raw.match(new RegExp(`<${name}[^>]*>([\\s\\S]*?)</${name}>`)) || [])[1] || '';
+    const permalink = (raw.match(/<link href="([^"]+)"/) || [])[1] || '';
+    const html = decode(tag('content'));
+    const link = (html.match(/<a href="([^"]+)">\[link\]<\/a>/) || [])[1] || '';
+    const community = (permalink.match(/reddit\.com\/(r\/[^/]+)/) || [])[1] || '';
+    return {
+      id: `reddit:${tag('id')}`,
+      platform: 'reddit',
+      handle,
+      title: strip(decode(tag('title'))),
+      text: strip(html.replace(/<a href="[^"]+">\[(link|comments)\]<\/a>/g, '').replace(/submitted by[\s\S]*$/, '')).slice(0, 1000),
+      permalink,
+      link: link === permalink ? '' : decode(link),
+      community: community.startsWith('r/u_') ? '' : community,
+      points: null,
+      comments: null,
+      createdAt: Date.parse(tag('published') || tag('updated')),
+    };
+  }).filter((p) => /^reddit:t3_/.test(p.id) && Number.isFinite(p.createdAt));
+}
+
+// Bluesky author feed: own posts only (reposts carry a reason), title from the first line.
+export function parseBlueskyFeed(json, handle) {
+  return (json.feed || []).filter((f) => !f.reason && f.post?.author?.handle?.toLowerCase() === handle.toLowerCase()).map(({ post: p }) => {
+    const text = String(p.record?.text || '');
+    const external = p.record?.embed?.external?.uri || p.record?.embed?.media?.external?.uri || '';
+    const facet = (p.record?.facets || []).flatMap((f) => f.features || []).find((f) => f.uri)?.uri || '';
+    return {
+      id: `bluesky:${p.uri}`,
+      platform: 'bluesky',
+      handle,
+      title: firstLine(text) || 'Bluesky post',
+      text: text.slice(0, 1000),
+      permalink: `https://bsky.app/profile/${p.author.handle}/post/${p.uri.split('/').pop()}`,
+      link: external || facet,
+      community: '',
+      points: (Number(p.likeCount) || 0) + (Number(p.repostCount) || 0),
+      comments: Number(p.replyCount) || 0,
+      createdAt: Date.parse(p.record?.createdAt || p.indexedAt),
+    };
+  });
+}
+
+export function parseMastodonStatuses(list, handle) {
+  return (Array.isArray(list) ? list : []).filter((st) => !st.reblog).map((st) => {
+    const lines = String(st.content || '').replace(/<p class="quote-inline">[\s\S]*?<\/p>/, '').split(/<\/p>|<br\s*\/?>/).map(strip).filter(Boolean);
+    const text = lines.join('\n');
+    const href = [...String(st.content || '').matchAll(/<a href="([^"]+)"(?![^>]*class="[^"]*(mention|hashtag))/g)].map((m) => decode(m[1]));
+    return {
+      id: `mastodon:${st.uri || st.url}`,
+      platform: 'mastodon',
+      handle,
+      title: firstLine(text) || 'Mastodon post',
+      text: text.slice(0, 1000),
+      permalink: st.url || st.uri,
+      link: st.card?.url || href.find((u) => !/\/@[\w.-]+\/\d+/.test(u)) || '',
+      community: (st.tags || []).map((t) => `#${t.name}`).join(' '),
+      points: (Number(st.favourites_count) || 0) + (Number(st.reblogs_count) || 0),
+      comments: Number(st.replies_count) || 0,
+      createdAt: Date.parse(st.created_at),
+    };
+  });
+}
+
+// Lobsters lists stories a user submitted, including other people's links.
+export function parseLobsters(list, handle) {
+  return (Array.isArray(list) ? list : []).map((st) => ({
+    id: `lobsters:${st.short_id}`,
+    platform: 'lobsters',
+    handle,
+    title: strip(st.title),
+    text: strip(st.description_plain || st.description).slice(0, 1000),
+    permalink: st.comments_url || st.short_id_url,
+    link: st.url || '',
+    community: (st.tags || []).map((t) => `#${t}`).join(' '),
+    points: Number(st.score) || 0,
+    comments: Number(st.comment_count) || 0,
+    createdAt: Date.parse(st.created_at),
+  }));
+}
+
 // Platform from a pasted URL, for posts added by hand.
 export function platformOf(url) {
   const host = (() => {
@@ -158,6 +262,9 @@ export function platformOf(url) {
   if (host === 'dev.to') return 'devto';
   if (/(^|\.)medium\.com$/.test(host)) return 'medium';
   if (/producthunt\.com$/.test(host)) return 'ph';
+  if (host === 'bsky.app') return 'bluesky';
+  if (host === 'lobste.rs') return 'lobsters';
+  if (/\/@[\w.-]+\/\d+$/.test(url) && /mastodon|mstdn|fosstodon|hachyderm|infosec\.exchange/.test(host)) return 'mastodon';
   return host ? 'other' : '';
 }
 
@@ -222,7 +329,7 @@ export function normalizeAccounts(input = []) {
     const platform = String(a?.platform || '');
     const handle = cleanHandle(a?.handle);
     if (!PLATFORMS[platform]?.fetch) throw new ValidationError(`${PLATFORMS[platform]?.label || platform || 'That platform'} can’t be fetched; add its posts by URL instead.`);
-    if (!/^[\w.-]{2,40}$/.test(handle)) throw new ValidationError(`“${a?.handle}” isn’t a ${PLATFORMS[platform].label} username.`);
+    if (!(PLATFORMS[platform].pattern || /^[\w.-]{2,40}$/).test(handle)) throw new ValidationError(`“${a?.handle}” isn’t a ${PLATFORMS[platform].label} username.`);
     if (!out.some((x) => x.platform === platform && x.handle.toLowerCase() === handle.toLowerCase())) out.push({ platform, handle });
   }
   return out;
@@ -262,8 +369,14 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
 
   const fetchers = {
     async reddit(handle) {
-      const token = await mentions.redditToken();
-      if (!token) throw new Error('Add a Reddit app in Settings → Mentions first.');
+      const token = await mentions.redditToken().catch(() => '');
+      if (!token) {
+        const xml = await request(`https://www.reddit.com/user/${encodeURIComponent(handle)}/submitted.rss?limit=100`, {}, 'text').catch((err) => {
+          if (err.status === 429 || err.status === 403) throw new Error('Reddit’s public feed is busy; it retries in 6 hours. A Reddit app (Settings → Mentions) syncs reliably and adds upvotes.');
+          throw err;
+        });
+        return parseRedditRss(xml, handle);
+      }
       const json = await request(`https://oauth.reddit.com/user/${encodeURIComponent(handle)}/submitted?limit=100&sort=new&raw_json=1`, { headers: { Authorization: `Bearer ${token}` } });
       return parseRedditSubmitted(json, handle);
     },
@@ -288,13 +401,24 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
       if (json.errors?.length) throw new Error(json.errors[0].message);
       return parsePhMadePosts(json, handle);
     },
+    async bluesky(handle) {
+      return parseBlueskyFeed(await request(`https://public.api.bsky.app/xrpc/app.bsky.feed.getAuthorFeed?actor=${encodeURIComponent(handle)}&limit=100&filter=posts_no_replies`), handle);
+    },
+    async mastodon(handle) {
+      const [user, host] = handle.split('@');
+      const account = await request(`https://${host}/api/v1/accounts/lookup?acct=${encodeURIComponent(user)}`);
+      return parseMastodonStatuses(await request(`https://${host}/api/v1/accounts/${encodeURIComponent(account.id)}/statuses?limit=40&exclude_replies=true&exclude_reblogs=true`), handle);
+    },
+    async lobsters(handle) {
+      return parseLobsters(await request(`https://lobste.rs/~${encodeURIComponent(handle)}/stories.json`), handle);
+    },
   };
 
   function save(items) {
     const t = now();
     const upsert = open().prepare(`INSERT INTO posts (id, platform, handle, title, text, permalink, link, community, points, comments, created_at, manual, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-      ON CONFLICT(id) DO UPDATE SET title = excluded.title, points = excluded.points, comments = excluded.comments, updated_at = excluded.updated_at`);
+      ON CONFLICT(id) DO UPDATE SET title = excluded.title, points = COALESCE(excluded.points, posts.points), comments = COALESCE(excluded.comments, posts.comments), updated_at = excluded.updated_at`);
     let added = 0;
     for (const p of items) {
       if (!Number.isFinite(p.createdAt)) continue;
@@ -383,15 +507,19 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
       });
       const byFamily = new Map();
       const campaigns = new Map();
+      const sources = new Map();
       for (const r of report.rows) {
         const day = `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}`;
         const key = `${day}|${sourceFamily(r.sessionSource)}`;
         const n = Number(r.sessions) || 0;
         byFamily.set(key, (byFamily.get(key) || 0) + n);
         const c = String(r.sessionCampaignName || '').toLowerCase();
-        if (c && c !== '(not set)' && c !== '(direct)' && c !== '(organic)' && c !== '(referral)') campaigns.set(c, (campaigns.get(c) || 0) + n);
+        if (c && c !== '(not set)' && c !== '(direct)' && c !== '(organic)' && c !== '(referral)') {
+          campaigns.set(c, (campaigns.get(c) || 0) + n);
+          sources.set(c, new Set([...(sources.get(c) || []), sourceFamily(r.sessionSource)]));
+        }
       }
-      return { byFamily, campaigns };
+      return { byFamily, campaigns, sources };
     });
   }
 
@@ -409,17 +537,24 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
     });
 
     // Traffic, per product site; a GA4 failure blanks sessions, never the list.
+    // Tagged links show up as campaigns whether or not a post was logged for them.
     const errors = { ...status.errors };
     const withTraffic = [];
+    const campaigns = [];
     for (const p of products) {
       const site = sites.find((s) => s.id === p.siteId && !s.demo && s.propertyId);
+      if (!site) continue;
       const mine = items.filter((i) => i.product === p.id);
-      if (!site || !mine.length) continue;
       try {
         const end = isoDay(Math.min(Date.parse(`${range.end}T00:00:00Z`), now()));
-        withTraffic.push(...attribute(mine, await siteDaily(site, range.start, end)));
+        const daily = await siteDaily(site, range.start, end);
+        withTraffic.push(...attribute(mine, daily));
+        for (const [name, sessions] of daily.campaigns) {
+          const post = mine.find((i) => utmCampaign(i.link, i.permalink).toLowerCase() === name);
+          campaigns.push({ campaign: name, product: p.id, sessions, sources: [...(daily.sources?.get(name) || [])], post: post ? { id: post.id, title: post.title, permalink: post.permalink } : null });
+        }
       } catch (err) {
-        errors[`ga4:${p.id}`] = err.message;
+        if (mine.length) errors[`ga4:${p.id}`] = err.message;
       }
     }
     const traffic = new Map(withTraffic.map((p) => [p.id, p]));
@@ -432,15 +567,21 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
       return { key, label: PLATFORMS[key].label, posts: list.length, points: sum(list, 'points'), comments: sum(list, 'comments'), sessions: sum(list, 'sessions') };
     }).filter((p) => p.posts);
     const { ph } = await mentions.credentials();
-    const redditReady = Boolean(await mentions.redditToken().catch(() => ''));
+    const redditApp = Boolean(await mentions.redditToken().catch(() => ''));
     return {
       range,
       accounts: await accounts(),
       platforms: Object.entries(PLATFORMS).map(([key, p]) => ({
         key, label: p.label, fetch: p.fetch, handle: p.handle || '',
-        ready: key === 'reddit' ? redditReady : key === 'ph' ? Boolean(ph.token) : p.fetch,
+        ready: key === 'ph' ? Boolean(ph.token) : p.fetch,
+        ...(key === 'reddit' ? { scores: redditApp } : {}),
+        utmSource: UTM_SOURCES[key] || '',
       })),
-      products: products.map((p) => ({ id: p.id, label: p.label })),
+      products: products.map((p) => {
+        const site = sites.find((s) => s.id === p.siteId && !s.demo);
+        return { id: p.id, label: p.label, url: site?.host ? `https://${site.host}/` : '' };
+      }),
+      campaigns: campaigns.filter((c) => !product || c.product === product).sort((a, b) => b.sessions - a.sessions).slice(0, 100),
       totals: { posts: filtered.length, points: sum(filtered, 'points'), comments: sum(filtered, 'comments'), sessions: sum(filtered, 'sessions') },
       byPlatform,
       items: filtered.slice(0, 500),

@@ -2,6 +2,7 @@ import { useState } from 'preact/hooks';
 import { formatNumber, formatRelative } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
+import { taggedLink, slug } from '../../../shared/utm.js';
 import { Card, KpiStrip, Loading, ErrorState, Empty } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 
@@ -43,6 +44,7 @@ export function Posts({ range }) {
 
       <Accounts data={d} open={!d.accounts.length} onSaved={data.reload} />
       <AddByUrl products={d.products} onAdded={data.reload} />
+      <LinkBuilder data={d} />
 
       {Object.entries(d.errors).filter(([k]) => k.startsWith('ga4:')).map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}><b>Traffic for {d.products.find((p) => `ga4:${p.id}` === k)?.label || k}:</b> {v}</p>)}
 
@@ -125,7 +127,9 @@ export function Posts({ range }) {
           </div>
         )}
       </Card>
-      <p class="note">Sessions marked ~ are inferred from timing. For exact numbers, post links with <span class="mono">?utm_source=reddit&amp;utm_campaign=my-post</span>.</p>
+
+      <Campaigns data={d} />
+      <p class="note">Sessions marked ~ are inferred from timing. For exact numbers, share a tagged link from <b>Make a tagged link</b> above.</p>
     </>
   );
 }
@@ -157,12 +161,17 @@ function Accounts({ data, open, onSaved }) {
   function state(r, p) {
     if (!p) return null;
     if (!p.ready) {
-      return <span class="account-state bad"><span class="status-dot warn" /> Needs {p.key === 'reddit' ? 'a Reddit app' : 'a Product Hunt token'} · <a href="#/settings?i=mentions">set up</a></span>;
+      return <span class="account-state bad"><span class="status-dot warn" /> Needs a Product Hunt token · <a href="#/settings?i=mentions">set up</a></span>;
     }
-    const err = data.errors[`${r.platform}:${r.handle.trim().replace(/^(u\/|@)/i, '')}`];
+    const saved = data.accounts.find((a) => a.platform === r.platform && a.handle.toLowerCase() === r.handle.trim().replace(/^(u\/|@|~)/i, '').toLowerCase());
+    const err = saved && data.errors[`${saved.platform}:${saved.handle}`];
     if (err) return <span class="account-state bad"><span class="status-dot bad" /> {err}</span>;
-    const saved = data.accounts.some((a) => a.platform === r.platform && a.handle === r.handle.trim());
-    return <span class="account-state"><span class={`status-dot ${saved ? 'good' : 'off'}`} /> {saved ? 'Syncing' : 'Not saved yet'}</span>;
+    const feedOnly = p.key === 'reddit' && p.scores === false;
+    return (
+      <span class="account-state"><span class={`status-dot ${saved ? 'good' : 'off'}`} /> {saved ? 'Syncing' : 'Not saved yet'}
+        {feedOnly && <> · public feed, no upvotes · <a href="#/settings?i=mentions">add a Reddit app</a></>}
+      </span>
+    );
   }
 
   return (
@@ -191,7 +200,7 @@ function Accounts({ data, open, onSaved }) {
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
           {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
         </div>
-        <p class="note" style={{ margin: 0 }}>LinkedIn and X can’t be fetched (no API for your own posts without partner approval or a paid plan). Add those by URL below.</p>
+        <p class="note" style={{ margin: 0 }}>No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
       </form>
     </details>
   );
@@ -240,5 +249,86 @@ function AddByUrl({ products, onAdded }) {
         </div>
       </form>
     </details>
+  );
+}
+
+// A link to your page with utm_* tags, so GA4 counts the visits a post brings exactly.
+function LinkBuilder({ data }) {
+  const withSite = data.products.filter((p) => p.url);
+  const [form, setForm] = useState(() => ({ url: withSite[0]?.url || '', platform: 'reddit', source: '', campaign: '', content: '' }));
+  const [copied, setCopied] = useState(false);
+  const set = (patch) => { setForm({ ...form, ...patch }); setCopied(false); };
+  const other = form.platform === 'other';
+  let link = '';
+  let error = '';
+  try {
+    link = form.url && form.campaign ? taggedLink({ ...form, medium: other ? 'referral' : 'social' }) : '';
+  } catch (err) {
+    error = err.message;
+  }
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(link);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  }
+  return (
+    <details class="card posts-panel">
+      <summary class="card-head">
+        <h2>Make a tagged link</h2>
+        <span class="sub">Share this instead of the bare URL, and the sessions it brings are counted exactly</span>
+        <Icon name="chevron" size={14} class="chev" />
+      </summary>
+      <div class="card-body stack" style={{ gap: '12px' }}>
+        <div class="post-form">
+          <label class="field">Page
+            <input type="url" list="link-builder-sites" value={form.url} placeholder="https://your-site.com/blog/post" onInput={(e) => set({ url: e.currentTarget.value })} />
+            <datalist id="link-builder-sites">{withSite.map((p) => <option key={p.id} value={p.url}>{p.label}</option>)}</datalist>
+          </label>
+          <label class="field">Where you’ll post it
+            <select value={form.platform} onChange={(e) => set({ platform: e.currentTarget.value })}>
+              {data.platforms.filter((p) => p.utmSource || p.key === 'other').map((p) => <option key={p.key} value={p.key}>{p.key === 'other' ? 'Somewhere else' : p.label}</option>)}
+            </select>
+          </label>
+          {other && <label class="field">Source<input value={form.source} placeholder="newsletter, discord, indiehackers" onInput={(e) => set({ source: e.currentTarget.value })} /></label>}
+          <label class="field">Campaign<input value={form.campaign} placeholder="launch-post" onInput={(e) => set({ campaign: e.currentTarget.value })} onBlur={(e) => set({ campaign: slug(e.currentTarget.value) })} /></label>
+          <label class="field"><span class="field-label">Variant <small>optional</small></span><input value={form.content} placeholder="r-sideproject" onInput={(e) => set({ content: e.currentTarget.value })} /></label>
+        </div>
+        {link ? (
+          <div class="row" style={{ flexWrap: 'wrap' }}>
+            <code class="mono small" style={{ wordBreak: 'break-all', flex: '1 1 320px' }}>{link}</code>
+            <button class="btn primary" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
+          </div>
+        ) : (
+          <p class="small muted" style={{ margin: 0 }}>{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
+        )}
+      </div>
+    </details>
+  );
+}
+
+// Every utm_campaign GA4 saw on your product sites, and the post it belongs to.
+function Campaigns({ data }) {
+  if (!data.campaigns?.length) return null;
+  const productLabel = (id) => data.products.find((p) => p.id === id)?.label || id;
+  return (
+    <Card title="Tagged links" sub="GA4 sessions per utm_campaign in this range" flush>
+      <table class="data">
+        <thead><tr><th>Campaign</th><th>Source</th><th>Product</th><th>Post</th><th class="num">Sessions</th></tr></thead>
+        <tbody>
+          {data.campaigns.map((c) => (
+            <tr key={`${c.product}:${c.campaign}`}>
+              <td class="mono small">{c.campaign}</td>
+              <td class="small">{c.sources.join(', ')}</td>
+              <td class="small muted">{productLabel(c.product)}</td>
+              <td class="small">{c.post ? <a href={c.post.permalink} target="_blank" rel="noreferrer">{c.post.title}</a> : <span class="muted">no post logged</span>}</td>
+              <td class="num">{formatNumber(c.sessions)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </Card>
   );
 }
