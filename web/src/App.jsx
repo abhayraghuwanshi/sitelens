@@ -34,6 +34,7 @@ import { STAGES, EXPLORE, stageHref, locate, nextStage } from './stages.js';
 import { ExploreHome } from './pages/ExploreHome.jsx';
 import { StagePage } from './pages/Stage.jsx';
 import { Setup } from './pages/Setup.jsx';
+import { NextApp } from './next/NextApp.jsx';
 
 // Per-site views. mode: which connection a view needs. API views share the GA4 range list; warehouse views use 7/28/90d.
 // Where each one sits in the sidebar is decided by STAGES (stages.js).
@@ -64,6 +65,8 @@ export function App() {
   const [range, setRange] = usePersistent('range', '28d');
   const [theme, setTheme] = usePersistent('theme', '');
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
+  // 'next' is the story-first layout (next/NextApp.jsx); the classic one stays the default.
+  const [layout, setLayout] = usePersistent('layout', 'classic');
   const systemDark = useSystemDark();
   const loading = useLoading();
   // After a range switch, dim the old numbers until the new ones arrive.
@@ -97,6 +100,12 @@ export function App() {
 
   if (state.loading && !state.data) return <div style={{ padding: '32px' }}><Loading height={400} /></div>;
   if (state.error) return <div style={{ padding: '32px' }}><ErrorState error={state.error} onRetry={state.reload} /></div>;
+
+  const toggleTheme = () => setTheme(resolvedTheme(theme, systemDark) === 'dark' ? 'light' : 'dark');
+  if (layout === 'next') {
+    return <NextApp state={state.data} route={route} onClassic={() => setLayout('classic')} onTheme={toggleTheme}
+      themeIcon={resolvedTheme(theme, systemDark) === 'dark' ? 'sun' : 'moon'} />;
+  }
 
   const { sites, auth, ranges } = state.data;
   const [section, siteId, viewKey = 'overview'] = route.parts;
@@ -231,6 +240,9 @@ export function App() {
             <NavLink href={`#/site/${current.id}/setup`} icon="layers" active={section === 'site' && view.key === 'setup'}>Setup</NavLink>
           )}
           <NavLink href="#/settings" icon="settings" active={section === 'settings'}>Settings</NavLink>
+          <button type="button" class="nav-item" style={{ border: 0, background: 'none', font: 'inherit', cursor: 'pointer', width: '100%' }} onClick={() => setLayout('next')}>
+            <Icon name="sparkles" /> Try the new layout
+          </button>
           <div class="foot-row">
             <div class="conn" title={auth.email || ''}>
               <span class={`dot${auth.connected && !auth.expired ? ' on' : ''}`} aria-hidden="true" />
