@@ -62,7 +62,7 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-bar { height: 8px; border-radius: 4px; background: var(--surface-2); overflow: hidden; }
 .nx-bar span { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
 .nx-rows { list-style: none; margin: 0; padding: 0; }
-.nx-rows a { display: grid; grid-template-columns: minmax(0, 1fr) 70px 80px; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); color: var(--text); text-decoration: none; }
+.nx-rows a { display: grid; grid-template-columns: minmax(0, 1fr) 60px 110px; gap: 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--border); color: var(--text); text-decoration: none; }
 .nx-rows li:first-child a { border-top: 0; }
 .nx-rows a:hover .nx-path { color: var(--accent); }
 .nx-path { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

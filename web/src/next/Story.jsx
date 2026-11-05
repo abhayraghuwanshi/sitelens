@@ -9,7 +9,7 @@ import { Page } from './Page.jsx';
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
 // a short list; "Explore" opens the full report behind it.
-const RANGES = [{ key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
+const RANGES = [{ key: 'today', label: 'Today' }, { key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const short = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const today = () => new Date().toISOString().slice(0, 10);
@@ -24,7 +24,8 @@ export function Story({ site, params }) {
     location.hash = `/site/${site.id}?range=${key}`;
   };
 
-  const story = useAsync(() => api.get(`/sites/${site.id}/story${qs({ range })}`), [site.id, range]);
+  const isToday = range === 'today';
+  const story = useAsync(() => (isToday ? null : api.get(`/sites/${site.id}/story${qs({ range })}`)), [site.id, range]);
   const r = story.data?.range;
   const span = r ? { site: site.id, from: r.from, to: r.to } : null;
   const metrics = useAsync(() => (span ? api.get(`/calendar/metrics${qs(span)}`) : null), [span?.from, span?.to, site.id]);
@@ -34,10 +35,10 @@ export function Story({ site, params }) {
 
   return (
     <Page title={site.label}
-      sub={r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
+      sub={isToday ? 'Today so far, against a usual day like it' : r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       <NeedsYou site={site} />
-      {story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
+      {isToday ? <><Today site={site} /><NextSteps site={site} /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
         <>
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
@@ -47,6 +48,66 @@ export function Story({ site, params }) {
         </>
       )}
     </Page>
+  );
+}
+
+// Today so far, from GA4's real-time and today reports. Today isn't over, so it
+// is set against a usual same weekday's whole day, not against yesterday.
+function Today({ site }) {
+  const dash = useAsync(() => api.get(`/sites/${site.id}/dashboard?range=today`), [site.id]);
+  const live = useAsync(() => api.get(`/sites/${site.id}/live`).catch(() => null), [site.id]);
+  const to = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const from = new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
+  const past = useAsync(() => api.get(`/calendar/metrics${qs({ site: site.id, from, to })}`).catch(() => null), [site.id, to]);
+  if (dash.error) return <ErrorState error={dash.error} onRetry={dash.reload} />;
+  if (!dash.data) return <section class="nx-card"><Loading height={240} /></section>;
+
+  const rep = dash.data.reports;
+  const now = rep.overview.current;
+  const day = rep.trend[0]?.date || '';
+  const weekday = (day ? new Date(`${day.slice(0, 4)}-${day.slice(4, 6)}-${day.slice(6)}T12:00:00Z`) : new Date()).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+  const same = (past.data?.days || []).filter((d) => d.weekday === weekday && Number.isFinite(d.sessions));
+  const usual = same.length ? Math.round(same.reduce((n, d) => n + d.sessions, 0) / same.length) : null;
+  // Hours are in the property's time zone; the last one reported is "now".
+  const trend = rep.trend;
+  const left = 23 - (trend.at(-1)?.hour ?? 23);
+  const countries = rep.countries.slice(0, 3).filter((c) => c.sessions > 0);
+  const headline = usual === null
+    ? `${fmt(now.sessions)} visits so far today.`
+    : `${fmt(now.sessions)} visits so far today${left > 0 ? `, with ${left} hour${left === 1 ? '' : 's'} to go` : ''}. A usual ${weekday} has ${fmt(usual)} by the end of the day.`;
+
+  return (
+    <section class="nx-card" aria-label="Today">
+      <SectionHead n="1" title="Today so far" more={{ href: `#/site/${site.id}/pages?range=today`, label: 'Today’s pages' }} />
+      <p class="nx-headline">{headline}</p>
+      <p class="nx-lede">
+        {Math.round((now.engagementRate || 0) * 100)}% engaged.
+        {countries.length > 0 && ` Most came from ${countries.map((c) => `${c.country} (${fmt(c.sessions)})`).join(', ')}.`}
+        {live.data && ` On the site right now: ${fmt(live.data.total)}${live.data.top?.[0] ? `, reading “${live.data.top[0].title}”` : ''}.`}
+      </p>
+      {trend.length > 1 && (
+        <LineChart height={160} labels={trend.map((t) => t.label)} series={[{ label: 'Visits', values: trend.map((t) => t.sessions) }]} />
+      )}
+      <div class="nx-cols">
+        <div>
+          <div class="nx-label-sm">How they came</div>
+          <ul class="nx-rows">
+            {rep.channels.slice(0, 5).map((c) => (
+              <li key={c.channel}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{c.channel}</span><span class="nx-num">{fmt(c.sessions)}</span><span class="nx-dim small">{Math.round(c.engagementRate * 100)}% engaged</span></a></li>
+            ))}
+          </ul>
+        </div>
+        <div>
+          <div class="nx-label-sm">Where they landed</div>
+          <ul class="nx-rows">
+            {rep.entryPages.slice(0, 5).map((p) => (
+              <li key={p.path}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{capital(pageName(p.path))}</span><span class="nx-num">{fmt(p.sessions)}</span><span class="nx-dim small">{Math.round(p.engagementRate * 100)}% engaged</span></a></li>
+            ))}
+          </ul>
+        </div>
+      </div>
+      <p class="nx-note">Search Console reports 2–3 days late, so today’s searches aren’t in yet. Downloads and the reasons people leave fill in tomorrow.</p>
+    </section>
   );
 }
 
