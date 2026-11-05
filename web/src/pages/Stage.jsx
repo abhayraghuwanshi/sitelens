@@ -9,6 +9,7 @@ import { SummaryLine } from '../components/Journey.jsx';
 import { countryName, flagForCountry } from '@shared/site.js';
 import { useLive } from './Overview.jsx';
 import { ServerTrafficCard } from './Firebase.jsx';
+import { useSiteProduct, HEALTH_STAGES } from '../product.js';
 import { tabHref, tabId } from '../stages.js';
 
 // A stage of the journey on one page: a card per source with its headline
@@ -114,6 +115,7 @@ function Ship({ site, range }) {
   const latest = (kind) => [...list].reverse().find((e) => e.kind === kind);
   const kindCard = (kind, word) => () => (count(kind) ? { value: plural(count(kind), word), meta: `Latest: ${latest(kind).label}` } : null);
   const shipped = list.filter((e) => KIND_ICON[e.kind] && e.kind !== 'mention').slice().reverse();
+  const product = useSiteProduct(site).data;
 
   return (
     <>
@@ -127,6 +129,7 @@ function Ship({ site, range }) {
           pick={(d) => d.uptime?.checks ? { value: `${formatPercent(d.uptime.pct, 1)} up`, meta: d.latest?.mobile?.score ? `Mobile speed score ${d.latest.mobile.score}` : 'Last 7 days' } : null}
           empty="Not checked yet" linkOnly="Uptime and page speed" />
       </Cards>
+      <div class={product ? 'grid cols-2-1' : ''}>
       <Card title="What shipped" sub="Deploys, releases and posts in this period, newest first">
         {events.error ? <p class="muted small">Couldn’t load: {events.error.message}</p> : !events.data ? <p class="muted small">Loading…</p> : shipped.length ? (
           <ul class="stage-timeline">
@@ -142,10 +145,40 @@ function Ship({ site, range }) {
           <p class="muted small" style={{ margin: 0 }}>Nothing logged in this period. Vercel deploys, GitHub releases and your posts show up here once they’re connected.</p>
         )}
       </Card>
+      {product && <HealthChecks product={product} range={range} />}
+      </div>
     </>
   );
 }
 Ship.views = ['vercel', 'github', 'posts', 'articles', 'health'];
+
+// Is the site still up, reachable and fast: domain, DNS and SSL, the last
+// deploy, uptime and Core Web Vitals, each graded (server/journey.mjs).
+function HealthChecks({ product, range }) {
+  const journey = useAsync(() => api.get(`/journey/${product.id}${qs({ range: histRange(range) })}`), [product.id, range]);
+  const stages = (journey.data?.stages || []).filter((st) => HEALTH_STAGES.includes(st.key));
+  return (
+    <Card title="Health checks" sub="Domain, deploys, uptime and speed">
+      {journey.error ? <p class="muted small">Couldn’t load: {journey.error.message}</p> : !journey.data ? <p class="muted small">Checking…</p> : (
+        <div class="stack" style={{ gap: '12px' }}>
+          {stages.map((st) => (
+            <div key={st.key}>
+              <div class="health-head"><span class={`status-dot ${st.status}`} aria-hidden="true" /><b>{st.label}</b> <span class="muted small">{st.headline}</span></div>
+              <ul class="checks">
+                {st.items.map((i) => (
+                  <li key={i.label} class={i.status === 'good' ? 'ok' : i.status === 'warn' ? 'warn' : i.status === 'bad' ? 'bad' : ''}>
+                    {i.label}: <span class="muted">{i.text}</span>
+                  </li>
+                ))}
+              </ul>
+              {st.key === 'domain' && st.renewUrl && st.status !== 'good' && <a class="small" href={st.renewUrl} target="_blank" rel="noreferrer">Renew at {st.registrar}</a>}
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
 
 /* ---------- 2 Get found: who noticed? ---------- */
 
@@ -308,8 +341,8 @@ Engage.views = ['pages', 'paths', 'funnels', 'events'];
 /* ---------- 5 Pay off: did it work? ---------- */
 
 function PayOff({ site, range }) {
-  const products = useAsync(() => api.get('/products'), []);
-  const product = products.data?.products.find((p) => p.siteId === site.id);
+  const products = useSiteProduct(site);
+  const product = products.data;
   const outcomes = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range: histRange(range) })}`) : null), [product?.id, range]);
   const href = product ? `#/outcomes/${product.id}` : '#/outcomes';
   const d = outcomes.data;
@@ -318,7 +351,7 @@ function PayOff({ site, range }) {
     <>
       {d?.headline && <SummaryLine summary={{ text: d.headline, status: (d.insights || []).some((i) => i.tone === 'bad') ? 'warn' : 'good' }} />}
       <Cards>
-        {products.data && !product && <SourceCard site={site} href="#/outcomes" label="Outcomes" icon="target" linkOnly="Set up this site’s product to measure results" />}
+        {!products.loading && !product && <SourceCard site={site} href={`#/product?site=${site.id}`} label="Outcomes" icon="target" linkOnly="Set up this site’s product to measure results" />}
         {(d?.scorecard || []).slice(0, 4).map((s) => (
           <SourceCard key={s.key} site={site} href={href} label={s.label} icon="target" src={outcomes}
             pick={() => ({ value: s.format === 'decimal' ? formatDecimal(s.value, 1) : n(s.value), raw: s.value, ...(s.previous !== undefined ? { previous: s.previous } : {}), meta: s.meta })} />
@@ -347,7 +380,42 @@ function PayOff({ site, range }) {
           </Card>
         </div>
       )}
+      {product && <ProductGrowth product={product} range={range} />}
     </>
+  );
+}
+
+// The product beyond the site: its store listing and repos, one small chart
+// each, on the same days as everything else.
+const GROWTH = [
+  { key: 'stars', label: 'GitHub stars', area: false },
+  { key: 'downloads', label: 'Release downloads' },
+  { key: 'storeUsers', label: 'Store users', area: false },
+  { key: 'listingViews', label: 'Store listing views' },
+  { key: 'repoViews', label: 'Repo views' },
+];
+
+function ProductGrowth({ product, range }) {
+  const data = useAsync(() => api.get(`/products/${product.id}${qs({ range: histRange(range) })}`), [product.id, range]);
+  const dates = data.data?.range.dates || [];
+  const notes = useAnnotations(data.data?.scopes || [], dates);
+  if (!data.data) return null;
+  const { series } = data.data;
+  // A line needs two known days, and an all-zero line says nothing.
+  const charts = GROWTH.filter((c) => (series[c.key] || []).filter((v) => v !== null).length > 1 && series[c.key].some((v) => v > 0));
+  if (!charts.length) return null;
+  return (
+    <Card title="Beyond the site" sub={`${product.label}: store listing and repos, with what shipped marked`}>
+      <div class="growth-grid">
+        {charts.map((c) => (
+          <div key={c.key}>
+            <div class="small muted" style={{ marginBottom: '2px' }}>{c.label}</div>
+            <LineChart labels={dates.map(dayLabel)} series={[{ label: c.label, values: series[c.key].map((v) => (v === null ? NaN : v)) }]}
+              format={(v, axis) => formatNumber(v, { compact: axis })} height={140} area={c.area !== false} annotations={notes.annotations} dates={dates} />
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 PayOff.views = ['outcomes', 'retention'];

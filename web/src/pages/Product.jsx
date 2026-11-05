@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { formatNumber, formatDecimal } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, navigate, withParam } from '../hooks.js';
@@ -37,6 +37,9 @@ export function Product({ id, range, params }) {
     const site = options.sites.find((s) => s.id === siteId);
     return <NoProducts site={site} suggestions={suggestions.filter((s) => s.siteId === siteId)} options={options} onAdded={onAdded} />;
   }
+  // A site's product lives on that site's journey: health checks on Ship,
+  // growth and outcomes on Pay off. This page is for products without a site.
+  if (product.siteId) return <Redirect to={`/site/${product.siteId}/payoff`} />;
   return (
     <>
       {products.length > 1 && (
@@ -47,6 +50,12 @@ export function Product({ id, range, params }) {
       <ProductView key={product.id} product={product} range={range} params={params} />
     </>
   );
+}
+
+// Replaces the history entry, so Back doesn't bounce off this page.
+function Redirect({ to }) {
+  useEffect(() => location.replace(`#${to}`), [to]);
+  return <Loading height={120} />;
 }
 
 function NoProducts({ site, suggestions, options, onAdded }) {

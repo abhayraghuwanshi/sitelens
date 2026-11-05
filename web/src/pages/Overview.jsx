@@ -9,6 +9,7 @@ import { useAnnotations, AnnotationBar, toIso } from '../components/Annotations.
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { WhatHappened, useStory } from '../components/WhatHappened.jsx';
 import { CustomMetricsCard } from './CustomMetrics.jsx';
+import { useSiteProduct, HEALTH_STAGES } from '../product.js';
 
 const TREND_METRICS = [
   { key: 'activeUsers', label: 'Users' },
@@ -24,10 +25,10 @@ export function Overview({ site, range }) {
   // Search Console is its own source; the journey strip shows it when the site has one.
   const story = useStory(site, range);
   // Pay off counts the product's outcomes (installs, downloads, goals), not just GA4 key events.
-  const outcome = useAsync(async () => {
-    const product = site.demo ? null : (await api.get('/products')).products.find((p) => p.siteId === site.id);
-    return product ? api.get(`/outcomes/${product.id}${qs({ range: ['7d', '28d', '90d'].includes(range) ? range : '7d' })}`) : null;
-  }, [site.id, range]);
+  const product = useSiteProduct(site).data;
+  const productRange = ['7d', '28d', '90d'].includes(range) ? range : '7d';
+  const outcome = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range: productRange })}`) : null), [product?.id, productRange]);
+  const health = useAsync(() => (product ? api.get(`/journey/${product.id}${qs({ range: productRange })}`) : null), [product?.id, productRange]);
   const search = useAsync(() => (site.modes.search ? api.get(`/sites/${site.id}/search${qs({ range })}`) : null), [site.id, range, site.modes.search]);
 
   // Custom metrics don't need GA4, so a site without it still gets them.
@@ -43,6 +44,7 @@ export function Overview({ site, range }) {
   return (
     <>
       <WhatHappened site={site} range={range} story={story} />
+      <Attention site={site} journey={health.data} />
       <JourneyMap site={site} cur={cur} prev={prev} story={story.data} search={search} outcome={outcome.data} />
 
       {reports.warnings?.length > 0 && <p class="note">Partial data: {reports.warnings.join(' · ')}</p>}
@@ -63,6 +65,21 @@ export function Overview({ site, range }) {
         <ClaudeComments siteId={site.id} from={toIso(trendDates[0])} to={toIso(trendDates[trendDates.length - 1])} onChange={notes.reload} />
       )}
     </>
+  );
+}
+
+// Health checks that aren't fine (domain, deploys, uptime, speed), in one line
+// pointing at Ship, where they're listed in full. Nothing when all are fine.
+function Attention({ site, journey }) {
+  const items = (journey?.stages || []).filter((st) => HEALTH_STAGES.includes(st.key))
+    .flatMap((st) => st.items.filter((i) => i.status === 'bad' || i.status === 'warn'));
+  if (!items.length) return null;
+  const bad = items.some((i) => i.status === 'bad');
+  return (
+    <p class={`journey-summary ${bad ? 'bad' : 'warn'}`}>
+      <span class={`status-dot ${bad ? 'bad' : 'warn'}`} aria-hidden="true" />
+      <span>Needs attention: {items.map((i) => `${i.label} ${i.text}`).join(' · ')}. <a href={`#/site/${site.id}/ship`}>Health checks</a></span>
+    </p>
   );
 }
 

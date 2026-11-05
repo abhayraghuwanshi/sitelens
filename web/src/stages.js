@@ -44,7 +44,6 @@ export const STAGES = [
     key: 'payoff', step: 5, label: 'Pay off', icon: 'target', question: 'Did it work, and did they come back?',
     tabs: [
       { section: 'outcomes', label: 'Outcomes' },
-      { section: 'product', label: 'Products', siteParam: true },
       { section: 'extensions', label: 'Extensions' },
     ],
   },
