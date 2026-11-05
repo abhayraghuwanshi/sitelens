@@ -69,6 +69,14 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-callout { display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); text-decoration: none; line-height: 1.5; }
 .nx-callout:hover { outline: 1px solid var(--warning); }
 
+/* Left out */
+.nx-leftout { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: space-between; align-items: baseline; padding: 10px 14px; border-radius: 10px; background: var(--surface-2); color: var(--text-2); font-size: var(--text-md); line-height: 1.5; }
+.nx-leftout a { color: var(--accent); text-decoration: none; }
+.nx-field { display: flex; flex-direction: column; gap: 6px; font-size: var(--text-md); color: var(--text-2); }
+.nx-field input { font: inherit; font-size: var(--text-base); color: var(--text); background: var(--bg); border: 1px solid var(--border-strong); border-radius: 8px; padding: 9px 11px; max-width: 520px; }
+.nx-field input:focus-visible, .nx-check input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.nx-check { display: flex; gap: 10px; align-items: baseline; font-size: var(--text-md); color: var(--text-2); }
+
 /* Why they don't convert */
 .nx-stack { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
 .nx-leavers { list-style: none; margin: 0; padding: 0; }

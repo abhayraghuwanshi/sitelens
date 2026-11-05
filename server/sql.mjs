@@ -94,7 +94,7 @@ const PARAM = (key, kind = 'string_value') => `(SELECT value.${kind} FROM UNNEST
 export function sessionsFromEvents(bq, range) {
   return `SELECT
     user_id, session_id, session_date, first_touch_date, started_at, ended_at,
-    device, country, source, medium,
+    device, country, source, medium, engaged,
     -- Collapse reloads: drop a page view that repeats the previous one.
     ARRAY(
       SELECT p FROM UNNEST(raw_pages) AS p WITH OFFSET o
@@ -114,6 +114,7 @@ export function sessionsFromEvents(bq, range) {
       ANY_VALUE(country) AS country,
       ANY_VALUE(source) AS source,
       ANY_VALUE(medium) AS medium,
+      LOGICAL_OR(engaged_flag = '1') AS engaged,
       ARRAY_AGG(IF(event_name = 'page_view', path, NULL) IGNORE NULLS ORDER BY ts) AS raw_pages,
       ARRAY_AGG(STRUCT(
         IF(event_name = 'page_view', CONCAT('page:', path), CONCAT('event:', event_name)) AS k,
@@ -131,7 +132,8 @@ export function sessionsFromEvents(bq, range) {
         device.category AS device,
         geo.country AS country,
         traffic_source.source AS source,
-        traffic_source.medium AS medium
+        traffic_source.medium AS medium,
+        ${PARAM('session_engaged')} AS engaged_flag
       FROM ${eventsTable(bq)}
       WHERE ${eventFilter(bq, range)}
     )
@@ -152,7 +154,37 @@ function sessionsSource(bq, range) {
 
 function withSessions(bq, range, body, ctes = []) {
   const extra = ctes.map((cte) => `,\n${cte}`).join('');
-  return `WITH sessions AS (\n  ${sessionsSource(bq, range)}\n)${extra}\n${body}`;
+  const left = leftOutWhere(bq);
+  const source = left ? `SELECT * FROM (\n  ${sessionsSource(bq, range)}\n  ) WHERE NOT (${left})` : sessionsSource(bq, range);
+  return `WITH sessions AS (\n  ${source}\n)${extra}\n${body}`;
+}
+
+// The site's leave-out rule as a condition on a session's country and engaged
+// columns, or '' for none. A materialized table built before `engaged` existed
+// can only be filtered by country, so then the rule is country-only.
+const COUNTRY = /^[\p{L}][\p{L} .()’-]{1,59}$/u;
+export function leftOutWhere(bq, { engagedColumn = !bq.sessionsTable } = {}) {
+  const rule = bq.leaveOut;
+  const countries = (rule?.countries || []).filter((c) => COUNTRY.test(c));
+  if (!countries.length) return '';
+  const where = `IFNULL(country, '') IN (${countries.map((c) => `'${c}'`).join(', ')})`;
+  return rule.unengagedOnly !== false && engagedColumn ? `${where} AND NOT IFNULL(engaged, FALSE)` : where;
+}
+
+// How many sessions in the range the rule leaves out, against all of them.
+export function leftOutSql(bq, range) {
+  const left = leftOutWhere({ ...bq, sessionsTable: '' });
+  if (!left) throw new Error('This site has no leave-out rule.');
+  return {
+    sql: `WITH s AS (
+  SELECT ANY_VALUE(geo.country) AS country, LOGICAL_OR(${PARAM('session_engaged')} = '1') AS engaged
+  FROM ${eventsTable(bq)}
+  WHERE ${eventFilter(bq, range)} AND ${PARAM('ga_session_id', 'int_value')} IS NOT NULL
+  GROUP BY user_pseudo_id, ${PARAM('ga_session_id', 'int_value')}
+)
+SELECT COUNT(*) AS total, COUNTIF(${left}) AS left_out FROM s`,
+    params: baseParams(bq),
+  };
 }
 
 // The raw scan filters stream_id; a materialized table was already built for one stream.
@@ -330,13 +362,15 @@ export function leaversSql(bq, range, { steps = [], outcome = '' } = {}) {
   const names = [...new Set(steps)].filter((s) => EVENT_NAME.test(s)).slice(0, 4);
   if (!names.length || !EVENT_NAME.test(outcome)) throw new Error('Leavers need step events and an outcome event from the site’s goals.');
   const list = names.map((n) => `'${n}'`).join(', ');
+  const left = leftOutWhere({ ...bq, sessionsTable: '' });
   const sql = `WITH e AS (
   SELECT CONCAT(user_pseudo_id, '.', CAST(${PARAM('ga_session_id', 'int_value')} AS STRING)) AS sid,
-    event_name, event_timestamp AS ts, device.category AS device, device.operating_system AS os
+    event_name, event_timestamp AS ts, device.category AS device, device.operating_system AS os,
+    geo.country AS country, ${PARAM('session_engaged')} AS engaged_flag
   FROM ${eventsTable(bq)}
   WHERE ${eventFilter(bq, range)} AND ${PARAM('ga_session_id', 'int_value')} IS NOT NULL
 ),
-s AS (
+raw AS (
   SELECT sid,
     CASE
       WHEN ANY_VALUE(device) IN ('mobile', 'tablet') THEN 'Phones and tablets'
@@ -349,9 +383,13 @@ s AS (
     MAX(ts) - MIN(ts) AS span,
     COUNTIF(event_name IN (${list})) > 0 AS reached,
     COUNTIF(event_name = '${outcome}') > 0 AS converted,
-    ARRAY_AGG(DISTINCT IF(event_name IN (${list}), event_name, NULL) IGNORE NULLS) AS hit
+    ARRAY_AGG(DISTINCT IF(event_name IN (${list}), event_name, NULL) IGNORE NULLS) AS hit,
+    ANY_VALUE(country) AS country,
+    LOGICAL_OR(engaged_flag = '1') AS engaged
   FROM e
   GROUP BY sid
+),
+s AS (SELECT * FROM raw${left ? ` WHERE NOT (${left})` : ''}
 )
 SELECT grp, '' AS step, COUNTIF(reached AND NOT converted) AS n,
   COUNTIF(reached AND NOT converted AND span < 10000000) AS quick, COUNTIF(reached AND converted) AS converted

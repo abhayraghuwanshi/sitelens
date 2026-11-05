@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { createStore, publicSite, ValidationError } from './store.mjs';
+import { createStore, publicSite, ValidationError, normalizeLeaveOut } from './store.mjs';
 import { createAuth, AuthError } from './auth.mjs';
 import { createBigQuery, BigQueryError } from './bigquery.mjs';
 import { createEngines, EngineError } from './engines.mjs';
@@ -414,6 +414,15 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/events$/, async ({ match, query }) =>
       engines.events(await siteOr404(match[1]), query.get('range'), flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/left-out$/, async ({ match, query }) =>
+      engines.leftOut(await siteOr404(match[1]), query.get('range'), flags(query))],
+    ['POST', /^\/api\/sites\/([\w-]+)\/leave-out$/, async ({ match, body }) => {
+      const site = await siteOr404(match[1]);
+      if (site.demo) throw new EngineError('The demo site’s rule can’t be saved — try it on your own site.', { kind: 'validation' });
+      const saved = await store.saveSite({ ...site, leaveOut: normalizeLeaveOut(body) });
+      engines.clearSite(site.id);
+      return { leaveOut: saved.leaveOut };
+    }],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/leavers$/, async ({ match, query }) =>
       engines.leavers(await siteOr404(match[1]), query.get('range'), {
         steps: (query.get('steps') || '').split(',').filter(Boolean),

@@ -103,7 +103,7 @@ export function App() {
 
   const toggleTheme = () => setTheme(resolvedTheme(theme, systemDark) === 'dark' ? 'light' : 'dark');
   if (layout === 'next') {
-    return <NextApp state={state.data} route={route} onClassic={() => setLayout('classic')} onTheme={toggleTheme}
+    return <NextApp state={state.data} route={route} onClassic={() => setLayout('classic')} onTheme={toggleTheme} onReload={() => state.reload()}
       themeIcon={resolvedTheme(theme, systemDark) === 'dark' ? 'sun' : 'moon'} />;
   }
 

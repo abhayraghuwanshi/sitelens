@@ -14,6 +14,7 @@ import { GitHub } from '../pages/GitHub.jsx';
 import { Posts } from '../pages/Posts.jsx';
 import { Mentions } from '../pages/Mentions.jsx';
 import { Page } from './Page.jsx';
+import { LeaveOut } from './LeaveOut.jsx';
 import { Sites } from './Sites.jsx';
 import { Story } from './Story.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
@@ -26,7 +27,7 @@ import './next.css';
 // Classic routes (#/calendar, #/settings, #/outcomes…) still open here.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
 
-export function NextApp({ state, route, onClassic, onTheme, themeIcon }) {
+export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload }) {
   const { sites, auth } = state;
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
   const [section, siteId, view = 'story'] = route.parts;
@@ -48,7 +49,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon }) {
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
-  else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><Setup site={site} /></Page>;
+  else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
   else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={() => location.reload()} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;

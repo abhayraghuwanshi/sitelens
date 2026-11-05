@@ -107,3 +107,20 @@ test('leavers name only plain goal events, and group by device and system', () =
   assert.throws(() => sql.leaversSql(bq, range, { steps: ["x'; DROP"], outcome: 'file_download' }), /step events/);
   assert.throws(() => sql.leaversSql(bq, range, { steps: ['a'], outcome: '' }), /outcome/);
 });
+
+test('a leave-out rule filters sessions by country and engagement, and leavers too', () => {
+  const rule = { countries: ['Singapore', 'China'], unengagedOnly: true };
+  const withRule = { ...bq, leaveOut: rule };
+  assert.equal(sql.leftOutWhere(bq), '');
+  assert.equal(sql.leftOutWhere(withRule), "IFNULL(country, '') IN ('Singapore', 'China') AND NOT IFNULL(engaged, FALSE)");
+  assert.equal(sql.leftOutWhere({ ...withRule, leaveOut: { ...rule, unengagedOnly: false } }), "IFNULL(country, '') IN ('Singapore', 'China')");
+  // A materialized table may predate the engaged column: country only.
+  assert.equal(sql.leftOutWhere({ ...withRule, sessionsTable: 'p.d.t' }), "IFNULL(country, '') IN ('Singapore', 'China')");
+  assert.match(sql.cohortsSql(withRule, range).sql, /\) WHERE NOT \(IFNULL\(country, ''\) IN \('Singapore', 'China'\) AND NOT IFNULL\(engaged, FALSE\)\)/);
+  assert.ok(!sql.cohortsSql(bq, range).sql.includes('WHERE NOT ('));
+  const leavers = sql.leaversSql(withRule, range, { steps: ['a_step'], outcome: 'done' }).sql;
+  assert.match(leavers, /s AS \(SELECT \* FROM raw WHERE NOT \(IFNULL\(country, ''\) IN/);
+  assert.match(sql.leftOutSql(withRule, range).sql, /COUNTIF\(IFNULL\(country, ''\) IN \('Singapore', 'China'\) AND NOT IFNULL\(engaged, FALSE\)\) AS left_out/);
+  // Names that could break out of the SQL string never reach it.
+  assert.equal(sql.leftOutWhere({ ...bq, leaveOut: { countries: ["x') OR TRUE --"] } }), '');
+});

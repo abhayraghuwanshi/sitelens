@@ -121,7 +121,8 @@ export function createEngines({ auth, bigquery }) {
         kind: 'needs-warehouse',
       });
     }
-    return site.bq;
+    // The site's leave-out rule travels with its BigQuery settings into every query.
+    return site.leaveOut ? { ...site.bq, leaveOut: site.leaveOut } : site.bq;
   }
 
   // Resolves which export tables cover the range. Listing tables is free metadata;
@@ -284,6 +285,15 @@ export function createEngines({ auth, bigquery }) {
     return { ...meta(site, range, [result]), events: result.rows.map(eventRow) };
   }
 
+  // How many sessions the leave-out rule removes from the BigQuery views.
+  async function leftOut(site, rangeKey, flags) {
+    const range = await eventsRange(site, rangeKey);
+    if (site.demo || !site.leaveOut?.countries?.length) return { ...meta(site, range), rule: site.leaveOut || null, total: 0, leftOut: 0 };
+    const result = await run(site, sql.leftOutSql(requireBq(site), range), flags);
+    const row = result.rows[0] || {};
+    return { ...meta(site, range, [result]), rule: site.leaveOut, total: Number(row.total) || 0, leftOut: Number(row.left_out) || 0 };
+  }
+
   // Sessions that reached a step but didn't convert, by device and system.
   async function leavers(site, rangeKey, goals, flags) {
     const range = await eventsRange(site, rangeKey);
@@ -373,6 +383,7 @@ export function createEngines({ auth, bigquery }) {
     funnelDiscovery,
     cohorts,
     leavers,
+    leftOut,
     sessions,
     events,
     eventDetail,

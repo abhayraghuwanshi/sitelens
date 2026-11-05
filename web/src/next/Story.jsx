@@ -5,6 +5,7 @@ import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
+import { LeftOutLine } from './LeaveOut.jsx';
 
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
@@ -38,6 +39,7 @@ export function Story({ site, params }) {
       sub={isToday ? 'Today so far, against a usual day like it' : r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       <NeedsYou site={site} />
+      {!isToday && <LeftOutLine site={site} range={range} />}
       {isToday ? <><Today site={site} /><NextSteps site={site} /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
         <>
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />

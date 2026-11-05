@@ -74,6 +74,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
         const index = s.sites.findIndex((x) => x.id === site.id);
         // Settings edits don't send query groups; keep the saved ones.
         if (index >= 0 && site.searchGroups === undefined && s.sites[index].searchGroups) site.searchGroups = s.sites[index].searchGroups;
+        if (index >= 0 && site.leaveOut === undefined && s.sites[index].leaveOut) site.leaveOut = s.sites[index].leaveOut;
         if (index >= 0) s.sites[index] = site;
         else s.sites.push(site);
       });
@@ -142,7 +143,21 @@ export function normalizeSite(input = {}) {
     searchSite: text(input.searchSite, 300),
     bq,
     ...(Array.isArray(input.searchGroups) ? { searchGroups: normalizeGroups(input.searchGroups) } : {}),
+    ...(input.leaveOut ? { leaveOut: normalizeLeaveOut(input.leaveOut) } : {}),
   };
+}
+
+// Visits a site leaves out of its BigQuery views: from these countries, and
+// (by default) only when GA4 didn't count the visit as engaged, so real
+// readers there still count. Country names are GA4's, e.g. "Singapore".
+const COUNTRY_RE = /^[\p{L}][\p{L} .()’-]{1,59}$/u;
+
+export function normalizeLeaveOut(input = {}) {
+  const countries = [...new Set((Array.isArray(input.countries) ? input.countries : []).map((c) => text(c, 60)).filter(Boolean))];
+  const bad = countries.find((c) => !COUNTRY_RE.test(c));
+  if (bad) throw new ValidationError(`“${bad}” doesn’t look like a country name.`);
+  if (countries.length > 20) throw new ValidationError('Leave out up to 20 countries.');
+  return { countries, unengagedOnly: input.unengagedOnly !== false };
 }
 
 // Repos picked on a site briefly lived on the site; they belong to the site's
