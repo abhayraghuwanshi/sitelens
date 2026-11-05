@@ -24,7 +24,7 @@ The built-in **Demo site** works immediately. API views use the extension's samp
 | Mode | Views | Source |
 | --- | --- | --- |
 | **API** | Overview, Pages, Search | GA4 Data API + Search Console, through the extension's own report layer (`shared/sitelens`, synced with `npm run sync`) |
-| **Warehouse** | Paths, Funnels, Retention, Events, Sessions, SQL console | GA4 BigQuery export (`analytics_<property>.events_*`) |
+| **Warehouse** | Paths, Funnels, Retention, Events, Sessions, SQL console (all under **Explore** in the sidebar) | GA4 BigQuery export (`analytics_<property>.events_*`) |
 
 Each site can have either mode or both. Views a site can't use are marked with a lock and explain what to connect.
 

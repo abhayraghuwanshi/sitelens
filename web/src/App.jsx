@@ -30,7 +30,8 @@ import { Firebase } from './pages/Firebase.jsx';
 import { Bing } from './pages/Bing.jsx';
 import { AiSearch } from './pages/AiSearch.jsx';
 import { Calendar } from './pages/Calendar.jsx';
-import { STAGES, stageHref, locate, nextStage } from './stages.js';
+import { STAGES, EXPLORE, stageHref, locate, nextStage } from './stages.js';
+import { ExploreHome } from './pages/ExploreHome.jsx';
 import { StagePage } from './pages/Stage.jsx';
 import { Setup } from './pages/Setup.jsx';
 
@@ -51,6 +52,7 @@ export const VIEWS = [
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
   { key: 'sql', label: 'SQL console', mode: 'warehouse', component: Explore },
   { key: 'setup', label: 'Setup', mode: 'setup', component: Setup },
+  { key: 'explore', label: 'Explore', mode: 'explore', component: ExploreHome },
   // Each numbered stage's summary page, at #/site/<id>/<stage key>.
   ...STAGES.filter((s) => s.step).map((s) => ({ key: s.key, label: s.label, mode: 'stage', component: (props) => <StagePage {...props} stage={s} /> })),
 ];
@@ -104,7 +106,7 @@ export function App() {
   // Bing keeps its own daily history, so it takes the long history ranges.
   const rangeOptions = isHistory || (section === 'site' && view.mode === 'bing') ? ranges.history : isWarehouse ? ranges.warehouse : ranges.api;
   // A ?range= in the URL wins (bookmarks, shared links); otherwise the last one picked anywhere.
-  const showRange = section !== 'settings' && section !== 'health' && section !== 'calendar' && !(section === 'site' && view.mode === 'setup');
+  const showRange = section !== 'settings' && section !== 'health' && section !== 'calendar' && !(section === 'site' && (view.mode === 'setup' || view.mode === 'explore'));
   const urlRange = showRange ? route.params.get('range') : '';
   const wanted = urlRange && rangeOptions.some((r) => r.key === urlRange) ? urlRange : range;
   const effectiveRange = rangeOptions.some((r) => r.key === wanted) ? wanted : '28d';
@@ -170,9 +172,9 @@ export function App() {
   const stage = section === 'site' && !site ? null : here.stage;
   const stageLink = (s) => stageHref(s, current);
   const next = stage && nextStage(stage);
-  // A numbered stage's own summary page, or one of the pages its cards open.
-  const summary = Boolean(stage?.step && !here.tab);
-  const detail = Boolean(stage?.step && here.tab);
+  // A stage's own page (numbered stages and Explore), or one of the pages it opens.
+  const summary = Boolean(stage && !here.tab);
+  const detail = Boolean(stage && here.tab && stage.key !== 'overview');
 
   return (
     <div class="shell">
@@ -212,13 +214,17 @@ export function App() {
             </nav>
           </div>
         )}
+
+        {current && (
+          <div class="nav-group">
+            <div class="nav-label">Go deeper</div>
+            <NavLink href={stageLink(EXPLORE)} icon={EXPLORE.icon} active={stage === EXPLORE}>{EXPLORE.label}</NavLink>
+          </div>
+        )}
         </div>
 
         <div class="sidebar-foot">
           <AlertsNavItem active={section === 'alerts'} />
-          {current && (
-            <NavLink href={`#/site/${current.id}/sql`} icon="terminal" active={section === 'site' && view.key === 'sql'}>SQL console</NavLink>
-          )}
           {current && (
             <NavLink href={`#/site/${current.id}/setup`} icon="layers" active={section === 'site' && view.key === 'setup'}>Setup</NavLink>
           )}
@@ -241,12 +247,12 @@ export function App() {
         <header class="topbar">
           <div>
             <h1>
-              {summary && <span class="step-num" aria-hidden="true">{stage.step}</span>}
+              {summary && stage.step && <span class="step-num" aria-hidden="true">{stage.step}</span>}
               {summary || !stage ? (stage ? stage.label : title) : here.tab.label}
             </h1>
             {(stage || (section === 'site' && site)) && (
               <div class="crumb">
-                {detail && <><a href={stageLink(stage)}>← {stage.step}. {stage.label}</a>{site && ' · '}</>}
+                {detail && <><a href={stageLink(stage)}>← {stage.step ? `${stage.step}. ` : ''}{stage.label}</a>{site && ' · '}</>}
                 {[summary && stage.question, site && `${site.label}${site.demo ? ' · sample data' : ''}`].filter(Boolean).join(' · ')}
               </div>
             )}
