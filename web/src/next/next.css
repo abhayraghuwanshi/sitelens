@@ -3,6 +3,11 @@
 
 .nx { display: flex; min-height: 100vh; background: var(--bg); color: var(--text); font-family: var(--font); font-size: var(--text-base); }
 
+/* Block links (rows, cards, buttons, tabs) show hover with a border or colour;
+   the app-wide underline would run under every line inside them. */
+.nx-jlinks a:hover, .nx-rows a:hover, .nx-site-card:hover, .nx-callout:hover, .nx-btn:hover,
+.nx-item:hover, .nx-tab:hover, .nx-brand:hover, .nx-list a:hover, a.nx-cause:hover, .nx-more:hover { text-decoration: none; }
+
 /* Sidebar */
 .nx-side { position: sticky; top: 0; align-self: flex-start; height: 100vh; width: 232px; flex: none; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 18px 12px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; }
 .nx-brand { display: flex; align-items: center; gap: 10px; padding: 4px 8px 16px; color: var(--text); text-decoration: none; font-weight: 700; font-size: var(--text-lg); }
@@ -44,7 +49,6 @@
 .nx-h2 { margin: 0; display: flex; align-items: center; gap: 10px; font-size: var(--text-lg); font-weight: 650; }
 .nx-step { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); color: var(--text-2); font-size: var(--text-sm); font-weight: 600; }
 .nx-more { display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-md); color: var(--accent); text-decoration: none; white-space: nowrap; }
-.nx-more:hover { text-decoration: underline; }
 .nx-headline { margin: 0; font-size: 20px; line-height: 1.4; font-weight: 600; text-wrap: balance; }
 .nx-headline.tone-bad { color: var(--critical-ink); }
 .nx-lede { margin: 0; color: var(--text-2); }
