@@ -285,6 +285,22 @@ export function createEngines({ auth, bigquery }) {
     return { ...meta(site, range, [result]), events: result.rows.map(eventRow) };
   }
 
+  // Journeys by source × landing page; step counts come back as a map.
+  async function journeys(site, rangeKey, goals, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), journeys: [] };
+    const built = sql.journeysSql(requireBq(site), range, goals);
+    const result = await run(site, built, flags);
+    return {
+      ...meta(site, range, [result]),
+      journeys: result.rows.map((r) => ({
+        source: r.source, medium: r.medium, landing: r.landing,
+        sessions: Number(r.sessions) || 0, engaged: Number(r.engaged) || 0, converted: Number(r.converted) || 0,
+        steps: Object.fromEntries(built.steps.map((name, i) => [name, Number(r[`step_${i}`]) || 0])),
+      })),
+    };
+  }
+
   // How many sessions the leave-out rule removes from the BigQuery views.
   async function leftOut(site, rangeKey, flags) {
     const range = await eventsRange(site, rangeKey);
@@ -384,6 +400,7 @@ export function createEngines({ auth, bigquery }) {
     cohorts,
     leavers,
     leftOut,
+    journeys,
     sessions,
     events,
     eventDetail,

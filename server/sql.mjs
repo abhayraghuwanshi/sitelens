@@ -94,7 +94,7 @@ const PARAM = (key, kind = 'string_value') => `(SELECT value.${kind} FROM UNNEST
 export function sessionsFromEvents(bq, range) {
   return `SELECT
     user_id, session_id, session_date, first_touch_date, started_at, ended_at,
-    device, country, source, medium, engaged,
+    device, country, source, medium, visit_source, visit_medium, engaged,
     -- Collapse reloads: drop a page view that repeats the previous one.
     ARRAY(
       SELECT p FROM UNNEST(raw_pages) AS p WITH OFFSET o
@@ -115,6 +115,10 @@ export function sessionsFromEvents(bq, range) {
       ANY_VALUE(source) AS source,
       ANY_VALUE(medium) AS medium,
       LOGICAL_OR(engaged_flag = '1') AS engaged,
+      -- Where this visit came from: the first page view's utm_source, else its
+      -- referrer's host. (source/medium above are the user's first-ever touch.)
+      ARRAY_AGG(pv_source IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS visit_source,
+      ARRAY_AGG(pv_medium IGNORE NULLS ORDER BY ts LIMIT 1)[SAFE_OFFSET(0)] AS visit_medium,
       ARRAY_AGG(IF(event_name = 'page_view', path, NULL) IGNORE NULLS ORDER BY ts) AS raw_pages,
       ARRAY_AGG(STRUCT(
         IF(event_name = 'page_view', CONCAT('page:', path), CONCAT('event:', event_name)) AS k,
@@ -133,7 +137,9 @@ export function sessionsFromEvents(bq, range) {
         geo.country AS country,
         traffic_source.source AS source,
         traffic_source.medium AS medium,
-        ${PARAM('session_engaged')} AS engaged_flag
+        ${PARAM('session_engaged')} AS engaged_flag,
+        IF(event_name = 'page_view', IFNULL(COALESCE(REGEXP_EXTRACT(${PARAM('page_location')}, r'[?&]utm_source=([^&#]+)'), NET.HOST(${PARAM('page_referrer')})), '(direct)'), NULL) AS pv_source,
+        IF(event_name = 'page_view', COALESCE(REGEXP_EXTRACT(${PARAM('page_location')}, r'[?&]utm_medium=([^&#]+)'), IF(${PARAM('page_referrer')} IS NULL, '(none)', 'referral')), NULL) AS pv_medium
       FROM ${eventsTable(bq)}
       WHERE ${eventFilter(bq, range)}
     )
@@ -349,6 +355,32 @@ ORDER BY events DESC
 LIMIT 100`,
     params: baseParams(bq),
   };
+}
+
+// Journeys: where a visit came from (visit_source) × the page it landed on, with how many
+// went on to each of the site's goal steps and to its outcome. Reads the
+// sessions view, so a site's leave-out rule applies. Rows with fewer than
+// `min` sessions are left to Explore.
+export function journeysSql(bq, range, { steps = [], outcome = '', min = 3 } = {}) {
+  const names = [...new Set(steps)].filter((s) => EVENT_NAME.test(s)).slice(0, 4);
+  if (!EVENT_NAME.test(outcome)) throw new Error('Journeys need an outcome event from the site’s goals.');
+  const hit = (name) => `COUNTIF(EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${name}'))`;
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT IFNULL(visit_source, '(direct)') AS source, IFNULL(visit_medium, '(none)') AS medium,
+  IFNULL(pages[SAFE_OFFSET(0)], '(not set)') AS landing,
+  COUNT(*) AS sessions,
+  COUNTIF(engaged) AS engaged,
+${names.map((n, i) => `  ${hit(n)} AS step_${i},`).join('\n')}
+  ${hit(outcome)} AS converted
+FROM sessions
+GROUP BY source, medium, landing
+HAVING sessions >= @min
+ORDER BY converted DESC, sessions DESC
+LIMIT 60`,
+  );
+  return { sql, params: { ...sessionParams(bq), min: clampInt(min, 1, 1000) }, steps: names };
 }
 
 // Who reached a step but didn't convert, grouped by what they were on. Steps and

@@ -6,6 +6,7 @@ import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
 import { LeftOutLine } from './LeaveOut.jsx';
+import { useJourneys, pageName as journeyPage } from './Journeys.jsx';
 
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
@@ -44,7 +45,7 @@ export function Story({ site, params }) {
         <>
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
-          <Landing site={site} rows={pages.data?.rows} range={range} />
+          {site.modes?.warehouse ? <HowTheyCome site={site} range={range} /> : <Landing site={site} rows={pages.data?.rows} range={range} />}
           {site.modes?.warehouse && <Leavers site={site} range={range} />}
           <Results site={site} range={range} />
           <NextSteps site={site} />
@@ -242,6 +243,42 @@ function Landing({ site, rows, range }) {
         <a class="nx-callout" href={`#/site/${site.id}/search`}>
           <Icon name="search" size={14} />
           <span>“{top.query}” is shown {fmt(top.impressions)} times at position {top.position.toFixed(1)}, but {(top.ctr * 100).toFixed(1)}% click. Last 28 days, from Search Console.</span>
+        </a>
+      )}
+    </section>
+  );
+}
+
+// The top journeys: where visits came from × where they landed × how many
+// converted, with the biggest search opportunity under them.
+function HowTheyCome({ site, range }) {
+  const j = useJourneys(site, range);
+  const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
+  if (j.config.data && !j.outcome) return null;
+  if (j.data.error) return <section class="nx-card"><ErrorState error={j.data.error} onRetry={j.data.reload} /></section>;
+  if (!j.data.data) return <section class="nx-card"><Loading height={180} /></section>;
+  const top = j.journeys.filter((x) => x.name !== 'Your own site').slice(0, 4);
+  const best = j.journeys.find((x) => x.converted);
+  const opp = search.data?.opportunities?.[0];
+  return (
+    <section class="nx-card" aria-label="How they come">
+      <SectionHead n="3" title="How they come" more={{ href: `#/site/${site.id}/journeys?range=${range}`, label: `All ${j.journeys.length} journeys` }} />
+      {best && <p class="nx-lede">The strongest way in is {best.name} → {journeyPage(best.landing).replace(/^The/, 'the')}: {fmt(best.converted)} of its {fmt(best.sessions)} visits reached “{j.outcome.label}”.</p>}
+      <ul class="nx-rows nx-jtop">
+        {top.map((x) => (
+          <li key={x.key}>
+            <a href={`#/site/${site.id}/journeys?range=${range}&open=${encodeURIComponent(x.key)}`}>
+              <span class="nx-path"><b>{x.name}</b> <span class="nx-dim">→ {journeyPage(x.landing)}</span></span>
+              <span class="nx-num">{fmt(x.sessions)}</span>
+              <span class="small"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b> <span class="nx-dim">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}%` : ''}</span></span>
+            </a>
+          </li>
+        ))}
+      </ul>
+      {opp && (
+        <a class="nx-callout" href={`#/site/${site.id}/search`}>
+          <Icon name="search" size={14} />
+          <span>“{opp.query}” is shown {fmt(opp.impressions)} times at position {opp.position.toFixed(1)}, but {(opp.ctr * 100).toFixed(1)}% click. Last 28 days, from Search Console.</span>
         </a>
       )}
     </section>

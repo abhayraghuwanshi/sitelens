@@ -15,6 +15,7 @@ import { Posts } from '../pages/Posts.jsx';
 import { Mentions } from '../pages/Mentions.jsx';
 import { Page } from './Page.jsx';
 import { LeaveOut } from './LeaveOut.jsx';
+import { JourneysPage } from './Journeys.jsx';
 import { Sites } from './Sites.jsx';
 import { Story } from './Story.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
@@ -38,7 +39,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   }, [site?.id]);
 
   const tab = !section ? 'sites'
-    : section === 'site' ? (['story', 'timeline', 'setup'].includes(view) ? view : 'explore')
+    : section === 'site' ? (view === 'journeys' ? 'story' : ['story', 'timeline', 'setup'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
     : section === 'settings' || section === 'account' ? 'account'
     : 'explore';
@@ -47,6 +48,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   if (!section) body = <Sites sites={sites} />;
   else if (section === 'site' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
+  else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
   else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;

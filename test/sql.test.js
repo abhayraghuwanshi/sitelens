@@ -124,3 +124,16 @@ test('a leave-out rule filters sessions by country and engagement, and leavers t
   // Names that could break out of the SQL string never reach it.
   assert.equal(sql.leftOutWhere({ ...bq, leaveOut: { countries: ["x') OR TRUE --"] } }), '');
 });
+
+test('journeys group sessions by source and landing page, counting goal steps', () => {
+  const built = sql.journeysSql(bq, range, { steps: ['saw_it', 'clicked'], outcome: 'done', min: 5 });
+  assert.deepEqual(built.steps, ['saw_it', 'clicked']);
+  assert.match(built.sql, /^WITH sessions AS/);
+  assert.match(built.sql, /k = 'event:saw_it'\)\) AS step_0/);
+  assert.match(built.sql, /k = 'event:done'\)\) AS converted/);
+  assert.match(built.sql, /GROUP BY source, medium, landing/);
+  assert.equal(built.params.min, 5);
+  assert.throws(() => sql.journeysSql(bq, range, { steps: [], outcome: "x' OR 1" }), /outcome/);
+  // The leave-out rule reaches journeys through the sessions view.
+  assert.match(sql.journeysSql({ ...bq, leaveOut: { countries: ['China'] } }, range, { outcome: 'done' }).sql, /WHERE NOT \(IFNULL\(country/);
+});
