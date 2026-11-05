@@ -1,0 +1,237 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>SiteLens Studio Trailer</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400;12..96,600;12..96,800&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+:root {
+  --ink: #0b1110; --panel: #121a19; --line: #24312e;
+  --fg: #eef3f1; --fg-2: #a9bab5; --fg-3: #687a75;
+  --orange: #db562d; --teal: #14a394; --amber: #f6c453;
+  --display: "Bricolage Grotesque", "Avenir Next", sans-serif;
+  --body: "Hanken Grotesk", "Helvetica Neue", Arial, sans-serif;
+  --mono: "JetBrains Mono", Menlo, monospace;
+}
+* { box-sizing: border-box; margin: 0; }
+html, body { width: 1920px; height: 1080px; overflow: hidden; background: var(--ink); color: var(--fg); font-family: var(--body); }
+#stage { position: absolute; inset: 0; overflow: hidden; }
+.glow { position: absolute; inset: -20%;
+  background: radial-gradient(40% 50% at 15% 10%, rgba(219,86,45,.22), transparent 70%),
+              radial-gradient(45% 55% at 90% 95%, rgba(20,163,148,.2), transparent 70%); }
+.layer { position: absolute; inset: 0; opacity: 0; will-change: opacity; }
+/* screen scenes */
+.cam { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+.cam img { position: absolute; left: 0; top: 0; width: 1600px; height: 1000px; }
+.shade { position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(to top, rgba(6,10,9,.96) 0%, rgba(6,10,9,.82) 24%, rgba(6,10,9,0) 46%),
+              linear-gradient(to right, rgba(6,10,9,.5), rgba(6,10,9,0) 40%); }
+.cap { position: absolute; left: 110px; bottom: 96px; max-width: 1180px; }
+.kicker { font: 600 22px/1 var(--mono); letter-spacing: .14em; text-transform: uppercase; color: var(--amber); display: flex; align-items: center; gap: 14px; }
+.kicker b { display: inline-grid; place-items: center; width: 34px; height: 34px; border-radius: 50%; border: 2px solid var(--amber); font-size: 18px; letter-spacing: 0; }
+.head { font: 800 76px/1.02 var(--display); letter-spacing: -.02em; margin-top: 18px; text-wrap: balance; }
+.head em { font-style: normal; background: linear-gradient(90deg, #f08a5d, #3fd0bf); -webkit-background-clip: text; color: transparent; }
+.sub { font: 500 30px/1.35 var(--body); color: var(--fg-2); margin-top: 18px; max-width: 1100px; }
+.hl { position: absolute; border: 3px solid var(--amber); border-radius: 14px; box-shadow: 0 0 0 9999px rgba(0,0,0,.0), 0 0 40px rgba(246,196,83,.45); opacity: 0; }
+.cursor { position: absolute; width: 44px; height: 44px; left: 0; top: 0; opacity: 0; filter: drop-shadow(0 4px 8px rgba(0,0,0,.6)); }
+.ripple { position: absolute; width: 20px; height: 20px; border-radius: 50%; border: 4px solid var(--amber); opacity: 0; transform: translate(-50%,-50%); }
+/* title scenes */
+.center { position: absolute; inset: 0; display: grid; place-content: center; text-align: center; gap: 26px; justify-items: center; }
+.big { font: 800 112px/1.02 var(--display); letter-spacing: -.03em; }
+.big.dim { color: var(--fg-3); }
+.mark { width: 190px; height: 190px; }
+.name { font: 800 120px/1 var(--display); letter-spacing: -.03em; }
+.name span { color: var(--fg-3); font-weight: 400; }
+.tag { font: 500 38px/1.3 var(--body); color: var(--fg-2); max-width: 1560px; }
+.why-h { font: 800 92px/1 var(--display); letter-spacing: -.02em; text-align: center; margin-top: 170px; }
+.grid { position: absolute; left: 150px; right: 150px; top: 380px; display: grid; grid-template-columns: 1fr 1fr; gap: 34px; }
+.card { background: rgba(18,26,25,.88); border: 1px solid var(--line); border-radius: 22px; padding: 34px 40px; display: grid; grid-template-columns: 76px 1fr; gap: 26px; align-items: start; }
+.card .n { width: 76px; height: 76px; border-radius: 18px; display: grid; place-items: center; font: 800 36px var(--display); background: linear-gradient(135deg, var(--orange), #0f766e); }
+.card h3 { font: 700 40px/1.1 var(--display); }
+.card p { font: 500 26px/1.4 var(--body); color: var(--fg-2); margin-top: 10px; }
+.cmd { font: 600 44px var(--mono); background: var(--panel); border: 1px solid var(--line); border-radius: 18px; padding: 24px 40px; }
+.cmd span { color: var(--teal); }
+.fine { font: 500 28px var(--body); color: var(--fg-3); }
+.bar { position: absolute; left: 0; bottom: 0; height: 6px; background: linear-gradient(90deg, var(--orange), var(--teal)); }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div class="glow"></div>
+  <svg width="0" height="0" style="position:absolute"><defs>
+    <linearGradient id="sl-bg" x1="0" y1="0" x2="1" y2="1.3"><stop offset="0" stop-color="#db562d"/><stop offset="1" stop-color="#0f766e"/></linearGradient>
+    <radialGradient id="sl-hi" cx="0.18" cy="0.08" r="0.62"><stop offset="0" stop-color="#ffab80" stop-opacity=".22"/><stop offset="1" stop-color="#ffab80" stop-opacity="0"/></radialGradient>
+    <symbol id="logo" viewBox="0 0 64 64">
+      <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-bg)"/>
+      <rect x="3.5" y="3.5" width="57" height="57" rx="15" fill="url(#sl-hi)"/>
+      <circle cx="29" cy="29" r="16" fill="none" stroke="#fff" stroke-width="4"/>
+      <path d="M41 41l8.5 8.5" stroke="#fff" stroke-width="5.6" stroke-linecap="round"/>
+      <rect x="21" y="30" width="4.6" height="7" rx="2.3" fill="#fff"/>
+      <rect x="26.8" y="25.5" width="4.6" height="11.5" rx="2.3" fill="#fff"/>
+      <rect x="32.6" y="21" width="4.6" height="16" rx="2.3" fill="#fff"/>
+      <circle cx="40.3" cy="17.7" r="3.8" fill="#f6c453"/>
+    </symbol>
+  </defs></svg>
+  <div id="layers"></div>
+  <div class="bar" id="bar"></div>
+</div>
+<script>
+// The trailer film: real app screenshots (shots/*.png, captured by scripts/record-video.mjs)
+// moved by a camera, with captions. Every frame is a pure function of t (ms), so the renderer can seek to exact times.
+const W = 1920, H = 1080, SW = 1600, SH = 1000, COVER = 1.2;
+const ease = (x) => (x < 0 ? 0 : x > 1 ? 1 : x < .5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2);
+const clamp01 = (x) => Math.max(0, Math.min(1, x));
+// Keyframes: [[timeSec, value], ...]; values are numbers or arrays of numbers.
+function kf(t, frames) {
+  if (t <= frames[0][0]) return frames[0][1];
+  for (let i = 1; i < frames.length; i++) {
+    const [t1, v1] = frames[i], [t0, v0] = frames[i - 1];
+    if (t <= t1) {
+      const p = ease((t - t0) / (t1 - t0));
+      return Array.isArray(v0) ? v0.map((a, j) => a + (v1[j] - a) * p) : v0 + (v1 - v0) * p;
+    }
+  }
+  return frames[frames.length - 1][1];
+}
+const rise = (t, d, dur = .7) => { const p = ease((t - d) / dur); return `opacity:${p};transform:translateY(${(1 - p) * 34}px)`; };
+const fade = (t, d, dur = .6) => clamp01((t - d) / dur);
+
+const CURSOR = `<svg class="cursor" viewBox="0 0 24 24"><path d="M4 2l15 11-6.5 1.2L16 21l-3 1.4-3.5-6.8L4 20z" fill="#fff" stroke="#111" stroke-width="1.3" stroke-linejoin="round"/></svg>`;
+
+// Screen scenes: real screenshots of the app (demo site), moved by a camera.
+// cam keyframes: [t, [centerX, centerY, zoom]] in screenshot CSS px.
+const scenes = [
+  { kind: 'title', dur: 4.6, html: `<div class="center">
+      <div class="big" data-rise=".2">GA4 tells you <em style="font-style:normal;color:var(--amber)">how many</em>.</div>
+      <div class="big dim" data-rise="1.5">It never tells you <span style="color:var(--fg)">why</span>.</div></div>` },
+  { kind: 'title', dur: 4.4, html: `<div class="center">
+      <svg class="mark" data-rise=".1"><use href="#logo"/></svg>
+      <div class="name" data-rise=".5">SiteLens <span>Studio</span></div>
+      <div class="tag" data-rise="1.1">Search, traffic, journeys and outcomes for every site you run, in one local window.</div></div>` },
+  { kind: 'screen', dur: 7.2, shots: ['overview'], kicker: 'Overview', head: 'The whole journey, <em>on one screen</em>.',
+    sub: 'Ship → Get found → Arrive → Engage → Pay off. When a number at the end moves, walk back to find out why.',
+    cam: [[0, [800, 500, 1]], [1.4, [800, 500, 1]], [3.6, [920, 330, 1.18]], [7.2, [915, 340, 1.15]]],
+    hl: [[2.8, 6.8, [268, 94, 1572, 180]]] },
+  { kind: 'screen', dur: 8.4, shots: ['calOct'], kicker: 'Calendar', head: 'Every day <em>explains itself</em>.',
+    sub: 'Oct 17 was 132% above a typical Saturday. Studio says why: 365 sessions came from your Reddit post.',
+    cam: [[0, [800, 500, 1]], [2.6, [800, 500, 1]], [4.6, [1300, 420, 1.55]], [8.4, [1320, 430, 1.5]]],
+    cursor: [[0, [700, 820]], [1.0, [700, 820]], [2.1, [880, 530]]], click: [2.2],
+    hl: [[1.9, 3.4, [824, 489, 929, 567]], [4.9, 8.2, [1150, 296, 1562, 630]]] },
+  { kind: 'screen', dur: 6.6, shots: ['search'], kicker: 'Get found', head: 'Know which searches are <em>worth winning</em>.',
+    sub: 'Google, Bing and AI search side by side, with queries ranked by the clicks you could add.',
+    cam: [[0, [700, 420, 1.12]], [2.2, [760, 420, 1.12]], [5, [1240, 420, 1.5]], [6.6, [1260, 430, 1.5]]],
+    hl: [[3.8, 6.4, [1144, 320, 1571, 778]]] },
+  { kind: 'screen', dur: 9.4, shots: ['paths', 'pathsPricing'], swap: 3.6, kicker: 'Paths', head: 'The real path, <em>session by session</em>.',
+    sub: 'Built from your GA4 BigQuery export, not guessed from referrers. Click any page to follow only those visitors.',
+    cam: [[0, [800, 480, 1]], [1, [800, 480, 1]], [3.2, [600, 470, 1.3]], [5, [760, 420, 1.2]], [9.4, [800, 420, 1.15]]],
+    cursor: [[0, [1100, 300]], [1.2, [1100, 300]], [3.0, [335, 590]]], click: [3.3],
+    hl: [[2.6, 3.7, [284, 568, 380, 609]], [5.4, 8.8, [268, 186, 1571, 779]]] },
+  { kind: 'screen', dur: 7.4, shots: ['funnels'], kicker: 'Funnels', head: 'Funnels that <em>suggest themselves</em>.',
+    sub: 'Any page or event, strictly in order. Studio reads your events and your repo to propose the steps that matter.',
+    cam: [[0, [800, 420, 1.15]], [1.6, [800, 420, 1.15]], [4, [1080, 300, 1.4]], [7.4, [1060, 310, 1.36]]],
+    cursor: [[0, [900, 700]], [2.8, [900, 700]], [4.6, [1516, 343]]], click: [4.9],
+    hl: [[1.2, 3.6, [268, 134, 1126, 468]], [4.2, 7.2, [1144, 134, 1571, 455]]] },
+  { kind: 'screen', dur: 6.2, shots: ['retention'], kicker: 'Retention', head: 'See who actually <em>came back</em>.',
+    sub: 'Weekly cohorts from the raw export, something GA4’s Data API cannot produce.',
+    cam: [[0, [800, 430, 1.1]], [1.4, [800, 430, 1.1]], [4, [920, 360, 1.35]], [6.2, [930, 370, 1.32]]],
+    hl: [[3.2, 6, [270, 300, 1570, 476]]] },
+  { kind: 'title', dur: 10.4, html: `
+      <div class="why-h" data-rise=".1">Why use <span style="background:linear-gradient(90deg,#f08a5d,#3fd0bf);-webkit-background-clip:text;color:transparent">SiteLens Studio</span>?</div>
+      <div class="grid">
+        <div class="card" data-rise="1.0"><div class="n">1</div><div><h3>It answers why</h3><p>Releases, posts, mentions and search sit on the same timeline as your traffic, so you can see what caused a change.</p></div></div>
+        <div class="card" data-rise="2.0"><div class="n">2</div><div><h3>Your data stays yours</h3><p>Runs on 127.0.0.1 and talks to Google directly. There is no SiteLens server, and stored history works offline.</p></div></div>
+        <div class="card" data-rise="3.0"><div class="n">3</div><div><h3>BigQuery without the bill shock</h3><p>Every query is dry-run and priced first. Anything over your scan cap is refused before it runs.</p></div></div>
+        <div class="card" data-rise="4.0"><div class="n">4</div><div><h3>Your AI agent can read it</h3><p>A built-in MCP server lets Claude query your numbers and leave its analysis right in the app.</p></div></div>
+      </div>` },
+  { kind: 'title', dur: 6, html: `<div class="center">
+      <svg class="mark" data-rise=".1" style="width:150px;height:150px"><use href="#logo"/></svg>
+      <div class="name" data-rise=".4" style="font-size:104px">SiteLens Studio</div>
+      <div class="cmd" data-rise="1.1"><span>$</span> npm install &amp;&amp; npm start</div>
+      <div class="fine" data-rise="1.8">Comes with a demo site, so you can try it in a minute with no setup.</div></div>` },
+];
+
+const XF = .5; // crossfade seconds
+let acc = 0;
+for (const s of scenes) { s.start = acc; acc += s.dur; }
+const total = acc * 1000;
+
+const layers = document.getElementById('layers');
+for (const s of scenes) {
+  const el = document.createElement('div');
+  el.className = 'layer';
+  if (s.kind === 'title') el.innerHTML = s.html;
+  else {
+    el.innerHTML = `<div class="cam">${s.shots.map((n) => `<img src="shots/${n}.png">`).join('')}</div>
+      <div class="hls">${(s.hl || []).map(() => '<div class="hl"></div>').join('')}</div>
+      ${s.cursor ? CURSOR + '<div class="ripple"></div>' : ''}
+      <div class="shade"></div>
+      <div class="cap"><div class="kicker" data-rise=".3">${s.kicker}</div><div class="head" data-rise=".5">${s.head}</div><div class="sub" data-rise="1.0">${s.sub}</div></div>`;
+  }
+  s.el = el;
+  layers.append(el);
+}
+
+function camera(s, t) {
+  const [cx0, cy0, z] = kf(t, s.cam);
+  const k = COVER * z;
+  const vw = W / k, vh = H / k;
+  const cx = Math.min(Math.max(cx0, vw / 2), SW - vw / 2);
+  const cy = Math.min(Math.max(cy0, vh / 2), SH - vh / 2);
+  return { k, x: W / 2 - cx * k, y: H / 2 - cy * k };
+}
+
+function renderScene(s, t) {
+  s.el.querySelectorAll('[data-rise]').forEach((n) => (n.style.cssText += ';' + rise(t, +n.dataset.rise)));
+  if (s.kind !== 'screen') return;
+  const c = camera(s, t);
+  s.el.querySelector('.cam').style.transform = `translate(${c.x}px,${c.y}px) scale(${c.k})`;
+  const imgs = s.el.querySelectorAll('.cam img');
+  if (imgs[1]) imgs[1].style.opacity = fade(t, s.swap, .45);
+  const toScreen = (x, y) => [c.x + x * c.k, c.y + y * c.k];
+  s.el.querySelectorAll('.hl').forEach((n, i) => {
+    const [a, b, [x1, y1, x2, y2]] = s.hl[i];
+    const o = Math.min(fade(t, a, .4), 1 - fade(t, b - .4, .4));
+    const [l, tp] = toScreen(x1 - 6, y1 - 6), [r, bt] = toScreen(x2 + 6, y2 + 6);
+    n.style.cssText = `opacity:${o};left:${l}px;top:${tp}px;width:${r - l}px;height:${bt - tp}px`;
+  });
+  if (s.cursor) {
+    const [px, py] = kf(t, s.cursor);
+    const [sx, sy] = toScreen(px, py);
+    const last = s.cursor[s.cursor.length - 1][0];
+    const o = Math.min(fade(t, .4, .4), 1 - fade(t, last + 1.6, .4));
+    const pressed = s.click.some((c0) => t >= c0 && t < c0 + .15);
+    const cur = s.el.querySelector('.cursor');
+    cur.style.cssText = `opacity:${o};transform:translate(${sx - 6}px,${sy - 3}px) scale(${pressed ? .86 : 1})`;
+    const rp = s.el.querySelector('.ripple');
+    const c0 = s.click.find((c1) => t >= c1 && t < c1 + .7);
+    if (c0 !== undefined) {
+      const p = (t - c0) / .7;
+      rp.style.cssText = `opacity:${1 - p};left:${sx}px;top:${sy}px;width:${20 + p * 90}px;height:${20 + p * 90}px`;
+    } else rp.style.opacity = 0;
+  }
+}
+
+function seek(ms) {
+  const T = ms / 1000;
+  for (const s of scenes) {
+    const t = T - s.start;
+    let o = 0;
+    if (t >= -XF && t <= s.dur) {
+      o = Math.min(clamp01((t + XF) / XF), 1);
+      const isLast = s === scenes[scenes.length - 1];
+      if (!isLast) o = Math.min(o, clamp01((s.dur - t) / XF));
+      // first scene starts from black
+      if (s === scenes[0]) o = Math.min(clamp01(t / .6), isLast ? 1 : clamp01((s.dur - t) / XF));
+    }
+    s.el.style.opacity = o;
+    s.el.style.visibility = o > 0 ? 'visible' : 'hidden';
+    if (o > 0) renderScene(s, Math.max(0, t));
+  }
+  document.getElementById('bar').style.width = `${(ms / total) * 100}%`;
+}
+
+window.__film = { total, cues: scenes.map((s) => s.start), seek, ready: Promise.all([document.fonts.ready, ...[...document.images].map((i) => i.decode())]) };
+seek(0);
+</script>
+</body>
+</html>
