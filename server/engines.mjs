@@ -284,6 +284,14 @@ export function createEngines({ auth, bigquery }) {
     return { ...meta(site, range, [result]), events: result.rows.map(eventRow) };
   }
 
+  // Sessions that reached a step but didn't convert, by device and system.
+  async function leavers(site, rangeKey, goals, flags) {
+    const range = await eventsRange(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), groups: [] };
+    const result = await run(site, sql.leaversSql(requireBq(site), range, goals), flags);
+    return { ...meta(site, range, [result]), groups: leaverGroups(result.rows) };
+  }
+
   async function eventDetail(site, rangeKey, name, flags) {
     if (!name) throw new EngineError('Pick an event.');
     const range = await eventsRange(site, rangeKey);
@@ -364,6 +372,7 @@ export function createEngines({ auth, bigquery }) {
     funnel,
     funnelDiscovery,
     cohorts,
+    leavers,
     sessions,
     events,
     eventDetail,
@@ -385,6 +394,18 @@ function normalizeEdges(rows) {
 
 function normalizeExits(rows) {
   return rows.map((r) => ({ page: r.page, views: Number(r.views) || 0, exits: Number(r.exits) || 0 }));
+}
+
+// Rows from leaversSql → one entry per group, biggest first, steps as a map.
+export function leaverGroups(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const g = groups.get(r.grp) || { group: r.grp, left: 0, quick: 0, converted: 0, steps: {} };
+    if (r.step) g.steps[r.step] = Number(r.n) || 0;
+    else Object.assign(g, { left: Number(r.n) || 0, quick: Number(r.quick) || 0, converted: Number(r.converted) || 0 });
+    groups.set(r.grp, g);
+  }
+  return [...groups.values()].filter((g) => g.left || g.converted).sort((a, b) => b.left - a.left);
 }
 
 function normalizeCohorts(rows) {

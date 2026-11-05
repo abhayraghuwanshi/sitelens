@@ -98,3 +98,12 @@ test('table plan prefers daily tables and falls back to intraday per day', () =>
   assert.throws(() => sql.eventsCatalogSql(bq, { ...r, suffixes: ["1' OR '1"] }), /Invalid table suffix/);
   assert.match(sql.expandConsoleSql(bq, { ...r, ...plan }, 'SELECT 1 FROM {{events}} WHERE {{range}}').sql, /WHERE \(_TABLE_SUFFIX IN/);
 });
+
+test('leavers name only plain goal events, and group by device and system', () => {
+  const built = sql.leaversSql(bq, range, { steps: ['downloads_section_view', 'download_cta_click'], outcome: 'file_download' });
+  assert.match(built.sql, /event_name IN \('downloads_section_view', 'download_cta_click'\)/);
+  assert.match(built.sql, /event_name = 'file_download'/);
+  for (const group of sql.LEAVER_GROUPS) assert.ok(built.sql.includes(`'${group}'`), group);
+  assert.throws(() => sql.leaversSql(bq, range, { steps: ["x'; DROP"], outcome: 'file_download' }), /step events/);
+  assert.throws(() => sql.leaversSql(bq, range, { steps: ['a'], outcome: '' }), /outcome/);
+});

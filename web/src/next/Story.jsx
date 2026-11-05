@@ -42,6 +42,7 @@ export function Story({ site, params }) {
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
           <Landing site={site} rows={pages.data?.rows} range={range} />
+          {site.modes?.warehouse && <Leavers site={site} range={range} />}
           <NextSteps site={site} />
         </>
       )}
@@ -179,6 +180,71 @@ function Landing({ site, rows, range }) {
           <span>“{top.query}” is shown {fmt(top.impressions)} times at position {top.position.toFixed(1)}, but {(top.ctr * 100).toFixed(1)}% click. Last 28 days, from Search Console.</span>
         </a>
       )}
+    </section>
+  );
+}
+
+// Who reached the site's goal steps and left without the outcome, by device and
+// system (BigQuery). The steps and outcome are the site's own goals from Setup.
+const GROUP_COLOR = { 'Phones and tablets': 'var(--series-muted)', Chromebooks: 'var(--series-5)', Mac: 'var(--series-4)', Windows: 'var(--series-1)', Linux: 'var(--series-7)', Other: 'var(--border-strong)' };
+
+function Leavers({ site, range }) {
+  const config = useAsync(() => api.get(`/sites/${site.id}/config`).catch(() => null), [site.id]);
+  const goals = config.data?.config?.goals || [];
+  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
+  const steps = goals.filter((g) => g.source === 'event' && g.role === 'step');
+  const ready = Boolean(outcome && steps.length);
+  const data = useAsync(() => (ready ? api.get(`/sites/${site.id}/warehouse/leavers${qs({ range, steps: steps.map((g) => g.match).join(','), outcome: outcome.match })}`) : null),
+    [site.id, range, ready && outcome.match, steps.map((g) => g.match).join()]);
+  if (!config.data || !ready) return null;
+  if (data.error) return <section class="nx-card"><ErrorState error={data.error} onRetry={data.reload} /></section>;
+  if (!data.data) return <section class="nx-card"><Loading height={180} /></section>;
+
+  const groups = data.data.groups;
+  const left = groups.reduce((n, g) => n + g.left, 0);
+  const converted = groups.reduce((n, g) => n + g.converted, 0);
+  if (!left) return null;
+  const desktop = config.data.config.kind === 'desktop';
+  const cannot = desktop ? groups.filter((g) => g.group === 'Phones and tablets' || g.group === 'Chromebooks') : [];
+  const cannotN = cannot.reduce((n, g) => n + g.left, 0);
+  const biggest = groups.find((g) => !cannot.includes(g));
+  // The step most leavers fired is "reaching"; the others are what they did next.
+  const reach = steps.map((g) => ({ g, n: groups.reduce((t, x) => t + (x.steps[g.match] || 0), 0) })).sort((a, b) => b.n - a.n);
+  const after = reach.slice(1).map((r) => r.g);
+  const r = data.data.range;
+  const since = r.firstDay && r.firstDay > r.start ? ` Since ${short(`${r.firstDay.slice(0, 4)}-${r.firstDay.slice(4, 6)}-${r.firstDay.slice(6)}`)}, when the BigQuery export starts.` : '';
+
+  const reason = (g) => {
+    const bits = [];
+    if (desktop && g.group === 'Phones and tablets') bits.push('A desktop app can’t be installed here.');
+    else if (desktop && g.group === 'Chromebooks') bits.push('A Chromebook can’t run a desktop app.');
+    if (g.quick) bits.push(`${fmt(g.quick)} left within 10 seconds.`);
+    for (const s of after) bits.push(`${fmt(g.steps[s.match] || 0)} ${s.label.charAt(0).toLowerCase() + s.label.slice(1)}.`);
+    return bits.join(' ');
+  };
+
+  return (
+    <section class="nx-card" aria-label="Why they don’t convert">
+      <SectionHead n="4" title="Why they leave without converting" more={{ href: `#/site/${site.id}/sessions?range=${range}`, label: 'Sessions' }} />
+      <p class="nx-lede">
+        {fmt(left)} visits reached “{reach[0].g.label}” and left without “{outcome.label}”; {fmt(converted)} went on to it.
+        {cannotN > 0 && ` ${fmt(cannotN)} were on phones, tablets or Chromebooks, where the app doesn’t run.`}
+        {biggest && ` The biggest group that could have is ${biggest.group}: ${fmt(biggest.left)}, and ${fmt(biggest.quick)} of them left within 10 seconds.`}
+      </p>
+      <div class="nx-stack" role="img" aria-label={groups.map((g) => `${g.group} ${g.left}`).join(', ')}>
+        {groups.map((g) => <span key={g.group} style={{ flex: `${g.left} 1 0`, background: GROUP_COLOR[g.group] }} />)}
+      </div>
+      <ul class="nx-leavers">
+        {groups.map((g) => (
+          <li key={g.group}>
+            <span class="nx-swatch" style={{ background: GROUP_COLOR[g.group] }} aria-hidden="true" />
+            <b class="nx-num">{fmt(g.left)}</b>
+            <b>{g.group}</b>
+            <span class="nx-dim">{reason(g)}</span>
+          </li>
+        ))}
+      </ul>
+      <p class="nx-note">From the site’s goals in Setup: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
     </section>
   );
 }

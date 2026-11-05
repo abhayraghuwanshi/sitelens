@@ -319,6 +319,51 @@ LIMIT 100`,
   };
 }
 
+// Who reached a step but didn't convert, grouped by what they were on. Steps and
+// the outcome are the site's own goal events (its config), named in the SQL, so
+// they must be plain event names. Rows: { grp, step, n, quick, converted } —
+// step '' is the group's total; quick = left within 10 seconds of landing.
+export const LEAVER_GROUPS = ['Phones and tablets', 'Chromebooks', 'Mac', 'Windows', 'Linux', 'Other'];
+const EVENT_NAME = /^[A-Za-z][\w]{0,39}$/;
+
+export function leaversSql(bq, range, { steps = [], outcome = '' } = {}) {
+  const names = [...new Set(steps)].filter((s) => EVENT_NAME.test(s)).slice(0, 4);
+  if (!names.length || !EVENT_NAME.test(outcome)) throw new Error('Leavers need step events and an outcome event from the site’s goals.');
+  const list = names.map((n) => `'${n}'`).join(', ');
+  const sql = `WITH e AS (
+  SELECT CONCAT(user_pseudo_id, '.', CAST(${PARAM('ga_session_id', 'int_value')} AS STRING)) AS sid,
+    event_name, event_timestamp AS ts, device.category AS device, device.operating_system AS os
+  FROM ${eventsTable(bq)}
+  WHERE ${eventFilter(bq, range)} AND ${PARAM('ga_session_id', 'int_value')} IS NOT NULL
+),
+s AS (
+  SELECT sid,
+    CASE
+      WHEN ANY_VALUE(device) IN ('mobile', 'tablet') THEN 'Phones and tablets'
+      WHEN ANY_VALUE(os) = 'Chrome OS' THEN 'Chromebooks'
+      WHEN ANY_VALUE(os) IN ('Macintosh', 'macOS') THEN 'Mac'
+      WHEN ANY_VALUE(os) = 'Windows' THEN 'Windows'
+      WHEN ANY_VALUE(os) = 'Linux' THEN 'Linux'
+      ELSE 'Other'
+    END AS grp,
+    MAX(ts) - MIN(ts) AS span,
+    COUNTIF(event_name IN (${list})) > 0 AS reached,
+    COUNTIF(event_name = '${outcome}') > 0 AS converted,
+    ARRAY_AGG(DISTINCT IF(event_name IN (${list}), event_name, NULL) IGNORE NULLS) AS hit
+  FROM e
+  GROUP BY sid
+)
+SELECT grp, '' AS step, COUNTIF(reached AND NOT converted) AS n,
+  COUNTIF(reached AND NOT converted AND span < 10000000) AS quick, COUNTIF(reached AND converted) AS converted
+FROM s GROUP BY grp
+UNION ALL
+SELECT grp, step, COUNT(*) AS n, 0 AS quick, 0 AS converted
+FROM s, UNNEST(hit) AS step
+WHERE reached AND NOT converted
+GROUP BY grp, step`;
+  return { sql, params: baseParams(bq) };
+}
+
 export function eventDetailSql(bq, range, eventName) {
   const params = { ...baseParams(bq), event_name: String(eventName) };
   return {

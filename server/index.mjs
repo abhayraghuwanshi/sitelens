@@ -414,6 +414,11 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/events$/, async ({ match, query }) =>
       engines.events(await siteOr404(match[1]), query.get('range'), flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/leavers$/, async ({ match, query }) =>
+      engines.leavers(await siteOr404(match[1]), query.get('range'), {
+        steps: (query.get('steps') || '').split(',').filter(Boolean),
+        outcome: query.get('outcome') || '',
+      }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/event$/, async ({ match, query }) =>
       engines.eventDetail(await siteOr404(match[1]), query.get('range'), query.get('name'), flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/breakdown$/, async ({ match, query }) =>

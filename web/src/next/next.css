@@ -69,6 +69,12 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-callout { display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); text-decoration: none; line-height: 1.5; }
 .nx-callout:hover { outline: 1px solid var(--warning); }
 
+/* Why they don't convert */
+.nx-stack { display: flex; gap: 2px; height: 12px; border-radius: 6px; overflow: hidden; }
+.nx-leavers { list-style: none; margin: 0; padding: 0; }
+.nx-leavers li { display: grid; grid-template-columns: 12px 44px minmax(0, 170px) minmax(0, 1fr); gap: 12px; align-items: baseline; padding: 10px 0; border-top: 1px solid var(--border); line-height: 1.45; }
+.nx-swatch { width: 10px; height: 10px; border-radius: 3px; align-self: center; }
+
 /* What to do next */
 .nx-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
 .nx-action { display: flex; flex-direction: column; gap: 8px; padding: 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); }
@@ -110,4 +116,6 @@ a.nx-cause:hover { color: var(--accent); }
   .nx-page { padding: 20px 16px 48px; }
   .nx-tr { grid-template-columns: minmax(0, 1fr) 64px 80px; }
   .nx-tr .nx-bar, .nx-th span:last-child { display: none; }
+  .nx-leavers li { grid-template-columns: 12px 40px minmax(0, 1fr); }
+  .nx-leavers li .nx-dim { grid-column: 2 / -1; }
 }
