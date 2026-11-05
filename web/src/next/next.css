@@ -26,7 +26,12 @@
 
 /* Page */
 .nx-main { flex: 1; min-width: 0; }
-.nx-page { max-width: 1120px; margin: 0 auto; padding: 32px 40px 64px; display: flex; flex-direction: column; gap: 18px; }
+.nx-page { max-width: 1200px; padding: 28px 36px 64px; display: flex; flex-direction: column; gap: 18px; }
+/* Classic pages reused here (Setup, Explore's reports) take the new cards' shape and padding, so edges line up. */
+.nx-page .card { border-radius: 14px; }
+.nx-page .card-head { padding: 18px 22px 0; }
+.nx-page .card-body { padding: 14px 22px 20px; }
+.nx-page .card-body.flush { padding: 8px 0 4px; }
 .nx-head { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: flex-end; justify-content: space-between; }
 .nx-head h1 { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: -0.015em; text-wrap: balance; }
 .nx-sub { margin: 4px 0 0; color: var(--text-3); }
