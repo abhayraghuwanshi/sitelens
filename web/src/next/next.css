@@ -74,6 +74,8 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-callout { display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); text-decoration: none; line-height: 1.5; }
 .nx-callout:hover { outline: 1px solid var(--warning); }
 
+.nx-results a { grid-template-columns: minmax(0, 1fr) 70px 110px; }
+
 /* Left out */
 .nx-leftout { margin: 0; display: flex; flex-wrap: wrap; gap: 6px 14px; justify-content: space-between; align-items: baseline; padding: 10px 14px; border-radius: 10px; background: var(--surface-2); color: var(--text-2); font-size: var(--text-md); line-height: 1.5; }
 .nx-leftout a { color: var(--accent); text-decoration: none; }

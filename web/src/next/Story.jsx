@@ -46,6 +46,7 @@ export function Story({ site, params }) {
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
           <Landing site={site} rows={pages.data?.rows} range={range} />
           {site.modes?.warehouse && <Leavers site={site} range={range} />}
+          <Results site={site} range={range} />
           <NextSteps site={site} />
         </>
       )}
@@ -311,6 +312,69 @@ function Leavers({ site, range }) {
     </section>
   );
 }
+
+// What the visits led to: the site's outcome goals (Outcomes) and, after the
+// download, the product's own usage from custom metrics. Without those it says
+// what to connect instead of guessing.
+const SOURCE_NOTE = {
+  downloads: 'Release files downloaded from GitHub: files, not people.',
+  installs: 'From the Chrome Web Store.',
+  event: 'On the site, from GA4.',
+};
+
+function Results({ site, range }) {
+  const products = useAsync(() => api.get('/products').catch(() => null), []);
+  const product = products.data?.products?.find((p) => p.siteId === site.id);
+  const out = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range })}`).catch(() => null) : null), [product?.id, range]);
+  const metrics = useAsync(() => api.get(`/sites/${site.id}/metrics${qs({ range })}`).catch(() => ({ metrics: [] })), [site.id, range]);
+  if (!products.data || (product && !out.data && out.loading)) return <section class="nx-card"><Loading height={160} /></section>;
+  const goals = (out.data?.goals?.list || []).filter((g) => g.role === 'outcome');
+  const usage = metrics.data?.metrics || [];
+  if (!goals.length && !usage.length) return null;
+  const dated = goals.filter((g) => g.previous !== null && g.previous !== undefined);
+  const lead = dated[0];
+
+  return (
+    <section class="nx-card" aria-label="What it led to">
+      <SectionHead n="5" title="What it led to" more={product ? { href: `#/outcomes/${product.id}?range=${range}`, label: 'Outcomes' } : null} />
+      {lead && (
+        <p class="nx-lede">{dated.map((g) => `${fmt(g.count)} ${g.label.charAt(0).toLowerCase() + g.label.slice(1)} (${changeWords(g.count, g.previous)})`).join(', ')}.</p>
+      )}
+      <ul class="nx-rows nx-results">
+        {goals.map((g) => (
+          <li key={g.id}>
+            <a href={product ? `#/outcomes/${product.id}?range=${range}` : '#/'}>
+              <span class="nx-path"><b>{g.label}</b><span class="nx-dim small"> · {SOURCE_NOTE[g.source] || ''}</span></span>
+              <span class="nx-num">{fmt(g.count)}</span>
+              {g.previous === null || g.previous === undefined ? <span class="nx-dim small">no history</span> : <Change value={g.count} previous={g.previous} />}
+            </a>
+          </li>
+        ))}
+      </ul>
+      <div class="nx-label-sm" style={{ marginTop: '6px' }}>Who keeps using it</div>
+      {usage.length ? (
+        <ul class="nx-rows nx-results">
+          {usage.map((m) => (
+            <li key={m.id}>
+              <a href="#/account?tab=metrics">
+                <span class="nx-path"><b>{m.label}</b>{m.error && <span class="bad small"> · {m.error.message}</span>}</span>
+                <span class="nx-num">{m.error ? '–' : fmt(m.total)}</span>
+                {m.error ? <span /> : <Change value={m.total} previous={m.previous} />}
+              </a>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <a class="nx-callout" href="#/account?tab=metrics">
+          <Icon name="database" size={14} />
+          <span>A download isn’t a user. Connect the app’s own numbers (launches, weekly active users, uninstalls, from a database such as Cloudflare D1) as custom metrics, and this shows who stays.</span>
+        </a>
+      )}
+    </section>
+  );
+}
+
+const changeWords = (value, previous) => (!previous ? 'none before' : previous * 4 < value ? `from ${fmt(previous)}` : `${value >= previous ? 'up' : 'down'} ${Math.abs(Math.round((value / previous - 1) * 100))}%`);
 
 // Search Console's opportunities as actions. "Start" writes a note on the
 // Timeline, so the day you acted sits on every chart from then on.
