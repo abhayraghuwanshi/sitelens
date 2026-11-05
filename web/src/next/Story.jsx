@@ -6,7 +6,7 @@ import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
 import { LeftOutLine } from './LeaveOut.jsx';
-import { useJourneys, pageName as journeyPage } from './Journeys.jsx';
+import { useJourneys } from './Journeys.jsx';
 
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
@@ -263,14 +263,18 @@ function HowTheyCome({ site, range }) {
   return (
     <section class="nx-card" aria-label="How they come">
       <SectionHead n="3" title="How they come" more={{ href: `#/site/${site.id}/journeys?range=${range}`, label: `All ${j.journeys.length} journeys` }} />
-      {best && <p class="nx-lede">The strongest way in is {best.name} → {journeyPage(best.landing).replace(/^The/, 'the')}: {fmt(best.converted)} of its {fmt(best.sessions)} visits reached “{j.outcome.label}”.</p>}
-      <ul class="nx-rows nx-jtop">
+      {best && <p class="nx-lede">The strongest way in is {best.name} → {pageTitle(best.landing).replace(/^The/, 'the')}: {fmt(best.converted)} of its {fmt(best.sessions)} visits reached “{j.outcome.label}”.</p>}
+      <ul class="nx-jlinks">
         {top.map((x) => (
           <li key={x.key}>
             <a href={`#/site/${site.id}/journeys?range=${range}&open=${encodeURIComponent(x.key)}`}>
-              <span class="nx-path"><b>{x.name}</b> <span class="nx-dim">→ {journeyPage(x.landing)}</span></span>
-              <span class="nx-num">{fmt(x.sessions)}</span>
-              <span class="small"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b> <span class="nx-dim">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}%` : ''}</span></span>
+              <span class="nx-jwho">
+                <b>{x.name} <span class="nx-dim">→</span> {pageTitle(x.landing)}</b>
+                <span class="nx-dim small">{x.landing === '/' ? site.host : x.landing}</span>
+              </span>
+              <span class="nx-stat"><b>{fmt(x.sessions)}</b><span class="nx-dim small">visits</span></span>
+              <span class="nx-stat"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b><span class="nx-dim small">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}% ` : ''}{j.outcome.label.toLowerCase()}</span></span>
+              <Icon name="chevron" size={14} />
             </a>
           </li>
         ))}
@@ -493,6 +497,13 @@ function byPage(data) {
     .slice(0, 3);
 }
 
+// A path as a reader would name it: "/blog/best-dock-apps-windows" → "Best dock apps windows".
+const pageTitle = (path) => {
+  if (path === '/') return 'The home page';
+  if (!path || path === '(not set)') return 'No page recorded';
+  const slug = path.replace(/\/$/, '').split('/').pop().replace(/[-_]+/g, ' ').trim();
+  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : path;
+};
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const pageName = (path) => (path === '/' ? 'the home page' : !path || path === '(not set)' ? 'no page recorded' : path);
 
