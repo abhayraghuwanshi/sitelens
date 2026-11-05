@@ -514,7 +514,8 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
         const n = Number(r.sessions) || 0;
         byFamily.set(key, (byFamily.get(key) || 0) + n);
         const c = String(r.sessionCampaignName || '').toLowerCase();
-        if (c && c !== '(not set)' && c !== '(direct)' && c !== '(organic)' && c !== '(referral)') {
+        // GA4 fills the campaign with labels like (organic) or (ai-assistant) when there's no utm tag.
+        if (c && !/^\(.*\)$/.test(c)) {
           campaigns.set(c, (campaigns.get(c) || 0) + n);
           sources.set(c, new Set([...(sources.get(c) || []), sourceFamily(r.sessionSource)]));
         }

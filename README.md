@@ -6,7 +6,7 @@ It runs locally (`127.0.0.1`), stores everything in `.data/`, and talks directly
 
 ![SiteLens Studio trailer](docs/trailer.gif)
 
-<sub>A one-minute tour, using sample figures from the built-in demo site. The interactive version is [`docs/trailer.html`](docs/trailer.html): open it in a browser for play/pause and scene controls. To re-render the GIF after editing it, run `npm run trailer` (needs Chrome and ffmpeg).</sub>
+<sub>A one-minute tour, using sample figures from the built-in demo site. The interactive version is [`docs/trailer.html`](docs/trailer.html): open it in a browser for play/pause and scene controls. To re-render the GIF after editing it, run `npm run trailer` (needs Chrome and ffmpeg). [`docs/trailer.mp4`](docs/trailer.mp4) is a 1080p version with sound, recorded from the real app on the demo site: `npm run trailer:video` rebuilds it from `scripts/trailer-video/film.html`, with a soundtrack synthesized by `scripts/trailer-music.mjs`.</sub>
 
 ## Quick start
 
@@ -53,6 +53,10 @@ seq   ARRAY<STRUCT<k STRING, ts INT64>>    -- 'page:/pricing' | 'event:sign_up'
 - Results are cached for an hour in memory (BigQuery also caches identical queries for free).
 - **Sessions rollup** (Settings → edit site → *Build & use rollup*): materializes a partitioned, clustered `sitelens_<id>.sessions` table in your billing project. Paths, funnels, retention and sessions then read that table instead of scanning raw events. To keep it fresh, re-run it or schedule the same SQL as a BigQuery scheduled query.
 
+## Site config as code (`.sitelens.yml`)
+
+What Studio measures for a site lives in a `.sitelens.yml` in the site's own repo: its goals (and which ones alert when they drop), its funnels, per-site alert thresholds, and what it wants to be found for: brand and competitor names, search topics and the questions AI search asks assistants. Those set up Demand's query groups, the AI answer checks and Mentions. Connections and keys stay in Settings. To have Claude set a site up, open its repo in Claude Code with the MCP server connected and run `/mcp__sitelens__setup_site`. Claude reads the tracking code and the site's real search queries, writes the file and validates it with `check_site_config`. Each site's **Setup** page (in the sidebar) shows goals, funnels, search and alerts, each marked as coming from the repo file, from Studio's own settings or from Studio's guesses. Editing a part that's in the file opens a pull request that changes only that part. Any other part can be moved into the repo the same way, and sites without a repo keep the file in `.data/config/`. The format is in [`docs/sitelens-yml.md`](docs/sitelens-yml.md).
+
 ## Calendar
 
 **Calendar** (under Workspace) shows a month with one cell per day. Each cell has the day's sessions (or search clicks) compared with a typical same weekday, which is the median of the same weekday over the previous 4 weeks. Days 15%+ or 40%+ off are tinted green or red. Dots mark that day's events (releases, deploys, posts, mentions, notes), plus a bell for alerts and ★ for GitHub stars gained. The last column sums each week.
@@ -93,6 +97,7 @@ Inside this repo you don't need to add anything: `.mcp.json` registers it as `si
 | `breakdown` | Sessions by source or landing page, or clicks by query, vs the previous window |
 | `day_story` | The calendar's story for one day |
 | `events` | Releases, deploys, posts, mentions, notes and alerts in a range |
+| `custom_metrics` | A site's custom metrics: daily values, top dimensions, and totals vs the previous period |
 | `schema` / `query` | Tables of, and one read-only `SELECT` against, any local database: `calendar`, `github`, `posts`, `mentions`, `bing`, `vitals`, `firebase`, `ai-search` |
 | `add_comment` / `list_comments` / `delete_comment` | Leave a dated comment written by Claude, list Claude's comments, or delete one of them. Notes you wrote can't be deleted |
 
@@ -142,6 +147,23 @@ Two non-GA sources sit next to your sites in the sidebar.
   - It counts only installs made from the listing page.
 - **The Chrome Web Store API has no stats.** v1.1 and v2 only upload, publish and read publishing status. Studio doesn't use it.
 - History is stored in `.data/studio.json`.
+
+## Custom metrics
+
+Daily numbers from your own stores, such as daily pings, signups or revenue, charted on the site's Overview next to GA4. They also work for sites with no GA4 property.
+
+- Add one in Settings → Integrations → Custom metrics. Pick the site, the source and a query, use **Test** to preview it, then save.
+- Every source answers with rows of one shape: `day`, `value`, and an optional `dimension` (the five largest get their own lines). New kinds of storage are new connectors in `server/custom-metrics.mjs`. Nothing else needs to change.
+- **Cloudflare D1** is the first connector. It uses the D1 REST API with a token that has **Account → D1 → Read**, saved in Settings or as `CLOUDFLARE_API_TOKEN` in `.env`.
+- Queries are a single `SELECT`. `{{start}}` / `{{end}}` are bound as `YYYY-MM-DD` dates (the end is exclusive), and `{{start_ms}}` / `{{end_ms}}` and `_s` as epoch timestamps. Studio asks for the range plus the period before it, so the change vs the previous period costs no extra query.
+- The headline number is the sum of the days, the daily average, or the latest day (for running totals). Results are cached for 15 minutes.
+
+```sql
+SELECT date(created_at) AS day, count(DISTINCT install_id) AS value, version AS dimension
+FROM pings
+WHERE created_at >= {{start}} AND created_at < {{end}}
+GROUP BY 1, 3
+```
 
 ## Connecting Google
 

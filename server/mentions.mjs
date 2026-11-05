@@ -49,9 +49,10 @@ const stripHtml = (s) => String(s || '').replace(/<[^>]+>/g, ' ').replace(/&#x2F
 
 /* ---------- Pure helpers (unit-tested) ---------- */
 
-// [{ term, scopes, origin }] from sites, products, extensions and Settings keywords.
+// [{ term, scopes, origin }] from sites, products, extensions, each site's
+// .sitelens.yml brand names (`declared`: { siteId: [names] }) and Settings keywords.
 // Generic terms are skipped: a term must be 4+ characters.
-export function deriveTerms({ sites = [], products = [], extensions = [], keywords = [] }) {
+export function deriveTerms({ sites = [], products = [], extensions = [], keywords = [], declared = {} }) {
   const terms = new Map();
   const add = (term, scopes, origin) => {
     const t = String(term || '').trim().toLowerCase();
@@ -69,6 +70,7 @@ export function deriveTerms({ sites = [], products = [], extensions = [], keywor
     for (const r of p.repos || []) add(`github.com/${r}`, [`repo:${r}`], 'repo');
   }
   for (const e of extensions) add(e.id, [`ext:${e.id}`], 'extension');
+  for (const [siteId, names] of Object.entries(declared)) for (const n of names) add(n, [`site:${siteId}`], 'config');
   for (const k of keywords) add(k.term, k.scope ? [k.scope] : [], 'keyword');
   return [...terms.values()];
 }
@@ -186,7 +188,7 @@ export function normalizeMentionSettings(input = {}) {
 
 /* ---------- Service ---------- */
 
-export function createMentions({ dbPath, store, env = process.env, fetchImpl = fetch, now = Date.now, log = console }) {
+export function createMentions({ dbPath, store, env = process.env, siteConfig = null, fetchImpl = fetch, now = Date.now, log = console }) {
   let db = null;
   let timers = [];
   let syncing = null;
@@ -224,7 +226,15 @@ export function createMentions({ dbPath, store, env = process.env, fetchImpl = f
   async function terms() {
     const s = await store.get();
     const extensions = s.extensions || [];
-    return deriveTerms({ sites: await store.sites(), products: s.products || [], extensions, keywords: (await settings()).keywords });
+    const sites = await store.sites();
+    const declared = {};
+    if (siteConfig) {
+      for (const site of sites.filter((x) => !x.demo)) {
+        const brand = (await siteConfig.applied(site))?.search?.brand;
+        if (brand?.length) declared[site.id] = brand;
+      }
+    }
+    return deriveTerms({ sites, products: s.products || [], extensions, keywords: (await settings()).keywords, declared });
   }
 
   async function getJson(url, init = {}) {

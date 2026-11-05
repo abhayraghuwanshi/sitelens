@@ -105,3 +105,21 @@ test('a product on the demo site alone gets a full sample page', async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('moveSiteRepos: repos saved on a site move to its product, once', async () => {
+  const { moveSiteRepos } = await import('../server/store.mjs');
+  const state = {
+    sites: [
+      { id: 's1', label: 'Cooldesk', host: 'cool-desk.com', repos: ['me/a', 'me/b'] },
+      { id: 's2', label: 'Cooldesk', host: 'other.com', repos: ['me/c'] },
+      { id: 's3', label: 'Quiet', host: 'quiet.com' },
+    ],
+    products: [{ id: 'cooldesk', label: 'Cooldesk', siteId: 's1', repos: ['me/a'], extensionIds: [] }],
+  };
+  assert.equal(moveSiteRepos(state), true);
+  assert.deepEqual(state.products[0].repos, ['me/a', 'me/b']);
+  // A new product for s2 doesn't take s1's product id.
+  assert.deepEqual(state.products[1], { id: 'cooldesk-s2', label: 'Cooldesk', siteId: 's2', repos: ['me/c'], extensionIds: [] });
+  assert.ok(state.sites.every((s) => !('repos' in s)));
+  assert.equal(moveSiteRepos(state), false);
+});

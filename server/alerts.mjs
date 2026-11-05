@@ -10,6 +10,7 @@
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
 import { runReport } from '../shared/sitelens/ga4.js';
+import { hostFilter } from '../shared/sitelens/reports.js';
 import { ValidationError } from './store.mjs';
 
 const HOUR = 60 * 60_000;
@@ -26,6 +27,8 @@ export const DEFAULT_RULES = Object.freeze({
   stars: { enabled: true, minGain: 3, multiple: 3 },
   issues: { enabled: true, minNew: 1 },
   mentions: { enabled: true, minPoints: 0 },
+  // Thresholds live on each goal in the site's .sitelens.yml.
+  goals: { enabled: true },
 });
 
 export const DEFAULT_SETTINGS = Object.freeze({
@@ -46,6 +49,7 @@ export const RULE_LABELS = {
   stars: 'GitHub stars spike',
   issues: 'New GitHub issues',
   mentions: 'New mentions (HN, Reddit, Product Hunt)',
+  goals: 'Goals marked alert: in .sitelens.yml',
 };
 
 /* ---------- Pure helpers (unit-tested) ---------- */
@@ -208,6 +212,7 @@ export function createAlerts({
   auth,
   listingProperty = null,
   mentions = null,
+  siteConfig = null,
   fetchImpl = fetch,
   now = () => Date.now(),
   notify = null,
@@ -226,12 +231,64 @@ export function createAlerts({
 
   /* --- checks; each returns { alerts, digest } for one source --- */
 
+  // Daily users reaching each goal, one GA4 report for the events and one per page.
+  async function goalSeries(site, goals, dates) {
+    const token = await auth.token();
+    const host = hostFilter(site.host, { includeSubdomains: site.includeSubdomains });
+    const ask = async (dimensions, filter) => (await report({
+      token,
+      propertyId: site.propertyId,
+      body: {
+        dateRanges: [{ startDate: dates[0], endDate: dates.at(-1) }],
+        dimensions,
+        metrics: [{ name: 'totalUsers' }],
+        dimensionFilter: { andGroup: { expressions: [host, filter] } },
+        limit: 5000,
+      },
+    })).rows || [];
+    const names = goals.filter((g) => g.source === 'event').map((g) => g.match);
+    const byEvent = names.length ? await ask([{ name: 'date' }, { name: 'eventName' }], { filter: { fieldName: 'eventName', inListFilter: { values: names } } }) : [];
+    return Promise.all(goals.map(async (g) => denseSeries(
+      g.source === 'event'
+        ? byEvent.filter((r) => r.eventName === g.match)
+        : await ask([{ name: 'date' }], { filter: { fieldName: 'pagePath', stringFilter: { matchType: 'BEGINS_WITH', value: g.match } } }),
+      dates,
+      'totalUsers',
+    )));
+  }
+
+  async function checkGoals(site, goals, dates, day, t) {
+    const product = ((await store.get()).products || []).find((p) => p.siteId === site.id);
+    const series = await goalSeries(site, goals, dates);
+    const alerts = [];
+    goals.forEach((g, i) => {
+      const { when, pct: threshold, min } = g.alert;
+      const hit = detectAnomaly(series[i].at(-1), series[i].slice(0, -1), { pct: threshold, minVolume: min, z: 0 });
+      if (!hit || (when === 'drop' && hit.direction !== 'down') || (when === 'spike' && hit.direction !== 'up')) return;
+      alerts.push(alert(t, {
+        key: `goal:${site.id}:${g.id}:${day}`, rule: 'goals', direction: hit.direction,
+        subject: { type: 'site', id: site.id, label: site.label },
+        link: product ? `#/outcomes/${product.id}` : `#/site/${site.id}/overview`,
+        title: `${site.label}: ${g.label} ${hit.direction === 'up' ? 'jumped' : 'dropped'} ${pct(hit.change)}`,
+        detail: `${num(hit.value)} users reached it on ${day} vs ${num(Math.round(hit.avg7 * 10) / 10)}/day over the previous 7 days. Watched because .sitelens.yml marks it alert.`,
+        value: hit.value, baseline: hit.avg7, change: hit.change,
+      }));
+    });
+    return alerts;
+  }
+
   async function checkSites(cfg, t, day) {
     const out = { alerts: [], digest: [], errors: [] };
     const sites = (await store.sites()).filter((s) => cfg.includeDemo || !s.demo);
     const dates = lastDays(t, 29);
     for (const site of sites) {
       const row = { id: site.id, label: site.label };
+      // The site's .sitelens.yml can tune or switch off its traffic and search rules.
+      const own = await siteConfig?.applied(site);
+      const rules = {
+        traffic: { ...cfg.rules.traffic, ...own?.alerts?.traffic },
+        search: { ...cfg.rules.search, ...own?.alerts?.search },
+      };
       try {
         if (site.demo || site.propertyId) {
           const [p] = await engines.portfolio([site], '90d');
@@ -239,9 +296,9 @@ export function createAlerts({
           const sessions = denseSeries(p.trend || [], dates, 'sessions');
           const users = denseSeries(p.trend || [], dates, 'activeUsers');
           Object.assign(row, { sessions: sessions.at(-1), users: users.at(-1), sessionsChange: change(sessions) });
-          if (cfg.rules.traffic.enabled) {
+          if (rules.traffic.enabled) {
             for (const [metric, series] of [['sessions', sessions], ['users', users]]) {
-              const hit = detectAnomaly(series.at(-1), series.slice(0, -1), cfg.rules.traffic);
+              const hit = detectAnomaly(series.at(-1), series.slice(0, -1), rules.traffic);
               if (hit) out.alerts.push(alert(t, {
                 key: `traffic:${site.id}:${metric}:${day}`, rule: 'traffic', direction: hit.direction,
                 subject: { type: 'site', id: site.id, label: site.label }, link: `#/site/${site.id}/overview`,
@@ -259,7 +316,7 @@ export function createAlerts({
           const clicks = trend.map((r) => Number(r.clicks) || 0);
           const lastDate = normDate(trend.at(-1)?.date);
           if (lastDate) Object.assign(row, { clicks: clicks.at(-1), clicksDay: lastDate });
-          const hit = cfg.rules.search.enabled && clicks.length ? detectAnomaly(clicks.at(-1), clicks.slice(0, -1), cfg.rules.search) : null;
+          const hit = rules.search.enabled && clicks.length ? detectAnomaly(clicks.at(-1), clicks.slice(0, -1), rules.search) : null;
           if (hit) out.alerts.push(alert(t, {
             key: `search:${site.id}:clicks:${lastDate}`, rule: 'search', direction: hit.direction,
             subject: { type: 'site', id: site.id, label: site.label }, link: `#/site/${site.id}/search`,
@@ -271,6 +328,14 @@ export function createAlerts({
       } catch (err) {
         row.error = err.message;
         out.errors.push(`${site.label}: ${err.message}`);
+      }
+      const watched = (own?.goals || []).filter((g) => g.alert);
+      if (cfg.rules.goals.enabled && watched.length && !site.demo && site.propertyId) {
+        try {
+          out.alerts.push(...await checkGoals(site, watched, dates, day, t));
+        } catch (err) {
+          out.errors.push(`${site.label} goals: ${err.message}`);
+        }
       }
       if (row.error || row.sessions !== undefined || row.clicks !== undefined) out.digest.push(row);
     }

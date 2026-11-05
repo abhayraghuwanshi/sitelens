@@ -43,6 +43,13 @@ const GROUPS = [
           : { on: false, text: 'Needs an access token' }),
       },
       {
+        key: 'metrics', name: 'Custom metrics', icon: 'database', panel: 'metrics',
+        desc: 'Daily numbers from your own databases, like daily pings from Cloudflare D1, charted on Overview.',
+        status: ({ customMetrics: m }) => (m.count
+          ? { on: true, text: `${m.count} ${m.count === 1 ? 'metric' : 'metrics'}${m.sources.length ? ` · ${m.sources.join(', ')}` : ''}` }
+          : { on: false, text: m.sources.length ? 'Token saved · no metrics yet' : 'Needs a source and a query' }),
+      },
+      {
         key: 'bing', name: 'Bing Webmaster Tools', icon: 'search', panel: 'bing',
         desc: 'Bing search clicks, queries and crawl health. Also feeds DuckDuckGo, Copilot and ChatGPT search.',
         status: ({ bing: b }) => (b?.source ? { on: true, text: via(b.source, 'API key') } : { on: false, text: 'Needs an API key' }),

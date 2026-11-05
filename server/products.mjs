@@ -402,7 +402,12 @@ export function createProducts({ store, auth, extensions, listingProperty, githu
       const product = normalizeProduct(input);
       await store.update((s) => {
         s.products ||= [];
-        const i = s.products.findIndex((p) => p.id === (input.previousId || product.id));
+        let i = s.products.findIndex((p) => p.id === (input.previousId || product.id));
+        // A new product never replaces another one that happens to share its name.
+        if (i >= 0 && !input.previousId) {
+          for (let n = 2; s.products.some((p) => p.id === product.id); n++) product.id = `${slugify(input.id || product.label)}-${n}`;
+          i = -1;
+        }
         if (i >= 0) s.products[i] = product;
         else s.products.push(product);
       });

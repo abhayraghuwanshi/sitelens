@@ -375,6 +375,7 @@ table.data tr.selected td { background: var(--accent-soft); }
 }
 .chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
 .chip.good { color: var(--good-ink); }
+.chip.bad { color: var(--critical-ink); }
 .path-chain { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
 .path-chain .arrow { color: var(--text-3); font-size: var(--text-xs); }
 .path-chain code { background: var(--surface-2); padding: 1px 6px; border-radius: 4px; font-size: var(--text-sm); }

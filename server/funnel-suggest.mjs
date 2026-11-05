@@ -212,11 +212,11 @@ export async function githubGet(fetchImpl, path, token) {
 }
 
 // Repos whose homepage is this site, plus repos a product links to it.
-// Repos picked in the site's settings or a product, the one its Vercel project deploys from.
+// Repos picked for the site's product, and the one its Vercel project deploys from.
 export async function linkedRepos({ store, site, vercel = null }) {
   const fromVercel = vercel ? await vercel.repoFor(site) : '';
   const fromProducts = ((await store.get()).products || []).filter((p) => p.siteId === site.id).flatMap((p) => p.repos || []);
-  return [...new Set([...(site.repos || []), ...(fromVercel ? [fromVercel] : []), ...fromProducts])];
+  return [...new Set([...fromProducts, ...(fromVercel ? [fromVercel] : [])])];
 }
 
 // Those, plus any of the user's repos whose homepage is the site.

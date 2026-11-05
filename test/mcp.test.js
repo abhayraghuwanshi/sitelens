@@ -173,3 +173,15 @@ test('detectMcpClients: connected, stale and missing registrations', async () =>
     await rm(home, { recursive: true, force: true });
   }
 });
+
+test('setup_site prompt is listed and fills in the site', async () => {
+  const mcp = createMcp({ fetchImpl: async () => { throw new Error('no network'); } });
+  const init = await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  assert.deepEqual(init.result.capabilities, { tools: {}, prompts: {} });
+  const list = await mcp.handle({ jsonrpc: '2.0', id: 2, method: 'prompts/list' });
+  assert.deepEqual(list.result.prompts.map((p) => p.name), ['setup_site']);
+  const got = await mcp.handle({ jsonrpc: '2.0', id: 3, method: 'prompts/get', params: { name: 'setup_site', arguments: { site: 'shop.test' } } });
+  assert.match(got.result.messages[0].content.text, /the site "shop\.test"[\s\S]*check_site_config/);
+  const bad = await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'prompts/get', params: { name: 'nope' } });
+  assert.equal(bad.error.code, -32602);
+});

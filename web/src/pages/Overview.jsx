@@ -10,6 +10,7 @@ import { LineChart } from '../charts/LineChart.jsx';
 import { useAnnotations, AnnotationBar, toIso } from '../components/Annotations.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { ServerTrafficCard } from './Firebase.jsx';
+import { CustomMetricsCard } from './CustomMetrics.jsx';
 
 const TREND_METRICS = [
   { key: 'activeUsers', label: 'Users' },
@@ -26,7 +27,8 @@ export function Overview({ site, range }) {
   // Search Console is its own source; the journey strip shows it when the site has one.
   const search = useAsync(() => (site.modes.search ? api.get(`/sites/${site.id}/search${qs({ range })}`) : null), [site.id, range, site.modes.search]);
 
-  if (dash.error) return <ErrorState error={dash.error} onRetry={dash.reload} />;
+  // Custom metrics don't need GA4, so a site without it still gets them.
+  if (dash.error) return <><ErrorState error={dash.error} onRetry={dash.reload} />{!site.demo && <CustomMetricsCard site={site} range={range} />}</>;
   if (!dash.data) return <><Loading height={92} /><Loading height={300} /></>;
 
   const { reports, insights, ai } = dash.data;
@@ -82,6 +84,8 @@ export function Overview({ site, range }) {
           )}
         </Card>
       </div>
+
+      {!site.demo && <CustomMetricsCard site={site} range={range} annotations={notes.annotations} />}
 
       {trendDates.length > 0 && (
         <ClaudeComments siteId={site.id} from={toIso(trendDates[0])} to={toIso(trendDates[trendDates.length - 1])} onChange={notes.reload} />

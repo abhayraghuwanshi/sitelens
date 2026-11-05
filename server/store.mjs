@@ -29,6 +29,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
     if (state) return state;
     try {
       state = { ...EMPTY, ...JSON.parse(await readFile(file, 'utf8')) };
+      if (moveSiteRepos(state)) await save();
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
       state = structuredClone(EMPTY);
@@ -92,7 +93,6 @@ const PROJECT_RE = /^[a-z0-9][a-z0-9.:_-]{1,120}$/i;
 const DATASET_RE = /^[A-Za-z0-9_]{1,1024}$/;
 const TABLE_RE = /^[a-z0-9][a-z0-9.:_-]{1,120}\.[A-Za-z0-9_]{1,1024}\.[A-Za-z0-9_$-]{1,1024}$/i;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 
 export class ValidationError extends Error {}
 
@@ -140,11 +140,32 @@ export function normalizeSite(input = {}) {
     streamName: text(input.streamName),
     includeSubdomains: Boolean(input.includeSubdomains),
     searchSite: text(input.searchSite, 300),
-    // GitHub repos (owner/name) that hold this site's code, on top of the ones found by homepage.
-    repos: [...new Set((Array.isArray(input.repos) ? input.repos : []).map((r) => text(r, 200)).filter((r) => REPO_RE.test(r)))],
     bq,
     ...(Array.isArray(input.searchGroups) ? { searchGroups: normalizeGroups(input.searchGroups) } : {}),
   };
+}
+
+// Repos picked on a site briefly lived on the site; they belong to the site's
+// product, which the site editor now edits. Moves them there once.
+export function moveSiteRepos(state) {
+  let moved = false;
+  for (const site of state.sites || []) {
+    if (!Array.isArray(site.repos)) continue;
+    if (site.repos.length) {
+      state.products ||= [];
+      let product = state.products.find((p) => p.siteId === site.id);
+      if (!product) {
+        const base = String(site.label || site.host).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || site.id;
+        const id = state.products.some((p) => p.id === base) ? `${base}-${site.id}` : base;
+        product = { id, label: site.label || site.host, siteId: site.id, repos: [], extensionIds: [] };
+        state.products.push(product);
+      }
+      product.repos = [...new Set([...(product.repos || []), ...site.repos])];
+    }
+    delete site.repos;
+    moved = true;
+  }
+  return moved;
 }
 
 // What the browser may see: everything except credentials.

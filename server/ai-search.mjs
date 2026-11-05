@@ -21,6 +21,7 @@ import { runReport } from '../shared/sitelens/ga4.js';
 import { getRange, hostFilter, AI_REFERRER_SOURCES, AI_CHANNEL_GROUP, AI_MEDIUM } from '../shared/sitelens/reports.js';
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
+import { aiQuestions } from './site-config.mjs';
 
 export const CHECK_MODEL = 'claude-opus-5-5';
 const MAX_PROMPTS = 12;
@@ -122,12 +123,13 @@ export function summarizeReferrals(rows, dates, siteDaily = []) {
 
 // Names that count as "the answer mentions us": product labels, the site label,
 // and the domain's name part with and without separators (cool-desk → cooldesk).
-export function brandTerms(site, products = []) {
+export function brandTerms(site, products = [], declared = []) {
   const terms = new Set();
   const add = (t) => {
     const v = String(t || '').trim().toLowerCase();
     if (v.length >= 3) terms.add(v);
   };
+  for (const t of declared) add(t);
   for (const p of products) if (p.siteId === site.id) add(p.label);
   add(site.label);
   const host = bare(site.host);
@@ -236,7 +238,7 @@ export function aiKeyError(err) {
 
 /* ---------- service ---------- */
 
-export function createAiSearch({ dbPath, store, auth, firebase, env = process.env, now = Date.now, log = console, createClient = (apiKey) => new Anthropic({ apiKey }) }) {
+export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = null, env = process.env, now = Date.now, log = console, createClient = (apiKey) => new Anthropic({ apiKey }) }) {
   let db = null;
   let timers = [];
   const cache = createCache();
@@ -292,14 +294,23 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
 
   /* ----- answer checks ----- */
 
+  // The site's .sitelens.yml (search: ask_ai) first, then questions saved in
+  // Studio, then generic ones made from the product's name.
   async function promptsFor(site) {
     const cfg = await config();
+    const declared = aiQuestions((await siteConfig?.applied(site))?.search);
+    if (declared.length) return { prompts: declared.map((q) => q.prompt), topics: declared, custom: true, from: 'file' };
     const saved = cfg.prompts[site.id];
-    return { prompts: saved || defaultPrompts(site, cfg.products), custom: Boolean(saved) };
+    return { prompts: saved || defaultPrompts(site, cfg.products), custom: Boolean(saved), from: saved ? 'settings' : 'auto' };
+  }
+
+  async function termsFor(site, products) {
+    return brandTerms(site, products, (await siteConfig?.applied(site))?.search?.brand || []);
   }
 
   async function savePrompts(site, list) {
     if (site.demo) throw new EngineError('The demo site’s questions can’t be saved — try them on your own site.', { kind: 'validation' });
+    if ((await promptsFor(site)).from === 'file') throw new EngineError('This site’s questions come from search: ask_ai in its .sitelens.yml. Change them there.', { kind: 'validation' });
     const prompts = normalizePrompts(list);
     await store.update((s) => {
       const all = { ...(s.aiSearch?.prompts || {}) };
@@ -363,7 +374,7 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
     const { prompts } = await promptsFor(site);
     if (!prompts.length) throw new EngineError('Add at least one question first.', { kind: 'validation' });
     const client = createClient(cfg.key);
-    const terms = brandTerms(site, cfg.products);
+    const terms = await termsFor(site, cfg.products);
     const state = { runId: `${now()}`, total: prompts.length, done: 0, startedAt: now(), error: '' };
     running.set(site.id, state);
     const queue = [...prompts];
@@ -383,9 +394,11 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
   }
 
   async function checks(site) {
-    const { prompts, custom } = await promptsFor(site);
+    const { prompts, custom, from, topics = [] } = await promptsFor(site);
     const cfg = await config();
-    if (site.demo) return { prompts, custom: false, keySource: cfg.source, running: null, results: demoChecks(site, prompts, now()), terms: brandTerms(site, cfg.products), sample: true };
+    const terms = await termsFor(site, cfg.products);
+    const topicOf = (prompt) => topics.find((q) => q.prompt === prompt);
+    if (site.demo) return { prompts, custom: false, from, keySource: cfg.source, running: null, results: demoChecks(site, prompts, now()).map((r) => ({ ...r, ...topicOf(r.prompt) })), terms, sample: true };
     const d = open();
     const rows = d.prepare('SELECT * FROM checks WHERE site_id = ? ORDER BY ts DESC LIMIT 600').all(site.id);
     const results = prompts.map((prompt) => {
@@ -393,6 +406,7 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
       const ok = mine.filter((r) => !r.error);
       const latest = mine[0] || null;
       return {
+        ...topicOf(prompt),
         prompt,
         latest: latest && shapeCheck(latest),
         history: ok.slice(0, 12).reverse().map((r) => ({ ts: r.ts, mentioned: Boolean(r.mentioned), cited: Boolean(r.cited), rank: r.rank })),
@@ -402,7 +416,7 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
       };
     });
     const lastRun = rows.find((r) => !r.error)?.ts || null;
-    return { prompts, custom, keySource: cfg.source, weekly: cfg.weekly, running: running.get(site.id) || null, results, lastRun, terms: brandTerms(site, cfg.products), model: CHECK_MODEL };
+    return { prompts, custom, from, keySource: cfg.source, weekly: cfg.weekly, running: running.get(site.id) || null, results, lastRun, terms, model: CHECK_MODEL };
   }
 
   // Latest run per prompt → share mentioned/cited, for the KPI strip.
@@ -443,11 +457,13 @@ export function createAiSearch({ dbPath, store, auth, firebase, env = process.en
     return { source: cfg.source, weekly: cfg.weekly, model: CHECK_MODEL };
   }
 
-  // Weekly re-check of every real site with saved questions, if turned on.
+  // Weekly re-check of every real site with its own questions (in its
+  // .sitelens.yml or saved here), if turned on. Generic questions aren't re-run.
   async function weeklyRun() {
     const cfg = await config();
     if (!cfg.weekly || !cfg.key) return;
-    for (const site of (await store.sites()).filter((s) => !s.demo && cfg.prompts[s.id]?.length)) {
+    for (const site of (await store.sites()).filter((s) => !s.demo)) {
+      if ((await promptsFor(site)).from === 'auto') continue;
       const last = open().prepare('SELECT MAX(ts) AS ts FROM checks WHERE site_id = ? AND error IS NULL').get(site.id)?.ts || 0;
       if (now() - last < 7 * DAY - HOUR) continue;
       const r = await run(site).catch((err) => log.error('[ai-search]', err.message));

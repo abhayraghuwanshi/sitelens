@@ -29,6 +29,13 @@ test('deriveTerms: hosts, products, repos, extensions and keywords; demo and sho
   assert.deepEqual(by['cool-desk.com'].origins, ['site', 'keyword']);
 });
 
+test('deriveTerms adds each site’s .sitelens.yml brand names under that site', () => {
+  const terms = deriveTerms({ sites: [{ id: 's1', host: 'cool-desk.com' }], declared: { s1: ['Cool Desk HQ', 'cd'] } });
+  const by = Object.fromEntries(terms.map((t) => [t.term, t]));
+  assert.deepEqual(by['cool desk hq'], { term: 'cool desk hq', scopes: ['site:s1'], origins: ['config'] });
+  assert.equal(by.cd, undefined); // too short to search for
+});
+
 test('parseHnHits keeps only literal matches (Algolia is fuzzy)', () => {
   const json = {
     hits: [

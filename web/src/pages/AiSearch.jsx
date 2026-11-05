@@ -231,9 +231,10 @@ function AnswerChecks({ site, initial, onDone }) {
   }
 
   const noKey = !a.keySource && !a.sample;
+  const fromFile = a.from === 'file';
   const actions = site.demo ? null : (
     <>
-      <button class="btn ghost" type="button" onClick={() => { setDraft(a.prompts.join('\n')); setEditing(!editing); }}>{editing ? 'Cancel' : 'Edit questions'}</button>
+      {!fromFile && <button class="btn ghost" type="button" onClick={() => { setDraft(a.prompts.join('\n')); setEditing(!editing); }}>{editing ? 'Cancel' : 'Edit questions'}</button>}
       <button class="btn primary" type="button" onClick={run} disabled={Boolean(a.running) || noKey}>
         <Icon name="sparkles" size={12} /> {a.running ? `Asking… ${a.running.done}/${a.running.total}` : 'Run checks'}
       </button>
@@ -258,6 +259,16 @@ function AnswerChecks({ site, initial, onDone }) {
         </form>
       )}
       {msg && <p class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {fromFile ? (
+        <p class="note">
+          These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+        </p>
+      ) : a.from === 'auto' && !site.demo && (
+        <p class="note">
+          These questions are generic guesses from your product’s name, and asking “What is {a.terms[0] || 'X'}?” will always name you.
+          Edit them to the questions a customer would ask. To keep them with the site’s code, <a href={`#/site/${site.id}/setup`}>move them to its repo in Setup</a>.
+        </p>
+      )}
 
       <div class="table-wrap">
         <table class="data">
@@ -268,7 +279,7 @@ function AnswerChecks({ site, initial, onDone }) {
               const others = l && !l.error ? l.domains.filter((d) => !d.own).slice(0, 3) : [];
               return [
                 <tr key={q.prompt} onClick={() => l?.answer && setOpen(open === q.prompt ? '' : q.prompt)} style={l?.answer ? { cursor: 'pointer' } : undefined}>
-                  <td>{q.prompt}</td>
+                  <td>{q.prompt}{q.topic && <div class="small muted">{q.topic}{q.page ? <> · <code>{q.page}</code></> : ''}</div>}</td>
                   {!l ? <td colSpan={3} class="small muted">Not asked yet</td>
                     : l.error ? <td colSpan={3} class="small" style={{ color: 'var(--critical-ink)' }}>{l.error}</td>
                       : <>

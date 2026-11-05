@@ -19,28 +19,38 @@ export function Funnels({ site, range }) {
   const [steps, setSteps] = useState(saved);
   // Never edited (still the placeholder): wait for the best suggestion instead of querying placeholder steps.
   const untouched = JSON.stringify(saved) === JSON.stringify(DEFAULT_STEPS);
-  const [run, setRun] = useState(untouched ? null : saved);
+  // Nothing runs until the site's .sitelens.yml is known: its funnels win over anything saved here.
+  const [run, setRun] = useState(null);
+  const config = useAsync(() => api.get(`/sites/${site.id}/config`), [site.id]);
+  const declared = config.data?.config?.funnels || [];
   const events = useAsync(() => api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`), [site.id, range]);
   const result = useAsync(() => (run ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }) : null), [site.id, range, JSON.stringify(run)]);
   const suggestions = useAsync(() => api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`), [site.id, range]);
 
+  // With funnels in the file, edits here are for exploring and aren't kept.
+  const keep = (next) => !declared.length && setSaved(next);
   const use = (next) => {
     setSteps(next);
     setRun(next);
-    setSaved(next);
+    keep(next);
   };
   const best = suggestions.data?.funnels[0];
+  const configKnown = Boolean(config.data || config.error);
   useEffect(() => {
-    if (!untouched || !(suggestions.data || suggestions.error)) return;
-    if (best) use(best.steps);
-    else setRun(saved);
-  }, [untouched, suggestions.data, suggestions.error]);
+    if (!configKnown || run) return;
+    if (declared.length) use(declared[0].steps);
+    else if (!untouched) setRun(saved);
+    else if (suggestions.data || suggestions.error) {
+      if (best) use(best.steps);
+      else setRun(saved);
+    }
+  }, [configKnown, untouched, suggestions.data, suggestions.error]);
 
   const update = (i, patch) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   const apply = () => {
     const clean = steps.filter((s) => s.value.trim());
     setRun(clean);
-    setSaved(clean);
+    keep(clean);
   };
   const eventNames = (events.data?.events || []).map((e) => e.name);
 
@@ -57,6 +67,7 @@ export function Funnels({ site, range }) {
       </Card>
 
       <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
+      {declared.length > 0 && <Declared funnels={declared} source={config.data.source} current={run} onUse={use} />}
       <Suggestions data={suggestions} current={run} onUse={use} />
       <Card title="Steps" actions={<button class="btn primary" type="button" onClick={apply}><Icon name="play" size={13} /> Run</button>}>
         <div class="funnel-steps">
@@ -88,6 +99,11 @@ export function Funnels({ site, range }) {
             Pages match the exact path. Events match GA4 event names from the export, including ones you never registered as key events.
             Unlike GA4’s funnel API, any step can be any event, and step N must happen after step N−1.
           </p>
+          <p class="note">
+            {declared.length
+              ? <>Changes here are for exploring and aren’t saved. To keep a funnel, add it in <a href={`#/site/${site.id}/setup`}>Setup</a>.</>
+              : <>To keep this funnel, add it in <a href={`#/site/${site.id}/setup`}>Setup</a>: <CopyYaml steps={run || steps} />.</>}
+          </p>
         </div>
       </Card>
       </div>
@@ -96,6 +112,49 @@ export function Funnels({ site, range }) {
 }
 
 const stepLabel = (s) => s.value;
+
+// The funnels the site's .sitelens.yml declares, in its order.
+function Declared({ funnels, source, current, onUse }) {
+  const currentKey = JSON.stringify(current);
+  const where = source?.type === 'repo' ? `${source.repo}/${source.path}` : source?.path || '.sitelens.yml';
+  return (
+    <Card title="Your funnels" sub={<>From {source?.url ? <a href={source.url} target="_blank" rel="noreferrer"><code>{where}</code></a> : <code>{where}</code>}</>}>
+      <div class="stack" style={{ gap: '10px' }}>
+        {funnels.map((f) => {
+          const active = JSON.stringify(f.steps) === currentKey;
+          return (
+            <div key={f.name} class={`suggestion${active ? ' active' : ''}`}>
+              <div class="row" style={{ justifyContent: 'space-between', flexWrap: 'nowrap', gap: '8px' }}>
+                <b class="small">{f.name}</b>
+                <button class={`btn${active ? '' : ' primary'}`} type="button" disabled={active} onClick={() => onUse(f.steps)}>{active ? 'Showing' : 'Show'}</button>
+              </div>
+              <div class="suggestion-steps">
+                {f.steps.map((s, i) => (
+                  <span key={i}>{i > 0 && <span class="muted" aria-hidden="true"> → </span>}<code>{stepLabel(s)}</code></span>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// Copies the funnel as a .sitelens.yml entry.
+function CopyYaml({ steps }) {
+  const [copied, setCopied] = useState(false);
+  const text = `funnels:\n  - name: My funnel\n    steps: [${steps.filter((s) => s.value.trim()).map((s) => `${s.kind}:${s.value}`).join(', ')}]\n`;
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+    } catch {
+      /* clipboard refused */
+    }
+  }
+  return <button class="btn ghost" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy as YAML'}</button>;
+}
 
 // Funnels built from the site's own events (and its code on GitHub); see server/funnel-suggest.mjs.
 function Suggestions({ data, current, onUse }) {

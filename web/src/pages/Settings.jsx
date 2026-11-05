@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { useAsync, navigate } from '../hooks.js';
-import { Card, ErrorState, humanBytes } from '../components/ui.jsx';
+import { Card, ErrorState, Loading, humanBytes } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
-import { ProductsCard, Repos } from './settings/Products.jsx';
+import { ProductsCard, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
@@ -13,6 +13,7 @@ import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
 import { IntegrationGrid } from './settings/Integrations.jsx';
 import { McpSettings } from './settings/McpSettings.jsx';
+import { CustomMetricsSettings } from './settings/CustomMetrics.jsx';
 
 const PUBLIC_SAMPLE = {
   label: 'Google Merchandise Store (public sample)',
@@ -32,6 +33,7 @@ const PANELS = {
   github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings sources={state.sources} onChange={onChange} /> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
+  metrics: { title: 'Custom metrics', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
   mentions: { title: 'Mentions', render: () => <MentionsSettings /> },
   pagespeed: { title: 'PageSpeed & CrUX', render: () => <SiteHealthCard /> },
   bing: { title: 'Bing Webmaster Tools', render: () => <BingSettings /> },
@@ -61,7 +63,7 @@ export function Settings({ state, params, onChange }) {
       {tab === 'integrations' && (panel ? (
         <>
           <a class="back-link" href="#/settings?tab=integrations">← All integrations</a>
-          {PANELS[panel].render({ state, onChange })}
+          {PANELS[panel].render({ state, params, onChange })}
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
       {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} />}
@@ -90,6 +92,7 @@ function SitesSettings({ state, params, onChange }) {
                 <td class="small mono">{s.demo ? 'demo events' : s.bq ? `${s.bq.dataProject}.${s.bq.dataset}` : <span class="muted">—</span>}
                   {s.bq?.sessionsTable && <div class="chip accent" style={{ marginTop: '3px' }}>rollup</div>}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
+                  <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>
                   {!s.demo && <button class="btn ghost" type="button" onClick={() => setEditing(s)}>Edit</button>}
                   <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); }}>
                     {s.demo ? 'Hide' : 'Remove'}
@@ -103,10 +106,11 @@ function SitesSettings({ state, params, onChange }) {
       </Card>
 
       {editing && (
-        <SiteForm key={editing.id || 'new'} initial={editing} auth={auth}
+        <SiteForm key={editing.id || 'new'} initial={editing} auth={auth} focus={params.get('focus') || ''}
           onCancel={() => setEditing(null)}
           onSaved={(site) => { setEditing(null); onChange(); navigate(`/site/${site.id}/overview`); }} />
       )}
+
     </>
   );
 }
@@ -252,11 +256,9 @@ function ConnectCard({ auth, onChange }) {
   );
 }
 
-const bareHost = (h) => String(h || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^www\./, '');
-// Same rule as the server: the project whose domains include the hostname.
-const servesHost = (project, host) => Boolean(bareHost(host)) && [...project.domains, ...project.vercelDomains].some((d) => bareHost(d) === bareHost(host));
-
-function SiteForm({ initial, auth, onCancel, onSaved }) {
+// A site and its product are edited together: the site's GA4, Search Console
+// and BigQuery first, then what the product runs on (domains, hosting, repos…).
+function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({
     id: initial.id || '',
     label: initial.label || '',
@@ -265,7 +267,6 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
     streamName: initial.streamName || '',
     includeSubdomains: Boolean(initial.includeSubdomains),
     searchSite: initial.searchSite || '',
-    repos: initial.repos || [],
     bq: { billingProject: '', dataProject: '', dataset: '', location: '', streamId: '', endDate: '', sessionsTable: '', maxBytes: 5e9, ...(initial.bq || {}) },
     useBq: Boolean(initial.bq),
   }));
@@ -276,14 +277,14 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
   const properties = useAsync(() => (live ? api.get('/google/properties') : Promise.resolve([])), [live]);
   const streams = useAsync(() => (live && form.propertyId ? api.get(`/google/streams?property=${form.propertyId}`) : Promise.resolve([])), [live, form.propertyId]);
   const searchSites = useAsync(() => (live ? api.get('/google/search-sites').catch(() => []) : Promise.resolve([])), [live]);
-  const repoNames = useAsync(() => api.get('/github/repo-names').catch(() => []), []);
-  // Vercel is optional: without a token the picker just doesn't show.
-  const vercel = useAsync(() => api.get('/vercel/projects').catch(() => null), []);
-  const vercelMatch = vercel.data?.sites.find((s) => s.id === initial.id);
-  const [vercelPick, setVercelPick] = useState(null); // null = unchanged
-  const vercelValue = vercelPick ?? (vercelMatch?.manual ? vercelMatch.projectId || 'none' : 'auto');
-  const autoProject = vercel.data?.projects.find((p) => servesHost(p, form.host));
-  const vercelProject = vercelValue === 'auto' ? autoProject : vercel.data?.projects.find((p) => p.id === vercelValue);
+  const setup = useAsync(() => api.get('/products/setup'), []);
+  const existing = initial.id ? setup.data?.products.find((p) => p.siteId === initial.id) : null;
+  const [product, setProduct] = useState(null);
+  useEffect(() => {
+    if (setup.data && !product) setProduct(productFormState(existing || { siteId: initial.id || '' }, setup.data));
+  }, [setup.data]);
+  useFocusStage(focus, Boolean(product));
+  const setProductPatch = (patch) => setProduct((p) => ({ ...p, ...patch }));
   const projects = useAsync(() => (live && form.useBq ? api.get('/google/bq-projects').catch(() => []) : Promise.resolve([])), [live, form.useBq]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
@@ -296,7 +297,18 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
     try {
       const { useBq, ...rest } = form;
       const site = await api.post('/sites', { ...rest, bq: useBq ? form.bq : null });
-      if (vercelPick !== null) await api.post('/vercel/match', { siteId: site.id, projectId: vercelPick === 'auto' ? null : vercelPick === 'none' ? '' : vercelPick });
+      // A retry after a product error updates this site rather than adding another.
+      set({ id: site.id });
+      if (product) {
+        await api.post('/products/setup', {
+          ...product,
+          siteId: site.id,
+          label: existing?.label || site.label,
+          id: existing?.id,
+          previousId: existing?.id,
+          domains: product.domains.length ? product.domains : [{ name: site.host.replace(/^www\./, '') }],
+        });
+      }
       onSaved(site);
     } catch (err) {
       setError(err);
@@ -305,13 +317,14 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
   }
 
   return (
-    <Card title={initial.id ? `Edit ${initial.label}` : 'Add a site'}
-      actions={!initial.id && (
-        <button class="btn ghost" type="button" onClick={() => setForm((f) => ({ ...f, label: PUBLIC_SAMPLE.label, host: PUBLIC_SAMPLE.host, useBq: true, bq: { ...f.bq, ...PUBLIC_SAMPLE.bq } }))}>
-          <Icon name="database" size={13} /> Use Google’s public GA4 sample
-        </button>
-      )}>
-      <form class="stack" onSubmit={save}>
+    <form class="stack" onSubmit={save}>
+      <Card title={initial.id ? `Edit ${initial.label}` : 'Add a site'} sub="The site’s analytics first, then everything it runs on. Skip what doesn’t apply."
+        actions={!initial.id && (
+          <button class="btn ghost" type="button" onClick={() => setForm((f) => ({ ...f, label: PUBLIC_SAMPLE.label, host: PUBLIC_SAMPLE.host, useBq: true, bq: { ...f.bq, ...PUBLIC_SAMPLE.bq } }))}>
+            <Icon name="database" size={13} /> Use Google’s public GA4 sample
+          </button>
+        )}>
+        <div class="stack">
         <div class="settings-grid">
           <label class="field">Hostname<input required value={form.host} placeholder="example.com" onInput={(e) => set({ host: e.currentTarget.value })} /></label>
           <label class="field">Label<input value={form.label} placeholder="Marketing site" onInput={(e) => set({ label: e.currentTarget.value })} /></label>
@@ -353,23 +366,6 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
         </div>
 
         <div class="divider" />
-        <div class="stack">
-          <b>Code &amp; hosting</b>
-          {vercel.data && (
-            <label class="field" style={{ maxWidth: '360px' }}>Vercel project
-              <select value={vercelValue} onChange={(e) => setVercelPick(e.currentTarget.value)}>
-                <option value="auto">Auto{autoProject ? ` (${autoProject.name})` : ' (no match)'}</option>
-                <option value="none">Not on Vercel</option>
-                {vercel.data.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
-              </select>
-              <small>Auto picks the project serving {form.host || 'this hostname'}. Ship → Vercel opens it for this site.</small>
-            </label>
-          )}
-          <small class="muted">GitHub repos that hold this site’s code. Ship → GitHub, Articles and Funnels use these{vercelProject?.repo ? <>, the Vercel project’s repo (<span class="mono">{vercelProject.repo}</span>)</> : ''} and any repo whose homepage is {form.host || 'this site'}.</small>
-          <Repos repos={repoNames.data || []} selected={form.repos} onChange={(repos) => set({ repos })} />
-        </div>
-
-        <div class="divider" />
         <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL</label>
         {form.useBq && (
           <>
@@ -400,13 +396,19 @@ function SiteForm({ initial, auth, onCancel, onSaved }) {
           </>
         )}
 
-        {error && <ErrorState error={error} />}
-        <div class="row">
-          <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save site'}</button>
-          <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
         </div>
-      </form>
-    </Card>
+      </Card>
+
+      {product
+        ? <ProductStages form={{ ...product, siteId: initial.id || '' }} set={setProductPatch} setup={setup.data} inSite />
+        : setup.error ? <ErrorState error={setup.error} onRetry={setup.reload} /> : <Loading height={120} />}
+
+      {error && <ErrorState error={error} />}
+      <div class="row">
+        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save site'}</button>
+        <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
   );
 }
 

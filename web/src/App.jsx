@@ -31,6 +31,7 @@ import { Bing } from './pages/Bing.jsx';
 import { AiSearch } from './pages/AiSearch.jsx';
 import { Calendar } from './pages/Calendar.jsx';
 import { STAGES, tabId, tabHref, locate, nextStage } from './stages.js';
+import { Setup } from './pages/Setup.jsx';
 
 // Per-site views. mode: which connection a view needs. API views share the GA4 range list; warehouse views use 7/28/90d.
 // Where each one sits in the sidebar is decided by STAGES (stages.js).
@@ -48,6 +49,7 @@ export const VIEWS = [
   { key: 'events', label: 'Events', mode: 'warehouse', component: Events },
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
   { key: 'sql', label: 'SQL console', mode: 'warehouse', component: Explore },
+  { key: 'setup', label: 'Setup', mode: 'setup', component: Setup },
 ];
 
 const NEEDS = { warehouse: 'BigQuery', search: 'Search Console', bing: 'a real site (not the sample)', content: 'a site address', api: 'a GA4 property' };
@@ -106,7 +108,7 @@ export function App() {
   // Bing keeps its own daily history, so it takes the long history ranges.
   const rangeOptions = isHistory || (section === 'site' && view.mode === 'bing') ? ranges.history : isWarehouse ? ranges.warehouse : ranges.api;
   // A ?range= in the URL wins (bookmarks, shared links); otherwise the last one picked anywhere.
-  const showRange = section !== 'settings' && section !== 'health' && section !== 'calendar';
+  const showRange = section !== 'settings' && section !== 'health' && section !== 'calendar' && !(section === 'site' && view.mode === 'setup');
   const urlRange = showRange ? route.params.get('range') : '';
   const wanted = urlRange && rangeOptions.some((r) => r.key === urlRange) ? urlRange : range;
   const effectiveRange = rangeOptions.some((r) => r.key === wanted) ? wanted : '28d';
@@ -221,6 +223,9 @@ export function App() {
           {current && (
             <NavLink href={`#/site/${current.id}/sql`} icon="terminal" active={section === 'site' && view.key === 'sql'}>SQL console</NavLink>
           )}
+          {current && (
+            <NavLink href={`#/site/${current.id}/setup`} icon="layers" active={section === 'site' && view.key === 'setup'}>Setup</NavLink>
+          )}
           <NavLink href="#/settings" icon="settings" active={section === 'settings'}>Settings</NavLink>
           <div class="foot-row">
             <div class="conn" title={auth.email || ''}>
@@ -252,7 +257,7 @@ export function App() {
           <span class="spacer" />
           {loading.shown && <span class="loading-label" role="status">Loading…</span>}
           {showRange && <Segmented label="Date range" value={effectiveRange} options={rangeOptions} onChange={pickRange} />}
-          {stage && stage.tabs.length > 1 && <StageTabs stage={stage} active={here.tab} site={current} />}
+          {stage && current && stage.tabs.length > 1 && <StageTabs stage={stage} active={here.tab} site={current} />}
           {loading.shown && <span class="loading-bar" aria-hidden="true" />}
         </header>
         <div class={`content${switching && loading.shown ? ' updating' : ''}`} aria-busy={loading.busy ? 'true' : undefined}>

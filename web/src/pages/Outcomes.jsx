@@ -45,16 +45,18 @@ function OutcomeView({ product, range }) {
   const d = data.data;
   const worst = d.insights.find((i) => i.tone === 'bad') ? 'bad' : d.insights.find((i) => i.tone === 'warn') ? 'warn' : 'good';
   const errors = Object.entries(d.errors);
-  const editGoals = `#/settings?tab=products&edit=${product.id}&focus=goals`;
+  // Goals in the site's repo file are changed from Setup, by pull request.
+  const fromFile = d.goals.from === 'file';
+  const editGoals = fromFile ? `#/site/${d.site.id}/setup` : `#/settings?tab=products&edit=${product.id}&focus=goals`;
   const conv = d.rateLabel;
 
   return (
     <>
       <SummaryLine summary={{ text: d.headline, status: worst }} />
       <div class="meta-line" style={{ alignItems: 'center' }}>
-        <span>{d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
+        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
         <span class="spacer" />
-        <a class="btn" href={editGoals}><Icon name="target" size={13} /> {d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
+        <a class="btn" href={editGoals}><Icon name="target" size={13} /> {fromFile ? 'View config' : d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
         <a class="btn ghost" href={`#/product/${product.id}`}>Journey</a>
         <button class="btn ghost" type="button" disabled={data.loading} onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
       </div>
@@ -216,8 +218,8 @@ function GoalsCard({ goals, editHref }) {
   const list = goals.list;
   const revenue = list.some((g) => g.revenue > 0);
   return (
-    <Card title="Goals" sub={goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
-      actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.custom ? 'Edit' : 'Set goals'}</a>}>
+    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
+      actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.from === 'file' ? 'Edit in Setup' : goals.custom ? 'Edit' : 'Set goals'}</a>}>
       {list.length ? (
         <div class="table-wrap">
           <table class="journey-table outcome-table">
