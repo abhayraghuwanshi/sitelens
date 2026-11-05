@@ -40,12 +40,15 @@ export function Vercel({ range, params }) {
         <span><Icon name="layers" size={13} /> {data.data.login || 'Vercel'}{data.data.teamId && <> · <span class="mono">{data.data.teamId}</span></>}</span>
         <span>{projects.length} projects</span>
         {project && <a href="#/vercel">← All projects</a>}
-        {site && !project && <span>{site.label} isn’t matched to a Vercel project. <a href={`#/settings?tab=sites&edit=${site.id}`}>Pick one in Settings → Sites</a></span>}
+        {site && !project && <a href="#/vercel">All Vercel projects</a>}
         <button class="btn ghost" type="button" onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
       </div>
       {project
         ? <ProjectDetail key={`${project.id}:${range}`} project={project} site={siteFor(project.id)} range={range} />
-        : <ProjectList projects={projects} sites={sites} siteFor={siteFor} onMatched={() => data.reload()} />}
+        : site
+          // From a site, only its own project: never the rest of the account.
+          ? <NotOnVercel site={site} />
+          : <ProjectList projects={projects} sites={sites} siteFor={siteFor} onMatched={() => data.reload()} />}
     </>
   );
 }
@@ -77,6 +80,22 @@ function ProjectList({ projects, sites, siteFor, onMatched }) {
       </Card>
       {sites.length > 0 && <SiteMatches sites={sites} projects={projects} onMatched={onMatched} />}
     </>
+  );
+}
+
+// A site with no Vercel project: either set to "Not on Vercel", or no project's
+// domain matches it.
+function NotOnVercel({ site }) {
+  return (
+    <div class="state">
+      <h3>{site.label} isn’t on Vercel</h3>
+      <p>
+        {site.manual
+          ? <>It’s set to “Not on Vercel”, so Studio doesn’t read deploys or Web Analytics for it from here. Its releases and posts are on <a href={`#/site/${site.id}/ship`}>Ship</a>.</>
+          : <>No Vercel project’s production domain matches {site.host}. If it is deployed on Vercel under another domain, pick its project.</>}
+      </p>
+      <a class="btn" href={`#/settings?tab=sites&edit=${site.id}`}>{site.manual ? 'Change its project' : 'Pick its project'}</a>
+    </div>
   );
 }
 

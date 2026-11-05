@@ -19,7 +19,9 @@ const stamp = (at) => new Date(at).toLocaleString(undefined, { month: 'short', d
 
 export function Health({ sites, params }) {
   const monitored = sites.filter((s) => s.host);
-  const siteId = params.get('site') || monitored.find((s) => !s.demo)?.id || monitored[0]?.id || '';
+  // From a site (?site=), only that site, with no row of other sites.
+  const scoped = params.get('site') || '';
+  const siteId = scoped || monitored.find((s) => !s.demo)?.id || monitored[0]?.id || '';
   const site = monitored.find((s) => s.id === siteId);
   const [range, setRange] = useState(params.get('range') || '7d');
   const summary = useAsync(() => api.get('/vitals'), [sites.length]);
@@ -31,7 +33,7 @@ export function Health({ sites, params }) {
     <>
       <div class="row" style={{ justifyContent: 'space-between', marginBottom: '16px' }}>
         <div class="health-sites" role="group" aria-label="Site">
-          {monitored.map((s) => (
+          {(scoped ? monitored.filter((s) => s.id === scoped) : monitored).map((s) => (
             <button key={s.id} type="button" class={`btn${s.id === siteId ? ' primary' : ''}`} aria-pressed={s.id === siteId}
               onClick={() => navigate(`/health${qs({ site: s.id, range })}`)}>
               <span class={`dot ${statusClass(healthOf.get(s.id)?.uptime?.last)}`} aria-hidden="true" /> {s.label}

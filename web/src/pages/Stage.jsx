@@ -344,7 +344,7 @@ function PayOff({ site, range }) {
   const products = useSiteProduct(site);
   const product = products.data;
   const outcomes = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range: histRange(range) })}`) : null), [product?.id, range]);
-  const href = product ? `#/outcomes/${product.id}` : '#/outcomes';
+  const href = product ? `#/outcomes/${product.id}?site=${site.id}` : `#/outcomes?site=${site.id}`;
   const d = outcomes.data;
 
   return (

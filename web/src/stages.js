@@ -13,7 +13,7 @@ export const STAGES = [
     tabs: [
       { section: 'github', label: 'GitHub', siteParam: true },
       { section: 'vercel', label: 'Vercel', siteParam: true },
-      { section: 'firebase', label: 'Firebase' },
+      { section: 'firebase', label: 'Firebase', siteParam: true },
       { section: 'posts', label: 'My posts' },
       { view: 'articles', label: 'My articles' },
       { section: 'health', label: 'Site health', siteParam: true },
@@ -43,8 +43,8 @@ export const STAGES = [
   {
     key: 'payoff', step: 5, label: 'Pay off', icon: 'target', question: 'Did it work, and did they come back?',
     tabs: [
-      { section: 'outcomes', label: 'Outcomes' },
-      { section: 'extensions', label: 'Extensions' },
+      { section: 'outcomes', label: 'Outcomes', siteParam: true },
+      { section: 'extensions', label: 'Extensions', siteParam: true },
     ],
   },
 ];
@@ -66,8 +66,9 @@ export const EXPLORE = {
 
 export const tabId = (tab) => tab.view || tab.section;
 
-// Health picks among sites with a host, so only pass one it can show; GitHub,
-// Vercel and Products use it to show just that site's repos, project or product.
+// ?site= scopes a workspace page to one site: just its repos, Vercel project,
+// Firebase traffic, health, outcomes or extensions, never the rest of the
+// account. Only a site with a host can have any of those.
 export function tabHref(tab, site) {
   if (tab.view) return `#/site/${site.id}/${tab.view}`;
   return tab.siteParam && site?.host ? `#/${tab.section}?site=${site.id}` : `#/${tab.section}`;

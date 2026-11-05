@@ -78,10 +78,12 @@ export function App() {
     if (linkedRange) setRange(linkedRange);
   }, [linkedRange]);
 
-  const routedSite = route.parts[0] === 'site' ? route.parts[1] : '';
+  // A site view's own site, or the ?site= that GitHub, Vercel and Health take,
+  // so the sidebar follows the site a page is about (Calendar's "all" isn't one).
+  const routedSite = route.parts[0] === 'site' ? route.parts[1] : route.params.get('site') || '';
   useEffect(() => {
-    if (routedSite) setLastSite(routedSite);
-  }, [routedSite]);
+    if (routedSite && state.data?.sites.some((s) => s.id === routedSite)) setLastSite(routedSite);
+  }, [routedSite, state.data]);
 
   const here = locate(route.parts[0] || '', route.parts[0] === 'site' ? route.parts[2] || 'overview' : '');
   useEffect(() => {
@@ -131,7 +133,7 @@ export function App() {
     body = <Product id={siteId} range={effectiveRange} params={route.params} />;
   } else if (section === 'outcomes') {
     title = 'Outcomes';
-    body = <Outcomes id={siteId} range={effectiveRange} />;
+    body = <Outcomes id={siteId} range={effectiveRange} params={route.params} />;
   } else if (section === 'health') {
     title = 'Site health';
     body = <Health sites={sites} params={route.params} />;
@@ -155,7 +157,7 @@ export function App() {
     body = <Vercel range={effectiveRange} params={route.params} />;
   } else if (section === 'extensions') {
     title = 'Chrome extensions';
-    body = <Extensions range={effectiveRange} onChange={() => state.reload()} />;
+    body = <Extensions range={effectiveRange} params={route.params} onChange={() => state.reload()} />;
   } else if (section === 'site' && site) {
     const View = view.component;
     title = view.label;

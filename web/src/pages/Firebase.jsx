@@ -23,12 +23,22 @@ export function Firebase({ range, params }) {
   if (!status.data) return <><Loading height={92} /><Loading height={300} /></>;
   const { links } = status.data;
   if (!links.length) return <Setup onLinked={status.reload} />;
-  const siteId = params.get('site') || links[0].siteId;
-  const link = links.find((l) => l.siteId === siteId) || links[0];
+  // From a site (?site=), only that site; a site that isn't on Firebase says so.
+  const scoped = params.get('site') || '';
+  const link = scoped ? links.find((l) => l.siteId === scoped) : links[0];
+  if (!link) {
+    return (
+      <div class="state">
+        <h3>This site isn’t on Firebase App Hosting</h3>
+        <p>Studio reads server-side traffic from Firebase only for sites linked to an App Hosting backend.</p>
+        <a class="btn" href="#/settings?i=firebase">Link it</a> <a class="btn ghost" href="#/firebase">All Firebase sites</a>
+      </div>
+    );
+  }
 
   return (
     <>
-      {links.length > 1 && (
+      {!scoped && links.length > 1 && (
         <div class="health-sites" role="group" aria-label="Site" style={{ marginBottom: '16px' }}>
           {links.map((l) => (
             <button key={l.siteId} type="button" class={`btn${l.siteId === link.siteId ? ' primary' : ''}`} aria-pressed={l.siteId === link.siteId}

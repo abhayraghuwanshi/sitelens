@@ -9,16 +9,30 @@ import { Icon } from '../components/icons.jsx';
 import { dayLabel } from './GitHub.jsx';
 import { useAnnotations } from '../components/Annotations.jsx';
 
-export function Extensions({ range, onChange }) {
+export function Extensions({ range, params, onChange }) {
   const data = useAsync((o) => api.get(`/extensions${qs({ range, fresh: o?.fresh })}`), [range]);
+  // From a site (?site=), only the extensions of that site's product.
+  const scoped = params?.get('site') || '';
+  const products = useAsync(() => (scoped ? api.get('/products') : null), [scoped]);
+  const own = scoped ? products.data?.products.find((p) => p.siteId === scoped)?.extensionIds || [] : null;
   const reload = () => {
     data.reload();
     onChange();
   };
 
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
-  if (!data.data) return <Loading height={360} />;
-  const { extensions } = data.data;
+  if (!data.data || (scoped && !products.data && !products.error)) return <Loading height={360} />;
+  const extensions = own ? data.data.extensions.filter((e) => own.includes(e.id)) : data.data.extensions;
+
+  if (scoped && !extensions.length) {
+    return (
+      <div class="state">
+        <h3>No Chrome extension for this site</h3>
+        <p>Link the site’s extension to its product, and its users, rating and installs show here and on Pay off.</p>
+        <a class="btn" href={`#/settings?tab=sites&edit=${scoped}`}>Link one</a> <a class="btn ghost" href="#/extensions">All extensions</a>
+      </div>
+    );
+  }
 
   return (
     <>
@@ -29,7 +43,7 @@ export function Extensions({ range, onChange }) {
         </Empty>
       )}
       {extensions.map((ext) => <ExtensionCard key={ext.id} ext={ext} range={data.data.range} onChange={reload} />)}
-      <AddExtension onAdded={reload} />
+      {scoped ? <p class="note"><a href="#/extensions">All extensions</a></p> : <AddExtension onAdded={reload} />}
     </>
   );
 }

@@ -13,7 +13,9 @@ const money = (v) => `$${formatNumber(Math.round(v))}`;
 const SOURCE_LABEL = { event: 'Site event', page: 'Page visited', installs: 'Store installs', downloads: 'Release downloads', stars: 'GitHub stars' };
 const pct = (v) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(v > 0 && v < 0.1 ? 1 : 0)}%`);
 
-export function Outcomes({ id, range }) {
+export function Outcomes({ id, range, params }) {
+  // From a site (?site=), only that site's product, with no switcher.
+  const siteId = params?.get('site') || '';
   const list = useAsync(() => api.get('/products'), []);
   if (list.error) return <ErrorState error={list.error} onRetry={list.reload} />;
   if (!list.data) return <Loading height={360} />;
@@ -25,10 +27,17 @@ export function Outcomes({ id, range }) {
       </Empty>
     );
   }
-  const product = products.find((p) => p.id === id) || products[0];
+  const product = products.find((p) => p.id === id) || (siteId ? products.find((p) => p.siteId === siteId) : products[0]);
+  if (!product) {
+    return (
+      <Empty title="No product for this site yet">
+        Outcomes are measured per product: the site plus its store listing or repos. <a href={`#/product?site=${siteId}`}>Set one up</a> · <a href="#/outcomes">All products</a>
+      </Empty>
+    );
+  }
   return (
     <>
-      {products.length > 1 && (
+      {!siteId && products.length > 1 && (
         <div class="row" style={{ marginBottom: '12px' }}>
           <Segmented label="Product" value={product.id} options={products.map((p) => ({ key: p.id, label: p.label }))} onChange={(key) => navigate(`/outcomes/${key}`)} />
         </div>
