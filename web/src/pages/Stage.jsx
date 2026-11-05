@@ -6,6 +6,9 @@ import { LineChart } from '../charts/LineChart.jsx';
 import { useAnnotations } from '../components/Annotations.jsx';
 import { Icon } from '../components/icons.jsx';
 import { SummaryLine } from '../components/Journey.jsx';
+import { countryName, flagForCountry } from '@shared/site.js';
+import { useLive } from './Overview.jsx';
+import { ServerTrafficCard } from './Firebase.jsx';
 import { tabHref, tabId } from '../stages.js';
 
 // A stage of the journey on one page: a card per source with its headline
@@ -237,12 +240,34 @@ function Arrive({ site, range }) {
               <BarList rows={dash.data.reports.entryPages.slice(0, 8)} label={(r) => r.path} value={(r) => r.sessions} format={formatNumber} extra={(r) => formatPercent(r.engagementRate, 0)} />
             </Card>
           </div>
+          <div class="grid cols-3">
+            <LiveCard site={site} initial={dash.data.live} />
+            <Card title="Countries" sub="People">
+              <BarList rows={dash.data.reports.countries.slice(0, 8)} label={(r) => `${flagForCountry(r.country)} ${countryName(r.country)}`} value={(r) => r.users} format={formatNumber} />
+            </Card>
+            <Card title="Devices" sub="Sessions">
+              <BarList rows={dash.data.reports.devices} label={(r) => r.device[0].toUpperCase() + r.device.slice(1)} value={(r) => r.sessions} format={formatNumber}
+                extra={(r) => formatPercent(r.engagementRate, 0)} />
+            </Card>
+          </div>
         </>
       )}
+      {!site.demo && <ServerTrafficCard site={site} range={range} />}
     </>
   );
 }
 Arrive.views = ['pages', 'sessions'];
+
+// Who's on the site now, refreshed every minute.
+function LiveCard({ site, initial }) {
+  const live = useLive(site, initial);
+  return (
+    <Card title={`${formatNumber(live?.total || 0)} on the site now`} sub={live?.scopedByStream ? 'This stream · last 5 minutes' : 'Last 5 minutes'}>
+      {live?.top?.length ? <BarList rows={live.top} label={(r) => r.title} value={(r) => r.users} format={formatNumber} />
+        : <p class="muted small">Nobody on the site right now.</p>}
+    </Card>
+  );
+}
 
 function Engage({ site, range }) {
   const dash = useDashboard(site, range);

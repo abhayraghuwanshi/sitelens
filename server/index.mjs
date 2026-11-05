@@ -36,6 +36,7 @@ import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes } from './ai-search.mjs';
 import { createCalendar, calendarRoutes } from './calendar.mjs';
+import { storyRoutes } from './story.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
 import { createCustomMetrics, customMetricRoutes } from './custom-metrics.mjs';
@@ -167,6 +168,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...articleRoutes({ articles, siteOr404 }),
     ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
+    // Calendar days are local, so the story's "today" is too.
+    ...storyRoutes({ calendar, siteOr404, today: () => new Date().toLocaleDateString('en-CA') }),
     ...customMetricRoutes({ metrics: customMetrics, siteOr404 }),
     ...siteConfigRoutes({
       siteConfig,

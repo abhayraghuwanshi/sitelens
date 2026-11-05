@@ -57,6 +57,16 @@ seq   ARRAY<STRUCT<k STRING, ts INT64>>    -- 'page:/pricing' | 'event:sign_up'
 
 What Studio measures for a site lives in a `.sitelens.yml` in the site's own repo: its goals (and which ones alert when they drop), its funnels, per-site alert thresholds, and what it wants to be found for: brand and competitor names, search topics and the questions AI search asks assistants. Those set up Demand's query groups, the AI answer checks and Mentions. Connections and keys stay in Settings. To have Claude set a site up, open its repo in Claude Code with the MCP server connected and run `/mcp__sitelens__setup_site`. Claude reads the tracking code and the site's real search queries, writes the file and validates it with `check_site_config`. Each site's **Setup** page (in the sidebar) shows goals, funnels, search and alerts, each marked as coming from the repo file, from Studio's own settings or from Studio's guesses. Editing a part that's in the file opens a pull request that changes only that part. Any other part can be moved into the repo the same way, and sites without a repo keep the file in `.data/config/`. The format is in [`docs/sitelens-yml.md`](docs/sitelens-yml.md).
 
+## What happened
+
+Each site's **Overview** opens with the period told as a story (`GET /api/sites/<id>/story?range=7d|28d|90d`, built in `server/story.mjs`):
+
+- **Headline:** visits against the same number of days before (search clicks for a site without GA4), counting whole days only.
+- **What moved it:** the sources, landing pages and search queries that changed the most, in plain words. When something you shipped matches one of them, such as a Reddit post next to more visits from Reddit, it shows as "Around then". That's a hint, not proof.
+- **Days that stood out:** days far off a usual same weekday, with what shipped that day or the day before. Each one opens in the Calendar.
+
+It reads the Calendar's local history, so it needs no extra Google calls once that has synced. Below it, the journey map leads to the five stage pages. Each stage page has a card per source, a chart with what shipped marked on it, and links to the full views.
+
 ## Calendar
 
 **Calendar** (under Workspace) shows a month with one cell per day. Each cell has the day's sessions (or search clicks) compared with a typical same weekday, which is the median of the same weekday over the previous 4 weeks. Days 15%+ or 40%+ off are tinted green or red. Dots mark that day's events (releases, deploys, posts, mentions, notes), plus a bell for alerts and ★ for GitHub stars gained. The last column sums each week.
