@@ -117,7 +117,7 @@ function loadAll(db, range, repoFilter = null) {
   const repos = db
     .prepare('SELECT id, name, description, archived, fork FROM repos WHERE hidden = 0 ORDER BY name')
     .all()
-    .filter((r) => !repoFilter || r.name === repoFilter);
+    .filter((r) => !repoFilter || (typeof repoFilter === 'string' ? r.name === repoFilter : repoFilter.has(r.name)));
   const ids = new Set(repos.map((r) => r.id));
   const stats = new Map();
   for (const row of db.prepare('SELECT * FROM repo_stats ORDER BY date').all()) {
@@ -175,10 +175,11 @@ function loadAll(db, range, repoFilter = null) {
   });
 }
 
-export function githubOverview(path, rangeKey) {
+// `names` (a Set) limits the overview to those repos, e.g. the ones a site links to.
+export function githubOverview(path, rangeKey, names = null) {
   const range = historyRange(rangeKey);
   return withDb(path, (db) => {
-    const repos = loadAll(db, range);
+    const repos = loadAll(db, range, names);
     const totals = { views: 0, uniques: 0, clones: 0, downloads: 0, downloadsTotal: 0, stars: 0, starsGained: 0, forks: 0 };
     const series = { views: range.dates.map(() => 0), clones: range.dates.map(() => 0), downloads: range.dates.map(() => 0), stars: range.dates.map(() => 0) };
     for (const r of repos) {

@@ -21,7 +21,7 @@ export function Outcomes({ id, range }) {
   if (!products.length) {
     return (
       <Empty title="Outcomes are measured per product">
-        Add a product first (a site plus its store listing or repos), then come back: <a href="#/product">Products</a>.
+        Add a product first (a site plus its store listing or repos), then come back: <a href="#/product">Set up a product</a>.
       </Empty>
     );
   }
@@ -45,17 +45,18 @@ function OutcomeView({ product, range }) {
   const d = data.data;
   const worst = d.insights.find((i) => i.tone === 'bad') ? 'bad' : d.insights.find((i) => i.tone === 'warn') ? 'warn' : 'good';
   const errors = Object.entries(d.errors);
-  const editGoals = `#/settings?tab=products&edit=${product.id}&focus=goals`;
+  // Goals in the site's repo file are changed from Setup, by pull request.
+  const fromFile = d.goals.from === 'file';
+  const editGoals = fromFile ? `#/site/${d.site.id}/setup` : `#/settings?tab=products&edit=${product.id}&focus=goals`;
   const conv = d.rateLabel;
 
   return (
     <>
       <SummaryLine summary={{ text: d.headline, status: worst }} />
       <div class="meta-line" style={{ alignItems: 'center' }}>
-        <span>{d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
+        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
         <span class="spacer" />
-        <a class="btn" href={editGoals}><Icon name="target" size={13} /> {d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
-        <a class="btn ghost" href={`#/product/${product.id}`}>Journey</a>
+        <a class="btn" href={editGoals}><Icon name="target" size={13} /> {fromFile ? 'View config' : d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
         <button class="btn ghost" type="button" disabled={data.loading} onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
       </div>
       {errors.map(([k, msg]) => <p class="note" key={k}><b>{k}:</b> {msg}</p>)}
@@ -73,7 +74,7 @@ function OutcomeView({ product, range }) {
       <Card title="What to do next" sub={`${d.insights.length} finding${d.insights.length === 1 ? '' : 's'}, most impact first`}>
         {d.insights.length ? (
           <ol class="insights">
-            {d.insights.map((i) => <Insight key={i.key} item={i} productId={product.id} />)}
+            {d.insights.map((i) => <Insight key={i.key} item={i} siteId={d.site?.id} />)}
           </ol>
         ) : (
           <p class="note">Nothing stands out yet. Insights appear once there’s enough traffic and at least one goal event.</p>
@@ -129,7 +130,7 @@ function OutcomeView({ product, range }) {
   );
 }
 
-function Insight({ item, productId }) {
+function Insight({ item, siteId }) {
   const tone = TONE[item.tone];
   return (
     <li class={`insight ${tone}`}>
@@ -144,7 +145,7 @@ function Insight({ item, productId }) {
           <p class="insight-action">
             <b>Do:</b> {item.action}
             {item.link && <> <a href={item.link} target="_blank" rel="noreferrer">Open GA4 <Icon name="external" size={11} /></a></>}
-            {item.day && <> <a href={`#/product/${productId}?day=${item.day}`}>See that day</a></>}
+            {item.day && <> <a href={`#/calendar${qs({ site: siteId, month: item.day.slice(0, 7), day: item.day })}`}>See that day</a></>}
           </p>
         )}
       </div>
@@ -216,8 +217,8 @@ function GoalsCard({ goals, editHref }) {
   const list = goals.list;
   const revenue = list.some((g) => g.revenue > 0);
   return (
-    <Card title="Goals" sub={goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
-      actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.custom ? 'Edit' : 'Set goals'}</a>}>
+    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
+      actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.from === 'file' ? 'Edit in Setup' : goals.custom ? 'Edit' : 'Set goals'}</a>}>
       {list.length ? (
         <div class="table-wrap">
           <table class="journey-table outcome-table">

@@ -51,6 +51,16 @@ export const TOOLS = [
     path: (a) => `/api/calendar/metrics?${params(a, ['from', 'to', 'site'])}`,
   },
   {
+    name: 'custom_metrics',
+    description: 'The site\'s custom metrics (daily numbers from its own databases, like daily pings or signups): per-day values for the range, the top dimensions, and totals for this and the previous period of the same length.',
+    inputSchema: {
+      type: 'object',
+      properties: { site: { type: 'string', description: 'A site id from list_sites.' }, range: { type: 'string', enum: ['7d', '28d', '90d', '1y'], description: 'Days ending today (default 28d).' } },
+      required: ['site'],
+    },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/metrics?${params(a, ['range'])}`,
+  },
+  {
     name: 'breakdown',
     description: 'What traffic was made of over a range, compared with the same-length window just before it: sessions by source family (by=source) or landing page (by=page), or search clicks by query (by=query). Use it to explain a change.',
     inputSchema: {
@@ -111,6 +121,30 @@ export const TOOLS = [
     path: (a) => `/api/annotations/${encodeURIComponent(a.id)}?author=claude`,
   },
   {
+    name: 'site_config',
+    description: 'The site\'s .sitelens.yml as Studio applies it: where it was read from (the site\'s repo, a local override, or none yet), the goals, funnels and alert settings it declares, and any errors, warnings and event names it uses that the site hasn\'t sent in 28 days. Spec: docs/sitelens-yml.md in sitelens-studio.',
+    inputSchema: { type: 'object', properties: { site: { type: 'string', description: 'A site id from list_sites.' } }, required: ['site'] },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/config?check=1&fresh=1`,
+  },
+  {
+    name: 'draft_site_config',
+    description: 'A starting .sitelens.yml for a site from what Studio already knows: the goals set in Settings (or Studio\'s guesses from the event names the site sends) and funnels suggested from its sessions. Check it against the site\'s tracking code before using it.',
+    inputSchema: { type: 'object', properties: { site: { type: 'string', description: 'A site id from list_sites.' } }, required: ['site'] },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/config/draft`,
+  },
+  {
+    name: 'check_site_config',
+    description: 'Validate a .sitelens.yml before committing it, without saving anything: returns the config as Studio would apply it, or the errors that would stop it from applying, plus warnings for unknown keys and for event names the site hasn\'t sent in 28 days.',
+    inputSchema: {
+      type: 'object',
+      properties: { site: { type: 'string', description: 'A site id from list_sites.' }, yaml: { type: 'string', description: 'The whole file.' } },
+      required: ['site', 'yaml'],
+    },
+    method: 'POST',
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/config/check`,
+    body: (a) => ({ yaml: a.yaml }),
+  },
+  {
     name: 'schema',
     description: `Tables and columns of one local SQLite database, for writing a query. Databases: ${Object.entries(DATABASES).map(([k, v]) => `${k} (${v})`).join(' ')}`,
     inputSchema: { type: 'object', properties: { database: { type: 'string', enum: Object.keys(DATABASES) } }, required: ['database'] },
@@ -125,6 +159,34 @@ export const TOOLS = [
       required: ['database', 'sql'],
     },
     local: (a, ctx) => query(ctx.dataDir, a.database, a.sql),
+  },
+];
+
+// Prompts show up in Claude Code as /mcp__sitelens__<name>.
+export const PROMPTS = [
+  {
+    name: 'setup_site',
+    description: 'Set up SiteLens for the site in this repo: read its code and search data and write .sitelens.yml (goals, alerts, funnels, search topics and AI questions).',
+    arguments: [{ name: 'site', description: 'The site id or host in SiteLens (optional; found from the repo otherwise).', required: false }],
+    text: (a) => `Set up SiteLens Studio for ${a.site ? `the site "${a.site}"` : 'the website in this repository'} by writing its .sitelens.yml. The file declares what Studio measures; connections and credentials stay in Studio's Settings, so never put tokens, property IDs or webhook URLs in it.
+
+1. Call list_sites and pick the site this repo serves (match its host to the repo's domain, homepage or deploy config). If it isn't there, stop and ask me to add it in Studio first.
+2. Call site_config for it. If a file already exists, improve it rather than starting over, and keep what's deliberate.
+3. Read the code for analytics calls: gtag('event', …), dataLayer.push({ event }), track/capture/logEvent(…), plausible(…), and the routes/pages they sit on. Work out what the site is for and pick its kind (saas, ecommerce, extension, desktop, mobile, content, docs, website).
+4. Call draft_site_config to see what Studio guesses from the live data, and use it as evidence, not as the answer.
+5. Write .sitelens.yml at the repo root (or .sitelens/<host>.yml if this repo serves several sites):
+   - goals: 1–3 outcomes (the results the site exists for: a sign-up, purchase, install, download, lead) and a few steps that lead to them (pricing page, plan picked, CTA click). Only use event names that the code really sends. Give outcomes a value when there's an honest one, and alert: true so a drop is noticed; tune pct and min for low-volume goals so one quiet day doesn't alert.
+   - funnels: 1–3 funnels, each the path a visitor really takes in the code, ending at an outcome. 2–8 steps of page:/path or event:name.
+   - alerts: only if the defaults wouldn't fit the site (e.g. very spiky traffic).
+   - search: what the site wants to be found for, in Google and in AI answers.
+     - brand: the product's name and how people misspell or space it. competitors: the rivals the site's copy names (its "vs X" and "alternative to X" pages).
+     - topics: 2–6, one per thing the site is for, each with the page that should rank for it (page), a regex for its queries (match), and the queries it must win (targets). Base them on the site's pages and headings and on real queries: call breakdown with by=query over the last 90 days.
+     - ask_ai: 1–3 questions per topic, as a customer who doesn't know the product yet would ask an AI assistant. Never name the product in them: "What is <product>?" always names it, so it measures nothing. Up to 12 in all; each is a paid call per check.
+   Add a short comment above each goal, funnel and topic saying where in the code or data it comes from.
+6. Call check_site_config with the whole file and fix every error. For "not sent in the last 28 days" warnings, check the name against the code: fix typos, and keep a goal that is new or rare only on purpose.
+7. Show me the file and a one-paragraph summary of why these goals and topics. Don't commit unless I ask.
+
+The full spec is docs/sitelens-yml.md in the sitelens-studio repo.`,
   },
 ];
 
@@ -243,9 +305,9 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
         const asked = msg.params?.protocolVersion;
         return reply({
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
-          capabilities: { tools: {} },
+          capabilities: { tools: {}, prompts: {} },
           serverInfo: { name: 'sitelens-studio', version: '0.2.0' },
-          instructions: 'Access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else. When the user wants your analysis kept in the app, record it with add_comment (check list_comments first); that is the only thing you can change.',
+          instructions: 'Access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else. When the user wants your analysis kept in the app, record it with add_comment (check list_comments first); that is the only thing you can change in Studio. A site\'s goals, funnels, goal alerts, search topics and AI answer-check questions come from a .sitelens.yml file in its repo: to set them up, read the site\'s code and write that file (the setup_site prompt walks through it), using site_config, draft_site_config and check_site_config.',
         });
       }
       case 'ping':
@@ -254,6 +316,13 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
         return reply({ tools: TOOLS.map(({ name, description, inputSchema, write }) => ({ name, description, inputSchema, annotations: write ? { readOnlyHint: false, destructiveHint: name.startsWith('delete') } : { readOnlyHint: true } })) });
       case 'tools/call':
         return reply(await callTool(msg.params?.name, msg.params?.arguments || {}));
+      case 'prompts/list':
+        return reply({ prompts: PROMPTS.map(({ name, description, arguments: args }) => ({ name, description, arguments: args })) });
+      case 'prompts/get': {
+        const prompt = PROMPTS.find((p) => p.name === msg.params?.name);
+        if (!prompt) return fail(-32602, `Unknown prompt: ${msg.params?.name}`);
+        return reply({ description: prompt.description, messages: [{ role: 'user', content: { type: 'text', text: prompt.text(msg.params?.arguments || {}) } }] });
+      }
       default:
         return isNotification ? null : fail(-32601, `Method not found: ${msg.method}`);
     }

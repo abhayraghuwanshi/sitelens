@@ -29,6 +29,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
     if (state) return state;
     try {
       state = { ...EMPTY, ...JSON.parse(await readFile(file, 'utf8')) };
+      if (moveSiteRepos(state)) await save();
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
       state = structuredClone(EMPTY);
@@ -144,6 +145,29 @@ export function normalizeSite(input = {}) {
   };
 }
 
+// Repos picked on a site briefly lived on the site; they belong to the site's
+// product, which the site editor now edits. Moves them there once.
+export function moveSiteRepos(state) {
+  let moved = false;
+  for (const site of state.sites || []) {
+    if (!Array.isArray(site.repos)) continue;
+    if (site.repos.length) {
+      state.products ||= [];
+      let product = state.products.find((p) => p.siteId === site.id);
+      if (!product) {
+        const base = String(site.label || site.host).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || site.id;
+        const id = state.products.some((p) => p.id === base) ? `${base}-${site.id}` : base;
+        product = { id, label: site.label || site.host, siteId: site.id, repos: [], extensionIds: [] };
+        state.products.push(product);
+      }
+      product.repos = [...new Set([...(product.repos || []), ...site.repos])];
+    }
+    delete site.repos;
+    moved = true;
+  }
+  return moved;
+}
+
 // What the browser may see: everything except credentials.
 export function publicSite(site) {
   return {
@@ -153,6 +177,7 @@ export function publicSite(site) {
       search: Boolean(site.demo || site.searchSite),
       warehouse: Boolean(site.demo || site.bq),
       bing: !site.demo && Boolean(site.host),
+      content: Boolean(site.demo || site.host),
     },
   };
 }

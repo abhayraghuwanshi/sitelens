@@ -140,3 +140,30 @@ test('without a key the run explains how to add one', async () => {
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('questions and brand names in .sitelens.yml win over saved and generic ones', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'studio-ai-'));
+  try {
+    const store = createStore(dir);
+    const site = await store.saveSite({ label: 'x', host: 'cool-desk.com' });
+    let search = null;
+    const siteConfig = { applied: async () => (search ? { search } : null) };
+    const ai = createAiSearch({ dbPath: join(dir, 'ai.db'), store, siteConfig, env: {} });
+    assert.equal((await ai.promptsFor(site)).from, 'auto');
+    await ai.savePrompts(site, ['What is a good new tab page?']);
+    assert.equal((await ai.promptsFor(site)).from, 'settings');
+
+    search = { brand: ['Cool Desk HQ'], topics: [{ name: 'New tab', page: '/', ask_ai: ['Best new tab extension for focus?'] }], ask_ai: ['Is there a calm start page?'] };
+    const p = await ai.promptsFor(site);
+    assert.equal(p.from, 'file');
+    assert.deepEqual(p.prompts, ['Best new tab extension for focus?', 'Is there a calm start page?']);
+    await assert.rejects(ai.savePrompts(site, ['Anything?']), /\.sitelens\.yml/);
+    const c = await ai.checks(site);
+    assert.equal(c.from, 'file');
+    assert.deepEqual([c.results[0].topic, c.results[0].page, c.results[1].topic], ['New tab', '/', undefined]);
+    assert.equal(c.terms[0], 'cool desk hq');
+    ai.stop();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

@@ -239,3 +239,39 @@ test('postWebhook sends Slack- and Discord-compatible JSON', async () => {
   assert.equal(bad.ok, false);
   assert.match(digestText({ day: '2026-10-29', sites: [], extensions: [], github: null, alerts: [] }), /No alerts/);
 });
+
+test('goals marked alert in .sitelens.yml alert on a drop, and the file tunes site rules', async () => {
+  const dates = lastDays(NOW, 29);
+  // sign_up: ~20 users a day, then 4 yesterday; purchase rises, but only drops are watched.
+  const rows = dates.flatMap((d, i) => [
+    { date: d.replaceAll('-', ''), eventName: 'sign_up', totalUsers: i === dates.length - 1 ? 4 : 20 + (i % 3) },
+    { date: d.replaceAll('-', ''), eventName: 'purchase', totalUsers: i === dates.length - 1 ? 30 : 10 },
+  ]);
+  const reports = [];
+  const report = async ({ body }) => (reports.push(body), { rows });
+  const siteConfig = {
+    applied: async () => ({
+      goals: [
+        { id: 'event-sign-up', label: 'Sign-ups', source: 'event', match: 'sign_up', role: 'outcome', alert: { when: 'drop', pct: 0.5, min: 5 } },
+        { id: 'event-purchase', label: 'purchase', source: 'event', match: 'purchase', role: 'outcome', alert: { when: 'drop', pct: 0.5, min: 5 } },
+        { id: 'page-pricing', label: '/pricing', source: 'page', match: '/pricing', role: 'step' },
+      ],
+      // The traffic spike from fakeEngines would alert; this site turns it off.
+      alerts: { traffic: { enabled: false } },
+    }),
+  };
+  const store = memoryStore({ sites: [trafficSite()], products: [{ id: 'shop', siteId: 's1' }], alertSettings: { desktop: false } });
+  const alerts = createAlerts({
+    store, engines: fakeEngines(), extensions: { list: async () => [] }, github: null, auth: { token: async () => 't' },
+    siteConfig, report, now: () => NOW, notify: fakeNotify(),
+  });
+  const run = await alerts.run({ daily: true });
+  assert.deepEqual(run.errors, []);
+  assert.deepEqual(run.fired.map((a) => a.rule), ['goals']);
+  assert.equal(run.fired[0].key, `goal:s1:event-sign-up:${localDay(NOW - DAY)}`);
+  assert.match(run.fired[0].title, /Shop: Sign-ups dropped -8\d%/);
+  assert.equal(run.fired[0].link, '#/outcomes/shop');
+  // One report for both event goals; the step without alert isn't queried.
+  assert.equal(reports.length, 1);
+  assert.deepEqual(reports[0].dimensionFilter.andGroup.expressions[1].filter.inListFilter.values, ['sign_up', 'purchase']);
+});

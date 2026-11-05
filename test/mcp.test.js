@@ -148,3 +148,40 @@ test('comment tools post Claude notes and delete only Claude ones', async () => 
   await mcp.callTool('delete_comment', { id: 'note-1' });
   assert.deepEqual(calls[3], { url: 'http://s/api/annotations/note-1?author=claude', method: 'DELETE', body: null });
 });
+
+test('detectMcpClients: connected, stale and missing registrations', async () => {
+  const { detectMcpClients } = await import('../server/mcp-clients.mjs');
+  const { mkdtemp, mkdir, writeFile, rm } = await import('node:fs/promises');
+  const { tmpdir } = await import('node:os');
+  const { join } = await import('node:path');
+  const home = await mkdtemp(join(tmpdir(), 'studio-clients-'));
+  const mcpPath = join(home, 'app', 'server', 'mcp.mjs');
+  try {
+    await mkdir(join(home, 'app', 'server'), { recursive: true });
+    await writeFile(mcpPath, '');
+    await writeFile(join(home, '.claude.json'), JSON.stringify({ mcpServers: { sitelens: { command: 'node', args: [mcpPath] } } }));
+    const desktopDir = join(home, 'Library', 'Application Support', 'Claude');
+    await mkdir(desktopDir, { recursive: true });
+    await writeFile(join(desktopDir, 'claude_desktop_config.json'), JSON.stringify({ mcpServers: { lens: { command: 'node', args: ['/gone/server/mcp.mjs'] } } }));
+    const found = await detectMcpClients({ mcpPath, home, cwd: '/x' });
+    assert.equal(found.claudeCode.state, 'connected');
+    assert.equal(found.claudeCode.name, 'sitelens');
+    assert.equal(found.claudeDesktop.state, 'stale');
+    const none = await detectMcpClients({ mcpPath, home: join(home, 'nobody') });
+    assert.deepEqual(none, { claudeCode: { state: 'missing' }, claudeDesktop: { state: 'missing' } });
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+});
+
+test('setup_site prompt is listed and fills in the site', async () => {
+  const mcp = createMcp({ fetchImpl: async () => { throw new Error('no network'); } });
+  const init = await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} });
+  assert.deepEqual(init.result.capabilities, { tools: {}, prompts: {} });
+  const list = await mcp.handle({ jsonrpc: '2.0', id: 2, method: 'prompts/list' });
+  assert.deepEqual(list.result.prompts.map((p) => p.name), ['setup_site']);
+  const got = await mcp.handle({ jsonrpc: '2.0', id: 3, method: 'prompts/get', params: { name: 'setup_site', arguments: { site: 'shop.test' } } });
+  assert.match(got.result.messages[0].content.text, /the site "shop\.test"[\s\S]*check_site_config/);
+  const bad = await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'prompts/get', params: { name: 'nope' } });
+  assert.equal(bad.error.code, -32602);
+});

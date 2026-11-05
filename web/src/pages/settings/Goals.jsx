@@ -32,9 +32,17 @@ export function GoalsEditor({ goals, onChange, siteId, hasStore, hasRepos }) {
   const update = (i, patch) => onChange(goals.map((g, j) => (j === i ? { ...g, ...patch } : g)));
   const add = (g) => !goals.some((x) => same(x, g)) && onChange([...goals, { label: g.label, source: g.source, match: g.match || '', role: g.role || 'outcome' }]);
   const unusedEvents = events.filter((e) => !goals.some((g) => g.source === 'event' && g.match === e.name)).slice(0, 8);
+  const config = useAsync(() => (siteId ? api.get(`/sites/${siteId}/config`) : null), [siteId]);
+  const fileGoals = config.data?.config?.goals?.length || 0;
 
   return (
     <div class="stack" style={{ gap: '10px' }}>
+      {fileGoals > 0 && (
+        <p class="note" style={{ margin: 0 }}>
+          <b>The site’s repo file sets {fileGoals} goal{fileGoals === 1 ? '' : 's'}</b>, and those are the ones measured; the goals here aren’t used while it does.{' '}
+          <a href={`#/site/${siteId}/setup`}>Edit them in Setup</a>
+        </p>
+      )}
       {!goals.length && (
         <div class="goal-auto">
           <p class="note" style={{ margin: 0 }}>

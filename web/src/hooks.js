@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'preact/hooks';
+import { onPending } from './api.js';
 
 // Hash routes: #/ · #/settings · #/site/<id>/<view>?k=v
 export function parseHash(hash = location.hash) {
@@ -49,6 +50,19 @@ export function useAsync(fn, deps) {
     run();
   }, [run]);
   return { ...state, reload: run };
+}
+
+// True while API reads are in flight, after a short delay so quick ones don't flash.
+export function useLoading(delay = 200) {
+  const [count, setCount] = useState(0);
+  const [shown, setShown] = useState(false);
+  useEffect(() => onPending(setCount), []);
+  useEffect(() => {
+    if (!count) return setShown(false);
+    const t = setTimeout(() => setShown(true), delay);
+    return () => clearTimeout(t);
+  }, [count > 0]);
+  return { busy: count > 0, shown };
 }
 
 export function usePersistent(key, initial) {

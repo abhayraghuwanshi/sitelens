@@ -2,7 +2,7 @@
 // sessions with GA4-like events and parameters. Each analysis here returns the
 // same rows the BigQuery SQL in sql.mjs returns, so the UI cannot tell them apart.
 
-import { stepKey } from './sql.mjs';
+import { stepKey, AUTO_EVENTS } from './sql.mjs';
 
 function mulberry32(seed) {
   let a = seed >>> 0;
@@ -195,6 +195,19 @@ export function demoPaths(range, { depth = 4, startPath = '', top = 12 } = {}) {
     exits: [...pages.values()].sort((a, b) => b.views - a.views).slice(0, 40),
     total,
   };
+}
+
+export function demoFunnelDiscovery(range) {
+  const out = [];
+  for (const s of sessionsIn(range)) {
+    const firsts = new Map();
+    for (const e of s.seq) {
+      const name = e.k.startsWith('event:') ? e.k.slice(6) : '';
+      if (name && !AUTO_EVENTS.includes(name) && !firsts.has(name)) firsts.set(name, e.ts);
+    }
+    if (firsts.size) out.push({ landing: s.pages[0] || '', start: s.seq[0]?.ts, events: [...firsts].map(([name, ts]) => ({ name, ts })) });
+  }
+  return out;
 }
 
 export function demoFunnel(range, steps) {

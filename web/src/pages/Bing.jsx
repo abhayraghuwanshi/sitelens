@@ -1,7 +1,7 @@
 import { useState } from 'preact/hooks';
 import { formatNumber, formatPercent, formatDecimal } from '@shared/format.js';
 import { api, qs } from '../api.js';
-import { useAsync, navigate } from '../hooks.js';
+import { useAsync } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, Segmented, Empty } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
@@ -13,23 +13,14 @@ const METRICS = [
 ];
 
 // Google | Bing switch shared by the two search views.
-export function EngineSwitch({ site, engine }) {
-  return (
-    <Segmented label="Search engine" value={engine} onChange={(key) => navigate(`/site/${site.id}/${key === 'bing' ? 'bing' : 'search'}`)}
-      options={[{ key: 'google', label: 'Google' }, { key: 'bing', label: 'Bing' }]} />
-  );
-}
-
 export function Bing({ site, range }) {
   const data = useAsync((o) => api.get(`/bing/sites/${site.id}${qs({ range, fresh: o?.fresh })}`), [site.id, range]);
   const [metric, setMetric] = useState('clicks');
 
-  const head = <div class="row" style={{ marginBottom: '12px' }}><EngineSwitch site={site} engine="bing" /></div>;
   if (data.error) {
     const setup = ['needs-bing', 'bing-site', 'bing-key'].includes(data.error.kind);
     return (
       <>
-        {head}
         {setup ? (
           <Empty title={data.error.kind === 'needs-bing' ? 'Connect Bing Webmaster Tools' : data.error.message}>
             {data.error.kind === 'needs-bing'
@@ -41,7 +32,7 @@ export function Bing({ site, range }) {
       </>
     );
   }
-  if (!data.data) return <>{head}<Loading height={92} /><Loading height={300} /></>;
+  if (!data.data) return <><Loading height={92} /><Loading height={300} /></>;
 
   const b = data.data;
   const labels = b.range.dates.map(dayLabel);
@@ -49,7 +40,6 @@ export function Bing({ site, range }) {
   const c = b.crawl.latest;
   return (
     <>
-      {head}
       <KpiStrip items={[
         { label: 'Clicks', value: formatNumber(b.current.clicks), raw: b.current.clicks, previous: prev.clicks },
         { label: 'Impressions', value: formatNumber(b.current.impressions), raw: b.current.impressions, previous: prev.impressions },

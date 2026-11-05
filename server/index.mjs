@@ -17,7 +17,12 @@ import { listingAnalytics, findListingProperty, listProperties } from './cws-ga.
 import { createCache } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
+import { fetchTopics, demoTopics } from './search-topics.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
+import { detectMcpClients } from './mcp-clients.mjs';
+import { createFunnelSuggest, funnelSuggestRoutes, linkedRepos, siteRepos } from './funnel-suggest.mjs';
+import { createArticles, articleRoutes } from './articles.mjs';
+import { createArticleEditor, articleEditorRoutes } from './article-editor.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
@@ -31,8 +36,11 @@ import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes } from './ai-search.mjs';
 import { createCalendar, calendarRoutes } from './calendar.mjs';
+import { storyRoutes } from './story.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
+import { createCustomMetrics, customMetricRoutes } from './custom-metrics.mjs';
+import { createSiteConfig, siteConfigRoutes, searchGroups } from './site-config.mjs';
 
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'web/dist');
@@ -83,12 +91,36 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     const { sources } = await store.get();
     return sources?.githubToken || env.GITHUB_TOKEN || '';
   }
-  const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
-  const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
-  const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
-  const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, fetchImpl });
-  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, fetchImpl });
   const vercel = createVercel({ store, env, fetchImpl });
+  // Which repos belong to a site: the same rule Articles and Funnels use (picked
+  // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
+  const siteRepoCache = new Map(); // site id → { at, linked, value }
+  async function siteRepoScope(site) {
+    const linked = await linkedRepos({ store, site, vercel });
+    const hit = siteRepoCache.get(site.id);
+    if (hit && hit.linked === linked.join() && Date.now() - hit.at < 10 * 60_000) return hit.value;
+    const token = await githubToken();
+    let value;
+    if (!token) value = { siteId: site.id, host: site.host || '', repos: linked, note: linked.length ? '' : 'Add a GitHub token in Settings → GitHub to find this site’s repos.' };
+    else {
+      try {
+        value = { siteId: site.id, host: site.host || '', repos: (await siteRepos({ store, site, token, vercel, fetchImpl })).map((r) => r.name), note: '' };
+      } catch (err) {
+        return { siteId: site.id, host: site.host || '', repos: linked, note: `Couldn’t list your GitHub repos: ${err.message}` };
+      }
+    }
+    siteRepoCache.set(site.id, { at: Date.now(), linked: linked.join(), value });
+    return value;
+  }
+  const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
+  const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, vercel, fetchImpl });
+  const articles = createArticles({ auth, store, getToken: githubToken, vercel, fetchImpl });
+  const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
+  const editor = createArticleEditor({ auth, store, articles, annotations, getToken: githubToken, env, fetchImpl });
+  const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
+  const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
+  const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, siteConfig, fetchImpl });
+  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
   annotations.registerSource('mentions', (q) => mentions.annotations(q));
   const firebase = createFirebase({ dbPath: join(store.dir, 'firebase.db'), store, getToken: () => auth.token(), bigquery, fetchImpl });
@@ -96,13 +128,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const products = createProducts({ store, auth, extensions, listingProperty, githubDb });
   const bing = createBing({ dbPath: join(store.dir, 'bing.db'), store, env, fetchImpl });
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
-  const outcomes = createOutcomes({ store, products, auth, listingProperty });
+  const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig });
   const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
   const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
-  const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, env });
+  const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, siteConfig, env });
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
+  const customMetrics = createCustomMetrics({ store, env, fetchImpl });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
   function githubDb() {
     if (!github.hasDb()) {
@@ -131,7 +164,68 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
     ...analystRoutes({ analyst, siteOr404 }),
+    ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
+    ...articleRoutes({ articles, siteOr404 }),
+    ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
+    // Calendar days are local, so the story's "today" is too.
+    ...storyRoutes({ calendar, siteOr404, today: () => new Date().toLocaleDateString('en-CA') }),
+    ...customMetricRoutes({ metrics: customMetrics, siteOr404 }),
+    ...siteConfigRoutes({
+      siteConfig,
+      siteOr404,
+      // What the site really sent, to flag config names that never fire.
+      async firedEvents(site) {
+        if (site.propertyId) return outcomes.eventNames(site);
+        if (site.demo || site.bq) return new Set((await engines.events(site, '28d')).events.map((e) => e.name));
+        return null;
+      },
+      // A starting file: the product's goals (or Studio's guesses) and suggested funnels.
+      async draftInputs(site) {
+        const product = ((await store.get()).products || []).find((p) => p.siteId === site.id);
+        const hasStore = Boolean(product?.extensionIds?.length);
+        const hasRepos = Boolean(product?.repos?.length);
+        const guessed = !product?.goals?.length;
+        const goals = guessed ? (await outcomes.suggest({ siteId: site.id, hasStore, hasRepos }).catch(() => ({ suggested: [] }))).suggested : product.goals;
+        const funnels = site.demo || site.bq ? (await funnelSuggest.suggest(site, '28d').catch(() => ({ funnels: [] }))).funnels.slice(0, 3) : [];
+        // What's set up by hand today: query groups become topics, saved AI
+        // questions stay questions, and the product's name is the brand.
+        const topics = (site.searchGroups || []).map((g) => ({ name: g.name, match: g.pattern }));
+        const asked = await aiSearch.promptsFor(site).catch(() => null);
+        const brand = topics.some((t) => /^brand$/i.test(t.name)) ? [] : [...new Set([product?.label, site.label].filter((x) => x && x.length >= 2))];
+        return { goals, funnels, guessed, search: { brand, competitors: [], topics, ask_ai: asked?.from === 'auto' ? [] : asked?.prompts || [] } };
+      },
+      // What each section falls back to when the file doesn't set it.
+      async studioSetup(site) {
+        const product = ((await store.get()).products || []).find((p) => p.siteId === site.id);
+        const asked = await aiSearch.promptsFor(site).catch(() => null);
+        const rules = (await alerts.settings()).rules;
+        const groups = site.searchGroups || [];
+        const pct = (r) => (r.enabled ? `±${Math.round(r.pct * 100)}%` : 'off');
+        return {
+          goals: product?.goals?.length
+            ? { from: 'studio', items: product.goals.map((g) => `${g.label}${g.role === 'step' ? ' (step)' : ''}`), edit: `#/settings?tab=sites&edit=${site.id}&focus=goals` }
+            : { from: 'auto', items: ['Guessed from the events the site sends'], edit: `#/settings?tab=sites&edit=${site.id}&focus=goals` },
+          funnels: { from: 'auto', items: ['Suggested from the site’s events and code'], edit: `#/site/${site.id}/funnels` },
+          search: {
+            from: groups.length || asked?.from === 'settings' ? 'studio' : 'auto',
+            items: [
+              groups.length ? `Query groups: ${groups.map((g) => g.name).join(', ')}` : 'Query groups: a Brand guess from the site’s name',
+              asked?.from === 'settings' ? `${asked.prompts.length} AI question${asked.prompts.length === 1 ? '' : 's'}` : 'AI questions: generic ones from the product’s name',
+            ],
+            edit: `#/site/${site.id}/demand`,
+          },
+          alerts: {
+            from: 'studio', items: [`Sessions & users: ${pct(rules.traffic)}`, `Search clicks: ${pct(rules.search)}`], edit: '#/settings?tab=alerts',
+            // The draft file has no alerts, so start from the thresholds used today.
+            draft: ['alerts:', ...['traffic', 'search'].map((k) => `  ${k}: ${rules[k].enabled ? `{ pct: ${Math.round(rules[k].pct * 100)}, min: ${rules[k].minVolume} }` : 'off'}`)].join('\n'),
+          },
+        };
+      },
+      async onChange(site) {
+        for (const p of (await store.get()).products || []) if (p.siteId === site.id) outcomes.clear(p.id);
+      },
+    }),
     ['GET', /^\/api\/state$/, async () => {
       return {
         auth: await auth.status(),
@@ -152,8 +246,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const saved = await store.get();
       const src = saved.sources || {};
       const from = (settingsValue, envValue) => (settingsValue ? 'settings' : envValue ? 'env' : '');
-      const [firebaseStatus, vercelStatus, vitalsStatus, alertSettings] = await Promise.all([
-        firebase.status(), vercel.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})),
+      const [firebaseStatus, vercelStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
+        firebase.status(), vercel.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
       ]);
       return {
         google: await auth.status(),
@@ -166,16 +260,19 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         pagespeedKey: { source: vitalsStatus.key?.source || '' },
         bing: { source: from(src.bingApiKey, env.BING_WEBMASTER_KEY) },
         anthropic: { source: from(src.anthropicKey, env.ANTHROPIC_API_KEY), weekly: Boolean(saved.aiSearch?.weekly) },
+        customMetrics: { count: metricStatus.metrics.length, sources: metricStatus.connectors.filter((c) => c.secret.source).map((c) => c.label) },
         notifications: { webhook: Boolean(alertSettings.webhookUrl), desktop: Boolean(alertSettings.desktop), enabled: Boolean(alertSettings.enabled) },
       };
     }],
     // What an MCP client needs to launch server/mcp.mjs with this install's
     // Node and data folder (in the desktop app, both live inside the bundle).
     ['GET', /^\/api\/mcp\/setup$/, async () => {
+      const mcpPath = join(ROOT, 'server', 'mcp.mjs');
       return {
         command: stableNode(process.execPath),
-        args: ['--no-warnings=ExperimentalWarning', join(ROOT, 'server', 'mcp.mjs')],
+        args: ['--no-warnings=ExperimentalWarning', mcpPath],
         env: { STUDIO_DATA_DIR: store.dir, ...(port !== 4318 ? { STUDIO_URL: `http://127.0.0.1:${port}` } : {}) },
+        clients: await detectMcpClients({ mcpPath, cwd: ROOT }),
       };
     }],
     ['POST', /^\/api\/github\/token$/, async ({ body }) => {
@@ -196,7 +293,13 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ['POST', /^\/api\/github\/sync$/, async () => github.sync()],
     ['POST', /^\/api\/github\/import$/, async ({ body }) => ({ imported: github.importFrom(String(body.path || '').trim()) })],
 
-    ['GET', /^\/api\/github\/overview$/, async ({ query }) => githubOverview(githubDb(), query.get('range') || '28d')],
+    ['GET', /^\/api\/github\/overview$/, async ({ query }) => {
+      const range = query.get('range') || '28d';
+      const site = query.get('site') && (await store.sites()).find((s) => s.id === query.get('site'));
+      if (!site) return githubOverview(githubDb(), range);
+      const scope = await siteRepoScope(site);
+      return { ...githubOverview(githubDb(), range, new Set(scope.repos)), scope };
+    }],
     ['GET', /^\/api\/github\/repo$/, async ({ query }) => githubRepo(githubDb(), query.get('name') || '', query.get('range') || '28d')],
 
     ['GET', /^\/api\/extensions$/, async ({ query }) => {
@@ -260,16 +363,34 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ['GET', /^\/api\/sites\/([\w-]+)\/search-demand$/, async ({ match, query }) => {
       const site = await siteOr404(match[1]);
       const rangeKey = query.get('range') || '28d';
-      const groups = site.searchGroups || defaultGroups(site);
-      if (site.demo) return { groups: groups, ...demoDemand({ site, rangeKey, groups }), defaultGroups: !site.searchGroups };
+      // The site's .sitelens.yml first, then groups saved here, then a Brand guess.
+      const fromFile = searchGroups((await siteConfig.applied(site))?.search);
+      const groupsFrom = fromFile.length ? 'file' : site.searchGroups ? 'settings' : 'auto';
+      const groups = fromFile.length ? fromFile : site.searchGroups || defaultGroups(site);
+      const meta = { groupsFrom, defaultGroups: groupsFrom === 'auto' };
+      if (site.demo) return { groups: groups, ...demoDemand({ site, rangeKey, groups }), ...meta };
       if (!site.searchSite) throw new EngineError('Pick a Search Console property for this site in Settings.', { kind: 'needs-search' });
       const key = `demand:${site.id}:${rangeKey}:${JSON.stringify(groups)}`;
       const data = await sourceCache.wrap(key, 10 * 60_000, query.has('fresh'), async () =>
         fetchDemand({ token: await auth.token(), site, rangeKey, groups }));
-      return { ...data, defaultGroups: !site.searchGroups };
+      return { ...data, ...meta };
+    }],
+    // How each search topic in the site's .sitelens.yml does in Google.
+    ['GET', /^\/api\/sites\/([\w-]+)\/search-topics$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const rangeKey = query.get('range') || '28d';
+      const search = (await siteConfig.applied(site))?.search;
+      if (!search?.topics?.length) return { topics: [] };
+      if (site.demo) return demoTopics({ site, rangeKey, search });
+      if (!site.searchSite) throw new EngineError('Pick a Search Console property for this site in Settings.', { kind: 'needs-search' });
+      const key = `topics:${site.id}:${rangeKey}:${JSON.stringify(search)}`;
+      return sourceCache.wrap(key, 10 * 60_000, query.has('fresh'), async () => fetchTopics({ token: await auth.token(), site, rangeKey, search }));
     }],
     ['POST', /^\/api\/sites\/([\w-]+)\/search-groups$/, async ({ match, body }) => {
       const site = await siteOr404(match[1]);
+      if (searchGroups((await siteConfig.applied(site))?.search).length) {
+        throw new EngineError('This site’s query groups come from search: in its .sitelens.yml. Change them there.', { kind: 'validation' });
+      }
       const groups = normalizeGroups(body.groups || []);
       if (site.demo) throw new EngineError('The demo site’s groups can’t be saved — try them on your own site.', { kind: 'validation' });
       await store.saveSite({ ...site, searchGroups: groups });
@@ -354,7 +475,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, calendar, history };
+  return { handle, store, auth, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, calendar, history, customMetrics };
 }
 
 function flags(query) {

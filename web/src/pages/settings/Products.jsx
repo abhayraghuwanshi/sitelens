@@ -15,8 +15,12 @@ export function ProductsCard({ params }) {
 
   useEffect(() => {
     if (!data.data) return;
-    if (editId === 'new') setEditing({});
-    else if (editId) setEditing(data.data.products.find((p) => p.id === editId) || null);
+    // A site's product is edited with the site, so old links land there.
+    const product = editId && editId !== 'new' ? data.data.products.find((p) => p.id === editId) : null;
+    const siteId = product?.siteId || (editId === 'new' && params.get('site')) || '';
+    if (siteId) navigate(`/settings${qs({ tab: 'sites', edit: siteId, focus: params.get('focus') })}`);
+    else if (editId === 'new') setEditing({});
+    else if (editId) setEditing(product);
   }, [editId, data.data]);
 
   async function add(product) {
@@ -54,7 +58,7 @@ export function ProductsCard({ params }) {
   }
 
   return (
-    <Card title="Products" sub="Everything one product runs on: domains, hosting, analytics, code, store listings and community"
+    <Card title="Products" sub="A site’s product is edited with the site in Settings → Sites. Add one here for something without a website, like an extension."
       actions={
         <div class="row">
           {suggestions.map((s) => (
@@ -74,7 +78,9 @@ export function ProductsCard({ params }) {
                 <td class="small">{hostingLabel(p) || <span class="muted">not set</span>}</td>
                 <td class="small muted">{[p.siteId && 'GA4', p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                  <button class="btn ghost" type="button" onClick={() => setEditing(p)}>Edit</button>
+                  {p.siteId
+                    ? <a class="btn ghost" href={`#/settings?tab=sites&edit=${p.siteId}`}>Edit site</a>
+                    : <button class="btn ghost" type="button" onClick={() => setEditing(p)}>Edit</button>}
                   <button class="btn ghost danger" type="button" onClick={() => remove(p.id)}>Remove</button>
                 </td>
               </tr>
@@ -90,40 +96,38 @@ export function ProductsCard({ params }) {
 
 const bareHost = (host) => String(host || '').toLowerCase().replace(/^www\./, '');
 
-function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
-  const { options } = setup;
-  const site = (id) => options.sites.find((s) => s.id === id);
-  const [form, setForm] = useState(() => {
-    const s = site(initial.siteId);
-    return {
-      label: initial.label || '',
-      siteId: initial.siteId || '',
-      repos: initial.repos || [],
-      extensionIds: initial.extensionIds || [],
-      domains: initial.domains || (s && !s.demo && s.host ? [{ name: bareHost(s.host) }] : []),
-      hosting: initial.hosting || hostingFromLinks(setup, initial.siteId),
-      keywords: initial.keywords || [],
-      goals: initial.goals || [],
-    };
-  });
-  // #/settings?tab=products&edit=<id>&focus=goals (from the Outcomes page) jumps to that section.
+// Form state for a product (or a site's product), with defaults from its site.
+export function productFormState(initial, setup) {
+  const s = setup.options.sites.find((x) => x.id === initial.siteId);
+  return {
+    label: initial.label || '',
+    siteId: initial.siteId || '',
+    repos: initial.repos || [],
+    extensionIds: initial.extensionIds || [],
+    domains: initial.domains || (s && !s.demo && s.host ? [{ name: bareHost(s.host) }] : []),
+    hosting: initial.hosting || hostingFromLinks(setup, initial.siteId),
+    keywords: initial.keywords || [],
+    goals: initial.goals || [],
+  };
+}
+
+// #/settings?…&focus=goals (from the Outcomes page) jumps to that section.
+export function useFocusStage(focus, ready = true) {
   useEffect(() => {
-    const el = focus && document.getElementById(`stage-${focus}`);
+    const el = ready && focus && document.getElementById(`stage-${focus}`);
     // Offset for the sticky page header.
     if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 72 });
-  }, [focus]);
+  }, [focus, ready]);
+}
+
+// Products without a website. A site's product is edited with the site (Settings → Sites).
+function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
+  const { options } = setup;
+  const [form, setForm] = useState(() => productFormState(initial, setup));
+  useFocusStage(focus);
   const [error, setError] = useState(null);
   const [saving, setSaving] = useState(false);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
-
-  function pickSite(siteId) {
-    const s = site(siteId);
-    const patch = { siteId };
-    // A fresh product picks up the site's domain and existing hosting link.
-    if (s && !s.demo && s.host && !form.domains.length) patch.domains = [{ name: bareHost(s.host) }];
-    if (!form.hosting?.provider) patch.hosting = hostingFromLinks(setup, siteId);
-    set(patch);
-  }
 
   async function save(e) {
     e.preventDefault();
@@ -139,32 +143,42 @@ function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
 
   return (
     <form class="stack" onSubmit={save}>
-      <Card title={initial.id ? `Set up ${initial.label}` : 'Add a product'} sub="Each section feeds one stage of the product’s journey. Skip what doesn’t apply.">
+      <Card title={initial.id ? `Set up ${initial.label}` : 'Add a product'} sub="For a product without its own website, like an extension or a CLI. Each section feeds one stage of its journey; skip what doesn’t apply.">
         <label class="field" style={{ maxWidth: '360px' }}>Product name
           <input required value={form.label} placeholder="Cooldesk" onInput={(e) => set({ label: e.currentTarget.value })} />
         </label>
+        {!options.sites.length || (
+          <small class="muted">Has a website? Set it up in <a href="#/settings?tab=sites">Settings → Sites</a> instead: the site and its product are edited together there.</small>
+        )}
       </Card>
+      <ProductStages form={form} set={set} setup={setup} />
 
+      {error && <ErrorState error={error} />}
+      <div class="row">
+        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save product'}</button>
+        <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// Everything a product runs on besides its GA4 site: domains, hosting, code,
+// store listings, community and goals. `form.siteId` is the site it belongs to;
+// `inSite` says the site editor holds them, so a site not saved yet still counts.
+export function ProductStages({ form, set, setup, inSite = false }) {
+  const { options } = setup;
+  return (
+    <>
       <Stage icon="globe" title="Domains" sub="Expiry, DNS and SSL are checked from public records. No registrar login needed." done={form.domains.length > 0}>
         <Domains domains={form.domains} registrars={setup.registrars} hostingNames={Object.fromEntries(setup.hosting.map((h) => [h.key, h.label]))} onChange={(domains) => set({ domains })}
           onHostingGuess={(provider) => !form.hosting?.provider && set({ hosting: { provider } })} />
       </Stage>
 
       <Stage icon="rocket" title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel give Studio a deploy feed; other hosts are recorded for context." done={hostingState(form.hosting)}>
-        <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId} onChange={(hosting) => set({ hosting })} />
+        <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} onChange={(hosting) => set({ hosting })} />
       </Stage>
 
-      <Stage icon="chart" title="Analytics" sub="The GA4 site behind traffic, referrers and the day drawer." done={Boolean(form.siteId)}>
-        <label class="field" style={{ maxWidth: '360px' }}>GA4 site
-          <select value={form.siteId} onChange={(e) => pickSite(e.currentTarget.value)}>
-            <option value="">— none —</option>
-            {options.sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (demo)' : ` · ${s.host}`}</option>)}
-          </select>
-          <small>Missing? Add it in <a href="#/settings?tab=sites">Settings → Sites</a>.</small>
-        </label>
-      </Stage>
-
-      <Stage icon="github" title="Code & releases" sub="GitHub releases mark the timeline; release downloads count as an outcome." done={form.repos.length > 0}>
+      <Stage icon="github" title="Code & releases" sub="Ship → GitHub, Articles and Funnels read these repos, plus the Vercel project’s repo and any repo whose homepage is the site. Releases mark the timeline." done={form.repos.length > 0}>
         <Repos repos={options.repos} selected={form.repos} onChange={(repos) => set({ repos })} />
       </Stage>
 
@@ -190,13 +204,7 @@ function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
       <Stage id="goals" icon="target" title="Goals" sub="What counts as progress and what counts as a result: a purchase, a sign-up, an install, a download. Outcomes measures these." done={form.goals.length > 0}>
         <GoalsEditor goals={form.goals} onChange={(goals) => set({ goals })} siteId={form.siteId} hasStore={form.extensionIds.length > 0} hasRepos={form.repos.length > 0} />
       </Stage>
-
-      {error && <ErrorState error={error} />}
-      <div class="row">
-        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save product'}</button>
-        <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
-      </div>
-    </form>
+    </>
   );
 }
 
@@ -326,7 +334,7 @@ function Hosting({ hosting, setup, siteId, onChange }) {
               {setup.vercel.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
             </select>
             {setup.vercel.error && <small>{setup.vercel.error}</small>}
-            {!siteId && <small>Pick the GA4 site below too: deploys are matched to it.</small>}
+            {!siteId && <small>Deploys are matched to a site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites</a>.</small>}
           </label>
         ) : <p class="note" style={{ margin: 0 }}>Connect Vercel in <a href="#/settings?i=vercel">Integrations → Vercel</a> to read deploys.</p>
       )}
@@ -376,13 +384,13 @@ function FirebaseBackend({ value, siteId, onChange }) {
         </label>
       ))}
       {value.service && <small>Linked backend: <span class="mono">{value.project} / {value.service}</span></small>}
-      {value.service && !siteId && <small class="muted">Pick the GA4 site below too: request logs are stored per site.</small>}
+      {value.service && !siteId && <small class="muted">Request logs are stored per site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites</a>.</small>}
       {error && <small class="muted">{error}</small>}
     </div>
   );
 }
 
-function Repos({ repos, selected, onChange }) {
+export function Repos({ repos, selected, onChange }) {
   const [filter, setFilter] = useState('');
   if (!repos.length) return <small class="muted">Add a GitHub token in <a href="#/settings?i=github">Integrations → GitHub</a> to pick repos.</small>;
   const q = filter.trim().toLowerCase();

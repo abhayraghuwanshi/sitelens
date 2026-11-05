@@ -75,8 +75,10 @@ export function Demand({ site, range }) {
           <MoversTable rows={d[movers]} colors={colors} kind={movers} />
         </Card>
         <div class="stack">
-          <GroupEditor site={site} groups={d.groups.filter((g) => g.name !== OTHER)} queries={d.queries} isDefault={d.defaultGroups}
-            colors={colors} onSaved={() => setVersion((v) => v + 1)} />
+          {d.groupsFrom === 'file'
+            ? <FileGroups site={site} groups={d.groups.filter((g) => g.name !== OTHER)} colors={colors} />
+            : <GroupEditor site={site} groups={d.groups.filter((g) => g.name !== OTHER)} queries={d.queries} isDefault={d.defaultGroups}
+              colors={colors} onSaved={() => setVersion((v) => v + 1)} />}
           <TrendsCard groups={d.groups} queries={d.queries} range={range} />
         </div>
       </div>
@@ -108,6 +110,27 @@ function MoversTable({ rows, colors, kind }) {
         </tbody>
       </table>
     </div>
+  );
+}
+
+// Groups declared in the site's .sitelens.yml (search: brand, competitors, topics).
+function FileGroups({ site, groups, colors }) {
+  return (
+    <Card title="Query groups" sub="From the site’s repo file">
+      <div class="stack" style={{ gap: '8px' }}>
+        {groups.map((g) => (
+          <div key={g.name} class="row" style={{ flexWrap: 'nowrap', alignItems: 'baseline' }}>
+            <i style={{ width: '10px', height: '10px', borderRadius: '3px', background: colors[g.name], flex: 'none' }} />
+            <b class="small" style={{ flex: 'none' }}>{g.name}</b>
+            <code class="small" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{g.pattern}</code>
+          </div>
+        ))}
+        <p class="note" style={{ margin: 0 }}>
+          First matching group wins. They’re made from your brand, topics and competitors.{' '}
+          <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+        </p>
+      </div>
+    </Card>
   );
 }
 

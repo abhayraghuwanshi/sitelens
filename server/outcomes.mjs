@@ -374,7 +374,7 @@ export function rollup(measured) {
 
 // ---------- the service ----------
 
-export function createOutcomes({ store, products, auth, listingProperty, now = Date.now }) {
+export function createOutcomes({ store, products, auth, listingProperty, siteConfig = null, now = Date.now }) {
   const cache = createCache();
 
   async function report(site, body) {
@@ -468,9 +468,12 @@ export function createOutcomes({ store, products, auth, listingProperty, now = D
       Promise.all(product.extensionIds.map((ext) => safely(`listing:${ext}`, async () => listingAnalytics({ token: await auth.token(), propertyId: await listingProperty(ext), range })))),
     ]);
 
-    // The product's own goals, else Studio's guess from event names and linked sources.
-    const custom = Boolean(product.goals?.length);
-    const goals = custom ? product.goals : autoGoals(classifyEvents(siteBase?.events || []), { hasStore: product.extensionIds.length > 0, hasRepos: product.repos.length > 0 });
+    // The site's .sitelens.yml, else the product's own goals, else Studio's guess
+    // from event names and linked sources.
+    const fileGoals = (await siteConfig?.applied(site))?.goals || null;
+    const goalsFrom = fileGoals?.length ? 'file' : product.goals?.length ? 'settings' : 'auto';
+    const custom = goalsFrom !== 'auto';
+    const goals = goalsFrom === 'file' ? fileGoals : custom ? product.goals : autoGoals(classifyEvents(siteBase?.events || []), { hasStore: product.extensionIds.length > 0, hasRepos: product.repos.length > 0 });
 
     const kpis = Object.fromEntries((view?.kpis || []).map((k) => [k.key, k]));
     const series = view?.series || {};
@@ -562,6 +565,7 @@ export function createOutcomes({ store, products, auth, listingProperty, now = D
       funnel,
       goals: {
         custom,
+        from: goalsFrom,
         list: measured,
         keyEvents: siteBase?.keyEvents ?? null,
         // For the goal editor: what the site sends, most used first.
@@ -593,6 +597,12 @@ export function createOutcomes({ store, products, auth, listingProperty, now = D
 
   return {
     suggest,
+    // Every event name the site sent in the range (GA4 API), or null without GA4.
+    async eventNames(site, rangeKey = '28d') {
+      if (!site || site.demo || !site.propertyId) return null;
+      const { events } = await siteEvents(site, historyRange(rangeKey, now()));
+      return new Set(events.map((e) => e.name));
+    },
     clear(id) {
       cache.clear(`outcomes:${id}:`);
     },

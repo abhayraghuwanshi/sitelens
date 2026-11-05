@@ -5,18 +5,61 @@ import { useAsync } from '../hooks.js';
 import { Card } from './ui.jsx';
 import { Icon } from './icons.jsx';
 
-// Plain text from Claude: blank lines split paragraphs, "- " lines are bullets.
+// Plain text from Claude (or light Markdown from Claude Code): blank lines split
+// paragraphs, "- " / "1. " lines become lists, "#" lines and lines ending in ":"
+// before a list read as headings, **bold** is kept.
+const BULLET = /^\s*[-•*]\s+/;
+const NUMBERED = /^\s*\d+[.)]\s+/;
+
+function Inline({ text }) {
+  return String(text).split(/(\*\*[^*]+\*\*|`[^`]+`)/).map((part, i) => {
+    if (/^\*\*[^*]+\*\*$/.test(part)) return <b key={i}>{part.slice(2, -2)}</b>;
+    if (/^`[^`]+`$/.test(part)) return <code key={i}>{part.slice(1, -1)}</code>;
+    return part;
+  });
+}
+
+function parseBlocks(text) {
+  const blocks = [];
+  let para = [];
+  const flush = () => {
+    if (para.length) blocks.push({ type: 'p', text: para.join('\n') });
+    para = [];
+  };
+  for (const raw of String(text || '').trim().split('\n')) {
+    const line = raw.trimEnd();
+    const list = BULLET.test(line) ? 'ul' : NUMBERED.test(line) ? 'ol' : null;
+    if (!line.trim()) {
+      flush();
+    } else if (list) {
+      flush();
+      const item = line.replace(list === 'ul' ? BULLET : NUMBERED, '');
+      const last = blocks.at(-1);
+      if (last?.type === list) last.items.push(item);
+      else blocks.push({ type: list, items: [item] });
+    } else if (/^#{1,6}\s+/.test(line)) {
+      flush();
+      blocks.push({ type: 'h', text: line.replace(/^#{1,6}\s+/, '') });
+    } else if (/^\s{2,}\S/.test(line) && ['ul', 'ol'].includes(blocks.at(-1)?.type) && !para.length) {
+      blocks.at(-1).items.push(`${blocks.at(-1).items.pop()} ${line.trim()}`); // wrapped list item
+    } else {
+      para.push(line);
+    }
+  }
+  flush();
+  return blocks;
+}
+
 export function CommentBody({ text }) {
-  const blocks = String(text || '').trim().split(/\n\s*\n/);
   return (
     <div class="claude-body">
-      {blocks.map((block, i) => {
-        const lines = block.split('\n');
-        const bullets = lines.filter((l) => /^\s*[-•]\s+/.test(l));
-        if (bullets.length && bullets.length === lines.length) {
-          return <ul key={i}>{bullets.map((l, j) => <li key={j}>{l.replace(/^\s*[-•]\s+/, '')}</li>)}</ul>;
+      {parseBlocks(text).map((b, i) => {
+        if (b.type === 'ul' || b.type === 'ol') {
+          const List = b.type;
+          return <List key={i}>{b.items.map((item, j) => <li key={j}><Inline text={item} /></li>)}</List>;
         }
-        return <p key={i}>{block}</p>;
+        if (b.type === 'h') return <p key={i} class="claude-h"><Inline text={b.text} /></p>;
+        return <p key={i} class={/:$/.test(b.text) && !b.text.includes('\n') ? 'claude-h' : undefined}><Inline text={b.text} /></p>;
       })}
     </div>
   );
@@ -31,12 +74,27 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
   const single = siteId && siteId !== 'all';
   const comments = useAsync(() => (lo ? api.get(`/annotations${qs({ author: 'claude', from: lo, to: hi, scope: single ? `site:${siteId}` : '' })}`) : { annotations: [] }), [siteId, lo, hi]);
   const status = useAsync(() => api.get('/claude/status'), []);
+  const mcp = useAsync(() => api.get('/mcp/setup').catch(() => null), []);
+  const [copied, setCopied] = useState(false);
   const [question, setQuestion] = useState('');
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const list = [...(comments.data?.annotations || [])].sort((a, b) => b.date.localeCompare(a.date) || String(b.createdAt).localeCompare(String(a.createdAt)));
   const hasKey = Boolean(status.data?.source);
   const inputId = `claude-q-${date ? 'day' : 'range'}`;
+  const codeConnected = mcp.data?.clients?.claudeCode?.state === 'connected';
+  // What to paste into Claude Code; it reads through the sitelens MCP tools and comments back here.
+  const ask = `Use the sitelens MCP tools to look at ${single ? `site "${siteId}"` : 'each of my sites'} ${date ? `on ${date}` : `from ${from} to ${to}`}: what moved and why. Leave your analysis as a comment with add_comment.`;
+
+  async function copyAsk() {
+    try {
+      await navigator.clipboard.writeText(ask);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      /* clipboard refused; the text is selectable */
+    }
+  }
 
   async function analyze(e) {
     e.preventDefault();
@@ -100,15 +158,29 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
         {comments.data && !list.length && (
           <p class="muted small" style={{ margin: 0 }}>
             No comments from Claude {date ? 'on this day' : 'in this range'} yet.
-            {!single && ' Pick one site to analyze it.'}
+            {!single && hasKey && ' Pick one site to analyze it here.'}
           </p>
         )}
-        {status.data && !hasKey && (
+        {status.data && !hasKey && mcp.data && (codeConnected ? (
+          <div class="stack" style={{ gap: '6px' }}>
+            <p class="small" style={{ margin: 0 }}>Claude Code is connected. Ask it in any session and its comment shows up here:</p>
+            <div class="snippet">
+              <div class="snippet-head">
+                <span>Claude Code</span>
+                <button class="btn ghost" type="button" onClick={copyAsk}>{copied ? 'Copied' : 'Copy'}</button>
+              </div>
+              <pre style={{ whiteSpace: 'pre-wrap' }}>{ask}</pre>
+            </div>
+            <p class="muted small" style={{ margin: 0 }}>
+              To analyze with a button here instead, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (roughly $0.10–0.40 a run).
+            </p>
+          </div>
+        ) : (
           <p class="note" style={{ margin: 0 }}>
             To analyze here, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (each run costs roughly $0.10–0.40).
-            Or ask Claude Code; it can leave comments here through the <a href="#/settings?i=mcp">SiteLens MCP server</a>.
+            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the SiteLens MCP server.
           </p>
-        )}
+        ))}
       </div>
     </Card>
   );

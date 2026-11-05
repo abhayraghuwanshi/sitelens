@@ -2,7 +2,8 @@ import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 import { fileURLToPath } from 'node:url';
 
-const api = 'http://127.0.0.1:4318';
+// Follows the API server's PORT, so dev can run next to the desktop app on 4318.
+const api = `http://127.0.0.1:${process.env.PORT || 4318}`;
 
 export default defineConfig({
   root: 'web',

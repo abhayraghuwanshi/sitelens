@@ -1,0 +1,38 @@
+# The demo site's config, as a site's own .sitelens.yml would be written.
+# Spec: docs/sitelens-yml.md.
+version: 1
+site: example.com
+kind: saas
+goals:
+  - { event: sign_up, label: Sign-ups, value: 20, alert: true }
+  - { event: generate_lead, label: Sales leads, value: 50, alert: { when: both, pct: 40, min: 2 } }
+  - { event: plan_select, label: Picked a plan, role: step }
+  - { page: /pricing, label: Saw pricing, role: step }
+funnels:
+  - name: Sign-up from pricing
+    steps: [page:/pricing, event:plan_select, page:/signup, event:sign_up]
+  - name: Contact sales
+    steps: [page:/, page:/contact, event:generate_lead]
+  - name: Desktop download
+    steps: [page:/docs/getting-started, event:file_download]
+alerts:
+  traffic: { pct: 40 }
+search:
+  brand: [example]
+  competitors: [plausible, google analytics]
+  topics:
+    # /features is what we want found for these; it sits at position 12–18 today.
+    - name: Product analytics
+      page: /features
+      match: product analytics|engagement|privacy
+      targets: [product analytics tool, privacy friendly analytics]
+      ask_ai:
+        - What's a good product analytics tool for a small SaaS?
+        - How do I measure product engagement without GA4?
+    - name: Integrations
+      page: /integrations
+      match: integration
+      ask_ai:
+        - Which analytics tools integrate with Stripe and Slack?
+  ask_ai:
+    - What is a privacy-friendly alternative to Google Analytics?
