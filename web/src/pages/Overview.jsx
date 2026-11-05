@@ -5,7 +5,7 @@ import { countryName, flagForCountry } from '@shared/site.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, BarList, Segmented, Delta } from '../components/ui.jsx';
-import { STAGES, tabHref } from '../stages.js';
+import { STAGES, stageHref } from '../stages.js';
 import { LineChart } from '../charts/LineChart.jsx';
 import { useAnnotations, AnnotationBar, toIso } from '../components/Annotations.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
@@ -166,7 +166,7 @@ function JourneyMap({ site, cur, prev, notes, search }) {
         const c = cards[s.key];
         return (
           <li key={s.key}>
-            <a class={`journey-step${worst === s.key ? ' bad' : ''}${c.off ? ' off' : ''}`} href={tabHref(s.tabs[0], site)} title={s.question}>
+            <a class={`journey-step${worst === s.key ? ' bad' : ''}${c.off ? ' off' : ''}`} href={stageHref(s, site)} title={s.question}>
               <span class="journey-head">
                 <span class="step-num" aria-hidden="true">{s.step}</span>
                 {s.label}

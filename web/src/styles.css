@@ -236,14 +236,6 @@ code, .mono { font-family: var(--mono); font-size: var(--text-sm); }
 .topbar { flex-wrap: wrap; }
 .topbar h1 { font-size: var(--text-xl); margin: 0; font-weight: 600; letter-spacing: -0.01em; display: flex; align-items: center; gap: 8px; }
 .topbar h1 .step-num { width: 22px; height: 22px; font-size: 12px; color: var(--accent-ink); }
-.stage-tabs { flex-basis: 100%; display: flex; gap: 2px; margin: 0 -10px -12px; overflow-x: auto; scrollbar-width: none; }
-.stage-tab {
-  display: inline-flex; align-items: center; gap: 5px; padding: 8px 10px; white-space: nowrap;
-  color: var(--text-2); font-weight: 500; border-bottom: 2px solid transparent;
-}
-.stage-tab:hover { color: var(--text); text-decoration: none; }
-.stage-tab.active { color: var(--accent-ink); border-bottom-color: var(--accent); }
-.stage-tab svg { color: var(--text-3); }
 .next-stage {
   display: flex; align-items: center; gap: 12px; padding: 12px 16px; margin-top: 8px;
   border: 1px dashed var(--border-strong); border-radius: var(--radius); color: var(--text); font-weight: 500;
@@ -845,3 +837,18 @@ table.data.compact .cell-path { max-width: none; }
 .md-preview table { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
 .md-preview th, .md-preview td { border: 1px solid var(--border); padding: 6px 10px; vertical-align: top; }
 .md-preview th { background: var(--surface-2); font-weight: 600; }
+
+/* stage summary pages: one card per source, each opening its full view */
+.stage-cards { list-style: none; margin: 0 0 16px; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 8px; }
+.stage-card { height: 100%; color: var(--text); }
+.stage-card:hover { text-decoration: none; border-color: var(--border-strong); }
+.stage-card .journey-head svg:last-child { margin-left: auto; color: var(--text-3); }
+.stage-card .journey-value { overflow-wrap: anywhere; }
+.stage-card.off .journey-value { color: var(--text-3); font-weight: 500; }
+.stage-card .journey-line { font-size: var(--text-sm); color: var(--text-2); }
+.stage-card.link .journey-line:first-of-type { color: var(--text-2); }
+.stage-timeline { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; font-size: var(--text-md); }
+.stage-timeline li { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.stage-timeline li > :last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage-timeline svg { color: var(--text-3); flex: none; }
+.stage-more { margin: 4px 0 0; }

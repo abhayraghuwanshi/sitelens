@@ -64,9 +64,17 @@ export function tabHref(tab, site) {
   return tab.siteParam && site?.host ? `#/${tab.section}?site=${site.id}` : `#/${tab.section}`;
 }
 
+// A numbered stage opens its summary page (pages/Stage.jsx), whose cards lead
+// to its tabs; Overview is its own page.
+export function stageHref(stage, site) {
+  return stage.step ? `#/site/${site.id}/${stage.key}` : tabHref(stage.tabs[0], site);
+}
+
 // Which stage and tab the current route belongs to (none for Settings, Alerts, SQL…).
+// A stage's summary page has the stage and no tab.
 export function locate(section, viewKey) {
   for (const stage of STAGES) {
+    if (stage.step && section === 'site' && viewKey === stage.key) return { stage, tab: null };
     const tab = stage.tabs.find((t) => (section === 'site' ? t.view === viewKey : t.section === section));
     if (tab) return { stage, tab };
   }

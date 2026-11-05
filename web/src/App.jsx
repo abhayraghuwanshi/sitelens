@@ -30,7 +30,8 @@ import { Firebase } from './pages/Firebase.jsx';
 import { Bing } from './pages/Bing.jsx';
 import { AiSearch } from './pages/AiSearch.jsx';
 import { Calendar } from './pages/Calendar.jsx';
-import { STAGES, tabId, tabHref, locate, nextStage } from './stages.js';
+import { STAGES, stageHref, locate, nextStage } from './stages.js';
+import { StagePage } from './pages/Stage.jsx';
 import { Setup } from './pages/Setup.jsx';
 
 // Per-site views. mode: which connection a view needs. API views share the GA4 range list; warehouse views use 7/28/90d.
@@ -50,9 +51,10 @@ export const VIEWS = [
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
   { key: 'sql', label: 'SQL console', mode: 'warehouse', component: Explore },
   { key: 'setup', label: 'Setup', mode: 'setup', component: Setup },
+  // Each numbered stage's summary page, at #/site/<id>/<stage key>.
+  ...STAGES.filter((s) => s.step).map((s) => ({ key: s.key, label: s.label, mode: 'stage', component: (props) => <StagePage {...props} stage={s} /> })),
 ];
 
-const NEEDS = { warehouse: 'BigQuery', search: 'Search Console', bing: 'a real site (not the sample)', content: 'a site address', api: 'a GA4 property' };
 
 export function App() {
   const route = useRoute();
@@ -60,8 +62,6 @@ export function App() {
   const [range, setRange] = usePersistent('range', '28d');
   const [theme, setTheme] = usePersistent('theme', '');
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
-  // Last tab opened in each stage, so a stage link returns to it.
-  const [stageTabs, setStageTabs] = usePersistent('stage-tabs', {});
   const systemDark = useSystemDark();
   const loading = useLoading();
   // After a range switch, dim the old numbers until the new ones arrive.
@@ -82,10 +82,6 @@ export function App() {
   }, [routedSite]);
 
   const here = locate(route.parts[0] || '', route.parts[0] === 'site' ? route.parts[2] || 'overview' : '');
-  useEffect(() => {
-    if (here.stage && stageTabs[here.stage.key] !== tabId(here.tab)) setStageTabs((t) => ({ ...t, [here.stage.key]: tabId(here.tab) }));
-  }, [here.stage?.key, here.tab && tabId(here.tab)]);
-
   useEffect(() => {
     document.querySelector('.sidebar-scroll .nav-item.active')?.scrollIntoView({ block: 'nearest' });
   }, [route.parts.join('/'), state.data]);
@@ -172,11 +168,11 @@ export function App() {
 
   // Site not found keeps its own title, even though its view key belongs to a stage.
   const stage = section === 'site' && !site ? null : here.stage;
-  const stageLink = (s) => {
-    const tab = s.tabs.find((t) => tabId(t) === stageTabs[s.key]) || s.tabs[0];
-    return tabHref(tab, current);
-  };
+  const stageLink = (s) => stageHref(s, current);
   const next = stage && nextStage(stage);
+  // A numbered stage's own summary page, or one of the pages its cards open.
+  const summary = Boolean(stage?.step && !here.tab);
+  const detail = Boolean(stage?.step && here.tab);
 
   return (
     <div class="shell">
@@ -245,24 +241,24 @@ export function App() {
         <header class="topbar">
           <div>
             <h1>
-              {stage?.step && <span class="step-num" aria-hidden="true">{stage.step}</span>}
-              {stage ? stage.label : title}
+              {summary && <span class="step-num" aria-hidden="true">{stage.step}</span>}
+              {summary || !stage ? (stage ? stage.label : title) : here.tab.label}
             </h1>
             {(stage || (section === 'site' && site)) && (
               <div class="crumb">
-                {[stage?.step && stage.question, site && `${site.label}${site.demo ? ' · sample data' : ''}`].filter(Boolean).join(' · ')}
+                {detail && <><a href={stageLink(stage)}>← {stage.step}. {stage.label}</a>{site && ' · '}</>}
+                {[summary && stage.question, site && `${site.label}${site.demo ? ' · sample data' : ''}`].filter(Boolean).join(' · ')}
               </div>
             )}
           </div>
           <span class="spacer" />
           {loading.shown && <span class="loading-label" role="status">Loading…</span>}
           {showRange && <Segmented label="Date range" value={effectiveRange} options={rangeOptions} onChange={pickRange} />}
-          {stage && current && stage.tabs.length > 1 && <StageTabs stage={stage} active={here.tab} site={current} />}
           {loading.shown && <span class="loading-bar" aria-hidden="true" />}
         </header>
         <div class={`content${switching && loading.shown ? ' updating' : ''}`} aria-busy={loading.busy ? 'true' : undefined}>
           {body}
-          {next && (
+          {next && !detail && (
             <a class="next-stage" href={stageLink(next)}>
               <span class="muted small">Next</span>
               <span><span class="step-num" aria-hidden="true">{next.step}</span> {next.label}: {next.question}</span>
@@ -281,25 +277,6 @@ function NavLink({ href, icon, active, count, children }) {
       <Icon name={icon} /> {children}
       {count > 0 && <span class="count">{count}</span>}
     </a>
-  );
-}
-
-// Sibling pages of one stage. Site views a connection is missing for stay visible, locked.
-function StageTabs({ stage, active, site }) {
-  return (
-    <nav class="stage-tabs" aria-label={`${stage.label} pages`}>
-      {stage.tabs.map((t) => {
-        const mode = t.view && VIEWS.find((v) => v.key === t.view).mode;
-        const locked = mode && !site.modes[mode];
-        return (
-          <a key={tabId(t)} class={`stage-tab${t === active ? ' active' : ''}`} href={tabHref(t, site)}
-            aria-current={t === active ? 'page' : undefined} title={locked ? `${t.label} needs ${NEEDS[mode]}` : undefined}>
-            {t.label}
-            {locked && <Icon name="lock" size={11} />}
-          </a>
-        );
-      })}
-    </nav>
   );
 }
 
