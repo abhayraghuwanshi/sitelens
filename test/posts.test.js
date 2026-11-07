@@ -7,7 +7,7 @@ import { createStore } from '../server/store.mjs';
 import {
   parseRedditSubmitted, parseHnStories, parseDevto, parseMediumRss, parsePhMadePosts,
   parseRedditRss, parseBlueskyFeed, parseMastodonStatuses, parseLobsters,
-  platformOf, utmCampaign, matchProduct, attribute, normalizeAccounts, createPosts,
+  platformOf, postKey, utmCampaign, matchProduct, attribute, normalizeAccounts, createPosts,
 } from '../server/posts.mjs';
 import { taggedLink } from '../shared/utm.js';
 import { sourceFamily } from '../server/journey.mjs';
@@ -175,6 +175,100 @@ test('posts service: sync per account, manual posts, hide and product assignment
     assert.equal((await posts.overview({ rangeKey: '28d' })).items.length, 0);
     posts.stop();
   } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('postKey: one key per post across URL forms', () => {
+  const k = 'reddit:a1';
+  for (const u of ['https://www.reddit.com/r/SideProject/comments/a1/x/', 'https://old.reddit.com/r/SideProject/comments/A1/x?utm_source=share', 'https://redd.it/a1']) assert.equal(postKey(u), k);
+  assert.equal(postKey('https://news.ycombinator.com/item?id=42'), 'hn:42');
+  assert.equal(postKey('https://www.linkedin.com/posts/me-1/?x=1'), 'linkedin.com/posts/me-1');
+  assert.equal(postKey('nope'), '');
+});
+
+test('posts service: a post added by hand and later synced is kept once', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'posts-'));
+  try {
+    const store = createStore(dir);
+    await store.update((s) => { s.products = [{ id: 'cooldesk', label: 'Cooldesk', siteId: 'cd', repos: [], extensionIds: [] }]; });
+    const fetchImpl = async (url) => {
+      const u = String(url);
+      if (u.includes('/r/SideProject/s/share1')) return new Response(null, { status: 301, headers: { location: 'https://www.reddit.com/r/SideProject/comments/a1/x/?share_id=z' } });
+      if (u.includes('reddit.com/user/me/submitted.rss')) return new Response(REDDIT_RSS.replaceAll('2026-10-0', new Date(Date.now() - 86400000).toISOString().slice(0, 9)));
+      throw new Error(`unexpected ${u}`);
+    };
+    const mentions = { redditToken: async () => '', credentials: async () => ({ ph: { token: '' } }) };
+    const posts = createPosts({ dbPath: join(dir, 'posts.db'), store, mentions, auth: { token: async () => 'x' }, fetchImpl, log: { error() {} } });
+    const items = async () => (await posts.overview({ rangeKey: '28d' })).items;
+
+    // A share link from the app, added on one site's calendar: resolved, filed under that site's product.
+    const manual = await posts.addManual({ url: 'https://www.reddit.com/r/SideProject/s/share1', title: 'Untitled', site: 'cd' });
+    assert.equal(manual.id, 'manual:reddit:a1');
+    assert.equal((await items())[0].permalink, 'https://www.reddit.com/r/SideProject/comments/a1/x/');
+
+    // Sync brings the same post: one row, the synced one, keeping the product.
+    await posts.saveAccounts([{ platform: 'reddit', handle: 'me' }]);
+    assert.equal((await posts.sync()).added['reddit:me'], 1);
+    const after = await items();
+    assert.deepEqual(after.map((i) => i.id).sort(), ['reddit:t3_a1', 'reddit:t3_a2']);
+    assert.equal(after.find((i) => i.id === 'reddit:t3_a1').product, 'cooldesk');
+
+    // Adding it again by hand, in another URL form, reuses the synced row, even a hidden one.
+    posts.hide('reddit:t3_a1');
+    const again = await posts.addManual({ url: 'https://old.reddit.com/r/SideProject/comments/a1/x' });
+    assert.deepEqual([again.id, again.existing], ['reddit:t3_a1', true]);
+    assert.equal((await items()).length, 2);
+    posts.stop();
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('posts service: one post’s traffic, landing pages and referrers', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'posts-'));
+  const realFetch = globalThis.fetch;
+  try {
+    const store = createStore(dir);
+    await store.update((s) => {
+      s.sites = [{ id: 'cd', label: 'Cooldesk', host: 'cool-desk.com', propertyId: '123' }];
+      s.products = [{ id: 'cooldesk', label: 'Cooldesk', siteId: 'cd', repos: [], extensionIds: [] }];
+    });
+    const day = new Date(Date.now() - 2 * 86400000).toISOString().slice(0, 10);
+    const ymd = (offset) => new Date(Date.parse(`${day}T00:00:00Z`) + offset * 86400000).toISOString().slice(0, 10).replaceAll('-', '');
+    const ga = (dims, metrics, rows) => new Response(JSON.stringify({
+      dimensionHeaders: dims.map((name) => ({ name })), metricHeaders: metrics.map((name) => ({ name, type: 'TYPE_INTEGER' })),
+      rows: rows.map((r) => ({ dimensionValues: r.slice(0, dims.length).map((value) => ({ value })), metricValues: r.slice(dims.length).map((v) => ({ value: String(v) })) })),
+    }));
+    globalThis.fetch = async (url, init) => {
+      const dims = JSON.parse(init.body).dimensions.map((d) => d.name);
+      if (dims.includes('landingPage')) return ga(dims, ['sessions', 'engagedSessions', 'newUsers', 'keyEvents'], [
+        ['reddit.com', '(referral)', '/', 30, 12, 25, 2], ['out.reddit.com', '(referral)', '/pricing', 10, 8, 9, 1], ['google', '(organic)', '/', 99, 50, 40, 5],
+      ]);
+      return ga(dims, ['sessions'], [[ymd(-3), 'reddit.com', '(referral)', 2], [ymd(-1), 'reddit.com', '(referral)', 4], [ymd(0), 'reddit.com', '(referral)', 40], [ymd(0), 'google', '(organic)', 99]]);
+    };
+    const posts = createPosts({ dbPath: join(dir, 'posts.db'), store, mentions: {}, auth: { token: async () => 'x' }, log: { error() {} } });
+    const { id } = await posts.addManual({ url: 'https://www.reddit.com/r/SideProject/comments/a1/x/', title: 'I built Cooldesk', date: day });
+    const d = await posts.detail(id);
+    assert.deepEqual([d.product.id, d.site.id, d.sessions, d.attribution], ['cooldesk', 'cd', 40, 'timing']);
+    assert.equal(d.series.find((p) => p.date === day).sessions, 40);
+    assert.equal(d.usual, 0);
+    assert.deepEqual(d.landing.map((r) => [r.label, r.sessions]), [['/', 30], ['/pricing', 10]]);
+    assert.deepEqual(d.sources.map((r) => r.label), ['reddit.com', 'out.reddit.com']);
+    assert.deepEqual([d.window.sessions, d.window.engaged, d.window.newUsers, d.window.keyEvents], [40, 20, 34, 3]);
+    await assert.rejects(posts.detail('nope'), /isn’t in Studio/);
+    posts.stop();
+
+    // Google refusing: the calendar's stored sources still draw the trend, and the page says to sign in.
+    const refused = Object.assign(new Error('Google refused to refresh the session (invalid_grant). Sign in again.'), { kind: 'auth' });
+    const history = { breakdown: async () => [{ date: day, key: 'reddit.com', value: 7 }, { date: day, key: 'google', value: 50 }] };
+    const offline = createPosts({ dbPath: join(dir, 'posts.db'), store, mentions: {}, auth: { token: async () => { throw refused; } }, history, log: { error() {} } });
+    const s = await offline.detail(id);
+    assert.deepEqual([s.authError, s.stored, s.sessions, s.landing.length], [true, true, 7, 0]);
+    assert.equal(s.series.find((p) => p.date === day).sessions, 7);
+    offline.stop();
+  } finally {
+    globalThis.fetch = realFetch;
     await rm(dir, { recursive: true, force: true });
   }
 });

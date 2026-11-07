@@ -12,7 +12,9 @@
 //  - A site whose property, host, subdomain setting or Search Console property
 //    changes starts over: rows from the old setup would mix two definitions.
 //
-// When Google can't be reached, reads fall back to what's stored.
+// When Google can't be reached, reads fall back to what's stored. Reads whose
+// range is already stored answer from it at once; the delta that brings it up
+// to date runs behind them (and every 30 minutes on its own).
 
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
@@ -21,9 +23,9 @@ import { runReport } from '../shared/sitelens/ga4.js';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { querySearchAnalytics, hostPageFilter } from '../shared/sitelens/gsc.js';
 import { normDate, localDay } from './alerts.mjs';
+import { markStale, wantsWait, detached } from './cache.mjs';
 
 const DAY = 86_400_000;
-const HOUR = 3_600_000;
 export const HISTORY_DAYS = 425;
 const GA_SETTLE = 3;
 const SC_SETTLE = 5;
@@ -259,12 +261,32 @@ export function createCalendarStore({ dbPath, auth, report = runReport, search =
     return last && last < cutoff ? last : cutoff;
   }
 
+  // Stored rows cover the request: answer from them now, and run `sync` behind
+  // it when it has anything to do. The web app's follow-up (X-Studio-Wait) waits for it.
+  async function behind(needed, sync, onError) {
+    if (!needed) return;
+    const p = detached(sync).then(() => true, (err) => (onError(err), false));
+    // A follow-up whose sync failed stays stale, so the web app doesn't ask again.
+    if (!wantsWait()) markStale(p);
+    else if (!(await p)) markStale(Promise.resolve());
+  }
+
+  function due(at) {
+    return !(at && now() - at < FRESH_MS && localDay(at) === localDay(now()));
+  }
+
   // The calendar's shape: { ga: Map date → {sessions, users, views} | null, sc: { values, last } | { error } | null }.
   // A failed sync still answers from stored rows when they cover the range.
   async function series(site, from, to, { force = false } = {}) {
     let ga = null;
     if (site.propertyId) {
-      try {
+      const stored = site.demo ? {} : state(site);
+      if (!force && stored.ga_from && from >= stored.ga_from) {
+        await behind(due(stored.ga_at), () => syncTraffic(site), (err) => {
+          setState(site, { error: err.message });
+          log.warn?.(`  Calendar: ${site.label} served from local history (${err.message})`);
+        });
+      } else try {
         await syncTraffic(site, { from, force });
       } catch (err) {
         const s = state(site);
@@ -277,7 +299,10 @@ export function createCalendarStore({ dbPath, auth, report = runReport, search =
     }
     let sc = null;
     if (site.searchSite) {
-      try {
+      const stored = site.demo ? {} : state(site);
+      if (!force && stored.sc_from && from >= stored.sc_from) {
+        await behind(due(stored.sc_at), () => syncSearch(site), () => {});
+      } else try {
         await syncSearch(site, { from, force });
       } catch (err) {
         const s = state(site);
@@ -320,7 +345,18 @@ export function createCalendarStore({ dbPath, auth, report = runReport, search =
 
   // Rows { date, key, value } for [from, to], fetching what isn't stored yet.
   async function breakdown(site, dim, from, to) {
-    try {
+    const spec = DIMS[dim];
+    if (!spec) throw new Error(`Unknown breakdown: ${dim}`);
+    if (!site.demo) state(site); // a changed setup drops its old rows first
+    const today = localDay(now());
+    const fetched = new Map(open().prepare('SELECT date, fetched_at FROM breakdown_days WHERE site = ? AND dim = ? AND date BETWEEN ? AND ?')
+      .all(site.id, dim, from, to).map((r) => [r.date, r.fetched_at]));
+    const missing = staleDays(fetched, { from, to, today, settle: spec.settle, now: now() });
+    // Every day stored before, only recent ones due again: refresh those behind the answer.
+    if (missing.every((d) => fetched.has(d))) {
+      await behind(missing.length > 0, () => ensureBreakdown(site, dim, from, to), (err) =>
+        log.warn?.(`  Calendar: ${site.label} ${dim} breakdown served from local history (${err.message})`));
+    } else try {
       await ensureBreakdown(site, dim, from, to);
     } catch (err) {
       const have = open().prepare('SELECT COUNT(*) AS n FROM breakdown_days WHERE site = ? AND dim = ? AND date BETWEEN ? AND ?').get(site.id, dim, from, to).n;
@@ -374,13 +410,15 @@ export function createCalendarStore({ dbPath, auth, report = runReport, search =
     syncSearch,
     ensureBreakdown,
     syncAll,
+    // Resolves once background syncs have finished (for tests).
+    idle: () => Promise.allSettled([...running.values()]),
     forget,
     status,
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.warn?.(`  Calendar sync: ${err.message}`));
-      timers.push(setTimeout(safe, 2 * 60_000));
-      timers.push(setInterval(safe, 6 * HOUR));
+      timers.push(setTimeout(safe, 15_000));
+      timers.push(setInterval(safe, FRESH_MS));
       for (const timer of timers) timer.unref?.();
     },
     stop() {

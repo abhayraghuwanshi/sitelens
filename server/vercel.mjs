@@ -28,8 +28,9 @@ const PROJECT_ID = /^prj_[A-Za-z0-9]{6,64}$/;
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const bareHost = (h) => String(h || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^www\./, '');
 
-export function createVercel({ store, env = process.env, fetchImpl = fetch, now = () => Date.now() }) {
-  const cache = createCache();
+export function createVercel({ store, env = process.env, cacheDb = null, fetchImpl = fetch, now = () => Date.now() }) {
+  // Kept on disk and shown stale while Vercel is asked again, so deploy marks don't hold up a page.
+  const cache = createCache({ db: cacheDb, name: 'vercel', staleFor: cacheDb ? DAY : 0, now });
   let lastError = '';
   let who = null;
 

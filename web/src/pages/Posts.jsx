@@ -1,13 +1,22 @@
 import { useState } from 'preact/hooks';
-import { formatNumber, formatRelative } from '@shared/format.js';
+import { formatNumber, formatRelative, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { taggedLink, slug } from '../../../shared/utm.js';
 import { Card, KpiStrip, Loading, ErrorState, Empty } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { LineChart } from '../charts/LineChart.jsx';
 
-// Your own posts across platforms, with the traffic each one likely brought.
-export function Posts({ range }) {
+// Where a post opens inside Studio (ids carry ':' and '/', so they're encoded).
+export const postHref = (id) => `#/posts/${encodeURIComponent(id)}`;
+
+// Your own posts across platforms, with the traffic each one likely brought;
+// #/posts/<id> opens one post.
+export function Posts({ range, id }) {
+  return id ? <PostDetail key={id} id={decodeURIComponent(id)} /> : <PostList range={range} />;
+}
+
+function PostList({ range }) {
   const [product, setProduct] = useState('');
   const [platform, setPlatform] = useState('');
   const data = useAsync(() => api.get(`/posts${qs({ range, product, platform })}`), [range, product, platform]);
@@ -96,7 +105,8 @@ export function Posts({ range }) {
                 <tr key={p.id}>
                   <td class="small muted mono" style={{ whiteSpace: 'nowrap' }}>{new Date(p.createdAt).toISOString().slice(0, 10)}</td>
                   <td>
-                    <a href={p.permalink} target="_blank" rel="noreferrer">{p.title}</a>
+                    <a href={postHref(p.id)}>{p.title}</a>
+                    {' '}<a href={p.permalink} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a>
                     <div class="small muted">{label(p.platform)}{p.community ? ` · ${p.community}` : ''}{p.manual ? ' · added by hand' : ''}</div>
                   </td>
                   <td class="num">{p.points === null ? '—' : formatNumber(p.points)}</td>
@@ -332,3 +342,110 @@ function Campaigns({ data }) {
     </Card>
   );
 }
+
+// One post: what it brought to your site, which pages those visits landed on,
+// and whether they stayed. The post itself is a link out; the analysis stays here.
+function PostDetail({ id }) {
+  const data = useAsync(() => api.get(`/posts/item${qs({ id })}`), [id]);
+  if (data.error) return <><a class="btn ghost" href="#/posts"><Icon name="chevron" size={13} class="flip" /> All posts</a><ErrorState error={data.error} onRetry={data.reload} /></>;
+  if (!data.data) return <><Loading height={120} /><Loading height={300} /></>;
+  const d = data.data;
+  const p = d.post;
+  const day = new Date(p.createdAt).toISOString().slice(0, 10);
+  const w = d.window;
+  const assign = async (product) => { await api.post('/posts/product', { id: p.id, product }); data.reload(); };
+
+  return (
+    <>
+      <div class="post-head">
+        <a class="btn ghost" href="#/posts"><Icon name="chevron" size={13} class="flip" /> All posts</a>
+        <h2>{p.title}</h2>
+        <div class="meta-line" style={{ alignItems: 'center' }}>
+          <span>{d.platform.label}{p.community ? ` · ${p.community}` : ''}</span>
+          <span>{longDate(day)}</span>
+          {p.manual && <span>added by hand</span>}
+          <label class="row" style={{ gap: '6px' }}>Product
+            <select value={p.product} onChange={(e) => assign(e.currentTarget.value)}>
+              <option value="">—</option>
+              {d.products.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </label>
+          <a class="btn" href={p.permalink} target="_blank" rel="noreferrer"><Icon name="external" size={13} /> Open on {d.platform.label}</a>
+        </div>
+      </div>
+
+      {!d.site ? (
+        <Card>
+          <Empty title="No site to measure against">
+            {d.product ? `${d.product.label} has no GA4 property linked, so there’s no traffic to show.` : 'Pick the product this post was about (above) and Studio shows what it brought to that product’s site.'}
+          </Empty>
+        </Card>
+      ) : (
+        <>
+          {d.authError ? (
+            <div class="state error" role="alert">
+              <h3>Google sign-in expired</h3>
+              <p class="small" style={{ margin: 0 }}>Studio can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
+              <a class="btn primary" href="#/settings?i=google">Sign in to Google again</a>
+            </div>
+          ) : d.error && <p class="note" style={{ margin: 0 }}><b>Google Analytics:</b> {d.error}</p>}
+          {Date.now() - p.createdAt < 86_400_000 && (
+            <p class="note" style={{ margin: 0 }}>Posted {formatRelative(p.createdAt)}. Google Analytics takes a few hours to report visits, so today’s numbers are still filling in.</p>
+          )}
+          <KpiStrip items={[
+            { label: 'Sessions brought', value: d.sessions === null ? '—' : `${d.attribution === 'timing' ? '~' : ''}${formatNumber(d.sessions)}`,
+              meta: d.attribution === 'utm' ? `exact: utm_campaign=${d.campaign}` : `${d.platform.label} referrals, ${d.windowDays} days`,
+              help: d.attribution === 'utm' ? 'Sessions tagged with this post’s utm_campaign.' : 'This platform’s referrer sessions on the post day and the two after, split with your other posts from it in that window.' },
+            { label: `Usual from ${d.platform.label}`, value: d.usual === null ? '—' : `${formatNumber(d.usual)}/day`, meta: 'median, 2 weeks before' },
+            { label: 'Engaged', value: w?.sessions ? `${Math.round((w.engaged / w.sessions) * 100)}%` : '—', meta: w?.sessions ? `${formatNumber(w.engaged)} of ${formatNumber(w.sessions)} sessions` : '' },
+            { label: 'New users', value: w ? formatNumber(w.newUsers) : '—' },
+            { label: 'Key events', value: w ? formatNumber(w.keyEvents) : '—' },
+            { label: 'Upvotes · comments', value: `${p.points === null ? '—' : formatNumber(p.points)} · ${p.comments === null ? '—' : formatNumber(p.comments)}`,
+              meta: p.points !== null ? '' : p.manual ? 'added by hand: none recorded' : p.platform === 'reddit' ? 'add a Reddit app in Settings → Mentions' : '' },
+          ]} />
+
+          {d.series.length > 1 && (
+            <Card title={`Visits from ${d.platform.label}`} sub="Each day, two weeks before the post to a week after">
+              <LineChart height={220} series={[{ label: d.platform.label, values: d.series.map((x) => x.sessions) }]}
+                labels={d.series.map((x) => formatDate(x.date.replaceAll('-', '')))} dates={d.series.map((x) => x.date)}
+                annotations={[{ id: p.id, date: day, label: p.title, kind: 'post' }]} format={formatNumber} tooltipTitle="Sessions" />
+            </Card>
+          )}
+
+          <div class="grid cols-2">
+            <Card title="Where they landed" sub={w ? `${shortDate(w.start)}–${shortDate(w.end)}` : ''} flush>
+              {d.landing.length ? (
+                <table class="data">
+                  <thead><tr><th>Page</th><th class="num">Sessions</th><th class="num">Engaged</th><th class="num">Key events</th></tr></thead>
+                  <tbody>{d.landing.map((r) => (
+                    <tr key={r.label}>
+                      <td class="cell-path" title={r.label}><code>{r.label}</code></td>
+                      <td class="num">{formatNumber(r.sessions)}</td>
+                      <td class="num muted">{r.sessions ? `${Math.round((r.engaged / r.sessions) * 100)}%` : '—'}</td>
+                      <td class="num">{formatNumber(r.keyEvents)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              ) : <div style={{ padding: '16px' }}><Empty title={d.error ? 'Needs Google' : 'No visits yet'}>{d.error ? 'Landing pages come straight from Google Analytics.' : w ? 'Nothing from this post reached the site in its window.' : 'Traffic shows here once Google Analytics reports the post day.'}</Empty></div>}
+            </Card>
+            <Card title="Referrers" sub={d.attribution === 'utm' ? 'Sources carrying the campaign' : `${d.platform.label} domains`} flush>
+              {d.sources.length ? (
+                <table class="data">
+                  <thead><tr><th>Source</th><th class="num">Sessions</th><th class="num">New users</th></tr></thead>
+                  <tbody>{d.sources.map((r) => (
+                    <tr key={r.label}><td>{r.label}</td><td class="num">{formatNumber(r.sessions)}</td><td class="num">{formatNumber(r.newUsers)}</td></tr>
+                  ))}</tbody>
+                </table>
+              ) : <div style={{ padding: '16px' }}><Empty title={d.error ? 'Needs Google' : 'No referrers yet'} /></div>}
+            </Card>
+          </div>
+          {d.attribution === 'timing' && <p class="note">Sessions marked ~ are inferred from timing: visits from {d.platform.label} around the post. Share a tagged link (My posts → Make a tagged link) for exact numbers.</p>}
+        </>
+      )}
+      {p.text && <Card title="Post"><p class="post-text">{p.text.slice(0, 1200)}{p.text.length > 1200 ? '…' : ''}</p></Card>}
+    </>
+  );
+}
+
+const longDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });

@@ -1,4 +1,3 @@
-import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
 import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
@@ -7,6 +6,7 @@ import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
 import { LeftOutLine } from './LeaveOut.jsx';
 import { useJourneys } from './Journeys.jsx';
+import { AddTodo, useTodos } from '../components/Todos.jsx';
 
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
@@ -14,7 +14,6 @@ import { useJourneys } from './Journeys.jsx';
 const RANGES = [{ key: 'today', label: 'Today' }, { key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const short = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-const today = () => new Date().toISOString().slice(0, 10);
 const KIND_ICON = { deploy: 'rocket', release: 'github', post: 'megaphone', extension: 'puzzle', mention: 'chat', note: 'star', claude: 'sparkles' };
 
 export function Story({ site, params }) {
@@ -41,14 +40,14 @@ export function Story({ site, params }) {
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       <NeedsYou site={site} />
       {!isToday && <LeftOutLine site={site} range={range} />}
-      {isToday ? <><Today site={site} /><NextSteps site={site} /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
+      {isToday ? <><Today site={site} /><NextSteps site={site} range="7d" /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
         <>
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
           {site.modes?.warehouse ? <HowTheyCome site={site} range={range} /> : <Landing site={site} rows={pages.data?.rows} range={range} />}
           {site.modes?.warehouse && <Leavers site={site} range={range} />}
           <Results site={site} range={range} />
-          <NextSteps site={site} />
+          <NextSteps site={site} range={range} />
         </>
       )}
     </Page>
@@ -377,14 +376,14 @@ function Results({ site, range }) {
 
   return (
     <section class="nx-card" aria-label="What it led to">
-      <SectionHead n="5" title="What it led to" more={product ? { href: `#/outcomes/${product.id}?range=${range}`, label: 'Outcomes' } : null} />
+      <SectionHead n="5" title="What it led to" more={product ? { href: `#/site/${site.id}/outcomes?range=${range}`, label: 'Outcomes' } : null} />
       {lead && (
         <p class="nx-lede">{dated.map((g) => `${fmt(g.count)} ${g.label.charAt(0).toLowerCase() + g.label.slice(1)} (${changeWords(g.count, g.previous)})`).join(', ')}.</p>
       )}
       <ul class="nx-rows nx-results">
         {goals.map((g) => (
           <li key={g.id}>
-            <a href={product ? `#/outcomes/${product.id}?range=${range}` : '#/'}>
+            <a href={product ? `#/site/${site.id}/outcomes?range=${range}` : `#/site/${site.id}/setup`}>
               <span class="nx-path"><b>{g.label}</b><span class="nx-dim small"> · {SOURCE_NOTE[g.source] || ''}</span></span>
               <span class="nx-num">{fmt(g.count)}</span>
               {g.previous === null || g.previous === undefined ? <span class="nx-dim small">no history</span> : <Change value={g.count} previous={g.previous} />}
@@ -417,84 +416,58 @@ function Results({ site, range }) {
 
 const changeWords = (value, previous) => (!previous ? 'none before' : previous * 4 < value ? `from ${fmt(previous)}` : `${value >= previous ? 'up' : 'down'} ${Math.abs(Math.round((value / previous - 1) * 100))}%`);
 
-// Search Console's opportunities as actions. "Start" writes a note on the
-// Timeline, so the day you acted sits on every chart from then on.
-function NextSteps({ site }) {
-  const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
-  const notes = useAsync(() => api.get(`/annotations${qs({ scope: `site:${site.id}`, author: 'you' })}`).catch(() => ({ annotations: [] })), [site.id]);
-  const [busy, setBusy] = useState('');
-  const [error, setError] = useState('');
-  const ops = byPage(search.data);
-  if (!ops.length) return null;
-  const started = new Map((notes.data?.annotations || []).filter((n) => n.label.startsWith('Started: ')).map((n) => [n.label.slice(9), n]));
+// What to do next (server/next-steps.mjs): fix what dropped, get found in
+// search, convert more, and do more of what worked. Each one can go on your
+// to-dos; ticking it off there marks the day on the Timeline.
+const GROUPS = [
+  { key: 'fix', label: 'Fix what dropped', icon: 'triangle' },
+  { key: 'found', label: 'Get found', icon: 'search' },
+  { key: 'convert', label: 'Convert more', icon: 'target' },
+  { key: 'grow', label: 'Bring more visits', icon: 'trend' },
+];
 
-  const title = (o) => o.type === 'low-ctr' && o.queries.length === 1
-    ? `Win more clicks on “${o.queries[0].query}”`
-    : `Rewrite the title and description of ${pageName(o.path)}`;
-  const why = (o) => `${o.queries.map((q) => `“${q.query}”`).join(', ')}: shown ${fmt(o.impressions)} times at position ${o.position.toFixed(1)}; ${(o.ctr * 100).toFixed(1)}% click.`;
-  const start = async (o) => {
-    setBusy(o.path);
-    setError('');
-    try {
-      await api.post('/annotations', { date: today(), label: `Started: ${title(o)}`.slice(0, 140), scope: `site:${site.id}`, body: why(o) });
-      notes.reload();
-    } catch (err) {
-      setError(err.message);
-    } finally {
-      setBusy('');
-    }
-  };
+function NextSteps({ site, range }) {
+  const next = useAsync(() => api.get(`/sites/${site.id}/next-steps${qs({ range })}`), [site.id, range]);
+  const todos = useTodos({ site: site.id });
+  if (next.error) return <section class="nx-card"><ErrorState error={next.error} onRetry={next.reload} /></section>;
+  if (!next.data) return <section class="nx-card"><Loading height={200} /></section>;
+  const steps = next.data.steps;
+  const added = new Map((todos.data?.todos || []).filter((t) => t.from).map((t) => [t.from, t]));
+  const open = todos.data?.open || 0;
 
   return (
     <section class="nx-card nx-next" aria-label="What to do next">
-      <SectionHead title="What to do next" more={{ href: `#/site/${site.id}/search`, label: 'All searches' }} />
-      <p class="nx-dim">Ranked by the clicks each could win. Start one and it goes on the Timeline, so you can see whether it worked.</p>
-      <div class="nx-actions">
-        {ops.map((o, i) => {
-          const done = started.get(title(o).slice(0, 131));
-          return (
-            <div class={`nx-action${done ? ' started' : ''}`} key={o.path}>
-              <span class="nx-label-sm">{i + 1} · Get found</span>
-              <b>{title(o)}</b>
-              <span class="nx-dim">{why(o)}</span>
-              <dl class="nx-kv"><dt>Worth</dt><dd class="good">about +{fmt(o.potential)} clicks a month</dd></dl>
-              <div class="nx-action-row">
-                <a class="nx-btn primary" href={`#/site/${site.id}/search`}>See the searches</a>
-                {done
-                  ? <a class="nx-btn done" href={`#/site/${site.id}/timeline?month=${done.date.slice(0, 7)}&day=${done.date}`}>✓ Started {short(done.date)}</a>
-                  : <button type="button" class="nx-btn" disabled={busy === o.path} onClick={() => start(o)}>{busy === o.path ? 'Starting…' : 'Start'}</button>}
-              </div>
+      <SectionHead title="What to do next" more={{ href: `#/site/${site.id}/todos`, label: open ? `Your to-dos (${open})` : 'Your to-dos' }} />
+      <p class="nx-dim">{steps.length
+        ? 'From this period’s numbers. Add one to your to-dos, and tick it off when the change is live: it goes on the Timeline that day, so you can see whether it worked.'
+        : 'Nothing stands out for this period. Add your own changes to your to-dos.'}</p>
+      {GROUPS.map((g) => {
+        const list = steps.filter((x) => x.group === g.key);
+        if (!list.length) return null;
+        return (
+          <div class="nx-step-group" key={g.key}>
+            <div class="nx-label-sm"><Icon name={g.icon} size={12} /> {g.label}</div>
+            <div class="nx-actions">
+              {list.map((x) => {
+                const todo = added.get(x.key);
+                return (
+                  <div class={`nx-action${todo ? ' started' : ''}`} key={x.key}>
+                    <b>{x.title}</b>
+                    <span class="nx-dim">{x.why}</span>
+                    {x.worth && <dl class="nx-kv"><dt>{g.key === 'fix' ? 'Lost' : 'Worth'}</dt><dd class={g.key === 'fix' ? 'bad' : 'good'}>{x.worth}</dd></dl>}
+                    <div class="nx-action-row">
+                      <AddTodo site={site} added={todo} class="nx-btn primary" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
+                      <a class="nx-btn" href={x.link} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>{x.linkLabel}</a>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          );
-        })}
-      </div>
-      {error && <p class="nx-error" role="alert">{error}</p>}
+          </div>
+        );
+      })}
     </section>
   );
-}
-
-// Search Console's opportunities, one per landing page: several searches that
-// reach the same page are fixed by the same title and description.
-function byPage(data) {
-  if (!data?.opportunities?.length) return [];
-  const pageOf = new Map();
-  for (const qp of data.queryPages || []) if (!pageOf.has(qp.query) || pageOf.get(qp.query).impressions < qp.impressions) pageOf.set(qp.query, qp);
-  const groups = new Map();
-  for (const o of data.opportunities) {
-    const path = pageOf.get(o.query)?.path || '';
-    const g = groups.get(path) || { path, type: o.type, queries: [], impressions: 0, clicks: 0, weighted: 0, potential: 0 };
-    g.queries.push(o);
-    g.impressions += o.impressions;
-    g.clicks += o.clicks;
-    g.weighted += o.position * o.impressions;
-    g.potential += o.potential || 0;
-    if (o.type !== 'low-ctr') g.type = o.type;
-    groups.set(path, g);
-  }
-  return [...groups.values()]
-    .map((g) => ({ ...g, position: g.weighted / Math.max(1, g.impressions), ctr: g.clicks / Math.max(1, g.impressions) }))
-    .sort((a, b) => b.potential - a.potential)
-    .slice(0, 3);
 }
 
 // A path as a reader would name it: "/blog/best-dock-apps-windows" → "Best dock apps windows".

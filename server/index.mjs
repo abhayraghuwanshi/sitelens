@@ -14,7 +14,7 @@ import { listSearchSites } from '../shared/sitelens/gsc.js';
 import { githubOverview, githubRepo, githubStatus, HISTORY_RANGES, historyRange, SourceError } from './github.mjs';
 import { createExtensionTracker, extensionView } from './cws.mjs';
 import { listingAnalytics, findListingProperty, listProperties } from './cws-ga.mjs';
-import { createCache } from './cache.mjs';
+import { createCache, openCacheDb, requestContext } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { fetchTopics, demoTopics } from './search-topics.mjs';
@@ -36,12 +36,20 @@ import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes } from './ai-search.mjs';
 import { createCalendar, calendarRoutes } from './calendar.mjs';
-import { storyRoutes } from './story.mjs';
+import { storyRoutes, createStory } from './story.mjs';
+import { createTodos, todoRoutes } from './todos.mjs';
+import { createTodoContext } from './todo-context.mjs';
+import { nextStepRoutes } from './next-steps.mjs';
+import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
+import { createPageReview, pageReviewRoutes } from './page-review.mjs';
+import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
 import { createCustomMetrics, customMetricRoutes } from './custom-metrics.mjs';
 import { createSiteConfig, siteConfigRoutes, searchGroups } from './site-config.mjs';
 
+// How old a stored Google answer may be and still show while a fresh one loads.
+const STALE_FOR = 24 * 3_600_000;
 const ROOT = resolve(fileURLToPath(import.meta.url), '../..');
 const DIST = join(ROOT, 'web/dist');
 const MIME = {
@@ -58,10 +66,12 @@ const MIME = {
 export function createApp({ store = createStore(), port = 4318, env = process.env, fetchImpl = fetch } = {}) {
   const auth = createAuth({ store, port, env, fetchImpl });
   const bigquery = createBigQuery({ getToken: () => auth.token(), fetchImpl });
-  const engines = createEngines({ auth, bigquery });
+  // Google answers kept on disk, so a restart (or a stale entry) answers at once.
+  const cacheDb = openCacheDb(join(store.dir, 'cache.db'));
+  const engines = createEngines({ auth, bigquery, cacheDb });
   const appUrl = env.STUDIO_APP_URL || '/';
   const extensions = createExtensionTracker({ store, fetchImpl });
-  const sourceCache = createCache();
+  const sourceCache = createCache({ db: cacheDb, name: 'sources', staleFor: STALE_FOR });
 
   // The GA4 property Chrome Web Store created for this extension: a saved link,
   // else auto-detected (Google names it after the extension ID) and saved.
@@ -91,7 +101,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     const { sources } = await store.get();
     return sources?.githubToken || env.GITHUB_TOKEN || '';
   }
-  const vercel = createVercel({ store, env, fetchImpl });
+  const vercel = createVercel({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
   // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
   const siteRepoCache = new Map(); // site id → { at, linked, value }
@@ -114,11 +124,11 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   }
   const github = createGitHubSync({ dbPath: join(store.dir, 'github.db'), getToken: githubToken, fetchImpl });
   const funnelSuggest = createFunnelSuggest({ store, engines, getToken: githubToken, vercel, fetchImpl });
-  const articles = createArticles({ auth, store, getToken: githubToken, vercel, fetchImpl });
+  const articles = createArticles({ auth, store, getToken: githubToken, vercel, cacheDb, fetchImpl });
   const annotations = createAnnotations({ store, githubDbPath: () => (github.hasDb() ? github.dbPath : null), extensions });
   const editor = createArticleEditor({ auth, store, articles, annotations, getToken: githubToken, env, fetchImpl });
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
-  const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
+  const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), cacheDb, repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, siteConfig, fetchImpl });
   const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
@@ -127,16 +137,22 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   annotations.registerSource('firebase', (q) => firebase.annotations(q));
   const products = createProducts({ store, auth, extensions, listingProperty, githubDb });
   const bing = createBing({ dbPath: join(store.dir, 'bing.db'), store, env, fetchImpl });
+  const searchHub = createSearchHub({ engines, bing, auth, fetchImpl });
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
   const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig });
+  const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb });
+  const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });
   const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
-  const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, fetchImpl });
+  const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
+  const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, history, cacheDb, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
   const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, siteConfig, env });
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl });
-  const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
   const customMetrics = createCustomMetrics({ store, env, fetchImpl });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
+  // Calendar days are local, so the story's "today" is too.
+  const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
+  const todos = createTodos({ store, annotations, context: createTodoContext({ calendar, engines, outcomes, store, today: () => new Date().toLocaleDateString('en-CA') }) });
   function githubDb() {
     if (!github.hasDb()) {
       throw new SourceError('No GitHub data yet.', {
@@ -160,6 +176,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...mentionRoutes({ mentions }),
     ...postRoutes({ posts }),
     ...bingRoutes({ bing, siteOr404 }),
+    ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
+    ...pageReviewRoutes({ review: pageReview, siteOr404 }),
+    ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
@@ -168,8 +187,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...articleRoutes({ articles, siteOr404 }),
     ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
-    // Calendar days are local, so the story's "today" is too.
-    ...storyRoutes({ calendar, siteOr404, today: () => new Date().toLocaleDateString('en-CA') }),
+    ...storyRoutes({ story, siteOr404 }),
+    ...todoRoutes({ todos }),
+    ...nextStepRoutes({ story, engines, outcomes, posts, store, siteOr404 }),
     ...customMetricRoutes({ metrics: customMetrics, siteOr404 }),
     ...siteConfigRoutes({
       siteConfig,
@@ -483,10 +503,13 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       if (req.method !== 'GET' && req.headers['x-studio'] !== '1') return send(res, 403, { error: 'Missing X-Studio header.' });
       const route = routes.find(([method, re]) => method === req.method && re.test(url.pathname));
       if (!route) return send(res, 404, { error: 'Not found' });
+      // A response built from stale data says so; the web app then asks again
+      // with X-Studio-Wait, which waits for the refreshes already under way.
+      const ctx = { wait: req.headers['x-studio-wait'] === '1', stale: false, refreshes: [] };
       try {
         const body = req.method === 'GET' ? {} : await readJson(req);
-        const data = await route[2]({ match: url.pathname.match(route[1]), query: url.searchParams, body, req });
-        return send(res, 200, data ?? {});
+        const data = await requestContext.run(ctx, () => route[2]({ match: url.pathname.match(route[1]), query: url.searchParams, body, req }));
+        return send(res, 200, data ?? {}, ctx.stale ? { 'X-Studio-Stale': '1' } : {});
       } catch (err) {
         return sendError(res, err);
       }
@@ -495,7 +518,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, calendar, history, customMetrics };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, calendar, history, customMetrics };
 }
 
 function flags(query) {
@@ -522,8 +545,8 @@ async function readJson(req) {
   }
 }
 
-function send(res, status, data) {
-  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+function send(res, status, data, headers = {}) {
+  res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...headers });
   res.end(JSON.stringify(data));
 }
 

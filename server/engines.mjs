@@ -22,9 +22,13 @@ export class EngineError extends Error {
 const API_TTL = 5 * 60_000;
 const LIVE_TTL = 40_000;
 const WAREHOUSE_TTL = 60 * 60_000;
+// Past its TTL, a result still shows (up to this age) while a fresh one loads.
+const STALE_FOR = 24 * 60 * 60_000;
 
-export function createEngines({ auth, bigquery }) {
-  const cache = createCache();
+export function createEngines({ auth, bigquery, cacheDb = null }) {
+  const cache = createCache({ db: cacheDb, name: 'engines', staleFor: cacheDb ? STALE_FOR : 0 });
+  // Real-time numbers are never shown stale.
+  const liveCache = createCache();
 
   function apiArgs(site, token, rangeKey) {
     if (!site.propertyId) throw new EngineError('Link a GA4 property to this site to see API reports.', { kind: 'needs-property' });
@@ -60,7 +64,7 @@ export function createEngines({ auth, bigquery }) {
   }
 
   async function live(site) {
-    return cache.wrap(`live:${site.id}`, LIVE_TTL, false, async () => {
+    return liveCache.wrap(`live:${site.id}`, LIVE_TTL, false, async () => {
       if (site.demo) return demoLive('Home', site.host);
       const token = await auth.token();
       return fetchRealtime({ token, propertyId: site.propertyId, streamName: site.streamName });

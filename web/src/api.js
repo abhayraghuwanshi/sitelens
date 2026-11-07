@@ -21,6 +21,29 @@ export function onPending(fn) {
   return () => pendingListeners.delete(fn);
 }
 
+// The server answers from stored data while it fetches newer numbers, and says
+// so (X-Studio-Stale). One follow-up per path waits for that fetch; then views
+// load again quietly (useAsync), now from the fresh copy.
+const following = new Map();
+const refreshListeners = new Set();
+let refreshTimer = 0;
+export function onRefreshed(fn) {
+  refreshListeners.add(fn);
+  return () => refreshListeners.delete(fn);
+}
+function followUp(path) {
+  if (following.has(path)) return;
+  following.set(path, fetch(`/api${path}`, { headers: { 'X-Studio-Wait': '1' } })
+    .then((res) => {
+      // Still stale: the refresh failed (offline?); keep what's shown.
+      if (!res.ok || res.headers.get('X-Studio-Stale') === '1') return;
+      clearTimeout(refreshTimer);
+      refreshTimer = setTimeout(() => refreshListeners.forEach((fn) => fn()), 50);
+    })
+    .catch(() => {})
+    .finally(() => following.delete(path)));
+}
+
 async function request(method, path, body) {
   const counted = method === 'GET';
   if (counted) addPending(1);
@@ -32,6 +55,7 @@ async function request(method, path, body) {
     });
     const data = await res.json().catch(() => ({}));
     if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, { status: res.status, ...data });
+    if (counted && res.headers.get('X-Studio-Stale') === '1') followUp(path);
     return data;
   } finally {
     if (counted) addPending(-1);

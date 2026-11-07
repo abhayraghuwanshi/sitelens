@@ -1,14 +1,34 @@
 import { useEffect, useMemo, useState } from 'preact/hooks';
-import { formatNumber, formatPercent, formatDecimal } from '@shared/format.js';
+import { formatNumber, formatPercent, formatDecimal, formatDuration } from '@shared/format.js';
 import { metaValue, setMetaValue } from '../../../shared/article-md.js';
 import { api, qs } from '../api.js';
-import { useAsync } from '../hooks.js';
+import { useAsync, usePersistent } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Markdown } from '../components/Markdown.jsx';
+import { ArticleTodos, useTodos } from '../components/Todos.jsx';
+import { ArticleGoal } from '../components/PageGoal.jsx';
+import { usePageRow, DecisionSelect, DecisionNote, LABELS, TONE } from './PageReview.jsx';
+import { PageDetail, BingVolume, Opportunities } from './SearchHub.jsx';
+import { PageTrend } from './Pages.jsx';
 
-// One article: its search queries and what they suggest on the right, the
-// source on the left. Edits (by hand or Claude's) ship as a pull request.
+// One page's own view. On top: what it is, the suggestion and your decision,
+// and its numbers. Below, four tabs so nothing is a long scroll:
+//  - Overview: goal, to-dos, index status, checks, the decision's note;
+//  - Search & demand: what's rising, new or falling for it, Bing's volume for
+//    its searches, the closest wins, and every search it shows up for;
+//  - Content: title and description, Claude's suggestions, the article, publish;
+//  - Traffic: views per day, where readers came from, engagement;
+//  - Journey: where people go after landing here, who leaves, and who reaches
+//    the site's goals (server/page-journey.mjs).
+// Edits (by hand or Claude's) ship as a pull request.
+const TABS = [
+  { key: 'overview', label: 'Overview' },
+  { key: 'search', label: 'Search & demand' },
+  { key: 'content', label: 'Content' },
+  { key: 'traffic', label: 'Traffic' },
+  { key: 'journey', label: 'Journey' },
+];
 const FIELDS = [
   { key: 'title', label: 'Title', ideal: [30, 60] },
   { key: 'description', label: 'Meta description', ideal: [120, 155] },
@@ -22,6 +42,10 @@ const WHERE = {
 
 export function ArticleEditor({ site, range, path, onClose }) {
   const d = useAsync(() => api.get(`/sites/${site.id}/articles/detail${qs({ path, range })}`), [site.id, path, range]);
+  // Visits, engagement, Bing and AI come from the page's row in All pages.
+  const page = usePageRow(site, path, range);
+  const todos = useTodos({ site: site.id });
+  const [tab, setTab] = usePersistent('pageTab', 'overview');
   const [md, setMd] = useState('');
   const [fileMeta, setFileMeta] = useState({ title: '', description: '' });
   const [mode, setMode] = useState('edit');
@@ -89,126 +113,328 @@ export function ArticleEditor({ site, range, path, onClose }) {
   const s = data.search;
   const editable = Boolean(data.source);
 
+  const row = page.data;
+  const title = a.title || data.live?.title || a.path;
+  const top = s ? [...s.queries].sort((x, y) => y.impressions - x.impressions).slice(0, 3).map((q) => q.query) : [];
+
   return (
-    <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
-        <button class="btn ghost" type="button" onClick={onClose}>← All articles</button>
-        <span class="mono">{a.path}</span>
+    <div class="pv">
+      <div class="pv-top">
+        <button type="button" class="link-btn" onClick={onClose}>← All pages</button>
         <a href={a.url || `https://${site.host}${a.path}`} target="_blank" rel="noreferrer"><Icon name="external" size={12} /> Live page</a>
         {data.source && <a href={data.source.href} target="_blank" rel="noreferrer"><Icon name="github" size={12} /> {data.source.file}</a>}
-        <a href={`#/site/${site.id}/pages${qs({ path: a.path, range })}`}><Icon name="chart" size={12} /> Traffic</a>
       </div>
-      {Object.entries(data.notes).filter(([, v]) => v).map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}>{v}</p>)}
 
-      {s && (
-        <KpiStrip items={[
-          { label: 'Google clicks', value: formatNumber(s.totals.clicks), raw: s.totals.clicks, previous: s.previous.clicks },
-          { label: 'Impressions', value: formatNumber(s.totals.impressions), raw: s.totals.impressions, previous: s.previous.impressions },
-          { label: 'CTR', value: formatPercent(s.totals.ctr), raw: s.totals.ctr, previous: s.previous.ctr },
-          { label: 'Avg. position', value: s.totals.position ? formatDecimal(s.totals.position) : '—', raw: s.totals.position, previous: s.previous.position, invert: true },
-        ]} />
+      <header class="pv-head">
+        <div class="pv-title">
+          <h2>{title}</h2>
+          {title !== a.path && <code class="small muted">{a.path}</code>}
+        </div>
+        {row && (
+          <label class="pv-decide">
+            <span class="small muted">Your decision</span>
+            <DecisionSelect site={site} row={row} onSaved={page.reload} />
+          </label>
+        )}
+      </header>
+      {row && <p class="pv-verdict"><span class={`rv-tag ${TONE[row.suggestion]}`}>{LABELS[row.suggestion]}</span> {row.reason}</p>}
+      {(s || row) && <KpiStrip items={pageNumbers(s, row, range, row?.period)} />}
+      {row?.period?.search && <p class="small muted" style={{ margin: 0 }}>Visits and AI cover {row.period.label}; search numbers cover {row.period.search}, since Search Console runs 2–3 days behind.</p>}
+
+      <nav class="pv-tabs" aria-label="Page sections">
+        {TABS.map((t) => (
+          <button type="button" key={t.key} class={`pv-tab${tab === t.key ? ' active' : ''}`} aria-current={tab === t.key ? 'page' : undefined} onClick={() => setTab(t.key)}>
+            {t.label}{t.key === 'content' && dirty ? ' •' : ''}
+          </button>
+        ))}
+      </nav>
+
+      {tab === 'overview' && (
+        <div class="pv-grid">
+          <div class="pv-col">
+            <Card title="Goal">
+              <ArticleGoal site={site} path={a.path} close={data.opportunities.map((o) => ({
+                query: o.query,
+                text: o.type === 'striking' ? `position ${formatDecimal(o.position)}, ${formatNumber(o.impressions)} impressions, about +${formatNumber(o.potential)} clicks in the top 3` : `top ${Math.round(o.position)} but ${formatPercent(o.ctr)} click, about +${formatNumber(o.potential)} clicks`,
+              }))} />
+            </Card>
+            {row?.decision && (
+              <Card title="Your decision" sub={`${row.decision.decision === 'merge' ? 'Merge' : row.decision.decision[0].toUpperCase() + row.decision.decision.slice(1)}: a note, and a to-do to do it`}>
+                <DecisionNote site={site} row={row} todo={(todos.data?.todos || []).find((t) => t.from === `page:${row.path}`)} onSaved={page.reload} />
+              </Card>
+            )}
+            <Card title="Index status" sub="Whether Google and Bing have this page, and when they last crawled it">
+              <PageDetail site={site} path={a.path} links={false} />
+            </Card>
+          </div>
+          <div class="pv-col">
+            <Card title="To-dos">
+              <ArticleTodos site={site} path={a.path} />
+            </Card>
+            {data.checks.length > 0 && (
+              <Card title="Checks">
+                <ul class="checks">
+                  {data.checks.map((c, i) => <li key={i} class={c.level}>{c.text}</li>)}
+                </ul>
+              </Card>
+            )}
+            <Trial site={site} path={a.path} data={data} onChange={d.reload} />
+          </div>
+        </div>
       )}
 
-      <History data={data} />
-
-      <div class="article-editor">
-        <div class="article-editor-main">
-          <Card title="Search result" sub="What people see in Google before they click">
-            {FIELDS.map((f) => {
-              const m = data.meta?.[f.key];
-              const value = fieldValue(f.key) ?? '';
-              const shown = m?.cut ? value.slice(0, m.cut) : value;
-              const [lo, hi] = f.ideal;
-              const tone = !shown ? 'bad' : shown.length < lo || shown.length > hi + 10 ? 'warn' : 'ok';
-              return (
-                <label class="field" key={f.key}>
-                  <span class="field-label">
-                    {f.label}
-                    <span class={`count ${tone}`}>{shown.length}{m?.cut ? ` of ${value.length} (site cuts at ${m.cut})` : ''} · aim {lo}–{hi}</span>
-                  </span>
-                  <textarea rows={f.key === 'title' ? 1 : 3} value={value}
-                    onInput={(e) => setField(f.key, e.currentTarget.value)} />
-                  <span class="small muted">
-                    {!m ? 'Read from the live page.'
-                      : WHERE[m.where] ? `Set by ${WHERE[m.where]} of the article — editing here edits the markdown.`
-                      : m.where === 'file' ? <>Set in <span class="mono">{m.file}</span> — published as an exact replacement there.</>
-                      : 'Couldn’t find where this is set in the repo — copy it into your code by hand.'}
-                  </span>
-                </label>
-              );
-            })}
-            <SerpPreview host={site.host} path={a.path} title={fieldValue('title')} description={(() => { const v = fieldValue('description') || ''; const c = data.meta?.description?.cut; return c ? v.slice(0, c) : v; })()} />
-          </Card>
-
-          {editable && (
-            <Card title="Article" sub={data.source.file}
-              actions={<Segmented label="View" value={mode} onChange={setMode} options={[{ key: 'edit', label: 'Edit' }, { key: 'preview', label: 'Preview' }, { key: 'diff', label: `Changes${changedLines ? ` (${changedLines})` : ''}` }]} />}
-              flush>
-              {mode === 'edit' && <textarea class="md-editor" spellcheck value={md} onInput={(e) => setMd(e.currentTarget.value)} aria-label="Article markdown" />}
-              {mode === 'preview' && <Markdown text={md} base={a.url || `https://${site.host}${a.path}`} />}
-              {mode === 'diff' && <Diff a={original} b={md} />}
-            </Card>
-          )}
-
-          {editable && (
-            <Card title="Publish" sub={`Opens a pull request on ${data.source.repo} against ${data.source.branch}`}>
-              <div class="publish-row">
-                <input type="text" placeholder={`Search update: ${a.title || a.path}`} value={pub.message} onInput={(e) => setPub((p) => ({ ...p, message: e.currentTarget.value }))} aria-label="Pull request title" />
-                <button class="btn primary" type="button" disabled={!dirty || pub.busy} onClick={publish}>
-                  <Icon name="github" size={13} /> {pub.busy ? 'Opening…' : 'Open pull request'}
-                </button>
-                <button class="btn ghost" type="button" disabled={!dirty || pub.busy} onClick={() => { setMd(original); setFileMeta({ title: data.meta?.title.value || '', description: data.meta?.description.value || '' }); setApplied({}); }}>Discard</button>
-              </div>
-              <p class="small muted" style={{ margin: '8px 0 0' }}>
-                {dirty ? `${changedLines ? `${changedLines} changed line${changedLines === 1 ? '' : 's'} in the article` : ''}${changedLines && metaFiles.length ? ' · ' : ''}${metaFiles.map((m) => `${m.field} in ${m.file}`).join(', ')}` : 'No changes yet.'}
-                {copyOnly.length ? ` · ${copyOnly.map((f) => f.label.toLowerCase()).join(' and ')} won’t be included (copy it by hand)` : ''}
-              </p>
-              {pub.result && (
-                <p class="note" style={{ margin: '8px 0 0', color: 'var(--good-ink)' }}>
-                  Pull request <a href={pub.result.url} target="_blank" rel="noreferrer">#{pub.result.number}</a> is open ({pub.result.files.join(', ')}). Merge it to deploy; the change is marked on your charts from today.
-                  {pub.result.skipped.length ? ` Skipped: ${pub.result.skipped.join(', ')}.` : ''}
-                </p>
-              )}
-              {pub.error && <ErrorLine error={pub.error} />}
-            </Card>
-          )}
-        </div>
-
-        <div class="article-editor-side">
-          <Card title="Suggest with Claude" sub="Reads the article and its real search queries">
-            <button class="btn primary" type="button" disabled={ai.busy || !editable} onClick={askClaude}>
-              <Icon name="sparkles" size={13} /> {ai.busy ? 'Claude is reading…' : ai.data ? 'Suggest again' : 'Suggest changes'}
-            </button>
-            {ai.busy && <p class="small muted">This takes up to a minute.</p>}
-            {ai.error && <ErrorLine error={ai.error} />}
-            {ai.data && <Suggestions s={ai.data} md={md} setMd={setMd} applied={applied} setApplied={setApplied} setField={setField} fieldValue={fieldValue} />}
-          </Card>
-
-          {data.checks.length > 0 && (
-            <Card title="Checks">
-              <ul class="checks">
-                {data.checks.map((c, i) => <li key={i} class={c.level}>{c.text}</li>)}
-              </ul>
-            </Card>
-          )}
-
+      {tab === 'search' && (
+        <>
+          {data.notes.search && <p class="note">{data.notes.search}</p>}
+          {s && <PageDemand queries={s.queries} gone={s.gone || []} />}
           {data.opportunities.length > 0 && (
-            <Card title="Closest wins" sub="Queries where a better result could earn more clicks">
-              <ul class="checks">
-                {data.opportunities.map((o) => (
-                  <li key={o.query} class="warn">
-                    <b>{o.query}</b> — {o.type === 'striking' ? `position ${formatDecimal(o.position)}, ${formatNumber(o.impressions)} impressions` : `top ${Math.round(o.position)} but ${formatPercent(o.ctr)} CTR`}; about {formatNumber(o.potential)} more clicks if it reached the top 3.
-                  </li>
-                ))}
+            <div class="pv-col">
+              <span class="nx-label-sm">Closest wins: where a better result could earn more clicks</span>
+              <Opportunities rows={data.opportunities} />
+            </div>
+          )}
+          <div class="pv-grid wide">
+            <div class="pv-col">
+              {s && <Queries queries={s.queries} md={md} />}
+            </div>
+            <div class="pv-col">
+              <BingVolume seeds={top} />
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'content' && (
+        <>
+          {data.notes.source && <p class="note">{data.notes.source}</p>}
+          <History data={data} />
+          <div class="pv-grid wide">
+            <div class="pv-col">
+              <Card title="Search result" sub="What people see in Google before they click">
+                {FIELDS.map((f) => {
+                  const m = data.meta?.[f.key];
+                  const value = fieldValue(f.key) ?? '';
+                  const shown = m?.cut ? value.slice(0, m.cut) : value;
+                  const [lo, hi] = f.ideal;
+                  const tone = !shown ? 'bad' : shown.length < lo || shown.length > hi + 10 ? 'warn' : 'ok';
+                  return (
+                    <label class="field" key={f.key}>
+                      <span class="field-label">
+                        {f.label}
+                        <span class={`count ${tone}`}>{shown.length}{m?.cut ? ` of ${value.length} (site cuts at ${m.cut})` : ''} · aim {lo}–{hi}</span>
+                      </span>
+                      <textarea rows={f.key === 'title' ? 1 : 3} value={value}
+                        onInput={(e) => setField(f.key, e.currentTarget.value)} />
+                      <span class="small muted">
+                        {!m ? 'Read from the live page.'
+                          : WHERE[m.where] ? `Set by ${WHERE[m.where]} of the article — editing here edits the markdown.`
+                          : m.where === 'file' ? <>Set in <span class="mono">{m.file}</span> — published as an exact replacement there.</>
+                          : 'Couldn’t find where this is set in the repo — copy it into your code by hand.'}
+                      </span>
+                    </label>
+                  );
+                })}
+                <SerpPreview host={site.host} path={a.path} title={fieldValue('title')} description={(() => { const v = fieldValue('description') || ''; const c = data.meta?.description?.cut; return c ? v.slice(0, c) : v; })()} />
+              </Card>
+
+              {editable && (
+                <Card title="Article" sub={data.source.file}
+                  actions={<Segmented label="View" value={mode} onChange={setMode} options={[{ key: 'edit', label: 'Edit' }, { key: 'preview', label: 'Preview' }, { key: 'diff', label: `Changes${changedLines ? ` (${changedLines})` : ''}` }]} />}
+                  flush>
+                  {mode === 'edit' && <textarea class="md-editor" spellcheck value={md} onInput={(e) => setMd(e.currentTarget.value)} aria-label="Article markdown" />}
+                  {mode === 'preview' && <Markdown text={md} base={a.url || `https://${site.host}${a.path}`} />}
+                  {mode === 'diff' && <Diff a={original} b={md} />}
+                </Card>
+              )}
+
+              {editable && (
+                <Card title="Publish" sub={`Opens a pull request on ${data.source.repo} against ${data.source.branch}`}>
+                  <div class="publish-row">
+                    <input type="text" placeholder={`Search update: ${a.title || a.path}`} value={pub.message} onInput={(e) => setPub((p) => ({ ...p, message: e.currentTarget.value }))} aria-label="Pull request title" />
+                    <button class="btn primary" type="button" disabled={!dirty || pub.busy} onClick={publish}>
+                      <Icon name="github" size={13} /> {pub.busy ? 'Opening…' : 'Open pull request'}
+                    </button>
+                    <button class="btn ghost" type="button" disabled={!dirty || pub.busy} onClick={() => { setMd(original); setFileMeta({ title: data.meta?.title.value || '', description: data.meta?.description.value || '' }); setApplied({}); }}>Discard</button>
+                  </div>
+                  <p class="small muted" style={{ margin: '8px 0 0' }}>
+                    {dirty ? `${changedLines ? `${changedLines} changed line${changedLines === 1 ? '' : 's'} in the article` : ''}${changedLines && metaFiles.length ? ' · ' : ''}${metaFiles.map((m) => `${m.field} in ${m.file}`).join(', ')}` : 'No changes yet.'}
+                    {copyOnly.length ? ` · ${copyOnly.map((f) => f.label.toLowerCase()).join(' and ')} won’t be included (copy it by hand)` : ''}
+                  </p>
+                  {pub.result && (
+                    <p class="note" style={{ margin: '8px 0 0', color: 'var(--good-ink)' }}>
+                      Pull request <a href={pub.result.url} target="_blank" rel="noreferrer">#{pub.result.number}</a> is open ({pub.result.files.join(', ')}). Merge it to deploy; the change is marked on your charts from today.
+                      {pub.result.skipped.length ? ` Skipped: ${pub.result.skipped.join(', ')}.` : ''}
+                    </p>
+                  )}
+                  {pub.error && <ErrorLine error={pub.error} />}
+                </Card>
+              )}
+            </div>
+            <div class="pv-col">
+              <Card title="Suggest with Claude" sub="Reads the article and its real search queries">
+                <button class="btn primary" type="button" disabled={ai.busy || !editable} onClick={askClaude}>
+                  <Icon name="sparkles" size={13} /> {ai.busy ? 'Claude is reading…' : ai.data ? 'Suggest again' : 'Suggest changes'}
+                </button>
+                {!editable && <p class="small muted">Needs the article’s source file in a GitHub repo.</p>}
+                {ai.busy && <p class="small muted">This takes up to a minute.</p>}
+                {ai.error && <ErrorLine error={ai.error} />}
+                {ai.data && <Suggestions s={ai.data} md={md} setMd={setMd} applied={applied} setApplied={setApplied} setField={setField} fieldValue={fieldValue} />}
+              </Card>
+            </div>
+          </div>
+        </>
+      )}
+
+      {tab === 'journey' && <PageJourney site={site} path={a.path} range={range} />}
+
+      {tab === 'traffic' && (
+        <div class="pv-grid wide">
+          <div class="pv-col">
+            <Card title={range === 'today' ? 'Views, users and sessions by hour' : 'Views, users and sessions per day'} sub={`${page.data?.period?.label ? page.data.period.label[0].toUpperCase() + page.data.period.label.slice(1) : 'This period'}, from GA4`}>
+              <PageTrend site={site} range={range} path={a.path} />
+            </Card>
+          </div>
+          <div class="pv-col">
+            <Card title="Where readers came from" sub="Visits that started on this page, by source">
+              {a.sources?.length ? (
+                <ul class="pv-sources">
+                  {a.sources.map((x) => (
+                    <li key={x.label}><span>{x.label}</span><b>{formatNumber(x.sessions)}</b></li>
+                  ))}
+                </ul>
+              ) : <p class="small muted">No visits started here in this period.</p>}
+            </Card>
+            <Card title="Reading">
+              <ul class="pv-sources">
+                <li><span>Views</span><b>{formatNumber(a.views || 0)}</b></li>
+                <li><span>Users</span><b>{formatNumber(a.users || 0)}</b></li>
+                <li><span>Engaged</span><b>{formatPercent(a.engagementRate || 0, 0)}</b></li>
+                <li><span>Average time</span><b>{formatDuration(a.avgDuration || 0)}</b></li>
               </ul>
             </Card>
-          )}
-
-          {s && <Queries queries={s.queries} md={md} />}
+          </div>
         </div>
-      </div>
-    </>
+      )}
+    </div>
   );
+}
+
+// After landing here: next pages (and what came after the top ones), who left,
+// and how many reached each goal. BigQuery paths when the export is connected,
+// else GA4 (clicks out of the page, and goals in sessions that landed here).
+function PageJourney({ site, path, range }) {
+  const d = useAsync(() => api.get(`/sites/${site.id}/page-journey${qs({ path, range })}`), [site.id, path, range]);
+  if (d.error) return <ErrorState error={d.error} onRetry={d.reload} />;
+  if (!d.data) return <><p class="note">Reading the sessions that started on this page…</p><Loading height={260} /></>;
+  const j = d.data;
+  if (!j.source) return <p class="note">{j.note}</p>;
+  if (!j.landed) return <p class="note">No sessions started on this page in {j.period || `the last ${j.days} days`}.</p>;
+  const warehouse = j.source === 'warehouse';
+  const pct = (v) => formatPercent(v, v && v < 0.1 ? 1 : 0);
+  const outcome = j.goals.find((g) => g.role === 'outcome');
+  const count = (g) => (warehouse ? g.sessions : g.users);
+  const lead = [
+    j.exit && `${pct(j.exit.share)} left without visiting another page.`,
+    j.next[0] && `The most common next step is ${j.next[0].page === '/' ? 'the home page' : j.next[0].page} (${pct(j.next[0].share)}).`,
+    outcome && (count(outcome) ? `${formatNumber(count(outcome))} of ${formatNumber(outcome.of)} went on to “${outcome.label}” (${pct(outcome.share)}).` : `None went on to “${outcome.label}”.`),
+  ].filter(Boolean).join(' ');
+
+  return (
+    <div class="pv-col">
+      <p class="pv-verdict"><b>{formatNumber(j.landed)} sessions started here</b> in {j.period || `the last ${j.days} days`}. {lead}</p>
+      <div class="pv-grid">
+        <Card title="Where they went next" sub={warehouse ? 'The next page in the same session (BigQuery export)' : 'Pages opened from this one, as a share of the sessions that landed here (GA4)'}
+          actions={warehouse && <a class="btn ghost" href={`#/site/${site.id}/paths?start=${encodeURIComponent(path)}`}>Full paths</a>}>
+          <ul class="jr-flow">
+            {j.next.map((n) => (
+              <li key={n.page}>
+                <Bar label={n.page === '/' ? 'Home page' : n.page} share={n.share} value={warehouse ? `${formatNumber(n.sessions)} · ${pct(n.share)}` : `${formatNumber(n.views)} views`} />
+                {j.then[n.page]?.length > 0 && (
+                  <ul class="jr-then">
+                    {j.then[n.page].map((t) => (
+                      <li key={t.page}><span class="muted">then</span> {t.page === '(exit)' ? <span class="bad">left</span> : t.page} <span class="muted">· {pct(t.share)}</span></li>
+                    ))}
+                  </ul>
+                )}
+              </li>
+            ))}
+            {j.exit && <li><Bar label="Left the site" share={j.exit.share} value={`${formatNumber(j.exit.sessions)} · ${pct(j.exit.share)}`} tone="bad" /></li>}
+            {!j.next.length && !j.exit && <li class="small muted">Nobody opened another page from here.</li>}
+          </ul>
+          {!warehouse && <p class="small muted">GA4’s API can’t say how many left from here; connect the BigQuery export for real paths and exits.</p>}
+        </Card>
+        <Card title="What they did" sub={warehouse ? 'Sessions that saw this page and then did each goal' : 'People who landed here and did each goal'}>
+          {j.goals.length ? (
+            <ul class="jr-flow">
+              {j.goals.map((g) => (
+                <li key={g.match}><Bar label={`${g.label}${g.role === 'step' ? ' (step)' : ''}`} share={g.share} value={`${formatNumber(count(g))} · ${pct(g.share)}`} tone={g.role === 'outcome' ? 'good' : ''} /></li>
+              ))}
+            </ul>
+          ) : <p class="small muted">Set the product’s goals (Setup) to see who goes on to download or sign up from here.</p>}
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function Bar({ label, share, value, tone = '' }) {
+  return (
+    <div class={`jr-bar ${tone}`}>
+      <div class="jr-bar-text"><span>{label}</span><b>{value}</b></div>
+      <div class="jr-bar-track"><span style={{ width: `${Math.max(2, Math.round(Math.min(1, share) * 100))}%` }} /></div>
+    </div>
+  );
+}
+
+// What people search for, for this page: searches it showed up for more often
+// than the period before, new ones, and ones fading (or gone).
+function PageDemand({ queries, gone }) {
+  const rows = queries.map((q) => ({ ...q, change: q.impressions - (q.previous?.impressions || 0) }));
+  const rising = rows.filter((q) => q.previous?.impressions > 0 && q.change > 0).sort((x, y) => y.change - x.change).slice(0, 6);
+  const fresh = rows.filter((q) => !q.previous?.impressions && q.impressions >= 3).sort((x, y) => y.impressions - x.impressions).slice(0, 6);
+  const falling = [...rows.filter((q) => q.previous?.impressions > 0 && q.change < 0), ...gone.map((g) => ({ ...g, change: -g.previous.impressions }))]
+    .sort((x, y) => x.change - y.change).slice(0, 6);
+  const list = (items, empty, fmt) => (items.length ? (
+    <ul class="pv-demand-list">
+      {items.map((q) => <li key={q.query}><span>{q.query}</span><b class={q.change > 0 ? 'good' : q.change < 0 ? 'bad' : ''}>{fmt(q)}</b></li>)}
+    </ul>
+  ) : <p class="small muted">{empty}</p>);
+  return (
+    <Card title="Demand for this page" sub="Google searches it showed up for, against the 90 days before">
+      <div class="pv-demand">
+        <div><span class="nx-label-sm">Rising</span>{list(rising, 'Nothing rising.', (q) => `+${formatNumber(q.change)}`)}</div>
+        <div><span class="nx-label-sm">New</span>{list(fresh, 'No new searches.', (q) => `${formatNumber(q.impressions)} new`)}</div>
+        <div><span class="nx-label-sm">Falling</span>{list(falling, 'Nothing falling.', (q) => (q.impressions ? formatNumber(q.change) : 'gone'))}</div>
+      </div>
+    </Card>
+  );
+}
+
+// The page at a glance: who comes and stays (GA4), Google with its change on
+// the period before, Bing, and AI assistants. Visits, Bing and AI are from All
+// pages' 90 days; Google follows `range` (90 days in the page view, so they match).
+function pageNumbers(s, row, range, period) {
+  const days = period?.search ? 'last 7 days of data' : { today: 'today', week: 'this week', '7d': '7 days', '28d': '28 days', '90d': '90 days' }[range] || range;
+  const items = [];
+  if (row) {
+    items.push({ label: 'Visits', value: formatNumber(row.visits), meta: row.visits ? `landed here, ${formatPercent(row.engagementRate, 0)} stayed` : `none ${period?.label || ''}`.trim(), help: 'GA4 sessions that started on this page.' });
+  }
+  if (s) {
+    items.push(
+      { label: 'Google impressions', value: formatNumber(s.totals.impressions), raw: s.totals.impressions, previous: s.previous.impressions, meta: days },
+      { label: 'Google clicks', value: formatNumber(s.totals.clicks), raw: s.totals.clicks, previous: s.previous.clicks, meta: `${formatPercent(s.totals.ctr)} click` },
+      { label: 'Avg. position', value: s.totals.position ? formatDecimal(s.totals.position) : '—', raw: s.totals.position, previous: s.previous.position, invert: true, help: 'Lower is better. Position 1 is the top result.' },
+    );
+  } else if (row?.google) {
+    items.push({ label: 'Google impressions', value: formatNumber(row.google.impressions), meta: `${formatNumber(row.google.clicks)} clicks` });
+  }
+  if (row) {
+    items.push(
+      { label: 'Bing', value: row.bing ? formatNumber(row.bing.impressions) : '—', meta: row.bing ? `impressions · ${formatNumber(row.bing.clicks)} clicks` : 'not shown, or not connected' },
+      { label: 'From AI', value: formatNumber(row.ai), meta: 'visits from ChatGPT, Perplexity…' },
+    );
+  }
+  return items;
 }
 
 function ErrorLine({ error }) {
@@ -226,6 +452,64 @@ function History({ data }) {
       {c?.pending && ' · search numbers for the change arrive after about 3 days.'}
       {c && !c.pending && ` · ${c.days} days before vs after: ${formatDecimal(per(c.before.clicks, c.days))} → ${formatDecimal(per(c.after.clicks, c.days))} clicks/day, ${formatNumber(Math.round(per(c.before.impressions, c.days)))} → ${formatNumber(Math.round(per(c.after.impressions, c.days)))} impressions/day, position ${formatDecimal(c.before.position)} → ${formatDecimal(c.after.position)}.`}
     </p>
+  );
+}
+
+const VERDICT = {
+  keep: { text: 'Keep it', cls: 'good' },
+  flat: { text: 'No clear change', cls: '' },
+  remove: { text: 'Remove it', cls: 'bad' },
+};
+
+// A set time for the page to earn search traffic, then keep or take it off the site.
+function Trial({ site, path, data, onChange }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  const t = data.trial;
+  async function call(url, body) {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post(`/sites/${site.id}/articles/${url}`, { path, ...body });
+      onChange();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+  const per = (n) => (t.elapsed ? n / t.elapsed : 0);
+  const numbers = t?.before && ` · per day, the ${t.elapsed} days before vs since: ${formatDecimal(per(t.before.clicks))} → ${formatDecimal(per(t.after.clicks))} clicks, ${formatNumber(Math.round(per(t.before.impressions)))} → ${formatNumber(Math.round(per(t.after.impressions)))} impressions${t.after.impressions ? `, position ${t.before.impressions ? formatDecimal(t.before.position) : '—'} → ${formatDecimal(t.after.position)}` : ''}.`;
+  const v = t?.verdict && VERDICT[t.verdict];
+
+  return (
+    <div class="note" style={{ margin: 0 }}>
+      {!t || t.status === 'decided' ? (
+        <div class="row" style={{ alignItems: 'center' }}>
+          <span>
+            {t ? <><b>Trial from {t.start}: {t.decision === 'keep' ? 'kept' : 'marked to remove'}</b> on {t.decidedAt}. </> : null}
+            Tuned it? Give it {t ? 'another' : ''} 28 days: if search still doesn’t pick it up, it’s a page to remove.
+          </span>
+          <button class="btn" type="button" disabled={busy || !site.searchSite} title={site.searchSite ? '' : 'Needs a Search Console property'} onClick={() => call('trial')}>
+            Start a 28-day trial
+          </button>
+        </div>
+      ) : (
+        <div class="row" style={{ alignItems: 'center' }}>
+          <span>
+            {t.status === 'running'
+              ? <><b>On trial since {t.start}</b> · day {t.elapsed} of {t.days}, verdict on {t.ends}{t.elapsed < 3 ? ' · search numbers arrive after about 3 days.' : numbers}</>
+              : <><span class={`chip ${v.cls}`}>{v.text}</span> <b>Trial {t.start} → {t.ends} is over.</b> {t.why}{numbers}</>}
+          </span>
+          {t.status === 'done' && <>
+            <button class="btn" type="button" disabled={busy} onClick={() => call('trial/decide', { decision: 'keep' })}>Keep it</button>
+            <button class="btn" type="button" disabled={busy} title="Records the decision; take it off the site and redirect its URL yourself" onClick={() => call('trial/decide', { decision: 'remove' })}>Remove it</button>
+          </>}
+          <button class="btn ghost" type="button" disabled={busy} onClick={() => call('trial/decide', { decision: 'cancel' })}>Stop trial</button>
+        </div>
+      )}
+      {error && <ErrorLine error={error} />}
+    </div>
   );
 }
 
@@ -313,13 +597,14 @@ function Queries({ queries, md }) {
       actions={<Segmented label="Sort" value={sort} onChange={setSort} options={[{ key: 'impressions', label: 'Impr.' }, { key: 'clicks', label: 'Clicks' }, { key: 'position', label: 'Pos.' }]} />} flush>
       <div class="table-wrap" style={{ maxHeight: '420px' }}>
         <table class="data">
-          <thead><tr><th>Query</th><th class="num">Clicks</th><th class="num">Impr.</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead>
+          <thead><tr><th>Query</th><th class="num">Clicks</th><th class="num">Impr.</th><th class="num" title="Impressions against the period before">Change</th><th class="num">CTR</th><th class="num">Pos.</th></tr></thead>
           <tbody>
             {rows.map((q) => (
               <tr key={q.query}>
                 <td>{md && (used(q) ? <span class="ok-mark" title="Every word is in the article">✓ </span> : <span class="muted" title="Some words never appear in the article">· </span>)}{q.query}</td>
                 <td class="num">{formatNumber(q.clicks)}</td>
                 <td class="num">{formatNumber(q.impressions)}</td>
+                <td class="num">{q.previous ? (() => { const c = q.impressions - q.previous.impressions; return <span class={c > 0 ? 'good' : c < 0 ? 'bad' : 'muted'}>{q.previous.impressions ? `${c > 0 ? '+' : ''}${formatNumber(c)}` : 'new'}</span>; })() : ''}</td>
                 <td class="num">{formatPercent(q.ctr)}</td>
                 <td class="num">{formatDecimal(q.position)}</td>
               </tr>

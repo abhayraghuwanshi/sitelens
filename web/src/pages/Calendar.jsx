@@ -1,3 +1,4 @@
+import { useState } from 'preact/hooks';
 import { formatNumber, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, navigate, withParam, usePersistent } from '../hooks.js';
@@ -5,6 +6,7 @@ import { Card, KpiStrip, Loading, ErrorState, Segmented, Empty } from '../compon
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { Icon } from '../components/icons.jsx';
 import { LineChart, kindColor } from '../charts/LineChart.jsx';
+import { postHref } from './Posts.jsx';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const METRICS = [
@@ -81,12 +83,12 @@ export function Calendar({ sites, params }) {
       ]} />
 
       <div class="grid cols-2-1">
-        <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush>
+        <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush class="cal-month">
           <MonthGrid m={m} metric={useMetric} selected={selected} />
           <Legend />
         </Card>
         <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
-          <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} />
+          <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} onChange={data.reload} />
           <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
         </div>
       </div>
@@ -183,7 +185,7 @@ function Legend() {
   );
 }
 
-function DayStory({ date, site, today }) {
+function DayStory({ date, site, today, onChange }) {
   const data = useAsync(() => api.get(`/calendar/day${qs({ date, site })}`), [date, site]);
   if (data.error) return <Card title={formatLong(date)}><ErrorState error={data.error} onRetry={data.reload} /></Card>;
   if (!data.data) return <Card title={formatLong(date)}><Loading height={420} /></Card>;
@@ -230,12 +232,28 @@ function DayStory({ date, site, today }) {
             {[...d.events.map((e) => ({ ...e, when: '' })), ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' }))].filter((e) => e.kind !== 'claude').map((e) => (
               <div key={e.id} class="row small" style={{ gap: '8px', flexWrap: 'nowrap' }}>
                 <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
-                <span style={{ minWidth: 0 }}>{e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}</span>
+                <span style={{ minWidth: 0 }}>
+                  {/* Your posts open their analysis here; other events link out. */}
+                  {e.source === 'posts' ? (
+                    <>
+                      <a href={postHref(e.id.slice('post:'.length))}>{e.label}</a>
+                      {e.url && <>{' '}<a href={e.url} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a></>}
+                    </>
+                  ) : e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}
+                </span>
                 {e.when && <span class="muted" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{e.when}</span>}
+                {e.id.startsWith('post:manual:') && !e.when && (
+                  <button class="btn ghost" type="button" title="Remove link" aria-label="Remove link" style={{ marginLeft: 'auto' }}
+                    onClick={async () => { await api.post('/posts/hide', { id: e.id.slice('post:'.length) }); data.reload(); onChange?.(); }}>
+                    <Icon name="x" size={12} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
         )}
+
+        <AddLink date={date} site={site} onAdded={() => { data.reload(); onChange?.(); }} />
 
         {d.alerts.length > 0 && (
           <div class="insights">
@@ -256,6 +274,52 @@ function DayStory({ date, site, today }) {
         )}
       </div>
     </Card>
+  );
+}
+
+// A post you made that day (Reddit, LinkedIn, X, a blog…), saved as a manual post
+// so it shows here, on Posts, and in that platform's traffic attribution.
+function AddLink({ date, site, onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button class="btn cal-add-open" type="button" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={13} /> Add a post link
+      </button>
+    );
+  }
+  async function add(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/posts/manual', { url, title, date, site: site === 'all' ? '' : site });
+      setUrl('');
+      setTitle('');
+      setOpen(false);
+      onAdded();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form class="cal-add stack" onSubmit={add}>
+      <h3 class="cal-sub">Add a post link</h3>
+      <label class="field">Post URL<input required autoFocus type="url" value={url} placeholder="https://www.reddit.com/r/…" onInput={(e) => setUrl(e.currentTarget.value)} /></label>
+      <label class="field"><span class="field-label">Title <small>optional</small></span><input value={title} placeholder="What it was about" onInput={(e) => setTitle(e.currentTarget.value)} /></label>
+      <div class="row" style={{ gap: '8px' }}>
+        <button class="btn primary" type="submit" disabled={busy}><Icon name="plus" size={13} /> Add to {dayLabel(date)}</button>
+        <button class="btn ghost" type="button" onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
+        {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+      </div>
+    </form>
   );
 }
 

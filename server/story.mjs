@@ -136,11 +136,9 @@ export function buildStory({ metrics, previous, breakdowns = {}, events = [], da
 }
 
 // `calendar` is createCalendar's API; `today()` → YYYY-MM-DD.
-export function storyRoutes({ calendar, siteOr404, today }) {
-  return [
-    ['GET', /^\/api\/sites\/([\w-]+)\/story$/, async ({ match, query }) => {
-      const site = await siteOr404(match[1]);
-      const rangeKey = STORY_DAYS[query.get('range')] ? query.get('range') : '28d';
+export function createStory({ calendar, today }) {
+  return {
+    async get(site, rangeKey) {
       const span = STORY_DAYS[rangeKey];
       if (!span) throw new ValidationError('Unknown range.');
       // Whole days only: today is still filling in.
@@ -163,6 +161,13 @@ export function storyRoutes({ calendar, siteOr404, today }) {
         breakdowns: { source: rows[0].rows, page: rows[1].rows, query: rows[2].rows },
       });
       return { range: { key: rangeKey, from, to, previous: prev }, ...story };
-    }],
+    },
+  };
+}
+
+export function storyRoutes({ calendar, siteOr404, today, story = createStory({ calendar, today }) }) {
+  return [
+    ['GET', /^\/api\/sites\/([\w-]+)\/story$/, async ({ match, query }) =>
+      story.get(await siteOr404(match[1]), STORY_DAYS[query.get('range')] ? query.get('range') : '28d')],
   ];
 }

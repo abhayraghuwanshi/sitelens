@@ -86,6 +86,28 @@ export function Pages({ site, range, params }) {
   );
 }
 
+// One page's views, users and sessions per day, for the page's own view.
+export function PageTrend({ site, range, path }) {
+  const trend = useAsync(() => api.get(`/sites/${site.id}/page-trend${qs({ range, path })}`), [site.id, range, path]);
+  const [metric, setMetric] = useState('screenPageViews');
+  const label = { screenPageViews: 'Views', activeUsers: 'Users', sessions: 'Sessions' }[metric];
+  if (trend.error) return <ErrorState error={trend.error} />;
+  if (!trend.data) return <Loading height={200} />;
+  return (
+    <>
+      <div class="row" style={{ gap: '6px' }}>
+        {['screenPageViews', 'activeUsers', 'sessions'].map((m) => (
+          <button key={m} type="button" class={`btn${m === metric ? ' primary' : ''}`} onClick={() => setMetric(m)}>
+            {{ screenPageViews: 'Views', activeUsers: 'Users', sessions: 'Sessions' }[m]}
+          </button>
+        ))}
+      </div>
+      <LineChart labels={trend.data.map((t) => t.label || formatDate(t.date))} series={[{ label, values: trend.data.map((t) => t[metric]) }]}
+        format={(v, axis) => formatNumber(v, { compact: axis })} height={200} />
+    </>
+  );
+}
+
 function PageDetail({ site, range, page, siteViews, onClose }) {
   const trend = useAsync(() => api.get(`/sites/${site.id}/page-trend${qs({ range, path: page.path })}`), [site.id, range, page.path]);
   const [metric, setMetric] = useState('screenPageViews');

@@ -157,7 +157,7 @@ export function App() {
     body = <Mentions range={effectiveRange} />;
   } else if (section === 'posts') {
     title = 'My posts';
-    body = <Posts range={effectiveRange} />;
+    body = <Posts range={effectiveRange} id={siteId} />;
   } else if (section === 'firebase') {
     title = 'Firebase';
     body = <Firebase range={effectiveRange} params={route.params} />;

@@ -19,12 +19,13 @@ import { JourneysPage } from './Journeys.jsx';
 import { Sites } from './Sites.jsx';
 import { Story } from './Story.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
+import { TodosPage, useTodos } from '../components/Todos.jsx';
 import './next.css';
 
 // The story-first layout: Sites → one site's Story, its Timeline, Explore for
 // every full report, and Setup. It lives beside the classic layout (App.jsx)
 // and reuses its pages, so nothing has to be rebuilt to fit in.
-// Routes: #/ · #/site/<id>[/story|timeline|explore|setup|<explore view>] · #/account
+// Routes: #/ · #/site/<id>[/story|todos|outcomes|timeline|explore|setup|<explore view>] · #/todos · #/account
 // Classic routes (#/calendar, #/settings, #/outcomes…) still open here.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
 
@@ -38,8 +39,13 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
     if (site && site.id !== lastSite) setLastSite(site.id);
   }, [site?.id]);
 
+  const todos = useTodos({ status: 'open' });
+  const openFor = (id) => (todos.data?.todos || []).filter((t) => t.site === id).length;
+  const story = current ? { href: `#/site/${current.id}${route.params.get('range') ? `?range=${route.params.get('range')}` : ''}`, label: `${current.label} story` } : null;
+
   const tab = !section ? 'sites'
-    : section === 'site' ? (view === 'journeys' ? 'story' : ['story', 'timeline', 'setup'].includes(view) ? view : 'explore')
+    : section === 'todos' ? 'todos'
+    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'timeline', 'setup'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
     : section === 'settings' || section === 'account' ? 'account'
     : 'explore';
@@ -49,6 +55,16 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
+  else if (section === 'site' && view === 'todos') body = <Page title="To-dos" sub={`Changes to make on ${site.label}`}><TodosPage key={site.id} site={site} sites={sites} /></Page>;
+  else if (section === 'todos') body = <Page title="To-dos" sub="Every site’s changes to make"><TodosPage sites={sites} /></Page>;
+  else if (section === 'site' && view === 'outcomes') {
+    body = (
+      <Page title="Outcomes" back={story}
+        sub={`What ${site.label}’s visits led to: the goals set in Setup (downloads, installs, sign-ups), how many reached them, and where people drop off`}>
+        <Outcomes key={site.id} range={route.params.get('range') || '28d'} params={withSite(route.params, site.id)} />
+      </Page>
+    );
+  }
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
   else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
@@ -58,7 +74,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'alerts') body = <Page title="Alerts"><Alerts /></Page>;
   else if (WIDE[section]) {
     const View = WIDE[section];
-    body = <Page title={section[0].toUpperCase() + section.slice(1)}><View id={siteId} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
+    body = <Page title={section[0].toUpperCase() + section.slice(1)} back={story}><View id={siteId} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
   } else body = <ErrorState error={{ message: 'This page isn’t in the new layout yet.' }} />;
 
   const href = (t) => (t === 'story' ? `#/site/${current.id}` : t === 'explore' ? `#/site/${current.id}/${EXPLORE_TABS[0].key}` : `#/site/${current.id}/${t}`);
@@ -72,16 +88,18 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
         </a>
         <nav class="nx-nav" aria-label="Main">
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
+          <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
         </nav>
         {current && (
           <>
             <label class="nx-label" for="nx-site">Site</label>
             <select id="nx-site" class="nx-site" value={current.id}
-              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' ? 'story' : tab === 'explore' ? view : tab}`; }}>
+              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' ? 'story' : tab === 'explore' ? view : tab === 'todos' ? 'todos' : tab}`; }}>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (sample)' : ''}</option>)}
             </select>
             <nav class="nx-nav" aria-label={current.label}>
               <NavItem href={href('story')} icon="sparkles" active={tab === 'story'}>Story</NavItem>
+              <NavItem href={href('todos')} icon="check" active={tab === 'todos' && section === 'site'}>To-dos {openFor(current.id) ? <span class="nx-count">{openFor(current.id)}</span> : null}</NavItem>
               <NavItem href={href('timeline')} icon="calendar" active={tab === 'timeline'}>Timeline</NavItem>
               <NavItem href={href('explore')} icon="layers" active={tab === 'explore'}>Explore</NavItem>
               <NavItem href={href('setup')} icon="settings" active={tab === 'setup'}>Setup</NavItem>

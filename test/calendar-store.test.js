@@ -73,9 +73,10 @@ test('totals: one history pull, then only the days that can still change', async
     await history.series(SITE, '2026-10-01', '2026-11-02');
     assert.equal(google.calls.length, 2);
 
-    // Later: a delta from the first unsettled day only.
+    // Later: stored rows answer at once, and a delta from the first unsettled day runs behind them.
     tick(HOUR);
     await history.series(SITE, '2026-10-01', '2026-11-02');
+    await history.idle();
     assert.deepEqual(google.calls.slice(2).map((c) => [c.api, c.from, c.to]), [['ga4', '2026-10-31', '2026-11-02'], ['gsc', '2026-10-29', '2026-11-02']]);
 
     // Older than the window: only the missing span is fetched.
@@ -127,6 +128,7 @@ test('breakdowns: fetched once per day, recent days refreshed, top rows kept', a
     assert.equal(google.calls.length, 2);
     tick(HOUR);
     await history.breakdown(SITE, 'source', '2026-10-10', '2026-11-02');
+    await history.idle();
     assert.deepEqual(google.calls.slice(2).map((c) => [c.from, c.to]), [['2026-10-31', '2026-11-02']]);
 
     const queries = await history.breakdown(SITE, 'query', '2026-10-28', '2026-10-30');

@@ -1,6 +1,7 @@
 // MCP server for local agents (Claude Code, Claude Desktop): read-only tools
 // over Studio's data, plus comment tools so an agent can leave its analysis in
-// the app (dated Claude notes on charts and the Calendar). Speaks MCP's stdio
+// the app (dated Claude notes on charts and the Calendar), and the to-dos with
+// the data behind each, where an agent posts what it found, changed and expects. Speaks MCP's stdio
 // transport (newline-delimited JSON-RPC) directly, so it needs no SDK.
 //
 //  - Analytics tools call the running Studio server's JSON API (STUDIO_URL,
@@ -9,6 +10,8 @@
 //  - `schema` and `query` open the .data/*.db files read-only and work even
 //    when Studio isn't running. studio.json (tokens, settings) is never exposed.
 //  - Comment tools write only Claude-authored notes, and can only delete those.
+//  - report_todo adds Claude's write-up to a to-do (and can tick it off); it
+//    can't create, edit or delete to-dos.
 //
 // Register with Claude Code:  claude mcp add sitelens -- node /path/to/sitelens-studio/server/mcp.mjs
 
@@ -119,6 +122,171 @@ export const TOOLS = [
     inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: '^[\\w-]+$' } }, required: ['id'] },
     method: 'DELETE',
     path: (a) => `/api/annotations/${encodeURIComponent(a.id)}?author=claude`,
+  },
+  {
+    name: 'search_rankings',
+    description: 'Where the site ranks in Google and Bing, side by side: each engine\'s totals (clicks, impressions, CTR %, average position) against the period before, the searches and the pages with both engines\' numbers next to each other, the pages each search lands on (Google), and Google\'s opportunities (searches close to page one, or ranking well with few clicks, and the clicks they could add). Filter with query or page to look at one article. These are live numbers: neither engine can rank a change before it\'s published and crawled.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites.' },
+        range: { type: 'string', enum: ['7d', '28d', '90d'], description: 'Days (default 28d). Search Console runs 2–3 days behind, Bing 1–3.' },
+        query: { type: 'string', description: 'Only searches containing this text.' },
+        page: { type: 'string', description: 'Only pages whose path contains this, e.g. /blog/raycast-alternatives-windows.' },
+      },
+      required: ['site'],
+    },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/search-hub?${params(a, ['range'])}`,
+    shape: (d, a) => {
+      const pct = (side) => side && { ...side, ctr: side.ctr === null ? null : Math.round(side.ctr * 1000) / 10, position: side.position === null ? null : Math.round(side.position * 10) / 10 };
+      const row = (r) => ({ [r.path !== undefined ? 'page' : 'search']: r.key, google: pct(r.google), bing: pct(r.bing) });
+      const q = String(a.query || '').toLowerCase();
+      const p = String(a.page || '');
+      const pages = d.pages.filter((r) => !p || r.key.includes(p));
+      const queries = d.queries.filter((r) => (!q || r.key.includes(q)) && (!p || d.queryPages.some((x) => x.query === r.key && x.path.includes(p))));
+      const totals = (e) => (e.error ? { error: e.error.message } : { now: pct(e.current), before: pct(e.previous), range: e.range && { from: e.range.current?.startDate || e.range.start, to: e.range.current?.endDate || e.range.end } });
+      return {
+        google: totals(d.google), bing: totals(d.bing),
+        opportunities: d.opportunities.filter((o) => !q || o.query.includes(q)).slice(0, 10).map((o) => ({ search: o.query, type: o.type, impressions: o.impressions, ctr: Math.round(o.ctr * 1000) / 10, position: Math.round(o.position * 10) / 10, couldAddClicks: Math.round(o.potential || 0) })),
+        searches: queries.slice(0, 40).map((r) => ({ ...row(r), landsOn: d.queryPages.filter((x) => x.query === r.key).map((x) => x.path) })),
+        pages: pages.slice(0, 40).map((r) => ({ page: r.key, google: pct(r.google), bing: pct(r.bing) })),
+      };
+    },
+  },
+  {
+    name: 'search_demand',
+    description: 'What people search for. From the site\'s own Search Console data: its query groups (brand, topics…) over time, and the searches that are new, rising or falling against the period before. With keywords, also Bing\'s weekly search volume for each (any keyword, including ones the site doesn\'t rank for yet), the last 4 weeks against the 4 before, and related searches with their volume: use it to pick the words for a title or a new article. Google publishes no search volumes (Trends has no public API), so Bing\'s volume is the measurable proxy.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites.' },
+        range: { type: 'string', enum: ['7d', '28d', '90d'], description: 'Days (default 28d).' },
+        keywords: { type: 'string', description: 'Up to 10 keywords, comma-separated, for Bing search volume, e.g. "raycast windows,raycast alternative".' },
+        market: { type: 'string', description: 'Bing market as country/language (default us/en-US), e.g. gb/en-GB, in/en-IN.' },
+      },
+      required: ['site'],
+    },
+    run: async (a, get) => {
+      const [demand, kw] = await Promise.all([
+        get(`/api/sites/${encodeURIComponent(a.site)}/search-demand?${params(a, ['range'])}`).catch((err) => ({ error: err.message })),
+        a.keywords ? get(`/api/search/keywords?${params({ q: a.keywords, market: a.market }, ['q', 'market'])}`).catch((err) => ({ error: err.message })) : null,
+      ]);
+      const movers = (rows = []) => rows.slice(0, 15).map((r) => ({ search: r.query, group: r.group, impressions: r.impressions, before: r.prevImpressions || 0, position: r.position === null ? null : Math.round(r.position * 10) / 10 }));
+      return {
+        google: demand.error ? { error: demand.error } : {
+          range: demand.range && { from: demand.range.startLabel, to: demand.range.endLabel },
+          groups: (demand.groups || []).map((g) => ({ name: g.name, impressions: g.impressions, before: g.previous?.impressions, clicks: g.clicks, position: g.position === null ? null : Math.round(g.position * 10) / 10, searches: g.queries })),
+          newSearches: movers(demand.newQueries), rising: movers(demand.rising), falling: movers(demand.falling),
+        },
+        ...(kw ? { bingVolume: kw.error ? { error: kw.error } : kw } : {}),
+      };
+    },
+  },
+  {
+    name: 'index_status',
+    description: 'Whether Google and Bing have one page in their index: Google\'s verdict (PASS = indexed), coverage ("Submitted and indexed", "Crawled - currently not indexed"…), last crawl, robots and fetch state and the canonical it chose; Bing\'s discovery and last crawl dates and HTTP status. Check it after publishing a change: rankings can\'t move until the page is recrawled.',
+    inputSchema: {
+      type: 'object',
+      properties: { site: { type: 'string', description: 'A site id from list_sites.' }, path: { type: 'string', description: 'The page path, e.g. /blog/raycast-alternatives-windows.' } },
+      required: ['site', 'path'],
+    },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/index-status?${params(a, ['path'])}`,
+  },
+  {
+    name: 'page_review',
+    description: 'Every page on the site (sitemap, repo, and anything GA4 saw, including pages nobody visits) with what it earns over 90 days: visits and how many stayed engaged, Google and Bing impressions, clicks and position, visits sent by AI assistants, and its age. Each has a suggestion with the reason: keep, needed (home, pricing, legal…), too new to judge, improve the content, rewrite the title and description, not found in search, or merge or remove. Each also has a goal: what the page is for (bring visitors from search, turn visitors into users, help people), whether it serves that today, and the next realistic target one step up from where it is (e.g. page 1 for its main search, the click rate its position usually earns, the site\'s average conversion rate) with what it\'s worth, how to get there and when to check; plus the goal the user set and its progress, if any. When working on a page, aim at its goal and say in report_todo whether the change should reach it. Also the user\'s own decision per page (keep, improve, merge into another page, remove) when they made one. Use it to pick which pages to work on.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites.' },
+        range: { type: 'string', enum: ['28d', '90d'], description: 'Days to judge on (default 90d).' },
+        suggestion: { type: 'string', enum: ['cut', 'improve-content', 'improve-title', 'not-found', 'watch', 'new', 'keep', 'needed'], description: 'Only pages with this suggestion.' },
+      },
+      required: ['site'],
+    },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/page-review?${params(a, ['range'])}`,
+    shape: (d, a) => ({
+      range: d.range, counts: d.counts, decided: d.decided, notes: Object.fromEntries(Object.entries(d.notes || {}).filter(([, v]) => v)),
+      pages: d.rows.filter((r) => !a.suggestion || r.suggestion === a.suggestion).map((r) => ({
+        page: r.path, title: r.title, published: r.published || undefined, inSitemap: r.inSitemap, visits: r.visits, engagedPct: r.visits ? Math.round(r.engagementRate * 100) : null, aiVisits: r.ai,
+        google: r.google && { clicks: r.google.clicks, impressions: r.google.impressions, position: r.google.position && Math.round(r.google.position * 10) / 10, topSearches: (r.google.queries || []).map((q) => q.query) },
+        bing: r.bing && { clicks: r.bing.clicks, impressions: r.bing.impressions },
+        suggestion: r.suggestion, why: r.reason, decision: r.decision || undefined,
+        goal: r.goal && {
+          purpose: r.goal.purposeLabel, servingItsPurpose: r.goal.serving, how: r.goal.servingText,
+          next: { title: r.goal.next.title, metric: r.goal.next.metric, from: r.goal.next.from, to: r.goal.next.to, query: r.goal.next.query, worth: r.goal.next.gain, how: r.goal.next.how, checkBy: r.goal.next.checkBy },
+          ...(r.goal.target ? { setByUser: { ...r.goal.target, progress: r.goal.progress } } : {}),
+        },
+      })),
+    }),
+  },
+  {
+    name: 'get_article',
+    description: 'One article or page as Studio sees it: its title and meta description as published and where each is set in the repo, the markdown source (repo, file, branch), its Google numbers against the period before, every search it shows up for (clicks, impressions, CTR, position), the checks Studio runs (title length, missing searches…), the closest wins, and past edits. Read it before proposing changes to an article.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites.' },
+        path: { type: 'string', description: 'The article path, e.g. /blog/raycast-alternatives-windows.' },
+        range: { type: 'string', enum: ['7d', '28d', '90d'], description: 'Days for the search numbers (default 28d).' },
+      },
+      required: ['site', 'path'],
+    },
+    path: (a) => `/api/sites/${encodeURIComponent(a.site)}/articles/detail?${params(a, ['path', 'range'])}`,
+    shape: ({ source, search, ...d }) => ({
+      ...d,
+      ...(search ? { search: { ...search, queries: (search.queries || []).slice(0, 60) } } : {}),
+      source: source && { ...source, markdown: source.markdown?.length > 30_000 ? `${source.markdown.slice(0, 30_000)}\n… (cut at 30,000 characters)` : source.markdown },
+    }),
+  },
+  {
+    name: 'list_todos',
+    description: 'The user\'s to-dos in SiteLens Studio: changes they mean to make to a site (fix a traffic drop, rewrite an article\'s title, post again somewhere), each with what it\'s about and how many write-ups it has. Open ones first. Use get_todo for the data behind one.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites; omit for every site.' },
+        status: { type: 'string', enum: ['open', 'done'], description: 'Only open or only done ones (default both).' },
+      },
+    },
+    path: (a) => `/api/todos?${params(a, ['site', 'status'])}`,
+    shape: (d) => ({
+      open: d.open,
+      todos: d.todos.map((t) => ({
+        id: t.id, title: t.title, detail: t.detail, site: t.site, status: t.status, about: t.subject, link: t.link,
+        added: new Date(t.createdAt).toISOString().slice(0, 10), ...(t.doneAt ? { done: new Date(t.doneAt).toISOString().slice(0, 10) } : {}),
+        writeUps: (t.entries || []).length,
+      })),
+    }),
+  },
+  {
+    name: 'get_todo',
+    description: 'One to-do with the data behind it, fresh: for a traffic source, its visits and the searches and pages that moved; for a page or article, its visits and the Google searches it shows up for (clicks, impressions, CTR %, position); for a search query, the pages that rank for it; for an outcome finding, that finding today. "whenAdded" holds the numbers when it was added and, once done, "sinceDone" compares the days since with as many days before. Also returns every write-up so far. Read this before working on a to-do.',
+    inputSchema: { type: 'object', properties: { id: { type: 'string', pattern: '^todo-\\w+$', description: 'A to-do id from list_todos.' } }, required: ['id'] },
+    path: (a) => `/api/todos/${encodeURIComponent(a.id)}`,
+    shape: (d) => ({
+      ...d,
+      todo: { ...d.todo, entries: (d.todo.entries || []).map((e) => ({ ...e, at: new Date(e.at).toISOString() })) },
+    }),
+  },
+  {
+    name: 'report_todo',
+    description: 'Post your write-up on a to-do, shown with it in Studio so the user can see what was done: what you found (summary), what you changed or propose to change, with files, PRs or new titles (changes), and what should happen and when to check (expected, e.g. "CTR on “raycast windows” from 1% toward 3% within two weeks of Google recrawling"). Set status "done" only once the change is live (merged and deployed): that puts a "Done:" note on the Timeline that day, so the charts show whether it worked.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        id: { type: 'string', pattern: '^todo-\\w+$' },
+        summary: { type: 'string', maxLength: 3000, description: 'What you found, with the numbers behind it.' },
+        changes: { type: 'string', maxLength: 3000, description: 'What was changed (or is proposed): files, PR links, the old and new text.' },
+        expected: { type: 'string', maxLength: 3000, description: 'What should happen, by how much and when to look again.' },
+        status: { type: 'string', enum: ['done'], description: 'Tick the to-do off: only when the change is live.' },
+      },
+      required: ['id'],
+    },
+    method: 'POST',
+    path: (a) => `/api/todos/${encodeURIComponent(a.id)}/entries`,
+    body: (a) => ({ summary: a.summary, changes: a.changes, expected: a.expected, author: 'claude', ...(a.status ? { status: a.status } : {}) }),
   },
   {
     name: 'site_config',
@@ -287,7 +455,10 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
     if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     try {
       const request = { method: tool.method, body: tool.body?.(args) };
-      const result = tool.local ? tool.local(args, ctx) : await studio(baseUrl, tool.path(args), fetchImpl, request).then((d) => (tool.shape ? tool.shape(d) : d));
+      const get = (path, req) => studio(baseUrl, path, fetchImpl, req);
+      const result = tool.local ? tool.local(args, ctx)
+        : tool.run ? await tool.run(args, get)
+        : await get(tool.path(args), request).then((d) => (tool.shape ? tool.shape(d, args) : d));
       return { content: [{ type: 'text', text: JSON.stringify(result, null, 1) }] };
     } catch (err) {
       return { content: [{ type: 'text', text: err instanceof ToolError ? err.message : `Failed: ${err.message}` }], isError: true };
@@ -307,7 +478,7 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {}, prompts: {} },
           serverInfo: { name: 'sitelens-studio', version: '0.2.0' },
-          instructions: 'Access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else. When the user wants your analysis kept in the app, record it with add_comment (check list_comments first); that is the only thing you can change in Studio. A site\'s goals, funnels, goal alerts, search topics and AI answer-check questions come from a .sitelens.yml file in its repo: to set them up, read the site\'s code and write that file (the setup_site prompt walks through it), using site_config, draft_site_config and check_site_config.',
+          instructions: 'Access to SiteLens Studio: website traffic (GA4), search (Search Console), GitHub, posts, mentions and more, stored locally. Start with list_sites, use daily_metrics and events to find and date changes, day_story or breakdown to explain them, and schema + query for anything else. When the user wants your analysis kept in the app, record it with add_comment (check list_comments first). The user\'s to-dos (list_todos, get_todo) are changes they mean to make, each with the data behind it. To work on one: read it, read the article with get_article, see where it ranks in Google and Bing with search_rankings and what people search for with search_demand (Bing volume for candidate wording), propose or make the change, then post what you found, changed and expect with report_todo; after it\'s published, index_status shows whether the engines have recrawled it. Comments and to-do write-ups are the only things you can change in Studio. A site\'s goals, funnels, goal alerts, search topics and AI answer-check questions come from a .sitelens.yml file in its repo: to set them up, read the site\'s code and write that file (the setup_site prompt walks through it), using site_config, draft_site_config and check_site_config.',
         });
       }
       case 'ping':

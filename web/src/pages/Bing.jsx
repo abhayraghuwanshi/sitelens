@@ -94,7 +94,7 @@ export function Bing({ site, range }) {
   );
 }
 
-function Stat({ label, value, bad }) {
+export function Stat({ label, value, bad }) {
   return (
     <div class="crawl-stat">
       <div class="small muted">{label}</div>
@@ -133,7 +133,7 @@ function QueryTable({ rows, first, field, path }) {
   );
 }
 
-function Submit({ site, quota, host }) {
+export function Submit({ site, quota, host }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);

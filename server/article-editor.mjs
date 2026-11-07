@@ -11,6 +11,10 @@
 //    nothing changes until the owner applies them
 //  - publish: a branch, one commit per changed file, and a pull request
 //    against the default branch; a dated note marks the change on every chart
+//  - trials: give a page a set time (28 days) to earn search traffic after
+//    tuning it, then a verdict on whether to keep it or take it off the site;
+//    stored in studio.json `pageTrials`, compared like-for-like with the days
+//    before it started
 
 import Anthropic from '@anthropic-ai/sdk';
 import { querySearchAnalytics, searchRange, searchOpportunities } from '../shared/sitelens/gsc.js';
@@ -24,6 +28,9 @@ export const EDITOR_MODEL = 'claude-opus-5-5';
 const DAY = 86_400_000;
 const SEARCH_LAG_DAYS = 2;
 const NOTE_PREFIX = 'Article update: ';
+const TRIAL_PREFIX = 'Page trial: ';
+export const TRIAL_DAYS = 28;
+const TRIAL_DECISIONS = ['keep', 'remove', 'cancel'];
 const STOPWORDS = new Set('a an and are as at be best by can do does for from how i in is it its me my of on or the to vs what when where which who why will with you your 2024 2025 2026 2027'.split(' '));
 
 /* ---------- markdown helpers (pure) ---------- */
@@ -150,6 +157,26 @@ export function checkSuggestions(raw, md) {
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 
+/* ---------- page trials (pure) ---------- */
+
+// Did the page earn its place? Same-length windows either side of the start,
+// per day. Lift: clicks or impressions up a fifth (on more than a trickle), or
+// two places higher. No lift and no clicks: remove. No lift but some clicks:
+// flat, the owner's call. Before the trial ends there is no verdict.
+export function trialVerdict({ days, elapsed, before, after }) {
+  if (elapsed < days) return { status: 'running', verdict: null };
+  const up = (a, b) => b > 0 ? a / b - 1 : a > 0 ? Infinity : 0;
+  const clicks = up(after.clicks, before.clicks);
+  const impressions = up(after.impressions, before.impressions);
+  const higher = after.impressions && before.impressions ? before.position - after.position : 0;
+  if (!after.impressions) return { status: 'done', verdict: 'remove', why: `Google didn’t show it once in ${days} days.` };
+  if ((clicks >= 0.2 && after.clicks >= 3) || (impressions >= 0.2 && after.impressions >= 30) || higher >= 2) {
+    return { status: 'done', verdict: 'keep', why: 'Search picked it up: more clicks, more impressions or a better position than before.' };
+  }
+  if (!after.clicks) return { status: 'done', verdict: 'remove', why: `Shown ${after.impressions} time${after.impressions === 1 ? '' : 's'} but never clicked, and no better than before.` };
+  return { status: 'done', verdict: 'flat', why: 'No clear change. Remove it, or redirect it into a stronger page on the same topic.' };
+}
+
 export function createArticleEditor({ auth, store, articles, annotations, getToken, env = process.env, fetchImpl = fetch, now = Date.now, createClient = (apiKey) => new Anthropic({ apiKey }) }) {
   const metaCache = new Map(); // repo:text → { file, at }
 
@@ -222,6 +249,69 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     return { updates: notes, compare: { days, before: before.totals, after: after.totals } };
   }
 
+  // The page's open trial (or its last decided one) with search numbers so far.
+  async function trial(site, path) {
+    const t = ((await store.get()).pageTrials || []).filter((x) => x.site === site.id && x.path === path).at(-1);
+    if (!t) return null;
+    const start = Date.parse(t.start);
+    const out = { ...t, ends: isoDay(start + (t.days - 1) * DAY), elapsed: 0, before: null, after: null, status: t.decision ? 'decided' : 'running', verdict: null };
+    if (t.decision) return out;
+    const lastData = now() - SEARCH_LAG_DAYS * DAY;
+    out.elapsed = Math.max(0, Math.min(t.days, Math.floor((lastData - start) / DAY) + 1));
+    if (out.elapsed < 3 || !site.searchSite) return out;
+    const n = out.elapsed;
+    const [before, after] = await Promise.all([
+      pageQueries(site, path, isoDay(start - n * DAY), isoDay(start - DAY), 0),
+      pageQueries(site, path, isoDay(start), isoDay(start + (n - 1) * DAY), 0),
+    ]);
+    return { ...out, before: before.totals, after: after.totals, ...trialVerdict({ days: t.days, elapsed: n, before: before.totals, after: after.totals }) };
+  }
+
+  async function startTrial(site, input = {}) {
+    const path = normPath(input.path);
+    const days = Number(input.days) || TRIAL_DAYS;
+    if (site.demo) throw new EngineError('The sample site’s pages can’t go on trial. Open one of your own sites.', { kind: 'demo' });
+    if (!site.searchSite) throw new EngineError('Pick a Search Console property in Settings first: a trial is judged on search numbers.', { status: 400, kind: 'validation' });
+    if (!Number.isInteger(days) || days < 7 || days > 90) throw new EngineError('A trial runs between 7 and 90 days.', { status: 400, kind: 'validation' });
+    const start = isoDay(now());
+    await store.update((s) => {
+      const open = (s.pageTrials || []).find((x) => x.site === site.id && x.path === path && !x.decision);
+      if (open) throw new EngineError(`This page is already on trial since ${open.start}.`, { status: 409, kind: 'validation' });
+      s.pageTrials = [...(s.pageTrials || []), { site: site.id, path, start, days, createdAt: new Date(now()).toISOString() }];
+    });
+    try {
+      await annotations.addNote({ date: start, label: `${TRIAL_PREFIX}${path}`, scope: `site:${site.id}`, body: `${days} days to earn search traffic, then keep or remove.` });
+    } catch { /* the trial is what matters */ }
+    return trial(site, path);
+  }
+
+  // keep / remove record the owner's call and close the trial; cancel drops it.
+  async function decideTrial(site, input = {}) {
+    const path = normPath(input.path);
+    const decision = String(input.decision || '');
+    if (!TRIAL_DECISIONS.includes(decision)) throw new EngineError(`Decision must be one of: ${TRIAL_DECISIONS.join(', ')}.`, { status: 400, kind: 'validation' });
+    let found = false;
+    await store.update((s) => {
+      const list = s.pageTrials || [];
+      const i = list.findLastIndex((x) => x.site === site.id && x.path === path && !x.decision);
+      if (i < 0) return;
+      found = true;
+      s.pageTrials = decision === 'cancel' ? list.filter((_, j) => j !== i) : list.map((x, j) => (j === i ? { ...x, decision, decidedAt: isoDay(now()) } : x));
+    });
+    if (!found) throw new EngineError('This page has no open trial.', { status: 404, kind: 'notfound' });
+    return trial(site, path);
+  }
+
+  // Every trial on the site, for the list: dates only, no search calls.
+  async function trials(site) {
+    const lastData = now() - SEARCH_LAG_DAYS * DAY;
+    return ((await store.get()).pageTrials || []).filter((x) => x.site === site.id).map((t) => {
+      const start = Date.parse(t.start);
+      const elapsed = Math.max(0, Math.min(t.days, Math.floor((lastData - start) / DAY) + 1));
+      return { ...t, ends: isoDay(start + (t.days - 1) * DAY), elapsed, due: !t.decision && elapsed >= t.days };
+    });
+  }
+
   // Where the live title and description come from, per field:
   // front matter, the # heading, the first paragraph, another repo file, or unknown.
   async function metaSources(token, repo, md, live) {
@@ -245,7 +335,7 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     if (!row) throw new EngineError('That article isn’t in the sitemap or the site’s code.', { status: 404, kind: 'notfound' });
     const live = (await articles.readPage(site, row.path)) || { title: '', description: '' };
     const token = await getToken();
-    const out = { article: row, live, source: null, meta: null, search: null, checks: [], opportunities: [], updates: [], compare: null, notes: {} };
+    const out = { article: row, live, source: null, meta: null, search: null, checks: [], opportunities: [], updates: [], compare: null, trial: null, notes: {} };
 
     if (row.file && token) {
       try {
@@ -264,9 +354,14 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
         const range = searchRange(rangeKey);
         const [cur, prev] = await Promise.all([
           pageQueries(site, row.path, range.current.startDate, range.current.endDate),
-          pageQueries(site, row.path, range.previous.startDate, range.previous.endDate, 0),
+          pageQueries(site, row.path, range.previous.startDate, range.previous.endDate),
         ]);
-        out.search = { range: range.current, totals: cur.totals, previous: prev.totals, queries: cur.queries };
+        // Each search's numbers the period before, so the page's demand shows what's rising, new or falling.
+        const before = new Map(prev.queries.map((q) => [q.query, q]));
+        const queries = cur.queries.map((q) => ({ ...q, previous: { impressions: before.get(q.query)?.impressions || 0, clicks: before.get(q.query)?.clicks || 0 } }));
+        const gone = prev.queries.filter((q) => !cur.queries.some((c) => c.query === q.query) && q.impressions >= 5)
+          .map((q) => ({ query: q.query, clicks: 0, impressions: 0, ctr: 0, position: 0, previous: { impressions: q.impressions, clicks: q.clicks } }));
+        out.search = { range: range.current, totals: cur.totals, previous: prev.totals, queries, gone };
         out.opportunities = searchOpportunities(cur.queries, { limit: 6 });
       } catch (err) {
         out.notes.search = err.message;
@@ -280,6 +375,11 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
       Object.assign(out, await history(site, row.path));
     } catch (err) {
       out.notes.history = err.message;
+    }
+    try {
+      out.trial = await trial(site, row.path);
+    } catch (err) {
+      out.notes.trial = err.message;
     }
     return out;
   }
@@ -390,7 +490,7 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     return { url: pr.html_url, number: pr.number, branch, files: [...changes.keys()], skipped, note };
   }
 
-  return { detail, suggest, publish };
+  return { detail, suggest, publish, startTrial, decideTrial, trials };
 }
 
 export function articleEditorRoutes({ editor, siteOr404 }) {
@@ -399,6 +499,9 @@ export function articleEditorRoutes({ editor, siteOr404 }) {
       editor.detail(await siteOr404(match[1]), query.get('path') || '/', query.get('range') || '28d')],
     ['POST', /^\/api\/sites\/([\w-]+)\/articles\/suggest$/, async ({ match, body }) => editor.suggest(await siteOr404(match[1]), body || {})],
     ['POST', /^\/api\/sites\/([\w-]+)\/articles\/publish$/, async ({ match, body }) => editor.publish(await siteOr404(match[1]), body || {})],
+    ['GET', /^\/api\/sites\/([\w-]+)\/articles\/trials$/, async ({ match }) => ({ trials: await editor.trials(await siteOr404(match[1])) })],
+    ['POST', /^\/api\/sites\/([\w-]+)\/articles\/trial$/, async ({ match, body }) => editor.startTrial(await siteOr404(match[1]), body || {})],
+    ['POST', /^\/api\/sites\/([\w-]+)\/articles\/trial\/decide$/, async ({ match, body }) => editor.decideTrial(await siteOr404(match[1]), body || {})],
   ];
 }
 

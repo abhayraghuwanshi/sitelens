@@ -177,3 +177,10 @@ a.nx-cause:hover { color: var(--accent); }
   .nx-fstep .nx-bar { display: none; }
   .nx-leavers li .nx-dim { grid-column: 2 / -1; }
 }
+
+/* Back to the page this one was opened from (the desktop app has no back button). */
+.nx-back { display: inline-block; margin-bottom: 4px; font-size: var(--text-md); color: var(--accent); text-decoration: none; }
+.nx-back:hover { text-decoration: underline; }
+.nx-step-group { display: flex; flex-direction: column; gap: 4px; }
+.nx-step-group .nx-label-sm { display: flex; align-items: center; gap: 6px; }
+

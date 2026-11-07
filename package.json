@@ -20,8 +20,9 @@
     "trailer:video": "node scripts/record-video.mjs",
     "desktop:stage": "vite build && node scripts/stage-desktop.mjs",
     "desktop:build": "npm run desktop:stage && tauri build",
-    "desktop:dev": "npm run desktop:stage && tauri dev",
-    "mcp": "node --no-warnings=ExperimentalWarning server/mcp.mjs"
+    "desktop:dev": "node scripts/desktop-live.mjs",
+    "mcp": "node --no-warnings=ExperimentalWarning server/mcp.mjs",
+    "desktop:preview": "npm run desktop:stage && tauri dev"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",

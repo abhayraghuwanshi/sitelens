@@ -268,6 +268,50 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return { submitted: list.length, quota: quota ? { daily: quota.DailyQuota ?? null, monthly: quota.MonthlyQuota ?? null } : null };
   }
 
+  // Keyword research: Bing's weekly search volume for any keywords (ones you
+  // don't rank for too), and the searches related to each. Not tied to a site,
+  // but needs the API key. market is Bing's country + language, e.g. us/en-US.
+  async function keywords(list, { country = 'us', language = 'en-US' } = {}) {
+    const words = [...new Set((list || []).map((k) => String(k).trim().toLowerCase()).filter((k) => k.length >= 2 && k.length <= 80))].slice(0, 10);
+    if (!words.length) throw new EngineError('Give at least one keyword.', { kind: 'validation' });
+    const end = isoDay(now());
+    const start = isoDay(now() - 90 * DAY);
+    return Promise.all(words.map(async (q) => {
+      const [stats, related] = await Promise.all([
+        cache.wrap(`kw:${country}:${language}:${q}`, 12 * HOUR, false, () => call('GetKeywordStats', { q, country, language })),
+        cache.wrap(`rel:${country}:${language}:${q}`, 12 * HOUR, false, () => call('GetRelatedKeywords', { q, country, language, startDate: start, endDate: end })).catch(() => []),
+      ]);
+      const weeks = (stats || []).map((r) => ({ week: bingDay(r.Date), impressions: Number(r.Impressions) || 0, broad: Number(r.BroadImpressions) || 0 }))
+        .filter((w) => w.week).sort((a, b) => (a.week < b.week ? -1 : 1));
+      const recent = weeks.slice(-4).reduce((a, w) => a + w.impressions, 0);
+      const before = weeks.slice(-8, -4).reduce((a, w) => a + w.impressions, 0);
+      return {
+        keyword: q, weeks, last4Weeks: recent, previous4Weeks: before,
+        related: (related || []).map((r) => ({ keyword: r.Query, impressions: Number(r.Impressions) || 0, broad: Number(r.BroadImpressions) || 0 }))
+          .sort((a, b) => b.impressions - a.impressions).slice(0, 15),
+      };
+    }));
+  }
+
+  // What Bing knows about one URL on the site: when it found and last crawled
+  // it, and the HTTP status it got. Bing answers an error for URLs it hasn't seen.
+  async function urlInfo(site, url) {
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    try {
+      const r = await cache.wrap(`url:${url}`, HOUR, false, () => call('GetUrlInfo', { siteUrl, url }));
+      if (!r) return { known: false };
+      return {
+        known: true, httpStatus: r.HttpStatus ?? null,
+        discovered: r.DiscoveryDate ? bingDay(r.DiscoveryDate) : null, lastCrawled: r.LastCrawledDate ? bingDay(r.LastCrawledDate) : null,
+        size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null,
+      };
+    } catch (err) {
+      if (err.kind === 'needs-bing') throw err;
+      return { known: false, note: err.message };
+    }
+  }
+
   async function saveKey(value) {
     const key = String(value ?? '').trim();
     if (key) {
@@ -322,7 +366,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, overview, summary, submit, syncAll,
+    status, saveKey, setMatch, overview, summary, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));

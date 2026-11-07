@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { frontMatterValue, setFrontMatter, firstHeading, setFirstHeading, lede, setLede, startsLike, metaValue, setMetaValue } from '../shared/article-md.js';
-import { missingTerms, articleChecks, checkSuggestions, createArticleEditor } from '../server/article-editor.mjs';
+import { missingTerms, articleChecks, checkSuggestions, createArticleEditor, trialVerdict } from '../server/article-editor.mjs';
 
 const MD = `# Best Dock Apps for Windows
 
@@ -144,4 +144,49 @@ test('suggest: one structured call with the article, queries and where meta live
 test('suggest: needs an Anthropic key', async () => {
   const editor = createArticleEditor({ auth: {}, store: { get: async () => ({}) }, articles, getToken: async () => '', env: {}, annotations: { list: async () => [] } });
   await assert.rejects(editor.suggest(site, { path: '/blog/dock', markdown: MD }), /Anthropic API key/);
+});
+
+test('trialVerdict: no verdict until the end, then keep, flat or remove', () => {
+  const t = (before, after, elapsed = 28) => trialVerdict({ days: 28, elapsed, before, after });
+  const b = { clicks: 10, impressions: 400, position: 12 };
+  assert.equal(t(b, { clicks: 30, impressions: 900, position: 8 }, 10).status, 'running');
+  assert.equal(t(b, { clicks: 14, impressions: 420, position: 11 }).verdict, 'keep');
+  assert.equal(t(b, { clicks: 10, impressions: 410, position: 9.5 }).verdict, 'keep');
+  assert.equal(t(b, { clicks: 9, impressions: 380, position: 12.5 }).verdict, 'flat');
+  assert.equal(t(b, { clicks: 0, impressions: 300, position: 30 }).verdict, 'remove');
+  assert.equal(t({ clicks: 0, impressions: 0, position: 0 }, { clicks: 0, impressions: 0, position: 0 }).verdict, 'remove');
+  // A trickle from nothing isn't a lift.
+  assert.equal(t({ clicks: 0, impressions: 0, position: 0 }, { clicks: 1, impressions: 5, position: 40 }).verdict, 'flat');
+});
+
+test('trials: start once, show progress, then keep, remove or cancel', async () => {
+  let state = {};
+  const store = { get: async () => state, update: async (fn) => { const next = structuredClone(state); await fn(next); state = next; } };
+  let today = Date.parse('2026-10-01T09:00:00Z');
+  const notes = [];
+  const editor = createArticleEditor({
+    auth: {}, store, articles, getToken: async () => '', now: () => today,
+    annotations: { addNote: async (n) => { notes.push(n); return n; }, list: async () => [] },
+  });
+  const gsc = { ...site, searchSite: 'sc-domain:a.com' };
+  await assert.rejects(editor.startTrial(site, { path: '/blog/dock' }), /Search Console/);
+  const started = await editor.startTrial(gsc, { path: '/blog/dock' });
+  assert.deepEqual([started.start, started.ends, started.status, started.elapsed], ['2026-10-01', '2026-10-28', 'running', 0]);
+  assert.deepEqual(notes.map((n) => n.label), ['Page trial: /blog/dock']);
+  await assert.rejects(editor.startTrial(gsc, { path: '/blog/dock' }), /already on trial since 2026-10-01/);
+
+  today = Date.parse('2026-10-12T09:00:00Z');
+  assert.deepEqual((await editor.trials(gsc)).map((t) => [t.path, t.elapsed, t.due]), [['/blog/dock', 10, false]]);
+  today = Date.parse('2026-11-06T09:00:00Z');
+  assert.equal((await editor.trials(gsc))[0].due, true);
+
+  await assert.rejects(editor.decideTrial(gsc, { path: '/blog/dock', decision: 'maybe' }), /keep, remove, cancel/);
+  await editor.decideTrial(gsc, { path: '/blog/dock', decision: 'remove' });
+  assert.deepEqual(state.pageTrials.map((t) => [t.decision, t.decidedAt]), [['remove', '2026-11-06']]);
+  await assert.rejects(editor.decideTrial(gsc, { path: '/blog/dock', decision: 'keep' }), /no open trial/);
+
+  // A new trial after a decided one; cancel drops it and leaves the old one.
+  await editor.startTrial(gsc, { path: '/blog/dock' });
+  await editor.decideTrial(gsc, { path: '/blog/dock', decision: 'cancel' });
+  assert.equal(state.pageTrials.length, 1);
 });

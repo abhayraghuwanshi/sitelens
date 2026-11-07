@@ -20,6 +20,7 @@ import YAML from 'yaml';
 import { normalizeGoals, GOAL_SOURCES } from './products.mjs';
 import { ValidationError } from './store.mjs';
 import { EngineError } from './engines.mjs';
+import { createCache } from './cache.mjs';
 
 const API = 'https://api.github.com';
 const DEMO_FILE = fileURLToPath(new URL('./demo-sitelens.yml', import.meta.url));
@@ -534,8 +535,11 @@ function declaredHost(text) {
   }
 }
 
-export function createSiteConfig({ dir, repos = async () => [], getToken = async () => '', fetchImpl = fetch, now = Date.now }) {
-  const cache = new Map(); // site id → { at, host, value }
+export function createSiteConfig({ dir, repos = async () => [], getToken = async () => '', cacheDb = null, fetchImpl = fetch, now = Date.now }) {
+  // Keyed `<site id>:<host>`. Kept on disk and shown stale while GitHub is asked
+  // again, so pages that only need the config don't wait on it.
+  const cache = createCache({ db: cacheDb, name: 'site-config', staleFor: cacheDb ? 7 * 86_400_000 : 0, now });
+  const lastGood = new Map(); // site id → { host, value }
 
   async function readLocal(host) {
     for (const ext of ['yml', 'yaml']) {
@@ -610,20 +614,22 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
 
   async function get(site, { fresh = false } = {}) {
     const host = cleanHost(site.host);
-    const hit = cache.get(site.id);
-    if (!fresh && hit && hit.host === host && now() - hit.at < TTL) return hit.value;
-    let value;
-    try {
-      value = await load(site);
-    } catch (err) {
-      value = { found: false, failed: true, source: null, config: null, errors: [], warnings: [], notes: [`Couldn’t read the config: ${err.message}`], checkedAt: now() };
-    }
-    // Keep using the last good file when GitHub or the disk hiccups, so goals
-    // and their alerts don't fall back to guesses during an outage.
-    if (value.failed && !value.found && hit?.host === host && hit.value.config) {
-      value = { ...hit.value, notes: [...hit.value.notes.filter((n) => !n.startsWith('Couldn’t re-read')), `Couldn’t re-read it, so the last good copy is used: ${value.notes.join(' ')}`] };
-    }
-    cache.set(site.id, { at: now(), host, value });
+    const value = await cache.wrap(`${site.id}:${host}`, TTL, fresh, async () => {
+      let value;
+      try {
+        value = await load(site);
+      } catch (err) {
+        value = { found: false, failed: true, source: null, config: null, errors: [], warnings: [], notes: [`Couldn’t read the config: ${err.message}`], checkedAt: now() };
+      }
+      // Keep using the last good file when GitHub or the disk hiccups, so goals
+      // and their alerts don't fall back to guesses during an outage.
+      const hit = lastGood.get(site.id);
+      if (value.failed && !value.found && hit?.host === host) {
+        value = { ...hit.value, notes: [...hit.value.notes.filter((n) => !n.startsWith('Couldn’t re-read')), `Couldn’t re-read it, so the last good copy is used: ${value.notes.join(' ')}`] };
+      }
+      return value;
+    });
+    if (value.config) lastGood.set(site.id, { host, value });
     return value;
   }
 
@@ -708,7 +714,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       if (to.type === 'local') {
         await mkdir(dir, { recursive: true });
         await writeFile(to.path, text.endsWith('\n') ? text : `${text}\n`);
-        cache.delete(site.id);
+        cache.clear(`${site.id}:`);
         return { saved: 'local', path: to.path };
       }
       return { saved: 'pr', repo: to.repo, path: to.path, ...(await openPr(site, to, text, key)) };
@@ -720,11 +726,12 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       await mkdir(dir, { recursive: true });
       const path = join(dir, `${host}.yml`);
       await writeFile(path, text.endsWith('\n') ? text : `${text}\n`);
-      cache.delete(site.id);
+      cache.clear(`${site.id}:`);
       return get(site);
     },
     forget(siteId) {
-      cache.delete(siteId);
+      cache.clear(`${siteId}:`);
+      lastGood.delete(siteId);
     },
   };
 }
