@@ -35,7 +35,8 @@ export const WAREHOUSE_RANGES = [
 // The daily export lands the next day, so ranges end yesterday — or at a fixed
 // endDate for static datasets such as Google's public GA4 sample.
 export function warehouseRange(rangeKey = '28d', { endDate = '', now = new Date() } = {}) {
-  const option = WAREHOUSE_RANGES.find((r) => r.key === rangeKey) || WAREHOUSE_RANGES[1];
+  // `yesterday` (Story's daily check) is one day: the export already ends yesterday.
+  const option = rangeKey === 'yesterday' ? { key: 'yesterday', days: 1 } : WAREHOUSE_RANGES.find((r) => r.key === rangeKey) || WAREHOUSE_RANGES[1];
   const end = endDate ? new Date(`${endDate}T12:00:00`) : new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
   const start = new Date(end);
   start.setDate(start.getDate() - (option.days - 1));

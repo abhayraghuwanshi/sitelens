@@ -139,7 +139,7 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
       const sc = dayTone(s.search.clicks, s.search.baseline);
       const vs = sc.change !== null && Number.isFinite(sc.change) && sc.tone !== 'flat' ? ` (${sc.change >= 0 ? '+' : '−'}${pct(sc.change)} vs usual)` : '';
       const top = s.search.queries?.[0];
-      lines.push({ kind: 'search', text: `${where}Search: ${num(s.search.clicks)} clicks${vs}${top ? `, top query “${top.query}”` : ''}.` });
+      lines.push({ kind: 'search', text: `${where}Search: ${num(s.search.clicks)} click${s.search.clicks === 1 ? '' : 's'}${vs}${top ? `, top query “${top.query}”` : ''}.` });
     }
   }
   // Claude's comments are analysis of the day, not things that happened on it.
@@ -603,11 +603,15 @@ export function createCalendar({ store, history, annotations, extensions = null,
 
   // Totals per source family, landing page or search query over [from, to],
   // against the window of the same length just before it.
-  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25 } = {}) {
+  // `back`: how many days earlier the "previous" window starts (default: the
+  // span just before). One day is set against the same weekday with back = 7.
+  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0 } = {}) {
     if (!['source', 'page', 'query'].includes(by)) throw new ValidationError('by must be source, page or query.');
     const r = span(from, to);
     const sc = await scope(site);
-    const prevFrom = addDays(r.from, -r.days);
+    const shift = Math.max(r.days, Math.min(366, Number(back) || 0));
+    const prevFrom = addDays(r.from, -shift);
+    const prevTo = addDays(r.to, -shift);
     const multi = sc.sites.length > 1;
     const cur = new Map();
     const prev = new Map();
@@ -618,7 +622,8 @@ export function createCalendar({ store, history, annotations, extensions = null,
         for (const row of await dailyBreakdown(s, by, prevFrom, r.to)) {
           const base = by === 'source' ? sourceFamily(row.key) : row.key;
           const key = multi && by === 'page' ? `${s.label} ${base}` : base;
-          const map = row.date < r.from ? prev : cur;
+          const map = row.date >= r.from ? cur : row.date <= prevTo ? prev : null;
+          if (!map) continue;
           map.set(key, (map.get(key) || 0) + row.value);
         }
       } catch (err) {
@@ -661,7 +666,7 @@ export function calendarRoutes({ calendar, history }) {
   const range = (query) => ({ from: query.get('from') || '', to: query.get('to') || '', site: query.get('site') || 'all' });
   return [
     ['GET', /^\/api\/calendar\/metrics$/, async ({ query }) => calendar.metrics(range(query))],
-    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25 })],
+    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25, back: Number(query.get('back')) || 0 })],
     ['GET', /^\/api\/calendar\/events$/, async ({ query }) => calendar.events(range(query))],
     ['GET', /^\/api\/calendar\/status$/, async () => history.status()],
     ['POST', /^\/api\/calendar\/sync$/, async () => ({ sites: await history.syncAll() })],

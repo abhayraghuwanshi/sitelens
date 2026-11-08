@@ -8,10 +8,13 @@ import { LeftOutLine } from './LeaveOut.jsx';
 import { useJourneys } from './Journeys.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
 
+// Yesterday is one whole day, set against the same weekday a week before.
+const weekday = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
+
 // One site's period as a story: what's failing, what happened, who brought the
 // visits, where they landed, and what to do next. Each part is one sentence and
 // a short list; "Explore" opens the full report behind it.
-const RANGES = [{ key: 'today', label: 'Today' }, { key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
+const RANGES = [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }, { key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const short = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const KIND_ICON = { deploy: 'rocket', release: 'github', post: 'megaphone', extension: 'puzzle', mention: 'chat', note: 'star', claude: 'sparkles' };
@@ -26,21 +29,22 @@ export function Story({ site, params }) {
   };
 
   const isToday = range === 'today';
+  const back = range === 'yesterday' ? 7 : undefined;
   const story = useAsync(() => (isToday ? null : api.get(`/sites/${site.id}/story${qs({ range })}`)), [site.id, range]);
   const r = story.data?.range;
   const span = r ? { site: site.id, from: r.from, to: r.to } : null;
   const metrics = useAsync(() => (span ? api.get(`/calendar/metrics${qs(span)}`) : null), [span?.from, span?.to, site.id]);
-  const sources = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'source', limit: 6 })}`) : null), [span?.from, span?.to, site.id]);
-  const pages = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'page', limit: 5 })}`) : null), [span?.from, span?.to, site.id]);
+  const sources = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'source', limit: 6, back })}`) : null), [span?.from, span?.to, site.id]);
+  const pages = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'page', limit: 5, back })}`) : null), [span?.from, span?.to, site.id]);
   const marks = useAsync(() => (span ? api.get(`/annotations${qs({ from: span.from, to: span.to, scope: `site:${site.id}` })}`) : null), [span?.from, span?.to, site.id]);
 
   return (
     <Page title={site.label}
-      sub={isToday ? 'Today so far, against a usual day like it' : r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
+      sub={isToday ? 'Today so far, against a usual day like it' : r && back ? `${weekday(r.from)} ${short(r.from)}, against the ${weekday(r.from)} before` : r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       <NeedsYou site={site} />
       {!isToday && <LeftOutLine site={site} range={range} />}
-      {isToday ? <><Today site={site} /><NextSteps site={site} range="7d" /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
+      {isToday ? <><Today site={site} onYesterday={() => pick('yesterday')} /><NextSteps site={site} range="7d" /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
         <>
           <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
@@ -56,7 +60,7 @@ export function Story({ site, params }) {
 
 // Today so far, from GA4's real-time and today reports. Today isn't over, so it
 // is set against a usual same weekday's whole day, not against yesterday.
-function Today({ site }) {
+function Today({ site, onYesterday }) {
   const dash = useAsync(() => api.get(`/sites/${site.id}/dashboard?range=today`), [site.id]);
   const live = useAsync(() => api.get(`/sites/${site.id}/live`).catch(() => null), [site.id]);
   const to = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
@@ -109,7 +113,10 @@ function Today({ site }) {
           </ul>
         </div>
       </div>
-      <p class="nx-note">Search Console reports 2–3 days late, so today’s searches aren’t in yet. Downloads and the reasons people leave fill in tomorrow.</p>
+      <p class="nx-note">
+        Today’s story stops here: Search Console reports 2–3 days late, and downloads, journeys and the reasons people leave fill in once the day is over.{' '}
+        <button type="button" class="nx-link" onClick={onYesterday}>See yesterday in full</button>
+      </p>
     </section>
   );
 }
@@ -171,8 +178,10 @@ function Traffic({ site, story, metrics, marks }) {
           ) : <p class="nx-dim">No single source or page moved much.</p>}
         </div>
         <div>
-          <div class="nx-label-sm">Days that stood out</div>
-          {story.days.length ? (
+          <div class="nx-label-sm">{days.length === 1 ? `Against a usual ${days[0].weekday}` : 'Days that stood out'}</div>
+          {days.length === 1 ? (
+            <p class="nx-lede">{usualDay(days[0])}</p>
+          ) : story.days.length ? (
             <ul class="nx-list">
               {story.days.map((d) => (
                 <li key={d.date}>
@@ -188,6 +197,13 @@ function Traffic({ site, story, metrics, marks }) {
     </section>
   );
 }
+
+// One day against the average of the same weekday before it.
+const usualDay = (d) => {
+  if (!Number.isFinite(d.sessions) || !d.baseline) return 'Not enough earlier days to say what a usual one looks like.';
+  const p = Math.round((d.sessions / d.baseline - 1) * 100);
+  return `${fmt(d.sessions)} visits, against ${fmt(d.baseline)} on a usual ${d.weekday}${Math.abs(p) < 10 ? ': about normal.' : `: ${Math.abs(p)}% ${p > 0 ? 'more' : 'fewer'}.`}`;
+};
 
 function Cause({ e, lead }) {
   const label = <><Icon name={KIND_ICON[e.kind] || 'star'} size={12} /> {lead}: {e.label}</>;
@@ -353,68 +369,89 @@ function Leavers({ site, range }) {
   );
 }
 
-// What the visits led to: the site's outcome goals (Outcomes) and, after the
-// download, the product's own usage from custom metrics. Without those it says
-// what to connect instead of guessing.
-const SOURCE_NOTE = {
-  downloads: 'Release files downloaded from GitHub: files, not people.',
-  installs: 'From the Chrome Web Store.',
-  event: 'On the site, from GA4.',
-};
+// What the visits led to, in three kinds that aren't added up: what visitors did
+// on the site (GA4 goal events, steps on the way to the outcome), what got the
+// product (store installs, release downloads) and who keeps using it (custom
+// metrics). Without any of those it says what to connect instead of guessing.
+const GOT = { installs: 'Chrome Web Store', downloads: 'GitHub files, not people', stars: 'GitHub stars gained' };
+const hasHistory = (x) => x.previous !== null && x.previous !== undefined;
 
-function Results({ site, range }) {
+export function Results({ site, range, n = '5', title = 'What it led to', more = true }) {
   const products = useAsync(() => api.get('/products').catch(() => null), []);
   const product = products.data?.products?.find((p) => p.siteId === site.id);
   const out = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range })}`).catch(() => null) : null), [product?.id, range]);
   const metrics = useAsync(() => api.get(`/sites/${site.id}/metrics${qs({ range })}`).catch(() => ({ metrics: [] })), [site.id, range]);
   if (!products.data || (product && !out.data && out.loading)) return <section class="nx-card"><Loading height={160} /></section>;
-  const goals = (out.data?.goals?.list || []).filter((g) => g.role === 'outcome');
-  const usage = metrics.data?.metrics || [];
-  if (!goals.length && !usage.length) return null;
-  const dated = goals.filter((g) => g.previous !== null && g.previous !== undefined);
-  const lead = dated[0];
+  const all = out.data?.goals?.list || [];
+  if (!all.some((g) => g.role === 'outcome') && !metrics.data?.metrics?.length) return null;
+  const outcomesHref = product ? `#/site/${site.id}/outcomes?range=${range}` : `#/site/${site.id}/setup`;
+
+  // On the site: the outcome first, then the steps that lead to it, biggest first.
+  const onSite = all.filter((g) => g.source === 'event' || g.source === 'page')
+    .sort((a, b) => (b.role === 'outcome') - (a.role === 'outcome') || b.count - a.count);
+  const got = all.filter((g) => GOT[g.source] && g.role === 'outcome')
+    .sort((a, b) => hasHistory(b) - hasHistory(a));
+  const usage = (metrics.data?.metrics || []).map((m) => ({
+    id: m.id,
+    label: m.label.replace(/[\s·]+$/, ''),
+    count: m.error ? null : m.total,
+    previous: m.previous,
+    note: m.error ? m.error.message : m.summary === 'average' ? 'average a day' : 'in this period',
+  }));
 
   return (
     <section class="nx-card" aria-label="What it led to">
-      <SectionHead n="5" title="What it led to" more={product ? { href: `#/site/${site.id}/outcomes?range=${range}`, label: 'Outcomes' } : null} />
-      {lead && (
-        <p class="nx-lede">{dated.map((g) => `${fmt(g.count)} ${g.label.charAt(0).toLowerCase() + g.label.slice(1)} (${changeWords(g.count, g.previous)})`).join(', ')}.</p>
-      )}
-      <ul class="nx-rows nx-results">
-        {goals.map((g) => (
-          <li key={g.id}>
-            <a href={product ? `#/site/${site.id}/outcomes?range=${range}` : `#/site/${site.id}/setup`}>
-              <span class="nx-path"><b>{g.label}</b><span class="nx-dim small"> · {SOURCE_NOTE[g.source] || ''}</span></span>
-              <span class="nx-num">{fmt(g.count)}</span>
-              {g.previous === null || g.previous === undefined ? <span class="nx-dim small">no history</span> : <Change value={g.count} previous={g.previous} />}
-            </a>
-          </li>
-        ))}
-      </ul>
-      <div class="nx-label-sm" style={{ marginTop: '6px' }}>Who keeps using it</div>
-      {usage.length ? (
-        <ul class="nx-rows nx-results">
-          {usage.map((m) => (
-            <li key={m.id}>
-              <a href="#/account?tab=metrics">
-                <span class="nx-path"><b>{m.label}</b>{m.error && <span class="bad small"> · {m.error.message}</span>}</span>
-                <span class="nx-num">{m.error ? '–' : fmt(m.total)}</span>
-                {m.error ? <span /> : <Change value={m.total} previous={m.previous} />}
-              </a>
-            </li>
-          ))}
-        </ul>
-      ) : (
-        <a class="nx-callout" href="#/account?tab=metrics">
-          <Icon name="database" size={14} />
-          <span>A download isn’t a user. Connect the app’s own numbers (launches, weekly active users, uninstalls, from a database such as Cloudflare D1) as custom metrics, and this shows who stays.</span>
-        </a>
-      )}
+      <SectionHead n={n} title={title} more={product && more ? { href: outcomesHref, label: 'Outcomes' } : null} />
+      <div class="nx-outcomes">
+        {onSite.length > 0 && (
+          <OutcomeKind icon="target" title="On the site" note="Visitors, from GA4" href={outcomesHref}
+            items={onSite.map((g) => ({ id: g.id, label: g.label, count: g.unavailable ? null : g.count, previous: g.previous, note: g.unavailable || (g.role === 'step' ? 'on the way' : '') }))} />
+        )}
+        {got.length > 0 && (
+          <OutcomeKind icon="download" title="Got the product" note="Counted outside the site" href={outcomesHref}
+            items={got.map((g) => ({ id: g.id, label: g.label, count: g.unavailable ? null : g.count, previous: g.previous, note: g.unavailable || GOT[g.source] }))} />
+        )}
+        {usage.length > 0 ? (
+          <OutcomeKind icon="users" title="Kept using it" note="Custom metrics" href="#/account?tab=metrics" items={usage} />
+        ) : (
+          <a class="nx-callout nx-okind-empty" href="#/account?tab=metrics">
+            <Icon name="database" size={14} />
+            <span>A download isn’t a user. Connect the app’s own numbers (launches, weekly active users, uninstalls) as custom metrics, and this shows who stays.</span>
+          </a>
+        )}
+      </div>
     </section>
   );
 }
 
-const changeWords = (value, previous) => (!previous ? 'none before' : previous * 4 < value ? `from ${fmt(previous)}` : `${value >= previous ? 'up' : 'down'} ${Math.abs(Math.round((value / previous - 1) * 100))}%`);
+// One kind of outcome: its headline number large, the rest as short rows.
+function OutcomeKind({ icon, title, note, href, items }) {
+  const [lead, ...rest] = items;
+  return (
+    <a class="nx-okind" href={href}>
+      <div class="nx-label-sm"><Icon name={icon} size={12} /> {title}<span class="nx-okind-src">{note}</span></div>
+      <div class="nx-okind-lead">
+        <b>{amount(lead.count)}</b>
+        <span>{lead.label}{lead.note && <span class="nx-dim small"> · {lead.note}</span>}</span>
+        <Shift item={lead} />
+      </div>
+      {rest.length > 0 && (
+        <ul class="nx-okind-rows">
+          {rest.map((x) => (
+            <li key={x.id}>
+              <span class="nx-path">{x.label}{x.note && <span class="nx-dim small"> · {x.note}</span>}</span>
+              <span class="nx-num">{amount(x.count)}</span>
+              <Shift item={x} />
+            </li>
+          ))}
+        </ul>
+      )}
+    </a>
+  );
+}
+
+const amount = (v) => (v === null || v === undefined ? '–' : v < 10 && v % 1 ? v.toFixed(1) : fmt(v));
+const Shift = ({ item }) => (item.count === null ? <span /> : hasHistory(item) ? <Change value={item.count} previous={item.previous} /> : <span class="nx-dim small">no history</span>);
 
 // What to do next (server/next-steps.mjs): fix what dropped, get found in
 // search, convert more, and do more of what worked. Each one can go on your
@@ -456,8 +493,8 @@ function NextSteps({ site, range }) {
                     <span class="nx-dim">{x.why}</span>
                     {x.worth && <dl class="nx-kv"><dt>{g.key === 'fix' ? 'Lost' : 'Worth'}</dt><dd class={g.key === 'fix' ? 'bad' : 'good'}>{x.worth}</dd></dl>}
                     <div class="nx-action-row">
-                      <AddTodo site={site} added={todo} class="nx-btn primary" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
                       <a class="nx-btn" href={x.link} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>{x.linkLabel}</a>
+                      <AddTodo site={site} added={todo} class="nx-btn quiet" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
                     </div>
                   </div>
                 );
@@ -482,7 +519,7 @@ const pageName = (path) => (path === '/' ? 'the home page' : !path || path === '
 
 // A change against the period before. From almost nothing, the starting
 // number says more than a percentage does ("from 1", not "up 12200%").
-function Change({ value, previous }) {
+export function Change({ value, previous }) {
   if (!previous) return value ? <span class="good small">new</span> : <span class="nx-dim">–</span>;
   if (previous * 4 < value) return <span class="good small">from {fmt(previous)}</span>;
   const p = Math.round((value / previous - 1) * 100);
@@ -490,7 +527,7 @@ function Change({ value, previous }) {
   return <span class={`${p > 0 ? 'good' : 'bad'} small`}>{p > 0 ? '↑' : '↓'} {Math.abs(p)}%</span>;
 }
 
-function SectionHead({ n, title, more }) {
+export function SectionHead({ n, title, more }) {
   return (
     <div class="nx-section-head">
       <h2 class="nx-h2">{n && <span class="nx-step" aria-hidden="true">{n}</span>}{title}</h2>

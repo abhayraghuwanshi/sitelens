@@ -65,9 +65,13 @@ export const CONNECTORS = {
 
 // ---------- window, placeholders and SQL guard ----------
 
-// UTC days ending today; `week` is Monday through today. The previous window
-// has the same length and ends the day before.
+// UTC days ending today; `week` is Monday through today, `yesterday` the one day
+// before today. The previous window has the same length and ends the day before.
 export function metricRange(rangeKey = '28d', now = Date.now()) {
+  if (rangeKey === 'yesterday') {
+    const r = metricRange('today', now - DAY);
+    return { ...r, key: 'yesterday' };
+  }
   const today = Date.parse(`${isoDay(now)}T00:00:00Z`);
   const days = rangeKey === 'week' ? ((new Date(today).getUTCDay() + 6) % 7) + 1 : RANGE_DAYS[rangeKey] || 28;
   const start = today - (days - 1) * DAY;

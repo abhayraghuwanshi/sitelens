@@ -6,7 +6,7 @@
 /* Block links (rows, cards, buttons, tabs) show hover with a border or colour;
    the app-wide underline would run under every line inside them. */
 .nx-jlinks a:hover, .nx-rows a:hover, .nx-site-card:hover, .nx-callout:hover, .nx-btn:hover,
-.nx-item:hover, .nx-tab:hover, .nx-brand:hover, .nx-list a:hover, a.nx-cause:hover, .nx-more:hover { text-decoration: none; }
+.nx-item:hover, .nx-tab:hover, .nx-brand:hover, .nx-list a:hover, a.nx-cause:hover, .nx-more:hover, .nx-okind:hover { text-decoration: none; }
 
 /* Sidebar */
 .nx-side { position: sticky; top: 0; align-self: flex-start; height: 100vh; width: 232px; flex: none; box-sizing: border-box; display: flex; flex-direction: column; gap: 4px; padding: 18px 12px; background: var(--surface); border-right: 1px solid var(--border); overflow-y: auto; }
@@ -45,7 +45,6 @@
 /* Cards and sections */
 .nx-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; min-width: 0; box-shadow: var(--shadow); }
 .nx-warn { background: color-mix(in srgb, var(--warning) 10%, var(--surface)); border-color: color-mix(in srgb, var(--warning) 45%, var(--border)); }
-.nx-next { border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); }
 .nx-section-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
 .nx-h2 { margin: 0; display: flex; align-items: center; gap: 10px; font-size: var(--text-lg); font-weight: 650; }
 .nx-step { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--surface-2); color: var(--text-2); font-size: var(--text-sm); font-weight: 600; }
@@ -80,7 +79,41 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-callout { display: flex; gap: 10px; align-items: baseline; padding: 11px 14px; border-radius: 10px; background: color-mix(in srgb, var(--warning) 12%, var(--surface)); color: var(--text); text-decoration: none; line-height: 1.5; }
 .nx-callout:hover { outline: 1px solid var(--warning); }
 
-.nx-results a { grid-template-columns: minmax(0, 1fr) 70px 110px; }
+.nx-outcomes { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr)); gap: 12px; }
+.nx-okind { display: flex; flex-direction: column; gap: 10px; padding: 16px; border-radius: 12px; background: var(--bg); border: 1px solid var(--border); color: var(--text); text-decoration: none; min-width: 0; }
+.nx-okind:hover { border-color: var(--accent); }
+.nx-okind:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.nx-okind .nx-label-sm { display: flex; align-items: center; gap: 6px; margin: 0; }
+.nx-okind-src { margin-left: auto; font-weight: 400; letter-spacing: 0; text-transform: none; }
+.nx-okind-lead { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 4px 10px; align-items: baseline; }
+.nx-okind-lead b { font-size: 28px; font-weight: 700; letter-spacing: -0.01em; font-variant-numeric: tabular-nums; line-height: 1.1; }
+.nx-okind-rows { list-style: none; margin: 0; padding: 0; }
+.nx-okind-rows li { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; gap: 10px; align-items: baseline; padding: 7px 0; border-top: 1px solid var(--border); font-size: var(--text-md); }
+.nx-okind-rows li > :last-child, .nx-okind-lead > :last-child { text-align: right; }
+.nx-okind-empty { align-self: stretch; }
+
+/* Outcomes page */
+.nx-action-bad { border-color: color-mix(in srgb, var(--critical-ink) 45%, var(--border)); }
+.nx-do { font-size: var(--text-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); margin-right: 4px; }
+.nx-fstep.leak .nx-path { color: var(--warning); font-weight: 600; }
+.nx-fstep.leak .nx-bar { outline: 1px solid color-mix(in srgb, var(--warning) 60%, transparent); }
+.nx-conv .nx-tr { grid-template-columns: minmax(0, 1fr) 70px 90px minmax(110px, 0.6fr); }
+.nx-conv.engaged .nx-tr { grid-template-columns: minmax(0, 1fr) 70px 90px minmax(110px, 0.6fr) 70px; }
+.nx-conv .nx-tr.hot { background: color-mix(in srgb, var(--good) 8%, transparent); }
+.nx-rate { display: grid; grid-template-columns: minmax(0, 1fr) 44px; gap: 8px; align-items: center; text-align: right; }
+.nx-goals > summary { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 10px; cursor: pointer; list-style: none; }
+.nx-goals > summary::-webkit-details-marker { display: none; }
+.nx-goals > summary > span:first-child::before { content: '▸ '; color: var(--text-3); }
+.nx-goals[open] > summary > span:first-child::before { content: '▾ '; }
+.nx-goals > summary .nx-action-row { padding: 0; border: 0; }
+.nx-goals .nx-btn, .nx-action-row a.nx-btn { gap: 6px; }
+.nx-goal-table .nx-tr { grid-template-columns: minmax(0, 1fr) minmax(0, 1.2fr) 80px 90px 70px; }
+@media (max-width: 640px) {
+  .nx-conv .nx-tr, .nx-conv.engaged .nx-tr { grid-template-columns: minmax(0, 1fr) 56px 64px 90px; }
+  .nx-conv.engaged .nx-tr > :last-child { display: none; }
+  .nx-goal-table .nx-tr { grid-template-columns: minmax(0, 1fr) 70px 60px; }
+  .nx-goal-table .nx-tr > :nth-child(2), .nx-goal-table .nx-tr > :nth-child(3) { display: none; }
+}
 
 /* Journeys */
 .nx-jlinks { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -132,6 +165,8 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-action-row { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .nx-btn { display: inline-flex; align-items: center; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: none; color: var(--text); font: inherit; font-size: var(--text-md); text-decoration: none; cursor: pointer; }
 .nx-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.nx-btn.quiet { border-color: transparent; color: var(--text-3); padding-inline: 8px; gap: 4px; }
+.nx-btn.quiet:hover { color: var(--text); background: var(--surface-2); }
 .nx-btn.done { border-color: var(--good); color: var(--good-ink); }
 .nx-btn:disabled { opacity: 0.6; cursor: default; }
 .nx-error { margin: 0; color: var(--critical-ink); }
@@ -184,3 +219,5 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-step-group { display: flex; flex-direction: column; gap: 4px; }
 .nx-step-group .nx-label-sm { display: flex; align-items: center; gap: 6px; }
 
+.nx-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }
+.nx-link:hover { text-decoration: underline; }

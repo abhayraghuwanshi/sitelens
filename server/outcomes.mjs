@@ -84,7 +84,10 @@ export function stepKind(goal) {
 // can't be summed across events without double counting.
 export function buildFunnel({ visitors, goals = [], listingFromSite = null, installsFromSite = null }) {
   const site = goals.filter((g) => g.source === 'event' || g.source === 'page');
-  const ordered = [...site.filter((g) => g.role === 'step'), ...site.filter((g) => g.role !== 'step')];
+  // Steps biggest first, whatever order they were written in: a funnel only
+  // narrows, so "saw the section" (243) comes before "clicked" (47).
+  const byUsers = (a, b) => (b.count || 0) - (a.count || 0);
+  const ordered = [...site.filter((g) => g.role === 'step').sort(byUsers), ...site.filter((g) => g.role !== 'step').sort(byUsers)];
   const steps = [{ key: 'visitors', label: 'Site visitors', users: visitors, kind: 'visit' }];
   for (const g of ordered) steps.push({ key: g.id, label: g.label, users: g.count || 0, event: g.match, kind: stepKind(g) });
   for (let i = 1; i < steps.length; i++) {

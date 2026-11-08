@@ -42,6 +42,18 @@ test('buildFunnel orders site goals (steps first), rates each and finds the bigg
   assert.ok(Math.abs(f.store.rate - 9 / 496) < 1e-9);
 });
 
+test('buildFunnel puts steps biggest first, whatever order the goals were written in', () => {
+  const goals = [
+    { id: 'click', label: 'Clicked to download', source: 'event', match: 'download_cta_click', role: 'step', count: 47 },
+    { id: 'view', label: 'Saw the downloads section', source: 'event', match: 'downloads_section_view', role: 'step', count: 243 },
+    { id: 'dl', label: 'Started a download', source: 'event', match: 'file_download', role: 'outcome', count: 37 },
+  ];
+  const f = buildFunnel({ visitors: 570, goals });
+  assert.deepEqual(f.steps.map((s) => s.key), ['visitors', 'view', 'click', 'dl']);
+  assert.ok(f.steps.every((s) => s.rate === undefined || s.rate <= 1));
+  assert.equal(f.leak.to.key, 'click');
+});
+
 test('goalRates takes session_start as visitors and the best goal event; byFamily merges sources', () => {
   const rows = [
     { key: 'google', event: 'session_start', users: 150 },

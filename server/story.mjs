@@ -15,10 +15,12 @@ const DAY = 86_400_000;
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const addDays = (date, n) => isoDay(Date.parse(`${date}T00:00:00Z`) + n * DAY);
 const shortDate = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const weekdayName = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
 const fmt = (v) => Math.round(v).toLocaleString('en-US');
 const pct = (change) => `${Math.round(Math.abs(change) * 100)}%`;
 
-export const STORY_DAYS = { '7d': 7, '28d': 28, '90d': 90 };
+// `yesterday` is one day, set against the same weekday a week before it.
+export const STORY_DAYS = { yesterday: 1, '7d': 7, '28d': 28, '90d': 90 };
 // The things you did, as opposed to notes and alerts about them.
 const SHIPPED = new Set(['deploy', 'release', 'post', 'extension', 'mention']);
 
@@ -64,14 +66,14 @@ function moverText(m) {
 //   previous: its totals for the period before
 //   breakdowns: { source, page, query } rows from calendar.breakdown
 //   events: calendar.events for the period
-export function buildStory({ metrics, previous, breakdowns = {}, events = [], days: span }) {
+export function buildStory({ metrics, previous, breakdowns = {}, events = [], days: span, period: against = '' }) {
   const traffic = metrics.days.some((d) => d.sessions !== null && d.sessions !== undefined) && (metrics.totals.sessions || previous.sessions);
   const metric = traffic ? 'sessions' : 'clicks';
   const noun = traffic ? 'Visits' : 'Search clicks';
   const value = metrics.totals[metric] || 0;
   const before = previous[metric] || 0;
   const change = before ? value / before - 1 : null;
-  const period = `the previous ${span} days`;
+  const period = against || `the previous ${span} days`;
   let headline;
   let tone = 'good';
   if (!value && !before) {
@@ -144,9 +146,12 @@ export function createStory({ calendar, today }) {
       // Whole days only: today is still filling in.
       const to = addDays(today(), -1);
       const from = addDays(to, -(span - 1));
-      const prev = { from: addDays(from, -span), to: addDays(from, -1) };
+      // One day is set against the same weekday a week before: the day before is
+      // a different weekday, and weekdays differ more than weeks do.
+      const prev = span === 1 ? { from: addDays(from, -7), to: addDays(from, -7) } : { from: addDays(from, -span), to: addDays(from, -1) };
       const at = { site: site.id };
-      const rowsFor = (by, end = to) => (end >= from ? calendar.breakdown({ ...at, from, to: end, by, limit: 40 }).catch(() => ({ rows: [] })) : { rows: [] });
+      const back = span === 1 ? 7 : 0;
+      const rowsFor = (by, end = to) => (end >= from ? calendar.breakdown({ ...at, from, to: end, by, limit: 40, back }).catch(() => ({ rows: [] })) : { rows: [] });
       const [metrics, before, events, ...rows] = await Promise.all([
         calendar.metrics({ ...at, from, to }),
         calendar.metrics({ ...at, ...prev }),
@@ -158,6 +163,7 @@ export function createStory({ calendar, today }) {
       rows.push(await rowsFor('query', metrics.searchLast && metrics.searchLast < to ? metrics.searchLast : to));
       const story = buildStory({
         metrics, previous: before.totals, events: events.events, days: span,
+        period: span === 1 ? `the ${weekdayName(from)} before` : '',
         breakdowns: { source: rows[0].rows, page: rows[1].rows, query: rows[2].rows },
       });
       return { range: { key: rangeKey, from, to, previous: prev }, ...story };

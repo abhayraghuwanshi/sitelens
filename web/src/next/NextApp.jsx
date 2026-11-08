@@ -18,6 +18,7 @@ import { LeaveOut } from './LeaveOut.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { Sites } from './Sites.jsx';
 import { Story } from './Story.jsx';
+import { OutcomesPage } from './Outcomes.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
 import { TodosPage, useTodos } from '../components/Todos.jsx';
 import './next.css';
@@ -57,14 +58,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'todos') body = <Page title="To-dos" sub={`Changes to make on ${site.label}`}><TodosPage key={site.id} site={site} sites={sites} /></Page>;
   else if (section === 'todos') body = <Page title="To-dos" sub="Every site’s changes to make"><TodosPage sites={sites} /></Page>;
-  else if (section === 'site' && view === 'outcomes') {
-    body = (
-      <Page title="Outcomes" back={story}
-        sub={`What ${site.label}’s visits led to: the goals set in Setup (downloads, installs, sign-ups), how many reached them, and where people drop off`}>
-        <Outcomes key={site.id} range={route.params.get('range') || '28d'} params={withSite(route.params, site.id)} />
-      </Page>
-    );
-  }
+  else if (section === 'site' && view === 'outcomes') body = <OutcomesPage key={site.id} site={site} params={route.params} back={story} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
   else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
