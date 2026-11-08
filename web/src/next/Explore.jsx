@@ -3,6 +3,7 @@ import { Segmented } from '../components/ui.jsx';
 import { Overview } from '../pages/Overview.jsx';
 import { PageReview } from '../pages/PageReview.jsx';
 import { Articles } from '../pages/Articles.jsx';
+import { ContentCycles } from '../pages/ContentCycles.jsx';
 import { SearchHub } from '../pages/SearchHub.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
 import { Paths } from '../pages/Paths.jsx';
@@ -20,6 +21,9 @@ export const EXPLORE_TABS = [
   // Pages, searches and articles in one: every page (and its own view, the
   // article editor), the searches that find them, and GA4's page report.
   { key: 'pages', label: 'Pages', mode: 'content', component: PagesTab },
+  // Articles measured every cycle in Google, Bing and AI: grow, improve or cut.
+  // A cycle is its own period, so the tab has no date range.
+  { key: 'cycles', label: 'Content cycles', mode: 'content', component: ContentCycles, ownPeriod: true },
   { key: 'ai', label: 'AI answers', mode: 'api', component: AiSearch },
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
   { key: 'paths', label: 'Paths', mode: 'warehouse', component: Paths },
@@ -87,7 +91,7 @@ export function ExploreFrame({ site, view, params, auth, ranges: lists }) {
 
   return (
     <Page title="Explore" sub={`Every full report for ${site.label}. The Story links here for detail.`}
-      actions={<Segmented label="Date range" value={range} options={ranges} onChange={(key) => {
+      actions={tab.ownPeriod ? null : <Segmented label="Date range" value={range} options={ranges} onChange={(key) => {
         if (pages) return setPagesRange(key);
         setSaved(key);
         // Keep the view and the open page; only the range changes.

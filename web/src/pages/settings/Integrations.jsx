@@ -60,6 +60,13 @@ const GROUPS = [
         status: ({ anthropic: a }) => (a?.source ? { on: true, text: `${via(a.source, 'API key')}${a.weekly ? ' · weekly' : ''}` } : { on: false, text: 'Needs an API key' }),
       },
       {
+        key: 'openrouter', name: 'OpenRouter (ChatGPT, Gemini, Perplexity, Grok)', icon: 'sparkles', panel: 'openrouter',
+        desc: 'One key to ask the same questions in ChatGPT, Gemini, Perplexity and Grok, each with its own web search.',
+        status: ({ openrouter: o }) => (o?.source
+          ? { on: true, text: `${via(o.source, 'API key')} · ${o.on.join(', ') || 'no assistants on'}` }
+          : { on: false, text: 'Needs an API key' }),
+      },
+      {
         key: 'cws', name: 'Chrome Web Store', icon: 'puzzle', href: '#/extensions',
         desc: 'Users, ratings and versions of your extensions, plus listing installs via GA4.',
         status: ({ extensions: e }) => (e.count ? { on: true, text: `${e.count} ${e.count === 1 ? 'extension' : 'extensions'} tracked` } : { on: false, text: 'No extensions added' }),

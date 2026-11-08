@@ -6,6 +6,7 @@ import { Icon } from '../components/icons.jsx';
 import { ProductsCard, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
+import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
 import { AlertsSettings } from './settings/AlertsSettings.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
@@ -38,6 +39,7 @@ const PANELS = {
   pagespeed: { title: 'PageSpeed & CrUX', render: () => <SiteHealthCard /> },
   bing: { title: 'Bing Webmaster Tools', render: () => <BingSettings /> },
   anthropic: { title: 'Claude', render: () => <AnthropicSettings /> },
+  openrouter: { title: 'OpenRouter', render: () => <OpenRouterSettings /> },
   mcp: { title: 'Claude Code & Claude Desktop', render: () => <McpSettings /> },
 };
 

@@ -248,6 +248,16 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     }
   }
 
+  // Every page's clicks, impressions and position between two dates (inclusive),
+  // for windows that aren't one of the range keys; null when Bing isn't set up.
+  async function pageStats(site, from, to) {
+    if (site.demo || !(await config()).key) return null;
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) return null;
+    const rows = await cache.wrap(`pages:${siteUrl}`, HOUR, false, () => call('GetPageStats', { siteUrl }));
+    return aggregateQueries(rows || [], from, to, 5000).map(({ query, ...p }) => ({ page: query, ...p }));
+  }
+
   async function submit(site, urls) {
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
@@ -366,7 +376,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, overview, summary, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));

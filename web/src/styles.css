@@ -1029,3 +1029,49 @@ table.data.compact .cell-path { max-width: none; }
 .jr-bar.bad .jr-bar-track span { background: var(--critical); }
 .jr-bar.good .jr-bar-track span { background: var(--good); }
 .jr-then { list-style: none; margin: 6px 0 0 14px; padding: 0; display: flex; flex-direction: column; gap: 2px; font-size: var(--text-sm); }
+
+/* Timeline: a day's story (Calendar.jsx DayStory). */
+.cal-moved { display: flex; flex-direction: column; gap: 8px; }
+.cal-moved-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 16px 24px; }
+.cal-moved-cols > div { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.cal-moved-list, .cal-happened-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.cal-moved-list li { display: flex; justify-content: space-between; gap: 10px; font-size: var(--text-sm); }
+.cal-moved-list li > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cal-moved-list b { font-weight: 500; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cal-moved-list .delta { margin-left: 6px; font-size: var(--text-xs); }
+.cal-happened { display: flex; flex-direction: column; gap: 8px; padding-top: 12px; border-top: 1px solid var(--border); }
+.cal-happened-list li { display: flex; align-items: center; gap: 8px; font-size: var(--text-sm); }
+.cal-happened-label { min-width: 0; flex: 1; }
+.cal-happened-list .muted { white-space: nowrap; font-size: var(--text-xs); }
+.cal-happened-list a.good { color: var(--good-ink); }
+.cal-happened-list a.bad { color: var(--critical-ink); }
+
+/* AI answers: checks across assistants (AiSearch.jsx). */
+.ai-engines { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-bottom: 12px; }
+.ai-engine { display: flex; flex-direction: column; gap: 2px; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); }
+.ai-engine b { font-size: var(--text-lg); font-variant-numeric: tabular-nums; }
+.ai-engine.add { border-style: dashed; color: var(--accent); text-decoration: none; justify-content: center; }
+.ai-checks td, .ai-checks th { white-space: nowrap; }
+.ai-checks td:first-child { white-space: normal; min-width: 260px; }
+.ai-answers { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 320px), 1fr)); gap: 12px; padding: 4px 0 8px; white-space: normal; }
+.ai-answer { display: flex; flex-direction: column; gap: 8px; padding: 12px; border-radius: 10px; border: 1px solid var(--border); background: var(--bg); min-width: 0; }
+.ai-answer-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.ai-answer-head .chip, .ai-answer-head > span:last-child { margin-left: auto; }
+.ai-answer-text { white-space: pre-wrap; max-height: 260px; overflow: auto; color: var(--text-2); }
+
+/* Content cycles */
+.cycle-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: var(--gap, 16px); }
+.cycle-cat .link-btn { white-space: nowrap; }
+.cycle-cat.on { outline: 2px solid var(--accent); outline-offset: -1px; }
+.cycle-funnel { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 8px; }
+.cycle-engines { width: 100%; table-layout: fixed; }
+.cycle-engines th { font-weight: 500; white-space: nowrap; width: 96px; }
+.cycle-engines td { white-space: nowrap; }
+.cycle-engines td.num { width: 48px; }
+.cycle-engines td.small.muted { width: 84px; }
+.cycle-engines td:last-child { overflow: hidden; text-overflow: ellipsis; }
+table.review td.num { white-space: nowrap; }
+input.cycle-cat-input { width: 120px; height: auto; min-height: 0; padding: 0 4px; font-size: var(--text-xs); line-height: 1.6; border: 1px solid transparent; background: none; color: inherit; border-radius: 4px; box-shadow: none; }
+input.cycle-cat-input:hover, input.cycle-cat-input:focus { border-color: var(--border); background: var(--surface); }
+.btn.cycle-act { padding: 2px 8px; font-size: var(--text-xs); }
+@media (max-width: 520px) { .cycle-cats { grid-template-columns: 1fr; } }

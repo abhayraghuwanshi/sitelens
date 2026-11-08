@@ -231,6 +231,13 @@ function AnswerChecks({ site, initial, onDone }) {
   }
 
   const noKey = !a.keySource && !a.sample;
+  // Older responses (and the demo) only have Claude.
+  const engines = a.engines?.length ? a.engines : [{ key: 'claude', label: 'Claude', model: a.model }];
+  const by = (q, key) => q.byEngine?.[key] || (key === 'claude' ? { latest: q.latest, history: q.history, mentionRate: q.mentionRate } : { latest: null });
+  const asked = engines.map((e) => {
+    const latest = a.results.map((q) => by(q, e.key).latest).filter((l) => l && !l.error);
+    return { ...e, asked: latest.length, named: latest.filter((l) => l.mentioned).length, cited: latest.filter((l) => l.cited).length };
+  });
   const fromFile = a.from === 'file';
   const actions = site.demo ? null : (
     <>
@@ -242,12 +249,30 @@ function AnswerChecks({ site, initial, onDone }) {
   );
 
   return (
-    <Card title="Answer checks" sub={a.sample ? 'Sample results' : a.lastRun ? `Asked Claude with web search · last run ${formatRelative(a.lastRun)}` : 'Ask an AI your customers’ questions and see if it names you'} actions={actions}>
+    <Card title="Answer checks"
+      sub={a.sample ? 'Sample results' : a.lastRun ? `Asked ${engines.map((e) => e.label).join(', ')} with web search · last run ${formatRelative(a.lastRun)}` : 'Ask AI assistants your customers’ questions and see if they name you'}
+      actions={actions}>
       {noKey && (
-        <Empty title="Add an Anthropic API key to run answer checks">
-          Claude answers each question with live web search; Studio records whether the answer names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
-          <div style={{ marginTop: '10px' }}><a class="btn primary" href="#/settings?i=anthropic">Open Claude settings</a></div>
+        <Empty title="Add an API key to run answer checks">
+          Each assistant answers your questions with live web search; Studio records whether it names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
+          Claude uses an Anthropic key; ChatGPT, Gemini, Perplexity and Grok share one OpenRouter key.
+          <div class="row" style={{ marginTop: '10px', gap: '8px' }}>
+            <a class="btn primary" href="#/settings?i=openrouter">Add an OpenRouter key</a>
+            <a class="btn" href="#/settings?i=anthropic">Add an Anthropic key</a>
+          </div>
         </Empty>
+      )}
+      {!noKey && !a.sample && (
+        <div class="ai-engines" aria-label="Named by each assistant (latest answer per question)">
+          {asked.map((e) => (
+            <div key={e.key} class="ai-engine" title={e.model || ''}>
+              <span class="small muted">{e.label}</span>
+              <b>{e.asked ? `${e.named}/${e.asked}` : '—'}</b>
+              <span class="small muted">{e.asked ? `named · cited ${e.cited}` : 'not asked yet'}</span>
+            </div>
+          ))}
+          {!(a.engines || []).some((e) => e.via === 'openrouter') && <a class="ai-engine add" href="#/settings?i=openrouter"><b>+</b><span class="small">Add ChatGPT, Gemini, Perplexity</span></a>}
+        </div>
       )}
       {editing && (
         <form class="stack" onSubmit={save} style={{ gap: '8px', marginBottom: '12px' }}>
@@ -271,32 +296,52 @@ function AnswerChecks({ site, initial, onDone }) {
       )}
 
       <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Question</th><th>Named</th><th>Cited</th><th>Also cited</th><th class="num">Hit rate</th><th>History</th></tr></thead>
+        <table class="data ai-checks">
+          <thead>
+            <tr>
+              <th>Question</th>
+              {engines.map((e) => <th key={e.key} title={e.model || ''}>{e.label}</th>)}
+              <th class="num" title="Assistants that named you in their latest answer">Named by</th>
+              <th class="num" title="Share of every answer, across assistants and runs, that named you">Hit rate</th>
+            </tr>
+          </thead>
           <tbody>
             {a.results.map((q) => {
-              const l = q.latest;
-              const others = l && !l.error ? l.domains.filter((d) => !d.own).slice(0, 3) : [];
+              const any = engines.some((e) => by(q, e.key).latest?.answer);
+              const askedBy = q.askedBy ?? (q.latest && !q.latest.error ? 1 : 0);
+              const namedBy = q.namedBy ?? (q.latest?.mentioned ? 1 : 0);
+              const rate = q.hitRate ?? q.mentionRate;
               return [
-                <tr key={q.prompt} onClick={() => l?.answer && setOpen(open === q.prompt ? '' : q.prompt)} style={l?.answer ? { cursor: 'pointer' } : undefined}>
+                <tr key={q.prompt} onClick={() => any && setOpen(open === q.prompt ? '' : q.prompt)} style={any ? { cursor: 'pointer' } : undefined}>
                   <td>{q.prompt}{q.topic && <div class="small muted">{q.topic}{q.page ? <> · <code>{q.page}</code></> : ''}</div>}</td>
-                  {!l ? <td colSpan={3} class="small muted">Not asked yet</td>
-                    : l.error ? <td colSpan={3} class="small" style={{ color: 'var(--critical-ink)' }}>{l.error}</td>
-                      : <>
-                        <td><Mark on={l.mentioned} /></td>
-                        <td>{l.cited ? <span class="chip good">#{l.rank}</span> : l.inResults ? <span class="chip" title="Found in search results but not cited">seen</span> : <Mark on={false} />}</td>
-                        <td class="small muted">{others.map((d) => d.domain).join(', ') || '—'}</td>
-                      </>}
-                  <td class="num">{q.mentionRate === null ? '—' : formatPercent(q.mentionRate, 0)}</td>
-                  <td><History items={q.history} /></td>
+                  {engines.map((e) => <td key={e.key}><Verdict l={by(q, e.key).latest} /></td>)}
+                  <td class="num">{askedBy ? <span class={namedBy ? 'good' : 'muted'}>{namedBy} of {askedBy}</span> : '—'}</td>
+                  <td class="num">{rate === null || rate === undefined ? '—' : formatPercent(rate, 0)}</td>
                 </tr>,
-                open === q.prompt && l?.answer && (
-                  <tr key={`${q.prompt}:answer`}>
-                    <td colSpan={6}>
-                      <div class="small" style={{ whiteSpace: 'pre-wrap', maxHeight: '320px', overflow: 'auto', color: 'var(--text-2)' }}>{l.answer}</div>
-                      {l.domains.length > 0 && <div class="row" style={{ marginTop: '8px', gap: '4px', flexWrap: 'wrap' }}>
-                        {l.domains.map((d) => <span key={d.domain} class={`chip${d.own ? ' accent' : ''}`}>{d.domain} · {d.citations}</span>)}
-                      </div>}
+                open === q.prompt && (
+                  <tr key={`${q.prompt}:answers`}>
+                    <td colSpan={engines.length + 3}>
+                      <div class="ai-answers">
+                        {engines.map((e) => {
+                          const l = by(q, e.key).latest;
+                          if (!l) return null;
+                          return (
+                            <div key={e.key} class="ai-answer">
+                              <div class="ai-answer-head"><b>{e.label}</b><span class="small muted">{l.model || e.model || ''}</span><Verdict l={l} /></div>
+                              {l.error ? <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>{l.error}</p> : (
+                                <>
+                                  <div class="small ai-answer-text">{l.answer}</div>
+                                  {l.domains?.length > 0 && (
+                                    <div class="row" style={{ gap: '4px', flexWrap: 'wrap' }}>
+                                      {l.domains.map((d) => <span key={d.domain} class={`chip${d.own ? ' accent' : ''}`}>{d.domain} · {d.citations}</span>)}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </td>
                   </tr>
                 ),
@@ -306,8 +351,8 @@ function AnswerChecks({ site, initial, onDone }) {
         </table>
       </div>
       <p class="note" style={{ marginBottom: 0 }}>
-        Each check asks {a.model || 'Claude'} with web search, as a neutral assistant that doesn’t know whose site it is. “Named” matches {a.terms.slice(0, 4).map((t) => `“${t}”`).join(', ')}.
-        Answers vary run to run, so the hit rate across runs matters more than one result. A run costs roughly $0.05–0.20 per question in API credits.
+        Each assistant answers with its own web search, as a neutral assistant that doesn’t know whose site it is. “Named” matches {a.terms.slice(0, 4).map((t) => `“${t}”`).join(', ')}; <span class="chip good">#2</span> means it cited your site, second among the sites it cited; “seen” means your site was in its search results but not cited.
+        Answers vary run to run, so the hit rate matters more than one result. Per question, Claude costs roughly $0.05–0.20 and each OpenRouter assistant $0.01–0.05.
         {!site.demo && <> <WeeklyToggle on={a.weekly} onChange={(weekly) => api.post('/ai-search/settings', { weekly }).then(() => setA({ ...a, weekly }))} /></>}
       </p>
     </Card>
@@ -322,20 +367,12 @@ function WeeklyToggle({ on, onChange }) {
   );
 }
 
-function Mark({ on }) {
-  return on
-    ? <span class="chip good" aria-label="yes">Yes</span>
-    : <span class="small muted" aria-label="no">No</span>;
-}
-
-function History({ items }) {
-  if (!items.length) return <span class="small muted">—</span>;
-  return (
-    <span style={{ display: 'inline-flex', gap: '3px' }} aria-label={`${items.filter((h) => h.mentioned).length} of ${items.length} runs named you`}>
-      {items.map((h) => (
-        <span key={h.ts} title={`${new Date(h.ts).toLocaleDateString()}: ${h.cited ? `cited #${h.rank}` : h.mentioned ? 'named' : 'not named'}`}
-          style={{ width: '8px', height: '8px', borderRadius: '50%', background: h.cited ? 'var(--good)' : h.mentioned ? 'var(--series-1)' : 'var(--border)' }} />
-      ))}
-    </span>
-  );
+// One assistant's latest answer to one question.
+function Verdict({ l }) {
+  if (!l) return <span class="small muted">—</span>;
+  if (l.error) return <span class="small" style={{ color: 'var(--critical-ink)' }} title={l.error}>error</span>;
+  if (l.cited) return <span class="chip good" title={l.mentioned ? 'Named you and cited your site' : 'Cited your site'}>{l.mentioned ? 'Named · ' : ''}#{l.rank}</span>;
+  if (l.mentioned) return <span class="chip good">Named</span>;
+  if (l.inResults) return <span class="chip" title="Your site was in its search results but not named or cited">seen</span>;
+  return <span class="small muted">No</span>;
 }

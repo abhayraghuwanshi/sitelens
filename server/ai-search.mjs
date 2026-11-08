@@ -5,10 +5,12 @@
 //   1. Referral sessions from AI assistants (GA4) — people who clicked through.
 //   2. AI bots in the server logs (Firebase) — assistant fetches mean an AI
 //      read the page live to answer someone; crawlers index/train.
-//   3. Answer checks (opt-in, costs API credits) — Claude with web search
-//      answers the questions you care about; Studio records whether the
+//   3. Answer checks (opt-in, costs API credits) — AI assistants with web
+//      search answer the questions you care about; Studio records whether each
 //      answer names the product and cites the site, and who else it cites.
-//      Results go to .data/ai-search.db so the mention rate has history.
+//      Claude is asked directly (Anthropic key); ChatGPT, Gemini, Perplexity
+//      and Grok through OpenRouter (one key), each with its provider's own web
+//      search. Results go to .data/ai-search.db so the mention rate has history.
 //
 // Google AI Overviews clicks are counted as Google organic in Search Console
 // and GA4, and can't be separated.
@@ -24,6 +26,20 @@ import { createCache } from './cache.mjs';
 import { aiQuestions } from './site-config.mjs';
 
 export const CHECK_MODEL = 'claude-opus-5-5';
+
+// The assistants a check can ask. The OpenRouter ones resolve to the newest
+// model matching `match` in OpenRouter's catalog (or a model you set), so they
+// stay current without code changes.
+export const ENGINES = [
+  { key: 'claude', label: 'Claude', via: 'anthropic' },
+  { key: 'chatgpt', label: 'ChatGPT', via: 'openrouter', match: /^openai\/gpt-\d+(\.\d+)?$/ },
+  { key: 'gemini', label: 'Gemini', via: 'openrouter', match: /^google\/gemini-\d+(\.\d+)?-(pro|flash)$/ },
+  { key: 'perplexity', label: 'Perplexity', via: 'openrouter', fixed: 'perplexity/sonar' },
+  { key: 'grok', label: 'Grok', via: 'openrouter', match: /^x-ai\/grok-\d+(\.\d+)?$/ },
+];
+export const ENGINE_ON = { claude: true, chatgpt: true, gemini: true, perplexity: true, grok: false };
+const OPENROUTER = 'https://openrouter.ai/api/v1';
+const MODEL_ID = /^[\w.-]+\/[\w.:-]+$/;
 const MAX_PROMPTS = 12;
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
@@ -36,6 +52,8 @@ CREATE TABLE IF NOT EXISTS checks (
 );
 CREATE INDEX IF NOT EXISTS checks_site ON checks (site_id, prompt, ts);
 `;
+// Added with multi-assistant checks; rows from before are Claude's.
+const MIGRATIONS = ['ALTER TABLE checks ADD COLUMN engine TEXT'];
 
 // Answer like an AI search assistant would, without knowing whose site is being checked.
 const SYSTEM = `You are an AI search assistant. Search the web, then answer the user's question the way a search assistant does:
@@ -189,6 +207,39 @@ export function readAnswer(blocks) {
   return { text: text.join('').trim(), cited, searched, searches };
 }
 
+// An OpenRouter chat completion → the same shape readAnswer gives. Citations
+// come as message.annotations of type url_citation for every model (older
+// Perplexity responses also list `citations` URLs).
+export function readOpenRouter(json) {
+  const msg = json?.choices?.[0]?.message || {};
+  const text = typeof msg.content === 'string' ? msg.content
+    : Array.isArray(msg.content) ? msg.content.map((p) => p?.text || '').join('') : '';
+  const cited = [];
+  for (const a of msg.annotations || []) {
+    if (a?.type !== 'url_citation') continue;
+    const c = a.url_citation || a;
+    if (c.url) cited.push({ url: c.url, title: c.title || '' });
+  }
+  if (!cited.length) for (const u of json?.citations || []) cited.push({ url: typeof u === 'string' ? u : u?.url, title: u?.title || '' });
+  const urls = cited.filter((c) => c.url);
+  return { text: text.trim(), cited: urls, searched: urls, searches: urls.length ? 1 : 0 };
+}
+
+// The newest catalog model matching an engine (or its fixed id). Pure.
+export function pickModel(catalog, engine) {
+  if (engine.fixed) return catalog.some((m) => m.id === engine.fixed) || !catalog.length ? engine.fixed : '';
+  const hits = catalog.filter((m) => engine.match?.test(m.id)).sort((a, b) => (b.created || 0) - (a.created || 0));
+  return hits[0]?.id || '';
+}
+
+export function openRouterError(status, json, model) {
+  const message = json?.error?.message || `HTTP ${status}`;
+  if (status === 401) return new EngineError('OpenRouter rejected the API key.', { status: 401, kind: 'ai-key', hint: 'Create a key at openrouter.ai/keys and paste it in Settings → Integrations → OpenRouter.' });
+  if (status === 402) return new EngineError('The OpenRouter account is out of credits.', { status: 402, kind: 'ai-credits', hint: 'Add credits at openrouter.ai/credits.' });
+  if (status === 429) return new EngineError(`OpenRouter rate limit for ${model}: try again in a minute.`, { status: 429, kind: 'ai-quota' });
+  return new EngineError(`OpenRouter (${model}): ${message}`, { status: 502, kind: 'ai' });
+}
+
 // Did the answer name us, cite us, and how high? `rank` is our domain's
 // position among the distinct domains in citation order (1 = cited first).
 export function analyzeAnswer(answer, { host, terms }) {
@@ -238,7 +289,7 @@ export function aiKeyError(err) {
 
 /* ---------- service ---------- */
 
-export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = null, env = process.env, now = Date.now, log = console, createClient = (apiKey) => new Anthropic({ apiKey }) }) {
+export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = null, env = process.env, now = Date.now, log = console, createClient = (apiKey) => new Anthropic({ apiKey }), fetchImpl = fetch }) {
   let db = null;
   let timers = [];
   const cache = createCache();
@@ -250,6 +301,11 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     db = new DatabaseSync(dbPath, { timeout: 5000 });
     db.exec('PRAGMA journal_mode = WAL;');
     db.exec(SCHEMA);
+    for (const sql of MIGRATIONS) {
+      try {
+        db.exec(sql);
+      } catch { /* already applied */ }
+    }
     return db;
   }
 
@@ -262,7 +318,47 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
       prompts: s.aiSearch?.prompts || {},
       weekly: Boolean(s.aiSearch?.weekly),
       products: s.products || [],
+      orKey: s.sources?.openrouterKey || env.OPENROUTER_API_KEY || '',
+      orSource: s.sources?.openrouterKey ? 'settings' : env.OPENROUTER_API_KEY ? 'env' : '',
+      on: { ...ENGINE_ON, ...(s.aiSearch?.engines || {}) },
+      models: s.aiSearch?.models || {},
     };
+  }
+
+  // OpenRouter's public model list, for picking each assistant's newest model.
+  async function catalog() {
+    return cache.wrap('openrouter:models', DAY, false, async () => {
+      const res = await fetchImpl(`${OPENROUTER}/models`, { signal: AbortSignal.timeout(20_000) });
+      if (!res.ok) throw new Error(`OpenRouter models: HTTP ${res.status}`);
+      return ((await res.json()).data || []).map((m) => ({ id: m.id, created: m.created || 0 }));
+    }).catch(() => []);
+  }
+
+  // Every assistant with whether it's on, has a key, and the model it uses.
+  async function engines(cfg) {
+    const list = cfg.orKey ? await catalog() : [];
+    return ENGINES.map((e) => {
+      const model = e.via === 'anthropic' ? CHECK_MODEL : cfg.models[e.key] || pickModel(list, e);
+      const ready = e.via === 'anthropic' ? Boolean(cfg.key) : Boolean(cfg.orKey && model);
+      return { key: e.key, label: e.label, via: e.via, model, on: Boolean(cfg.on[e.key]), ready, custom: Boolean(cfg.models[e.key]) };
+    });
+  }
+
+  // One question to one OpenRouter model with its provider's web search.
+  async function askOpenRouter(key, model, prompt) {
+    const res = await fetchImpl(`${OPENROUTER}/chat/completions`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'SiteLens Studio' },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }],
+        plugins: [{ id: 'web', max_results: 5 }],
+      }),
+      signal: AbortSignal.timeout(180_000),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok || json.error) throw openRouterError(res.ok ? json.error?.code || 502 : res.status, json, model);
+    return { answer: readOpenRouter(json), usage: { input: json.usage?.prompt_tokens || 0, output: json.usage?.completion_tokens || 0 }, model: json.model || model };
   }
 
   /* ----- GA4 referrals ----- */
@@ -335,7 +431,11 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
         fallbacks: 'default',
         output_config: { effort: 'low' },
         system: SYSTEM,
-        tools: [{ type: 'web_search_20260209', name: 'web_search', max_uses: 5 }],
+        // The basic web search on purpose: its answers carry citations (which sites
+        // the assistant relied on). The dynamic-filtering version (_20260209) searches
+        // from inside code execution and returns its answer without any citations, so
+        // "cited" could never be measured.
+        tools: [{ type: 'web_search_20250305', name: 'web_search', max_uses: 5 }],
         messages,
       });
       usage.input += res.usage?.input_tokens || 0;
@@ -349,18 +449,26 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     return { blocks, usage, model };
   }
 
-  async function checkOne(client, site, terms, prompt, runId) {
+  async function checkOne(engine, ctx, site, terms, prompt, runId) {
     const ts = now();
     try {
-      const { blocks, usage, model } = await ask(client, prompt);
-      const answer = readAnswer(blocks);
+      let answer;
+      let usage;
+      let model;
+      if (engine.via === 'anthropic') {
+        const r = await ask(ctx.client, prompt);
+        answer = readAnswer(r.blocks);
+        ({ usage, model } = r);
+      } else {
+        ({ answer, usage, model } = await askOpenRouter(ctx.orKey, engine.model, prompt));
+      }
       const a = analyzeAnswer(answer, { host: site.host, terms });
-      open().prepare(`INSERT INTO checks (site_id, run_id, prompt, ts, model, mentioned, cited, rank, answer, sources, searches, input_tokens, output_tokens)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(site.id, runId, prompt, ts, model, Number(a.mentioned), Number(a.cited), a.rank,
-        answer.text, JSON.stringify({ domains: a.domains, inResults: a.inResults, cited: answer.cited.slice(0, 40) }), answer.searches, usage.input, usage.output);
+      open().prepare(`INSERT INTO checks (site_id, run_id, prompt, ts, model, mentioned, cited, rank, answer, sources, searches, input_tokens, output_tokens, engine)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).run(site.id, runId, prompt, ts, model, Number(a.mentioned), Number(a.cited), a.rank,
+        answer.text, JSON.stringify({ domains: a.domains, inResults: a.inResults, cited: answer.cited.slice(0, 40) }), answer.searches, usage.input, usage.output, engine.key);
     } catch (raw) {
-      const err = aiKeyError(raw);
-      open().prepare('INSERT INTO checks (site_id, run_id, prompt, ts, error) VALUES (?, ?, ?, ?, ?)').run(site.id, runId, prompt, ts, err.message);
+      const err = raw instanceof EngineError ? raw : aiKeyError(raw);
+      open().prepare('INSERT INTO checks (site_id, run_id, prompt, ts, error, engine) VALUES (?, ?, ?, ?, ?, ?)').run(site.id, runId, prompt, ts, err.message, engine.key);
       if (['ai-key', 'ai-credits'].includes(err.kind)) throw err;
     }
   }
@@ -370,21 +478,39 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     if (site.demo) throw new EngineError('Answer checks run on your own sites — the demo shows sample results.', { kind: 'validation' });
     if (running.has(site.id)) return { started: false, running: running.get(site.id) };
     const cfg = await config();
-    if (!cfg.key) throw new EngineError('Answer checks need an Anthropic API key.', { status: 409, kind: 'needs-anthropic', hint: 'Add ANTHROPIC_API_KEY to .env, or paste a key in Settings → Integrations → Claude.' });
+    const asking = (await engines(cfg)).filter((e) => e.on && e.ready);
+    if (!asking.length) {
+      throw new EngineError('Answer checks need an Anthropic or OpenRouter API key, and at least one assistant turned on.', {
+        status: 409, kind: 'needs-anthropic', hint: 'Paste a key in Settings → Integrations → Claude (Anthropic) or OpenRouter (ChatGPT, Gemini, Perplexity, Grok).',
+      });
+    }
     const { prompts } = await promptsFor(site);
     if (!prompts.length) throw new EngineError('Add at least one question first.', { kind: 'validation' });
-    const client = createClient(cfg.key);
+    const ctx = { client: asking.some((e) => e.via === 'anthropic') ? createClient(cfg.key) : null, orKey: cfg.orKey };
     const terms = await termsFor(site, cfg.products);
-    const state = { runId: `${now()}`, total: prompts.length, done: 0, startedAt: now(), error: '' };
+    const queue = prompts.flatMap((prompt) => asking.map((engine) => ({ prompt, engine })));
+    const state = { runId: `${now()}`, total: queue.length, done: 0, startedAt: now(), error: '', engines: asking.map((e) => e.key), stopped: {} };
     running.set(site.id, state);
-    const queue = [...prompts];
+    // A bad key or empty credits stops that assistant (or that provider) only.
     const worker = async () => {
-      while (queue.length && !state.error) {
-        await checkOne(client, site, terms, queue.shift(), state.runId);
+      while (queue.length) {
+        const item = queue.shift();
+        const via = item.engine.via;
+        if (state.stopped[via]) {
+          state.done += 1;
+          continue;
+        }
+        try {
+          await checkOne(item.engine, ctx, site, terms, item.prompt, state.runId);
+        } catch (err) {
+          state.stopped[via] = err.message;
+          state.error = Object.values(state.stopped).join(' ');
+          log.error('[ai-search]', err.message);
+        }
         state.done += 1;
       }
     };
-    const job = Promise.all([worker(), worker()])
+    const job = Promise.all([worker(), worker(), worker()])
       .catch((err) => {
         state.error = err.message;
         log.error('[ai-search]', err.message);
@@ -400,28 +526,49 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     const topicOf = (prompt) => topics.find((q) => q.prompt === prompt);
     if (site.demo) return { prompts, custom: false, from, keySource: cfg.source, running: null, results: demoChecks(site, prompts, now()).map((r) => ({ ...r, ...topicOf(r.prompt) })), terms, sample: true };
     const d = open();
-    const rows = d.prepare('SELECT * FROM checks WHERE site_id = ? ORDER BY ts DESC LIMIT 600').all(site.id);
-    const results = prompts.map((prompt) => {
-      const mine = rows.filter((r) => r.prompt === prompt);
+    const rows = d.prepare('SELECT * FROM checks WHERE site_id = ? ORDER BY ts DESC LIMIT 3000').all(site.id).map((r) => ({ ...r, engine: r.engine || 'claude' }));
+    const all = await engines(cfg);
+    // Columns: assistants turned on and ready, plus any that has results.
+    const shown = all.filter((e) => (e.on && e.ready) || rows.some((r) => r.engine === e.key));
+    const summarize = (mine) => {
       const ok = mine.filter((r) => !r.error);
-      const latest = mine[0] || null;
       return {
-        ...topicOf(prompt),
-        prompt,
-        latest: latest && shapeCheck(latest),
+        latest: mine[0] ? shapeCheck(mine[0]) : null,
         history: ok.slice(0, 12).reverse().map((r) => ({ ts: r.ts, mentioned: Boolean(r.mentioned), cited: Boolean(r.cited), rank: r.rank })),
         mentionRate: ok.length ? ok.filter((r) => r.mentioned).length / ok.length : null,
         citeRate: ok.length ? ok.filter((r) => r.cited).length / ok.length : null,
         runs: ok.length,
       };
+    };
+    const results = prompts.map((prompt) => {
+      const mine = rows.filter((r) => r.prompt === prompt);
+      const byEngine = Object.fromEntries(shown.map((e) => [e.key, summarize(mine.filter((r) => r.engine === e.key))]));
+      const latest = shown.map((e) => byEngine[e.key].latest).filter((l) => l && !l.error);
+      const ok = mine.filter((r) => !r.error);
+      return {
+        ...topicOf(prompt),
+        prompt,
+        // Claude's own fields, as before (the Story and MCP read them).
+        ...summarize(mine.filter((r) => r.engine === 'claude')),
+        byEngine,
+        namedBy: latest.filter((l) => l.mentioned).length,
+        citedBy: latest.filter((l) => l.cited).length,
+        askedBy: latest.length,
+        // Across every assistant and run.
+        hitRate: ok.length ? ok.filter((r) => r.mentioned).length / ok.length : null,
+      };
     });
     const lastRun = rows.find((r) => !r.error)?.ts || null;
-    return { prompts, custom, from, keySource: cfg.source, weekly: cfg.weekly, running: running.get(site.id) || null, results, lastRun, terms, model: CHECK_MODEL };
+    return {
+      prompts, custom, from, keySource: cfg.source || cfg.orSource, weekly: cfg.weekly, running: running.get(site.id) || null, results, lastRun, terms,
+      model: CHECK_MODEL, engines: shown.map(({ key, label, model, via }) => ({ key, label, model, via })),
+    };
   }
 
   // Latest run per prompt → share mentioned/cited, for the KPI strip.
+  // Latest answer per question and assistant → how many named or cited you.
   function scoreOf(results) {
-    const latest = results.map((r) => r.latest).filter((l) => l && !l.error);
+    const latest = results.flatMap((r) => Object.values(r.byEngine || { claude: { latest: r.latest } }).map((e) => e.latest)).filter((l) => l && !l.error);
     if (!latest.length) return null;
     return {
       asked: latest.length,
@@ -439,7 +586,15 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     return { range: rangeKey, dates: rangeDates(rangeKey, now()), referrals: ref.data || null, referralsError: ref.error || null, crawlers: crawl || null, answers: { ...answer, score: scoreOf(answer.results) } };
   }
 
-  async function saveSettings({ key, weekly } = {}) {
+  // key: Anthropic; openrouterKey: OpenRouter; engines: { chatgpt: true, … };
+  // models: { chatgpt: 'openai/gpt-…' } to pin a model ('' goes back to the newest).
+  async function saveSettings({ key, weekly, openrouterKey, engines: on, models } = {}) {
+    if (models) {
+      for (const [k, v] of Object.entries(models)) {
+        if (!ENGINES.some((e) => e.key === k && e.via === 'openrouter')) throw new EngineError(`Unknown assistant: ${k}.`, { kind: 'validation' });
+        if (v && !MODEL_ID.test(String(v))) throw new EngineError('A model is an OpenRouter id like openai/gpt-5.5.', { kind: 'validation' });
+      }
+    }
     await store.update((s) => {
       s.sources = s.sources || {};
       if (key !== undefined) {
@@ -447,21 +602,37 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
         if (k) s.sources.anthropicKey = k;
         else delete s.sources.anthropicKey;
       }
-      if (weekly !== undefined) s.aiSearch = { ...(s.aiSearch || {}), weekly: Boolean(weekly) };
+      if (openrouterKey !== undefined) {
+        const k = String(openrouterKey || '').trim();
+        if (k) s.sources.openrouterKey = k;
+        else delete s.sources.openrouterKey;
+      }
+      const ai = { ...(s.aiSearch || {}) };
+      if (weekly !== undefined) ai.weekly = Boolean(weekly);
+      if (on) ai.engines = { ...(ai.engines || {}), ...Object.fromEntries(Object.entries(on).filter(([k]) => ENGINES.some((e) => e.key === k)).map(([k, v]) => [k, Boolean(v)])) };
+      if (models) {
+        const next = { ...(ai.models || {}) };
+        for (const [k, v] of Object.entries(models)) {
+          if (v) next[k] = String(v).trim();
+          else delete next[k];
+        }
+        ai.models = next;
+      }
+      s.aiSearch = ai;
     });
     return status();
   }
 
   async function status() {
     const cfg = await config();
-    return { source: cfg.source, weekly: cfg.weekly, model: CHECK_MODEL };
+    return { source: cfg.source, openrouter: cfg.orSource, weekly: cfg.weekly, model: CHECK_MODEL, engines: await engines(cfg) };
   }
 
   // Weekly re-check of every real site with its own questions (in its
   // .sitelens.yml or saved here), if turned on. Generic questions aren't re-run.
   async function weeklyRun() {
     const cfg = await config();
-    if (!cfg.weekly || !cfg.key) return;
+    if (!cfg.weekly || (!cfg.key && !cfg.orKey)) return;
     for (const site of (await store.sites()).filter((s) => !s.demo)) {
       if ((await promptsFor(site)).from === 'auto') continue;
       const last = open().prepare('SELECT MAX(ts) AS ts FROM checks WHERE site_id = ? AND error IS NULL').get(site.id)?.ts || 0;
@@ -471,8 +642,35 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     }
   }
 
+  // Which of the site's pages the assistants cited between two times, from the
+  // answer checks: path → { cited, prompts, engines }, plus how many answers there were.
+  function citations(site, fromMs, toMs) {
+    const pages = new Map();
+    if (site.demo) return { asked: 0, pages };
+    const rows = open().prepare('SELECT prompt, engine, sources FROM checks WHERE site_id = ? AND ts >= ? AND ts <= ? AND error IS NULL').all(site.id, fromMs, toMs);
+    const own = bare(site.host);
+    for (const r of rows) {
+      const seen = new Set();
+      for (const c of JSON.parse(r.sources || '{}').cited || []) {
+        let url;
+        try { url = new URL(c.url); } catch { continue; }
+        const h = bare(url.hostname);
+        if (h !== own && !h.endsWith(`.${own}`)) continue;
+        const path = url.pathname.replace(/\/+$/, '') || '/';
+        if (seen.has(path)) continue;
+        seen.add(path);
+        const p = pages.get(path) || { cited: 0, prompts: new Set(), engines: new Set() };
+        p.cited += 1;
+        p.prompts.add(r.prompt);
+        p.engines.add(r.engine || 'claude');
+        pages.set(path, p);
+      }
+    }
+    return { asked: rows.length, pages };
+  }
+
   return {
-    overview, referrals, checks, run, savePrompts, saveSettings, status, promptsFor,
+    overview, referrals, checks, run, savePrompts, saveSettings, status, promptsFor, citations,
     start() {
       if (timers.length) return;
       const safe = () => weeklyRun().catch((err) => log.error('[ai-search]', err.message));

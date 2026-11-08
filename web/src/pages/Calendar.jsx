@@ -192,6 +192,13 @@ function DayStory({ date, site, today, onChange }) {
   const d = data.data;
   const detailed = d.sites.filter((s) => s.sources.length || s.pages.length || s.search?.queries?.length);
 
+  // The numbers in words; events and alerts get their own list below, so their lines are left out here.
+  const lines = d.lines.filter((l) => l.kind !== 'event' && l.kind !== 'alert');
+  const happened = [
+    ...d.events.map((e) => ({ ...e, when: 'that day' })),
+    ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' })),
+  ].filter((e) => e.kind !== 'claude');
+
   return (
     <Card title={formatLong(date)} sub={d.partial ? 'so far' : date === addDay(today, -1) ? 'yesterday' : ''} class="cal-story">
       <div class="stack">
@@ -201,9 +208,9 @@ function DayStory({ date, site, today, onChange }) {
             labels={d.trend.map((p) => formatDate(p.date.replaceAll('-', '')))} dates={d.trend.map((p) => p.date)}
             annotations={[...d.eventsBefore, ...d.events]} format={formatNumber} tooltipTitle="Sessions" />
         )}
-        {d.lines.length > 0 && (
+        {lines.length > 0 && (
           <ul class="cal-lines">
-            {d.lines.map((l, i) => (
+            {lines.map((l, i) => (
               <li key={i}>
                 <Icon name={LINE_ICONS[l.kind] || 'chart'} size={14} />
                 <span>{l.href ? <a href={l.href}>{l.text}</a> : l.text}</span>
@@ -212,68 +219,93 @@ function DayStory({ date, site, today, onChange }) {
           </ul>
         )}
 
-        {detailed.map((s) => (
-          <div key={s.id} class="stack" style={{ gap: '10px' }}>
-            {d.sites.length > 1 && <h3 class="cal-sub"><a href={`#/site/${s.id}/overview`}>{s.label}</a></h3>}
-            {s.sources.length > 0 && <ShiftTable title="Sources" rows={[...s.sources.filter((r) => r.value > 0).slice(0, 4), ...s.losers]} />}
-            {s.pages.length > 0 && <ShiftTable title="Landing pages" rows={s.pages.filter((r) => r.value > 0).slice(0, 4)} mono />}
-            {s.search?.queries?.length > 0 && (
-              <table class="data compact">
-                <thead><tr><th>Top queries</th><th class="num">Clicks</th></tr></thead>
-                <tbody>{s.search.queries.map((q) => <tr key={q.query}><td>{q.query}</td><td class="num">{formatNumber(q.clicks)}</td></tr>)}</tbody>
-              </table>
-            )}
-          </div>
-        ))}
-
-        {(d.events.length > 0 || d.eventsBefore.length > 0) && (
-          <div class="stack" style={{ gap: '6px' }}>
-            <h3 class="cal-sub">Events</h3>
-            {[...d.events.map((e) => ({ ...e, when: '' })), ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' }))].filter((e) => e.kind !== 'claude').map((e) => (
-              <div key={e.id} class="row small" style={{ gap: '8px', flexWrap: 'nowrap' }}>
-                <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
-                <span style={{ minWidth: 0 }}>
-                  {/* Your posts open their analysis here; other events link out. */}
-                  {e.source === 'posts' ? (
-                    <>
-                      <a href={postHref(e.id.slice('post:'.length))}>{e.label}</a>
-                      {e.url && <>{' '}<a href={e.url} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a></>}
-                    </>
-                  ) : e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}
-                </span>
-                {e.when && <span class="muted" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{e.when}</span>}
-                {e.id.startsWith('post:manual:') && !e.when && (
-                  <button class="btn ghost" type="button" title="Remove link" aria-label="Remove link" style={{ marginLeft: 'auto' }}
-                    onClick={async () => { await api.post('/posts/hide', { id: e.id.slice('post:'.length) }); data.reload(); onChange?.(); }}>
-                    <Icon name="x" size={12} />
-                  </button>
+        {detailed.map((s) => {
+          const sources = [...s.sources.filter((r) => r.value > 0).slice(0, 4), ...s.losers].filter((r) => r.value > 0 || Math.abs(r.gain) >= 0.5);
+          const pages = s.pages.filter((r) => r.value > 0).slice(0, 4);
+          const queries = (s.search?.queries || []).filter((q) => q.clicks > 0);
+          if (!sources.length && !pages.length && !queries.length) return null;
+          return (
+            <div key={s.id} class="cal-moved">
+              {d.sites.length > 1 && <h3 class="cal-sub"><a href={`#/site/${s.id}/overview`}>{s.label}</a></h3>}
+              <div class="cal-moved-cols">
+                <MovedList title="Sources" rows={sources} />
+                <MovedList title="Landing pages" rows={pages} mono />
+                {queries.length > 0 && (
+                  <div>
+                    <span class="nx-label-sm">Searches</span>
+                    <ul class="cal-moved-list">
+                      {queries.map((q) => <li key={q.query}><span>{q.query}</span><b>{formatNumber(q.clicks)} clicks</b></li>)}
+                    </ul>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          );
+        })}
 
-        <AddLink date={date} site={site} onAdded={() => { data.reload(); onChange?.(); }} />
-
-        {d.alerts.length > 0 && (
-          <div class="insights">
-            {d.alerts.map((a) => (
-              <div key={a.id} class={`insight ${a.direction === 'up' ? 'good' : 'bad'}`}>
-                <span class="mark" />
-                <div>
-                  <a class="title" href={a.link} {...(a.link?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{a.title}</a>
-                  <div class="detail">{a.detail}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div class="cal-happened">
+          <span class="nx-label-sm">What happened</span>
+          {happened.length || d.alerts.length ? (
+            <ul class="cal-happened-list">
+              {d.alerts.map((a) => (
+                <li key={a.id}>
+                  <Icon name="bell" size={13} />
+                  <a href={a.link} class={a.direction === 'up' ? 'good' : 'bad'} {...(a.link?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{a.title}</a>
+                  <span class="muted">alert</span>
+                </li>
+              ))}
+              {happened.map((e) => (
+                <li key={e.id}>
+                  <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
+                  <span class="cal-happened-label">
+                    {/* Your posts open their analysis here; other events link out. */}
+                    {e.source === 'posts' ? (
+                      <>
+                        <a href={postHref(e.id.slice('post:'.length))}>{e.label}</a>
+                        {e.url && <>{' '}<a href={e.url} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a></>}
+                      </>
+                    ) : e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}
+                  </span>
+                  <span class="muted">{e.when}</span>
+                  {e.id.startsWith('post:manual:') && e.when === 'that day' && (
+                    <button class="btn ghost" type="button" title="Remove link" aria-label="Remove link"
+                      onClick={async () => { await api.post('/posts/hide', { id: e.id.slice('post:'.length) }); data.reload(); onChange?.(); }}>
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : <p class="small muted">Nothing shipped, posted or alerted that day or the day before.</p>}
+          <AddLink date={date} site={site} onAdded={() => { data.reload(); onChange?.(); }} />
+        </div>
 
         {d.sessions === null && !d.lines.length && !d.events.length && (
           <Empty title="Nothing recorded">Link a GA4 property or Search Console to a site to see its days here.</Empty>
         )}
       </div>
     </Card>
+  );
+}
+
+// Sources or landing pages that day: sessions, and the change on a usual same weekday.
+function MovedList({ title, rows, mono = false }) {
+  if (!rows.length) return null;
+  return (
+    <div>
+      <span class="nx-label-sm">{title}</span>
+      <ul class="cal-moved-list">
+        {rows.map((r) => {
+          const gain = Math.round(r.gain);
+          return (
+            <li key={r.label} title={`${formatNumber(r.value)} sessions, usually ${formatNumber(r.expected)}`}>
+              <span>{mono ? <code>{r.label}</code> : r.label}</span>
+              <b>{formatNumber(r.value)} <span class={`delta ${gain > 0 ? 'up' : gain < 0 ? 'down' : 'flat'}`}>{gain ? `${gain > 0 ? '+' : '−'}${formatNumber(Math.abs(gain))}` : 'same'}</span></b>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
   );
 }
 
@@ -288,7 +320,7 @@ function AddLink({ date, site, onAdded }) {
 
   if (!open) {
     return (
-      <button class="btn cal-add-open" type="button" onClick={() => setOpen(true)}>
+      <button class="link-btn cal-add-open" type="button" onClick={() => setOpen(true)}>
         <Icon name="plus" size={13} /> Add a post link
       </button>
     );
@@ -320,25 +352,6 @@ function AddLink({ date, site, onAdded }) {
         {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
       </div>
     </form>
-  );
-}
-
-function ShiftTable({ title, rows, mono = false }) {
-  if (!rows.length) return null;
-  return (
-    <table class="data compact">
-      <thead><tr><th>{title}</th><th class="num">Sessions</th><th class="num">Usual</th><th class="num">Change</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.label}>
-            <td class="cell-path" title={r.label}>{mono ? <code>{r.label}</code> : r.label}</td>
-            <td class="num">{formatNumber(r.value)}</td>
-            <td class="num muted">{formatNumber(r.expected)}</td>
-            <td class={`num delta ${r.gain >= 1 ? 'up' : r.gain <= -1 ? 'down' : 'flat'}`}>{r.gain >= 0 ? '+' : '−'}{formatNumber(Math.abs(r.gain))}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
   );
 }
 

@@ -34,7 +34,7 @@ import { createAlerts, alertRoutes } from './alerts.mjs';
 import { createVercel, vercelRoutes } from './vercel.mjs';
 import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
-import { createAiSearch, aiSearchRoutes } from './ai-search.mjs';
+import { createAiSearch, aiSearchRoutes, ENGINES, ENGINE_ON } from './ai-search.mjs';
 import { createCalendar, calendarRoutes } from './calendar.mjs';
 import { storyRoutes, createStory } from './story.mjs';
 import { createTodos, todoRoutes } from './todos.mjs';
@@ -42,6 +42,7 @@ import { createTodoContext } from './todo-context.mjs';
 import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
+import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
 import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
@@ -147,6 +148,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, history, cacheDb, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
   const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, siteConfig, env });
+  const contentCycles = createContentCycles({ dbPath: join(store.dir, 'content-cycles.db'), store, auth, articles, bing, aiSearch, siteConfig, annotations, pageReview });
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl });
   const customMetrics = createCustomMetrics({ store, env, fetchImpl });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
@@ -185,6 +187,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...analystRoutes({ analyst, siteOr404 }),
     ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
     ...articleRoutes({ articles, siteOr404 }),
+    ...contentCycleRoutes({ cycles: contentCycles, siteOr404 }),
     ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
     ...storyRoutes({ story, siteOr404 }),
@@ -280,6 +283,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         pagespeedKey: { source: vitalsStatus.key?.source || '' },
         bing: { source: from(src.bingApiKey, env.BING_WEBMASTER_KEY) },
         anthropic: { source: from(src.anthropicKey, env.ANTHROPIC_API_KEY), weekly: Boolean(saved.aiSearch?.weekly) },
+        openrouter: {
+          source: from(src.openrouterKey, env.OPENROUTER_API_KEY),
+          on: ENGINES.filter((e) => e.via === 'openrouter' && { ...ENGINE_ON, ...(saved.aiSearch?.engines || {}) }[e.key]).map((e) => e.label),
+        },
         customMetrics: { count: metricStatus.metrics.length, sources: metricStatus.connectors.filter((c) => c.secret.source).map((c) => c.label) },
         notifications: { webhook: Boolean(alertSettings.webhookUrl), desktop: Boolean(alertSettings.desktop), enabled: Boolean(alertSettings.enabled) },
       };
@@ -518,7 +525,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, calendar, history, customMetrics };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, contentCycles, calendar, history, customMetrics };
 }
 
 function flags(query) {
@@ -621,6 +628,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   app.posts.start();
   app.bing.start();
   app.aiSearch.start();
+  app.contentCycles.start();
   app.history.start();
   createServer((req, res) => app.handle(req, res)).listen(port, '127.0.0.1', () => {
     console.log(`\n  SiteLens Studio  →  http://127.0.0.1:${port}\n`);
