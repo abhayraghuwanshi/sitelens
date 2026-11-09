@@ -29,7 +29,7 @@ const MAX_TARBALL = 60_000_000;
 
 /* ---------- which URLs and files are articles (pure) ---------- */
 
-const ARTICLE_SECTION = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(blog|posts?|articles?|news|guides?|tutorials?|docs?|documentation|learn|insights|stories|writing|notes|changelog|resources|help|kb|knowledge-base|case-studies)\/[^/]+/i;
+const ARTICLE_SECTION = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(blog|posts?|articles?|news|guides?|tutorials?|docs?|documentation|learn|insights|stories|writing|notes|changelog|resources|help|kb|knowledge-base|case-studies|templates?|alternatives?|compare|comparisons?|vs|use-cases|examples)\/[^/]+/i;
 const DATED_PATH = /\/(19|20)\d{2}\/\d{2}\//;
 const LISTING = /\/(page|tags?|categor(y|ies)|authors?|archives?|feed)(\/|$)/i;
 
