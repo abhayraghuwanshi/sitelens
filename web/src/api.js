@@ -54,6 +54,8 @@ async function request(method, path, body) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
     const data = await res.json().catch(() => ({}));
+    // Hosted: the session ended; the gateway's sign-in page takes it from here.
+    if (res.status === 401 && data.kind === 'login') window.location.assign('/login');
     if (!res.ok) throw new ApiError(data.error || `Request failed (${res.status})`, { status: res.status, ...data });
     if (counted && res.headers.get('X-Studio-Stale') === '1') followUp(path);
     return data;

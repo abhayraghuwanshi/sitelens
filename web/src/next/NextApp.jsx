@@ -16,7 +16,7 @@ import { Mentions } from '../pages/Mentions.jsx';
 import { Page } from './Page.jsx';
 import { LeaveOut } from './LeaveOut.jsx';
 import { JourneysPage } from './Journeys.jsx';
-import { Sites } from './Sites.jsx';
+import { Sites, ADD_SITE } from './Sites.jsx';
 import { Story } from './Story.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
@@ -52,7 +52,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
     : 'explore';
 
   let body;
-  if (!section) body = <Sites sites={sites} />;
+  if (!section) body = <Sites sites={sites} auth={auth} />;
   else if (section === 'site' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
@@ -63,7 +63,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
   else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
-  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={() => location.reload()} /></Page>;
+  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
   else if (section === 'alerts') body = <Page title="Alerts"><Alerts /></Page>;
   else if (WIDE[section]) {
@@ -83,6 +83,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
         <nav class="nx-nav" aria-label="Main">
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
           <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
+          <NavItem href={ADD_SITE} icon="plus" active={section === 'account' && route.params.get('edit') === 'new'}>Add a site</NavItem>
         </nav>
         {current && (
           <>
@@ -109,7 +110,12 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
             </span>
             <button type="button" class="nx-icon-btn" onClick={onTheme} aria-label="Switch theme" title="Switch theme"><Icon name={themeIcon} /></button>
           </div>
-          <button type="button" class="nx-switch" onClick={onClassic}>Back to the classic layout</button>
+          {!state.hosted && <button type="button" class="nx-switch" onClick={onClassic}>Back to the classic layout</button>}
+          {state.hosted && (
+            <form method="post" action="/logout">
+              <button type="submit" class="nx-switch nx-signout">Sign out</button>
+            </form>
+          )}
         </div>
       </aside>
       <main class="nx-main">{body}</main>

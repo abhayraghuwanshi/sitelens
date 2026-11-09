@@ -239,6 +239,7 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
   let db = null;
   let timers = [];
   let running = null;
+  let lastAutoLink = 0;
 
   function open() {
     if (db) return db;
@@ -461,6 +462,14 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
 
   async function sync() {
     running ||= (async () => {
+      // Sites not linked yet get linked on their own when a backend serves
+      // their host, so nobody has to press Find. At most every 6 hours.
+      const sites = (await store.sites()).filter((s) => !s.demo && s.host);
+      const before = (await config()).links;
+      if (sites.some((s) => !before[s.id]) && now() - lastAutoLink > 6 * HOUR) {
+        lastAutoLink = now();
+        await autoLink().catch(() => {});
+      }
       const { links } = await config();
       const results = [];
       if (!Object.keys(links).length) return results;

@@ -4,7 +4,7 @@ import { Loading, ErrorState } from '../../components/ui.jsx';
 import { Icon } from '../../components/icons.jsx';
 
 const has = (scopes, s) => (scopes || []).some((x) => x.endsWith(s) || x.endsWith('cloud-platform'));
-const via = (source, what) => (source === 'env' ? `${what} from .env` : `${what} saved`);
+const via = (source, what) => (source === 'oauth' ? 'Connected' : source === 'env' ? `${what} from .env` : `${what} saved`);
 
 // What the one Google sign-in unlocks, scope by scope.
 export const GOOGLE_CAPS = [
@@ -33,7 +33,7 @@ const GROUPS = [
         status: ({ firebase: f, google }) => (!has(google.scopes, 'logging.read')
           ? { on: false, text: 'Google sign-in needs Cloud logs access', warn: google.connected }
           : f.errors.length ? { on: false, text: f.errors[0], warn: true }
-            : f.links ? { on: true, text: `${f.links} ${f.links === 1 ? 'site' : 'sites'} linked` } : { on: false, text: 'No backend linked yet' }),
+            : f.links ? { on: true, text: `${f.links} ${f.links === 1 ? 'site' : 'sites'} linked` } : { on: true, text: 'Logs connected · no App Hosting site found yet' }),
       },
       {
         key: 'vercel', name: 'Vercel', icon: 'triangle', panel: 'vercel',
@@ -47,7 +47,7 @@ const GROUPS = [
         desc: 'Daily numbers from your own databases, like daily pings from Cloudflare D1, charted on Overview.',
         status: ({ customMetrics: m }) => (m.count
           ? { on: true, text: `${m.count} ${m.count === 1 ? 'metric' : 'metrics'}${m.sources.length ? ` · ${m.sources.join(', ')}` : ''}` }
-          : { on: false, text: m.sources.length ? 'Token saved · no metrics yet' : 'Needs a source and a query' }),
+          : m.sources.length ? { on: true, text: `${m.sources.join(', ')} connected · add a metric to chart it` } : { on: false, text: 'Needs a source and a query' }),
       },
       {
         key: 'bing', name: 'Bing Webmaster Tools', icon: 'search', panel: 'bing',

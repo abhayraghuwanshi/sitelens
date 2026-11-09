@@ -102,7 +102,8 @@ export function App() {
   if (state.error) return <div style={{ padding: '32px' }}><ErrorState error={state.error} onRetry={state.reload} /></div>;
 
   const toggleTheme = () => setTheme(resolvedTheme(theme, systemDark) === 'dark' ? 'light' : 'dark');
-  if (layout === 'next') {
+  // Hosted, there is only the new layout.
+  if (layout === 'next' || state.data.hosted) {
     return <NextApp state={state.data} route={route} onClassic={() => setLayout('classic')} onTheme={toggleTheme} onReload={() => state.reload()}
       themeIcon={resolvedTheme(theme, systemDark) === 'dark' ? 'sun' : 'moon'} />;
   }

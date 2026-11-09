@@ -15,8 +15,12 @@ import { dirname } from 'node:path';
 import { EngineError } from './engines.mjs';
 import { historyRange } from './github.mjs';
 import { createCache } from './cache.mjs';
+import { refreshBing } from './connect.mjs';
 
 const BASE = 'https://ssl.bing.com/webmaster/api.svc/json';
+// OAuth calls go where Bing's OAuth docs send them, with a Bearer header.
+const OAUTH_BASE = 'https://www.bing.com/webmaster/api.svc/json';
+const OAUTH = Symbol('bing-oauth');
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
 
@@ -100,21 +104,38 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return db;
   }
 
+  // A pasted API key, or (key === OAUTH) the account connected with "Connect Bing".
   async function config() {
     const s = await store.get();
     const saved = s.sources?.bingApiKey || '';
-    return { key: saved || env.BING_WEBMASTER_KEY || '', source: saved ? 'settings' : env.BING_WEBMASTER_KEY ? 'env' : '', siteMap: s.bing?.siteMap || {} };
+    const oauth = Boolean(s.sources?.bingOAuth?.refreshToken);
+    return {
+      key: saved || (oauth ? OAUTH : '') || env.BING_WEBMASTER_KEY || '',
+      source: saved ? 'settings' : oauth ? 'oauth' : env.BING_WEBMASTER_KEY ? 'env' : '',
+      siteMap: s.bing?.siteMap || {},
+    };
+  }
+
+  let refreshing = null;
+  async function bearer() {
+    const o = (await store.get()).sources?.bingOAuth;
+    if (o?.accessToken && o.expiresAt - 60_000 > now()) return o.accessToken;
+    refreshing ||= refreshBing({ store, env, fetchImpl, now }).finally(() => {
+      refreshing = null;
+    });
+    return refreshing;
   }
 
   async function call(method, params = {}, { key, body } = {}) {
     const apiKey = key ?? (await config()).key;
-    if (!apiKey) throw new EngineError('Bing Webmaster Tools isn’t connected.', { status: 409, kind: 'needs-bing', hint: 'Add an API key in Settings → Integrations → Bing.' });
-    const url = new URL(`${BASE}/${method}`);
-    url.searchParams.set('apikey', apiKey);
+    if (!apiKey) throw new EngineError('Bing Webmaster Tools isn’t connected.', { status: 409, kind: 'needs-bing', hint: 'Connect Bing (or add an API key) in Settings → Integrations → Bing.' });
+    const oauth = apiKey === OAUTH;
+    const url = new URL(`${oauth ? OAUTH_BASE : BASE}/${method}`);
+    if (!oauth) url.searchParams.set('apikey', apiKey);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     const res = await fetchImpl(url, {
       method: body ? 'POST' : 'GET',
-      headers: body ? { 'Content-Type': 'application/json; charset=utf-8' } : {},
+      headers: { ...(body ? { 'Content-Type': 'application/json; charset=utf-8' } : {}), ...(oauth ? { Authorization: `Bearer ${await bearer()}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(30_000),
     });
@@ -332,6 +353,8 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
       s.sources = { ...(s.sources || {}) };
       if (key) s.sources.bingApiKey = key;
       else delete s.sources.bingApiKey;
+      // Removing (or replacing with a key) also disconnects "Connect Bing".
+      delete s.sources.bingOAuth;
     });
     cache.clear();
     lastError = '';
@@ -376,7 +399,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));

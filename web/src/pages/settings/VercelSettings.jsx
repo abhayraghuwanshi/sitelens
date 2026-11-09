@@ -2,9 +2,12 @@ import { useState } from 'preact/hooks';
 import { api } from '../../api.js';
 import { useAsync } from '../../hooks.js';
 import { Card } from '../../components/ui.jsx';
+import { KeyForm } from './BingSettings.jsx';
 
 export function VercelSettings() {
   const status = useAsync(() => api.get('/vercel/status'), []);
+  const connect = useAsync(() => api.get('/connect').catch(() => ({})), []);
+  const canConnect = Boolean(connect.data?.vercel);
   const [token, setToken] = useState('');
   const [teamId, setTeamId] = useState(null);
   const [msg, setMsg] = useState(null);
@@ -46,11 +49,18 @@ export function VercelSettings() {
         <div class="row small">
           <span class={`dot${s.tokenSource ? ' on' : ''}`} />
           {s.tokenSource
-            ? <>Token from {s.tokenSource === 'env' ? <code>VERCEL_TOKEN</code> : 'Settings'}{s.login && <> · <b>{s.login}</b></>}
+            ? <>{s.tokenSource === 'oauth' ? 'Connected to Vercel' : <>Token from {s.tokenSource === 'env' ? <code>VERCEL_TOKEN</code> : 'Settings'}</>}{s.login && <> · <b>{s.login}</b></>}
                 {s.teamId && <> · <span class="mono">{s.teamId}</span></>}
                 {s.lastError && <span style={{ color: 'var(--critical-ink)' }}> · {s.lastError}</span>}</>
             : 'No token yet'}
         </div>
+        {canConnect && (
+          <div class="row">
+            <a class="btn primary" href="/auth/vercel">{s.tokenSource === 'oauth' ? 'Connect again' : 'Connect Vercel'}</a>
+            {s.tokenSource === 'oauth' && <button class="btn ghost danger" type="button" disabled={busy} onClick={remove}>Disconnect</button>}
+          </div>
+        )}
+        <KeyForm open={!canConnect}>
         <form class="row" onSubmit={save}>
           <input type="password" autocomplete="off" style={{ flex: '1', minWidth: '240px' }} placeholder="Vercel access token" value={token}
             onInput={(e) => setToken(e.currentTarget.value)} aria-label="Vercel token" />
@@ -59,10 +69,12 @@ export function VercelSettings() {
           <button class="btn primary" type="submit" disabled={busy || (!token.trim() && !s.tokenSource)}>{busy ? 'Checking…' : 'Save'}</button>
           {s.tokenSource === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={remove}>Remove</button>}
         </form>
+        </KeyForm>
         <p class="note">
-          Create a token at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a> scoped
+          {canConnect && <>Connect picks the account or team that owns your projects; Studio only reads them. </>}
+          {!canConnect && <>Create a token at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a> scoped
           to the team that owns your projects. It's stored in <code>.data/studio.json</code> (owner-only), or set <code>VERCEL_TOKEN</code> (and
-          optionally <code>VERCEL_TEAM_ID</code>) in <code>.env</code>. Leave the team empty to use your default team.
+          optionally <code>VERCEL_TEAM_ID</code>) in <code>.env</code>. Leave the team empty to use your default team.</>}
         </p>
         {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
       </div>

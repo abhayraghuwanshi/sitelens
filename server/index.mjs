@@ -1,6 +1,7 @@
 // SiteLens Studio server: JSON API + the built web app, bound to 127.0.0.1.
 
 import { createServer } from 'node:http';
+import { Readable } from 'node:stream';
 import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, normalize } from 'node:path';
@@ -47,6 +48,7 @@ import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
 import { createCustomMetrics, customMetricRoutes } from './custom-metrics.mjs';
+import { createConnect } from './connect.mjs';
 import { createSiteConfig, siteConfigRoutes, searchGroups } from './site-config.mjs';
 
 // How old a stored Google answer may be and still show while a fresh one loads.
@@ -71,6 +73,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const cacheDb = openCacheDb(join(store.dir, 'cache.db'));
   const engines = createEngines({ auth, bigquery, cacheDb });
   const appUrl = env.STUDIO_APP_URL || '/';
+  // Hosted (server/hosted.mjs): one app per signed-in user behind a gateway,
+  // answering to the public host, with the desktop-only routes switched off.
+  const hosted = env.STUDIO_HOSTED === '1';
+  const hosts = ['127.0.0.1', 'localhost', '[::1]', ...(env.STUDIO_HOST ? [env.STUDIO_HOST] : [])];
   const extensions = createExtensionTracker({ store, fetchImpl });
   const sourceCache = createCache({ db: cacheDb, name: 'sources', staleFor: STALE_FOR });
 
@@ -149,8 +155,11 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   annotations.registerSource('posts', (q) => posts.annotations(q));
   const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, siteConfig, env });
   const contentCycles = createContentCycles({ dbPath: join(store.dir, 'content-cycles.db'), store, auth, articles, bing, aiSearch, siteConfig, annotations, pageReview });
-  const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl });
+  // Hosted, the analyst's calls to this app stay in-process: over the network
+  // they would reach the gateway, which knows no session for them.
+  const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, env, fetchImpl });
+  const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
   // Calendar days are local, so the story's "today" is too.
   const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
@@ -251,6 +260,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     }),
     ['GET', /^\/api\/state$/, async () => {
       return {
+        hosted,
         auth: await auth.status(),
         sites: (await store.sites()).map(publicSite),
         ranges: { ...engines.ranges, history: HISTORY_RANGES.map(({ key, label }) => ({ key, label })) },
@@ -281,7 +291,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         reddit: { source: from(src.redditClientId, env.REDDIT_CLIENT_ID) },
         productHunt: { source: from(src.productHuntToken, env.PRODUCTHUNT_TOKEN) },
         pagespeedKey: { source: vitalsStatus.key?.source || '' },
-        bing: { source: from(src.bingApiKey, env.BING_WEBMASTER_KEY) },
+        bing: { source: src.bingApiKey ? 'settings' : src.bingOAuth?.refreshToken ? 'oauth' : from('', env.BING_WEBMASTER_KEY) },
         anthropic: { source: from(src.anthropicKey, env.ANTHROPIC_API_KEY), weekly: Boolean(saved.aiSearch?.weekly) },
         openrouter: {
           source: from(src.openrouterKey, env.OPENROUTER_API_KEY),
@@ -294,6 +304,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     // What an MCP client needs to launch server/mcp.mjs with this install's
     // Node and data folder (in the desktop app, both live inside the bundle).
     ['GET', /^\/api\/mcp\/setup$/, async () => {
+      if (hosted) throw new SourceError('MCP setup is for the desktop app.', { kind: 'notfound' });
       const mcpPath = join(ROOT, 'server', 'mcp.mjs');
       return {
         command: stableNode(process.execPath),
@@ -358,6 +369,12 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       listDataStreams({ token: await auth.token(), propertyId: query.get('property') })],
     ['GET', /^\/api\/google\/search-sites$/, async () => listSearchSites({ token: await auth.token() })],
     ['GET', /^\/api\/google\/bq-projects$/, async () => bigquery.listProjects()],
+    ['GET', /^\/api\/connect$/, async () => ({ bing: connect.available('bing'), vercel: connect.available('vercel') })],
+    ['GET', /^\/api\/google\/bq-export$/, async ({ query }) => {
+      const property = String(query.get('property') || '');
+      if (!/^\d+$/.test(property)) throw new ValidationError('GA4 property IDs are numeric.');
+      return bigquery.findExport(property);
+    }],
     ['GET', /^\/api\/google\/bq-datasets$/, async ({ query }) => bigquery.listDatasets(query.get('project') || '')],
 
     ['POST', /^\/api\/sites$/, async ({ body }) => {
@@ -482,9 +499,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   async function handle(req, res) {
     const url = new URL(req.url, 'http://127.0.0.1');
 
-    // DNS-rebinding guard: this server only answers to loopback names.
+    // DNS-rebinding guard: this server only answers to loopback names (and,
+    // hosted, its public one).
     const host = String(req.headers.host || '').replace(/:\d+$/, '');
-    if (!['127.0.0.1', 'localhost', '[::1]'].includes(host)) return send(res, 421, { error: 'Misdirected request' });
+    if (!hosts.includes(host)) return send(res, 421, { error: 'Misdirected request' });
 
     if (url.pathname === '/auth/google') {
       try {
@@ -499,6 +517,21 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         if (url.searchParams.get('error')) throw new AuthError(`Google sign-in was cancelled (${url.searchParams.get('error')}).`);
         await auth.finish({ code: url.searchParams.get('code'), state: url.searchParams.get('state') });
         res.writeHead(302, { Location: `${appUrl}#/settings?connected=1` }).end();
+      } catch (err) {
+        redirectWithError(res, appUrl, err.message);
+      }
+      return;
+    }
+
+    // "Connect Bing" / "Connect Vercel": out to the provider and back.
+    const linking = url.pathname.match(/^\/auth\/(bing|vercel)(\/callback)?$/);
+    if (linking) {
+      const [, name, callback] = linking;
+      try {
+        if (!callback) return res.writeHead(302, { Location: connect.startUrl(name) }).end();
+        await connect.finish(name, url.searchParams);
+        (name === 'bing' ? bing : vercel).reset();
+        res.writeHead(302, { Location: `${appUrl}#/settings?i=${name}` }).end();
       } catch (err) {
         redirectWithError(res, appUrl, err.message);
       }
@@ -526,6 +559,28 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   }
 
   return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, contentCycles, calendar, history, customMetrics };
+}
+
+// Calls handle() as if over HTTP and returns a fetch Response.
+export async function selfFetch(handle, url, { method = 'GET', headers = {}, body } = {}) {
+  const u = new URL(url);
+  const req = Readable.from(body ? [Buffer.from(body)] : []);
+  Object.assign(req, { method, url: u.pathname + u.search, headers: { ...Object.fromEntries(Object.entries(headers).map(([k, v]) => [k.toLowerCase(), v])), host: u.host } });
+  return new Promise((resolve) => {
+    let status = 200;
+    let head = {};
+    const res = {
+      writeHead(code, h = {}) {
+        status = code;
+        head = h;
+        return res;
+      },
+      end(data = '') {
+        resolve(new Response(status === 204 ? null : data, { status, headers: head }));
+      },
+    };
+    handle(req, res);
+  });
 }
 
 function flags(query) {

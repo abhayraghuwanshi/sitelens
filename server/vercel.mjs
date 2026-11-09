@@ -38,8 +38,10 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
     const s = await store.get();
     return {
       token: s.sources?.vercelToken || env.VERCEL_TOKEN || '',
-      tokenSource: s.sources?.vercelToken ? 'settings' : env.VERCEL_TOKEN ? 'env' : '',
+      tokenSource: s.sources?.vercelToken ? (s.vercel?.via === 'oauth' ? 'oauth' : 'settings') : env.VERCEL_TOKEN ? 'env' : '',
       teamId: s.vercel?.teamId || env.VERCEL_TEAM_ID || '',
+      // A token from "Connect Vercel" already belongs to one account or team.
+      oauth: s.vercel?.via === 'oauth' && Boolean(s.sources?.vercelToken),
       projectMap: s.vercel?.projectMap || {},
     };
   }
@@ -85,7 +87,7 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
         hint: 'Create a token at vercel.com/account/settings/tokens, then add it in Settings → Vercel, or set VERCEL_TOKEN in .env and restart Studio.',
       });
     }
-    if (!cfg.teamId) {
+    if (!cfg.teamId && !cfg.oauth) {
       const user = await cache.wrap(`user:${cfg.token.slice(-6)}`, 60 * 60_000, false, () => verify(cfg.token));
       cfg.teamId = user.defaultTeamId || '';
     }
@@ -113,6 +115,7 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
       if (value) s.sources.vercelToken = value;
       else if (!team) delete s.sources.vercelToken;
       s.vercel = { ...(s.vercel || {}), teamId: team };
+      delete s.vercel.via;
     });
     cache.clear();
     lastError = '';
@@ -291,7 +294,13 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
     return lists.flat();
   }
 
-  return { status, verify, saveToken, projects, matches, repoFor, setMatch, deployments, analytics, compare, annotations };
+  const reset = () => {
+    cache.clear();
+    lastError = '';
+    who = null;
+  };
+
+  return { status, verify, saveToken, reset, projects, matches, repoFor, setMatch, deployments, analytics, compare, annotations };
 }
 
 // Project fields Studio shows. The API also returns env vars — never pass those on.

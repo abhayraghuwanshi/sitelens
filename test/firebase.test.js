@@ -122,6 +122,17 @@ test('autoLink finds the backend serving the site host and syncs it', async () =
   }
 });
 
+test('a sync links an unlinked site on its own, without pressing Find', async () => {
+  const { dir, firebase, store } = await setup();
+  try {
+    await firebase.sync();
+    assert.equal((await store.get()).firebase.links.desk.service, 'cooldesk-ui');
+  } finally {
+    firebase.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
 test('sync pages through logs, dedupes on re-sync, and summarizes traffic', async () => {
   const { dir, firebase, calls } = await setup();
   try {

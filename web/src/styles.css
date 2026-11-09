@@ -303,6 +303,12 @@ label.field small { font-weight: 400; color: var(--text-3); }
 .small { font-size: var(--text-sm); }
 .note { font-size: var(--text-sm); color: var(--text-3); line-height: 1.5; }
 .note b { color: var(--text-2); font-weight: 600; }
+.bq-found { display: flex; align-items: center; gap: 6px; color: var(--text-2); }
+.bq-found svg { color: var(--good); flex: none; }
+.key-form > summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-2); padding: 4px 0; }
+.key-form[open] > summary { margin-bottom: 8px; }
+.bq-advanced > summary { cursor: pointer; font-size: var(--text-sm); color: var(--text-2); padding: 4px 0; }
+.bq-advanced[open] > summary { margin-bottom: 12px; }
 
 /* KPI strip */
 .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); box-shadow: var(--shadow); }

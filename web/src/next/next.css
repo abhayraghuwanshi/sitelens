@@ -28,6 +28,7 @@
 .nx-icon-btn { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 8px; border: 1px solid var(--border); background: none; color: var(--text-2); cursor: pointer; }
 .nx-switch { margin: 2px 2px 0; padding: 8px 10px; border-radius: 8px; border: 1px dashed var(--border-strong); background: none; color: var(--text-2); font: inherit; font-size: var(--text-sm); cursor: pointer; text-align: left; }
 .nx-switch:hover { color: var(--text); border-color: var(--accent); }
+.nx-signout { width: calc(100% - 4px); border-style: solid; }
 
 /* Page */
 .nx-main { flex: 1; min-width: 0; }
@@ -165,6 +166,16 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-action-row { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
 .nx-btn { display: inline-flex; align-items: center; padding: 7px 12px; border-radius: 8px; border: 1px solid var(--border-strong); background: none; color: var(--text); font: inherit; font-size: var(--text-md); text-decoration: none; cursor: pointer; }
 .nx-btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; }
+.nx-btn .icon, .nx-btn svg { margin-right: 6px; }
+.nx-start h2 { margin: 0 0 4px; font-size: 18px; }
+.nx-start p { margin: 0; }
+.nx-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.nx-steps li { display: flex; align-items: center; gap: 14px; padding: 12px 0; border-top: 1px solid var(--border); }
+.nx-step-num { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong); font-weight: 600; font-size: var(--text-sm); color: var(--text-2); }
+.nx-steps li.done .nx-step-num { background: var(--good); border-color: var(--good); color: #fff; }
+.nx-step-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.nx-steps li.done .nx-step-text b { color: var(--text-2); }
+@media (max-width: 640px) { .nx-steps li { flex-wrap: wrap; } .nx-steps li .nx-btn { margin-left: 42px; } }
 .nx-btn.quiet { border-color: transparent; color: var(--text-3); padding-inline: 8px; gap: 4px; }
 .nx-btn.quiet:hover { color: var(--text); background: var(--surface-2); }
 .nx-btn.done { border-color: var(--good); color: var(--good-ink); }

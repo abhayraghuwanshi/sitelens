@@ -50,8 +50,12 @@ export function Settings({ state, params, onChange }) {
   const panel = PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
   const tab = panel ? 'integrations' : TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'integrations';
 
+  // Pick up the new sign-in once, then drop the flag so a reload can't repeat it.
   useEffect(() => {
-    if (connected) onChange();
+    if (!connected) return;
+    onChange();
+    const hash = location.hash.replace(/([?&])connected=1&?/, '$1').replace(/[?&]$/, '');
+    history.replaceState(null, '', hash || '#/');
   }, [connected]);
 
   return (
@@ -77,8 +81,13 @@ export function Settings({ state, params, onChange }) {
 
 function SitesSettings({ state, params, onChange }) {
   const { auth, sites } = state;
-  // ?edit=<site id> opens that site's form, e.g. from a tab that needs a setting.
-  const [editing, setEditing] = useState(() => sites.find((s) => s.id === params.get('edit') && !s.demo) || null);
+  // ?edit=<site id> opens that site's form, e.g. from a tab that needs a setting; ?edit=new opens a blank one.
+  const [editing, setEditing] = useState(() => (params.get('edit') === 'new' ? {} : sites.find((s) => s.id === params.get('edit') && !s.demo) || null));
+  // "Add a site" clicked again while this tab is already open.
+  const wantsNew = params.get('edit') === 'new';
+  useEffect(() => {
+    if (wantsNew) setEditing((e) => e || {});
+  }, [wantsNew, params.toString()]);
   return (
     <>
       <Card title="Sites" sub="Each site can use GA4, Search Console and BigQuery independently"
@@ -110,7 +119,7 @@ function SitesSettings({ state, params, onChange }) {
       {editing && (
         <SiteForm key={editing.id || 'new'} initial={editing} auth={auth} focus={params.get('focus') || ''}
           onCancel={() => setEditing(null)}
-          onSaved={(site) => { setEditing(null); onChange(); navigate(`/site/${site.id}/overview`); }} />
+          onSaved={(site) => { setEditing(null); onChange(); navigate(`/site/${site.id}`); }} />
       )}
 
     </>
@@ -260,6 +269,38 @@ function ConnectCard({ auth, onChange }) {
 
 // A site and its product are edited together: the site's GA4, Search Console
 // and BigQuery first, then what the product runs on (domains, hosting, repos…).
+// What the export search found, in words, and what to do if it found nothing.
+function BqExportStatus({ propertyId, live, result }) {
+  if (!live) return <p class="note">Connect Google above and Studio finds the export for you.</p>;
+  if (!propertyId) return <p class="note">Pick the GA4 property above and Studio finds its BigQuery export for you.</p>;
+  if (result.loading) return <p class="note">Looking for this property’s BigQuery export…</p>;
+  const found = result.data;
+  if (found?.found) {
+    return (
+      <p class="note bq-found"><Icon name="check" size={13} /> Found <code>{found.dataset}</code> in <b>{found.dataProject}</b>{found.location ? ` (${found.location})` : ''}. Nothing else to fill in.</p>
+    );
+  }
+  if (found?.linked) {
+    return (
+      <p class="note">This property is linked to BigQuery{found.project ? <> in <b>{found.project}</b></> : ''}, but its first daily export hasn’t arrived yet. That takes up to a day. Save now and it starts working when the data lands.</p>
+    );
+  }
+  return (
+    <div class="note stack" style={{ gap: '6px' }}>
+      <span>{result.error ? `Couldn’t look for the export: ${result.error.message}.` : 'No BigQuery export found for this property.'} To turn it on:</span>
+      <ol style={{ margin: 0, paddingLeft: '18px' }}>
+        <li>In Google Analytics, open <b>Admin → Product links → BigQuery links</b> and click <b>Link</b>.</li>
+        <li>Choose a Google Cloud project, tick <b>Daily</b> export, and submit.</li>
+        <li>Come back and check again. The first day’s data arrives within 24 hours.</li>
+      </ol>
+      <span class="row" style={{ gap: '8px' }}>
+        <a class="btn ghost" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Open GA4 Admin</a>
+        <button class="btn ghost" type="button" onClick={() => result.reload()}>Check again</button>
+      </span>
+    </div>
+  );
+}
+
 function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({
     id: initial.id || '',
@@ -288,6 +329,20 @@ function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
   useFocusStage(focus, Boolean(product));
   const setProductPatch = (patch) => setProduct((p) => ({ ...p, ...patch }));
   const projects = useAsync(() => (live && form.useBq ? api.get('/google/bq-projects').catch(() => []) : Promise.resolve([])), [live, form.useBq]);
+  // The property's BigQuery export, found for you: project, dataset and location.
+  const bqExport = useAsync(() => (live && /^\d+$/.test(form.propertyId) ? api.get(`/google/bq-export?property=${form.propertyId}`) : Promise.resolve(null)), [live, form.propertyId]);
+  useEffect(() => {
+    const found = bqExport.data;
+    if (!found?.found && !(found?.linked && found.project)) return;
+    // Fill in only what's empty or was found for another property.
+    if (form.bq.dataset && !(form.bq.dataset.startsWith('analytics_') && form.bq.dataset !== found.dataset)) return;
+    const project = found.found ? found.dataProject : found.project;
+    setForm((f) => ({
+      ...f,
+      useBq: f.useBq || (!initial.id && found.found),
+      bq: { ...f.bq, billingProject: project, dataProject: project, dataset: found.dataset, location: found.location || '' },
+    }));
+  }, [bqExport.data]);
 
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setBq = (patch) => setForm((f) => ({ ...f, bq: { ...f.bq, ...patch } }));
@@ -371,29 +426,33 @@ function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
         <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL</label>
         {form.useBq && (
           <>
-            <div class="settings-grid">
-              <label class="field">Billing project
-                {projects.data?.length ? (
-                  <select required value={form.bq.billingProject} onChange={(e) => setBq({ billingProject: e.currentTarget.value })}>
-                    <option value="">Choose…</option>
-                    {projects.data.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
-                  </select>
-                ) : (
-                  <input required value={form.bq.billingProject} placeholder="my-gcp-project" onInput={(e) => setBq({ billingProject: e.currentTarget.value })} />
-                )}
-                <small>Runs and pays for the queries (1 TB/month free).</small>
-              </label>
-              <label class="field">Data project<input value={form.bq.dataProject} placeholder="same as billing" onInput={(e) => setBq({ dataProject: e.currentTarget.value })} /></label>
-              <label class="field">Dataset<input required value={form.bq.dataset} placeholder="analytics_123456789" onInput={(e) => setBq({ dataset: e.currentTarget.value })} /></label>
-              <label class="field">Location<input value={form.bq.location} placeholder="US, EU, asia-south1…" onInput={(e) => setBq({ location: e.currentTarget.value })} /></label>
-              <label class="field">Stream ID<input value={form.bq.streamId} placeholder="optional, numeric" onInput={(e) => setBq({ streamId: e.currentTarget.value })} />
-                <small>Filters a multi-site property to this site.</small></label>
-              <label class="field">Fixed end date<input value={form.bq.endDate} placeholder="YYYY-MM-DD (static datasets)" onInput={(e) => setBq({ endDate: e.currentTarget.value })} /></label>
-              <label class="field">Scan cap (GB)<input type="number" min="0.1" step="0.1" value={form.bq.maxBytes / 1e9} onInput={(e) => setBq({ maxBytes: Number(e.currentTarget.value) * 1e9 })} />
-                <small>Queries above this are refused before they run.</small></label>
-              <label class="field">Sessions rollup table<input value={form.bq.sessionsTable} placeholder="project.dataset.sessions" onInput={(e) => setBq({ sessionsTable: e.currentTarget.value })} />
-                <small>Optional. Build it below after saving.</small></label>
-            </div>
+            <BqExportStatus propertyId={form.propertyId} live={live} result={bqExport} />
+            <details class="bq-advanced">
+              <summary>Advanced: project, dataset, location, limits</summary>
+              <div class="settings-grid">
+                <label class="field">Billing project
+                  {projects.data?.length ? (
+                    <select value={form.bq.billingProject} onChange={(e) => setBq({ billingProject: e.currentTarget.value })}>
+                      <option value="">Choose…</option>
+                      {projects.data.map((p) => <option key={p.id} value={p.id}>{p.name || p.id}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.bq.billingProject} placeholder="my-gcp-project" onInput={(e) => setBq({ billingProject: e.currentTarget.value })} />
+                  )}
+                  <small>Runs and pays for the queries (1 TB/month free).</small>
+                </label>
+                <label class="field">Data project<input value={form.bq.dataProject} placeholder="same as billing" onInput={(e) => setBq({ dataProject: e.currentTarget.value })} /></label>
+                <label class="field">Dataset<input value={form.bq.dataset} placeholder="analytics_123456789" onInput={(e) => setBq({ dataset: e.currentTarget.value })} /></label>
+                <label class="field">Location<input value={form.bq.location} placeholder="US, EU, asia-south1…" onInput={(e) => setBq({ location: e.currentTarget.value })} /></label>
+                <label class="field">Stream ID<input value={form.bq.streamId} placeholder="optional, numeric" onInput={(e) => setBq({ streamId: e.currentTarget.value })} />
+                  <small>Filters a multi-site property to this site.</small></label>
+                <label class="field">Fixed end date<input value={form.bq.endDate} placeholder="YYYY-MM-DD (static datasets)" onInput={(e) => setBq({ endDate: e.currentTarget.value })} /></label>
+                <label class="field">Scan cap (GB)<input type="number" min="0.1" step="0.1" value={form.bq.maxBytes / 1e9} onInput={(e) => setBq({ maxBytes: Number(e.currentTarget.value) * 1e9 })} />
+                  <small>Queries above this are refused before they run.</small></label>
+                <label class="field">Sessions rollup table<input value={form.bq.sessionsTable} placeholder="project.dataset.sessions" onInput={(e) => setBq({ sessionsTable: e.currentTarget.value })} />
+                  <small>Optional. Build it below after saving.</small></label>
+              </div>
+            </details>
             {initial.id && initial.bq && <Rollup site={initial} />}
           </>
         )}
