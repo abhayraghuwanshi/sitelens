@@ -3,6 +3,7 @@ import { formatNumber, formatPercent, formatDecimal } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, Loading, ErrorState } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
 import { PageDetail } from './SearchHub.jsx';
 
@@ -30,7 +31,7 @@ const num = (v) => (v ? formatNumber(v) : <span class="muted">0</span>);
 export function PageReview({ site, range = '90d' }) {
   const [only, setOnly] = useState('');
   const [all, setAll] = useState(false);
-  const data = useAsync(() => api.get(`/sites/${site.id}/page-review${qs({ range })}`), [site.id, range]);
+  const data = useAsync((o) => api.get(`/sites/${site.id}/page-review${qs({ range, fresh: o?.fresh ? 1 : undefined })}`), [site.id, range]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!data.data) {
     return (
@@ -52,6 +53,7 @@ export function PageReview({ site, range = '90d' }) {
       <div class="review-head">
         <p class="note" style={{ margin: 0 }}>
           {d.rows.length} pages{d.sources.sitemap ? `, ${d.sources.sitemap} from the sitemap` : ''}. Numbers cover {d.period?.label || 'the last 90 days'}{d.period?.search ? ` (search: ${d.period.search})` : ''}. Suggestions are judged on 90 days of visits, Google{d.sources.bing ? ', Bing' : ''} and AI, so a quiet day doesn’t change them; the decision is yours.
+          {' '}<button class="btn ghost" type="button" title="Read the sitemap, GA4, Google and Bing again" onClick={() => data.reload({ fresh: true })} disabled={data.loading}><Icon name="refresh" size={12} /> Refresh</button>
         </p>
       </div>
       {notes.length > 0 && <p class="note">{notes.map(([k, v]) => v).join(' ')}</p>}

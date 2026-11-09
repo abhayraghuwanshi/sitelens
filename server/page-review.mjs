@@ -165,7 +165,8 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
   }
 
   async function judge(site, fresh) {
-    const { rows, bingPages, siteSessions, ...base } = await cache.wrap(`${site.id}:90d`, 30 * 60_000, fresh, () => gather(site, '90d', 90));
+    // `fresh` reaches the sitemap too, so pages just added to it show up.
+    const { rows, bingPages, siteSessions, ...base } = await cache.wrap(`${site.id}:90d`, 30 * 60_000, fresh, () => gather(site, '90d', 90, { fresh }));
     const saved = await store.get();
     const decisions = saved.pageDecisions?.[site.id] || {};
     const goals = saved.pageGoals?.[site.id] || {};
@@ -228,11 +229,11 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
   }
 
   // Everything but the decisions: plain JSON, so it keeps on disk.
-  async function gather(site, key, days, { goals = true } = {}) {
+  async function gather(site, key, days, { goals = true, fresh = false } = {}) {
     const product = goals ? ((await store.get()).products || []).find((p) => p.siteId === site.id) : null;
     const [list, bingData, out] = await Promise.all([
       // Titles already read come with it; the rest are read in the background.
-      articles.list(site, key, { all: true, waitForTitles: false, waitForCode: false }),
+      articles.list(site, key, { all: true, fresh, waitForTitles: false, waitForCode: false }),
       // Bing keeps days, not "today" or "this week": those read its last 7 days.
       site.demo ? null : bing.overview(site, PERIODS[key].bing).catch(() => null),
       product && outcomes ? outcomes.get(product.id, key).catch(() => null) : null,

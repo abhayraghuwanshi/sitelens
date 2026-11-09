@@ -81,3 +81,13 @@ test('review: numbers follow the period, suggestions stay judged on 90 days', as
   assert.equal(today.rows.find((r) => r.path === '/blog/dead').suggestion, 'cut');
   assert.equal((await review.review(site, '90d')).rows.find((r) => r.path === '/blog/hit').visits, 400);
 });
+
+test('review: a fresh review re-reads the sitemap, a normal one uses the cached list', async () => {
+  const calls = [];
+  const articles = { list: async (site, key, o) => { calls.push(Boolean(o.fresh)); return { rows: [], totals: {}, notes: {} }; }, titles: () => new Map() };
+  const review = createPageReview({ articles, bing: { overview: async () => null }, store: { get: async () => ({}) }, today: () => '2026-11-09' });
+  const site = { id: 's', demo: true };
+  await review.review(site, '90d');
+  await review.review(site, '90d', { fresh: true });
+  assert.deepEqual(calls, [false, true]);
+});
