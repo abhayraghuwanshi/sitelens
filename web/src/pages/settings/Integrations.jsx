@@ -25,7 +25,7 @@ const GROUPS = [
         desc: 'Repo traffic, stars, clones and release downloads, synced hourly.',
         status: ({ github: g }) => (g.source
           ? { on: !g.lastError, text: g.lastError || `${g.repos} repos · ${via(g.source, 'token')}`, warn: Boolean(g.lastError) }
-          : { on: false, text: 'Needs a personal access token' }),
+          : { on: false, text: 'Not connected' }),
       },
       {
         key: 'firebase', name: 'Firebase App Hosting', icon: 'flame', panel: 'firebase',
@@ -99,7 +99,7 @@ const GROUPS = [
       {
         key: 'mcp', name: 'Claude Code & Claude Desktop', icon: 'terminal', panel: 'mcp',
         desc: 'Ask your agent about traffic, search and launches, and have it leave comments on your charts.',
-        status: () => ({ on: false, text: 'Set up once per agent · no key needed' }),
+        status: ({ hosted }) => ({ on: false, text: hosted ? 'Set up once per agent with an access token' : 'Set up once per agent · no key needed' }),
       },
     ],
   },

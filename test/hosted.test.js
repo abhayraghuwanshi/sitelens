@@ -52,10 +52,13 @@ function call(path, { method = 'GET', headers = {}, body, cookie } = {}) {
 
 const write = (path, body, cookie) => call(path, { method: 'POST', body, cookie, headers: { origin: ORIGIN, 'x-studio': '1' } });
 
+// Each sign-in from its own address, so the sign-in rate limit stays out of the way.
+let signIns = 0;
 async function signIn(email) {
-  const start = await call('/login/google');
+  const headers = { 'fly-client-ip': `198.51.100.${++signIns}` };
+  const start = await call('/login/google', { headers });
   const state = new URL(start.headers.location).searchParams.get('state');
-  const done = await call(`/login/callback?code=${encodeURIComponent(email)}&state=${state}`);
+  const done = await call(`/login/callback?code=${encodeURIComponent(email)}&state=${state}`, { headers });
   const cookie = String(done.headers['set-cookie'] || '').split(';')[0];
   return { done, cookie };
 }
@@ -66,7 +69,7 @@ before(async () => {
     dataDir: dir,
     masterKey,
     host: HOST,
-    allowedEmails: parseEmails('alice@example.com, Bob@Example.com'),
+    allowedEmails: parseEmails('alice@example.com, Bob@Example.com, bob2@example.com'),
     env: { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'csecret', ANTHROPIC_API_KEY: SECRET, GITHUB_TOKEN: SECRET, MASTER_KEY: SECRET },
     fetchImpl: fakeFetch,
     startJobs: false,
@@ -215,6 +218,13 @@ test('no GET route ever hands a stored secret back to the browser', async () => 
   assert.deepEqual(leaks, []);
 });
 
+test('sign-in attempts are limited per address', async () => {
+  const headers = { 'fly-client-ip': '203.0.113.99' };
+  for (let i = 0; i < 20; i++) await call('/login/google', { headers });
+  const res = await call('/login/google', { headers });
+  assert.match(decodeURIComponent(res.headers.location), /Too many sign-in attempts/);
+});
+
 test('outgoing fetches stay off private and internal addresses', () => {
   for (const ip of ['127.0.0.1', '10.1.2.3', '172.16.0.1', '192.168.1.1', '169.254.169.254', '100.64.0.1', '::1', 'fdaa::3', 'fe80::1', '::ffff:127.0.0.1', '0.0.0.0']) {
     assert.equal(isPrivateAddress(ip), true, ip);
@@ -229,4 +239,43 @@ test('the analyst reaches its own app in-process, with writes still guarded', as
   assert.equal((await res.json()).hosted, true);
   const write = await selfFetch(app.handle, 'http://127.0.0.1:8080/api/todos', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Studio': '1' }, body: JSON.stringify({}) });
   assert.notEqual(write.status, 403);
+});
+
+test('importing a server-side file is refused when hosted', async () => {
+  const { cookie } = await signIn('alice@example.com');
+  const res = await write('/api/github/import', { path: join(dir, 'gateway.db') }, cookie);
+  assert.equal(res.status, 404, res.body);
+  assert.match(JSON.parse(res.body).error, /desktop app/);
+});
+
+test('MCP over HTTP: a personal token picks the user, tools see only their data, and revoking ends it', async () => {
+  const alice = (await signIn('alice@example.com')).cookie;
+  const bob = (await signIn('bob2@example.com')).cookie;
+  const made = JSON.parse((await write('/api/mcp/tokens', { label: 'laptop' }, alice)).body);
+  assert.match(made.token, /^slk_/);
+  assert.equal(made.url, `${ORIGIN}/mcp`);
+  // Only a fingerprint is stored.
+  assert.equal(gateway.db.prepare('SELECT COUNT(*) AS n FROM mcp_tokens WHERE hash = ?').get(made.token).n, 0);
+
+  const rpc = (body, token = made.token, headers = {}) => call('/mcp', { method: 'POST', body, headers: { authorization: `Bearer ${token}`, ...headers } });
+  const init = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
+  assert.equal(init.status, 200);
+  assert.equal(JSON.parse(init.body).result.serverInfo.name, 'sitelens-studio');
+  assert.equal((await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
+
+  const sites = JSON.parse((await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_sites', arguments: {} } })).body);
+  assert.match(sites.result.content[0].text, /alice-only\.com/);
+
+  // Bob can't see or revoke Alice's tokens.
+  assert.equal(JSON.parse((await call('/api/mcp/tokens', { cookie: bob })).body).tokens.length, 0);
+  await call(`/api/mcp/tokens/${made.id}`, { method: 'DELETE', cookie: bob, headers: { origin: ORIGIN, 'x-studio': '1' } });
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 3, method: 'ping' })).status, 200);
+
+  // No token, a made-up one, or a browser on another site: refused.
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 4, method: 'ping' }, 'slk_madeupmadeupmadeupmadeup')).status, 401);
+  assert.equal((await call('/mcp', { method: 'POST', body: { jsonrpc: '2.0', id: 5, method: 'ping' } })).status, 401);
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 6, method: 'ping' }, made.token, { origin: 'https://evil.test' })).status, 403);
+
+  await call(`/api/mcp/tokens/${made.id}`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
+  assert.equal((await rpc({ jsonrpc: '2.0', id: 7, method: 'ping' })).status, 401);
 });

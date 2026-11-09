@@ -48,7 +48,7 @@ import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
 import { createCustomMetrics, customMetricRoutes } from './custom-metrics.mjs';
-import { createConnect } from './connect.mjs';
+import { createConnect, githubAccessToken } from './connect.mjs';
 import { createSiteConfig, siteConfigRoutes, searchGroups } from './site-config.mjs';
 
 // How old a stored Google answer may be and still show while a fresh one loads.
@@ -102,12 +102,21 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return match.id;
   }
 
-  // GitHub stats are Studio's own: a token (Settings, else GITHUB_TOKEN in .env)
-  // synced hourly into .data/github.db. No dependency on other projects.
+  // GitHub stats are Studio's own: a token (Settings, "Connect GitHub", else
+  // GITHUB_TOKEN in .env) synced hourly into .data/github.db.
+  let githubRefresh = null;
   async function githubToken() {
     const { sources } = await store.get();
-    return sources?.githubToken || env.GITHUB_TOKEN || '';
+    if (sources?.githubToken) return sources.githubToken;
+    if (sources?.githubOAuth) {
+      githubRefresh ||= githubAccessToken({ store, env, fetchImpl }).finally(() => {
+        githubRefresh = null;
+      });
+      return githubRefresh;
+    }
+    return env.GITHUB_TOKEN || '';
   }
+  const githubSource = (sources) => (sources?.githubToken ? 'settings' : sources?.githubOAuth ? 'oauth' : env.GITHUB_TOKEN ? 'env' : '');
   const vercel = createVercel({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
   // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
@@ -266,7 +275,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         ranges: { ...engines.ranges, history: HISTORY_RANGES.map(({ key, label }) => ({ key, label })) },
         sources: {
           github: {
-            tokenSource: (await store.get()).sources?.githubToken ? 'settings' : env.GITHUB_TOKEN ? 'env' : '',
+            tokenSource: githubSource((await store.get()).sources),
             ...github.status(),
             data: github.hasDb() ? githubStatus(github.dbPath) : { ok: false },
           },
@@ -283,8 +292,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         firebase.status(), vercel.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
       ]);
       return {
+        hosted,
         google: await auth.status(),
-        github: { source: from(src.githubToken, env.GITHUB_TOKEN), ...github.status(), repos: github.hasDb() ? githubStatus(github.dbPath).repos || 0 : 0 },
+        github: { source: githubSource(src), ...github.status(), repos: github.hasDb() ? githubStatus(github.dbPath).repos || 0 : 0 },
         firebase: { links: firebaseStatus.links.length, errors: firebaseStatus.links.filter((l) => l.error).map((l) => l.error) },
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
         extensions: { count: (await extensions.list()).length },
@@ -320,16 +330,24 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         await store.update((s) => {
           s.sources = { ...(s.sources || {}), githubToken: token };
         });
+        github.reset();
         github.sync().catch(() => {});
         return { ok: true, ...who };
       }
       await store.update((s) => {
-        if (s.sources) delete s.sources.githubToken;
+        if (s.sources) {
+          delete s.sources.githubToken;
+          delete s.sources.githubOAuth;
+        }
       });
       return { ok: true };
     }],
     ['POST', /^\/api\/github\/sync$/, async () => github.sync()],
-    ['POST', /^\/api\/github\/import$/, async ({ body }) => ({ imported: github.importFrom(String(body.path || '').trim()) })],
+    ['POST', /^\/api\/github\/import$/, async ({ body }) => {
+      // Reads a database file on this machine: never on a shared server.
+      if (hosted) throw new SourceError('Importing a local file is only for the desktop app.', { kind: 'notfound' });
+      return { imported: github.importFrom(String(body.path || '').trim()) };
+    }],
 
     ['GET', /^\/api\/github\/overview$/, async ({ query }) => {
       const range = query.get('range') || '28d';
@@ -369,7 +387,13 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       listDataStreams({ token: await auth.token(), propertyId: query.get('property') })],
     ['GET', /^\/api\/google\/search-sites$/, async () => listSearchSites({ token: await auth.token() })],
     ['GET', /^\/api\/google\/bq-projects$/, async () => bigquery.listProjects()],
-    ['GET', /^\/api\/connect$/, async () => ({ bing: connect.available('bing'), vercel: connect.available('vercel') })],
+    ['GET', /^\/api\/connect$/, async () => ({
+      bing: connect.available('bing'),
+      vercel: connect.available('vercel'),
+      github: connect.available('github'),
+      // Where to add or remove repos once GitHub is connected.
+      githubRepos: connect.available('github') ? `https://github.com/apps/${encodeURIComponent(env.GITHUB_APP_SLUG)}/installations/new` : '',
+    })],
     ['GET', /^\/api\/google\/bq-export$/, async ({ query }) => {
       const property = String(query.get('property') || '');
       if (!/^\d+$/.test(property)) throw new ValidationError('GA4 property IDs are numeric.');
@@ -524,15 +548,20 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     }
 
     // "Connect Bing" / "Connect Vercel": out to the provider and back.
-    const linking = url.pathname.match(/^\/auth\/(bing|vercel)(\/callback)?$/);
+    const linking = url.pathname.match(/^\/auth\/(bing|vercel|github)(\/callback)?$/);
     if (linking) {
       const [, name, callback] = linking;
       try {
         if (!callback) return res.writeHead(302, { Location: connect.startUrl(name) }).end();
-        await connect.finish(name, url.searchParams);
-        (name === 'bing' ? bing : vercel).reset();
+        const result = await connect.finish(name, url.searchParams);
+        if (result?.next) return res.writeHead(302, { Location: result.next }).end();
+        if (name === 'github') {
+          github.reset();
+          github.sync().catch(() => {});
+        } else (name === 'bing' ? bing : vercel).reset();
         res.writeHead(302, { Location: `${appUrl}#/settings?i=${name}` }).end();
       } catch (err) {
+        console.error(`[connect ${name}]`, err.message);
         redirectWithError(res, appUrl, err.message);
       }
       return;

@@ -48,7 +48,92 @@ function Snippet({ label, text }) {
   );
 }
 
-export function McpSettings() {
+export function McpSettings({ hosted = false }) {
+  return hosted ? <HostedMcp /> : <LocalMcp />;
+}
+
+// Hosted: Claude reaches https://<host>/mcp with a personal access token.
+function HostedMcp() {
+  const list = useAsync(() => api.get('/mcp/tokens'), []);
+  const [label, setLabel] = useState('');
+  const [made, setMade] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
+  if (list.error) return <ErrorState error={list.error} onRetry={list.reload} />;
+  if (!list.data) return <Loading height={240} />;
+  const { url, tokens } = list.data;
+
+  async function create(event) {
+    event.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      setMade(await api.post('/mcp/tokens', { label: label.trim() || 'Claude Code' }));
+      setLabel('');
+      list.reload();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function revoke(id) {
+    await api.del(`/mcp/tokens/${id}`);
+    if (made?.id === id) setMade(null);
+    list.reload();
+  }
+
+  const header = `Authorization: Bearer ${made?.token || '<your token>'}`;
+  const code = `claude mcp add --transport http sitelens ${url} \\\n  --header ${sh(header)} -s user`;
+  const desktop = JSON.stringify({ mcpServers: { sitelens: { command: 'npx', args: ['-y', 'mcp-remote@0.15.2', url, '--header', header] } } }, null, 2);
+
+  return (
+    <Card title="Claude Code & Claude Desktop" sub="Lets Claude read your Studio numbers over MCP and leave its analysis as comments on your charts and to-dos. It can’t change anything else, and it only ever sees your own data.">
+      <div class="stack">
+        <form class="row" onSubmit={create}>
+          <input style={{ flex: '1', minWidth: '220px', maxWidth: '320px' }} placeholder="Name, e.g. MacBook Claude Code" value={label}
+            onInput={(e) => setLabel(e.currentTarget.value)} aria-label="Token name" maxLength={60} />
+          <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create access token'}</button>
+        </form>
+        {error && <ErrorState error={error} />}
+        {made && (
+          <p class="small" style={{ margin: 0, color: 'var(--good-ink)' }}>
+            Token created. It’s in the commands below and won’t be shown again, so copy one now.
+          </p>
+        )}
+        <p class="small" style={{ margin: 0 }}><b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.</p>
+        <Snippet label="Terminal" text={code} />
+        <p class="small" style={{ margin: 0 }}>
+          <b>Claude Desktop</b> (optional): add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>, merged into any
+          existing <code>mcpServers</code>, then restart Claude Desktop. It needs Node.js installed.
+        </p>
+        <Snippet label="claude_desktop_config.json" text={desktop} />
+        {tokens.length > 0 && (
+          <table class="data">
+            <thead><tr><th>Token</th><th>Created</th><th>Last used</th><th /></tr></thead>
+            <tbody>
+              {tokens.map((t) => (
+                <tr key={t.id}>
+                  <td>{t.label}</td>
+                  <td class="small">{new Date(t.createdAt).toLocaleDateString()}</td>
+                  <td class="small">{t.lastUsed ? new Date(t.lastUsed).toLocaleString() : <span class="muted">never</span>}</td>
+                  <td class="num"><button class="btn ghost danger" type="button" onClick={() => revoke(t.id)}>Revoke</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        <p class="note" style={{ margin: 0 }}>
+          One token per computer or agent, so you can revoke one without the others. Studio keeps only a fingerprint of each token, never the token itself.
+          Anyone with a token can read your Studio data, so treat it like a password.
+        </p>
+      </div>
+    </Card>
+  );
+}
+
+function LocalMcp() {
   const setup = useAsync(() => api.get('/mcp/setup'), []);
   if (setup.error) return <ErrorState error={setup.error} onRetry={setup.reload} />;
   if (!setup.data) return <Loading height={320} />;

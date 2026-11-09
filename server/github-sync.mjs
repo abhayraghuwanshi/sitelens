@@ -231,6 +231,10 @@ export function createGitHubSync({ dbPath, getToken, fetchImpl = fetch, log = co
   return {
     dbPath,
     status: () => ({ ...state, running: Boolean(running) }),
+    // A new token: the last error was about the old one (or none at all).
+    reset() {
+      state.lastError = '';
+    },
     hasDb: () => existsSync(dbPath),
     // One sync at a time; concurrent callers share it.
     sync() {

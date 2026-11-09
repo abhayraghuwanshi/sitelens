@@ -3,12 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createConnect } from '../server/connect.mjs';
+import { createConnect, githubAccessToken } from '../server/connect.mjs';
 import { createBing } from '../server/bing.mjs';
 import { createVercel } from '../server/vercel.mjs';
 import { createStore } from '../server/store.mjs';
 
-const ENV = { BING_CLIENT_ID: 'bid', BING_CLIENT_SECRET: 'bsec', VERCEL_CLIENT_ID: 'oac_x', VERCEL_CLIENT_SECRET: 'vsec', VERCEL_INTEGRATION_SLUG: 'sitelens' };
+const ENV = { GITHUB_APP_CLIENT_ID: 'Iv1.x', GITHUB_APP_CLIENT_SECRET: 'gsec', GITHUB_APP_SLUG: 'sitelens-studio', BING_CLIENT_ID: 'bid', BING_CLIENT_SECRET: 'bsec', VERCEL_CLIENT_ID: 'oac_x', VERCEL_CLIENT_SECRET: 'vsec', VERCEL_INTEGRATION_SLUG: 'sitelens' };
 
 async function withStore(fn) {
   const dir = await mkdtemp(join(tmpdir(), 'studio-connect-'));
@@ -99,3 +99,46 @@ test('the Integrations overview counts a connected Bing as connected', async () 
     assert.equal((await res.json()).bing.source, 'oauth');
   });
 });
+
+test('Connect GitHub: signs in, sends a first-timer on to install, and refreshes the 8-hour token', async () => withStore(async (store) => {
+  let clock = 1_000_000;
+  let installs = 0;
+  const fetchImpl = async (url, init = {}) => {
+    const u = String(url);
+    if (u === 'https://github.com/login/oauth/access_token') {
+      assert.equal(init.headers.Accept, 'application/json');
+      const body = new URLSearchParams(String(init.body));
+      if (body.get('grant_type') === 'refresh_token') {
+        assert.equal(body.get('refresh_token'), 'ghr_1');
+        return Response.json({ access_token: 'ghu_2', expires_in: 28800 });
+      }
+      assert.equal(body.get('redirect_uri'), 'https://x.test/auth/github/callback');
+      return Response.json({ access_token: 'ghu_1', expires_in: 28800, refresh_token: 'ghr_1', refresh_token_expires_in: 15897600 });
+    }
+    if (u === 'https://api.github.com/user/installations') return Response.json({ total_count: installs });
+    throw new Error(`unexpected ${u}`);
+  };
+  const connect = createConnect({ store, env: ENV, baseUrl: 'https://x.test', fetchImpl, now: () => clock });
+  const start = new URL(connect.startUrl('github'));
+  assert.equal(start.origin + start.pathname, 'https://github.com/login/oauth/authorize');
+
+  // No installation yet: on to GitHub's install page, whose return is accepted.
+  const first = await connect.finish('github', new URLSearchParams({ code: 'c1', state: start.searchParams.get('state') }));
+  const install = new URL(first.next);
+  assert.equal(install.pathname, '/apps/sitelens-studio/installations/new');
+  installs = 1;
+  assert.deepEqual(await connect.finish('github', new URLSearchParams({ code: 'c2', state: install.searchParams.get('state'), installation_id: '9', setup_action: 'install' })), {});
+
+  const opts = { store, env: ENV, fetchImpl, now: () => clock };
+  assert.equal(await githubAccessToken(opts), 'ghu_1');
+  clock += 8 * 3_600_000;
+  assert.equal(await githubAccessToken(opts), 'ghu_2');
+  assert.equal((await store.get()).sources.githubOAuth.refreshToken, 'ghr_1');
+}));
+
+test('a GitHub token without expiry (expiry turned off on the app) is used as is', async () => withStore(async (store) => {
+  await store.update((s) => {
+    s.sources = { githubOAuth: { accessToken: 'ghu_forever', refreshToken: '', expiresAt: 0 } };
+  });
+  assert.equal(await githubAccessToken({ store, env: ENV, fetchImpl: async () => { throw new Error('no network'); } }), 'ghu_forever');
+}));

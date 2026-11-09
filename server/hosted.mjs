@@ -11,6 +11,9 @@
 //  - User apps see a short allowlist of env vars, so they can't fall back to
 //    (or read) the server's own keys.
 //  - Every outgoing fetch is kept off private and internal addresses.
+//  - /mcp speaks MCP over HTTP to Claude Code and Claude Desktop. A personal
+//    access token (slk_…, made in Account → Claude; only its hash is kept)
+//    picks the user, and the tools run against that user's app and folder.
 //
 // Env: STUDIO_HOST, MASTER_KEY (32 bytes, base64), GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), STUDIO_DATA_DIR, PORT.
@@ -21,7 +24,8 @@ import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
 import { createHash, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
-import { createApp } from './index.mjs';
+import { createApp, selfFetch } from './index.mjs';
+import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
 import { guardOutgoingFetch } from './net-guard.mjs';
@@ -32,7 +36,7 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 // What a user's app may see of the server's environment.
-const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'TZ'];
+const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET', 'GITHUB_APP_SLUG', 'TZ'];
 
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
@@ -106,11 +110,14 @@ export function createGateway({
   db.exec(`
     CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, last_seen INTEGER);
     CREATE TABLE IF NOT EXISTS sessions (hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id), expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS mcp_tokens (hash TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id),
+      label TEXT NOT NULL, created_at INTEGER NOT NULL, last_used INTEGER);
   `);
   const origin = `https://${host}`;
   const apps = new Map(); // user id → app
   const loginStates = new Map(); // state → expires at
   const attempts = new Map(); // client ip → { count, resetAt }
+  const mcps = new Map(); // user id → MCP server over that user's app
 
   function appFor(user) {
     let app = apps.get(user.id);
@@ -152,9 +159,102 @@ export function createGateway({
     res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
   }
 
+  /* ---------- MCP over HTTP ---------- */
+
+  function mcpFor(user) {
+    let mcp = mcps.get(user.id);
+    if (!mcp) {
+      const app = appFor(user);
+      // The tools' API calls stay in-process, inside this user's app.
+      mcp = createMcp({ baseUrl: `http://127.0.0.1:${port}`, dataDir: app.store.dir, fetchImpl: (url, init) => selfFetch(app.handle, url, init) });
+      mcps.set(user.id, mcp);
+    }
+    return mcp;
+  }
+
+  function tokenUser(req) {
+    const match = String(req.headers.authorization || '').match(/^Bearer (slk_[A-Za-z0-9_-]{20,100})$/);
+    if (!match) return null;
+    const row = db.prepare('SELECT t.id AS token_id, u.id, u.email FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ?').get(sha256(match[1]));
+    if (!row || !allowedEmails.has(row.email)) return null;
+    db.prepare('UPDATE mcp_tokens SET last_used = ? WHERE id = ?').run(now(), row.token_id);
+    return { id: row.id, email: row.email };
+  }
+
+  async function handleMcp(req, res) {
+    const json = (status, body, headers = {}) => res.writeHead(status, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', ...headers }).end(JSON.stringify(body));
+    // A browser page on another site must not drive it (the spec's DNS-rebinding advice).
+    if (req.headers.origin && req.headers.origin !== origin) return json(403, { error: 'Cross-site request refused.' });
+    if (req.method !== 'POST') return res.writeHead(405, { Allow: 'POST' }).end();
+    if (limitedFailures(req)) return json(429, { error: 'Too many failed attempts. Wait a few minutes.' });
+    const user = tokenUser(req);
+    if (!user) {
+      failed(req);
+      return json(401, { error: 'A valid SiteLens access token is required: Account → Claude Code & Claude Desktop.' }, { 'WWW-Authenticate': 'Bearer realm="sitelens"' });
+    }
+    let body;
+    try {
+      body = JSON.parse(await readBody(req, 1_000_000));
+    } catch {
+      return json(400, { jsonrpc: '2.0', id: null, error: { code: -32700, message: 'Parse error' } });
+    }
+    const mcp = mcpFor(user);
+    const messages = Array.isArray(body) ? body : [body];
+    const replies = [];
+    for (const message of messages) {
+      const reply = await mcp.handle(message);
+      if (reply) replies.push(reply);
+    }
+    // Only notifications: accepted, nothing to say.
+    if (!replies.length) return res.writeHead(202).end();
+    return json(200, Array.isArray(body) ? replies : replies[0]);
+  }
+
+  // Tokens a signed-in user makes, lists and revokes for their agents.
+  function tokenRoutes(req, res, url, user) {
+    const json = (status, body) => res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
+    if (req.method !== 'GET' && req.headers['x-studio'] !== '1') return json(403, { error: 'Missing X-Studio header.' });
+    if (url.pathname === '/api/mcp/tokens' && req.method === 'GET') {
+      const tokens = db.prepare('SELECT id, label, created_at AS createdAt, last_used AS lastUsed FROM mcp_tokens WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
+      return json(200, { url: `${origin}/mcp`, tokens: tokens.map((t) => ({ ...t })) });
+    }
+    if (url.pathname === '/api/mcp/tokens' && req.method === 'POST') {
+      return readBody(req, 10_000).then((raw) => {
+        let label = '';
+        try {
+          label = String(JSON.parse(raw || '{}').label || '').trim().slice(0, 60);
+        } catch { /* default label */ }
+        if (db.prepare('SELECT COUNT(*) AS n FROM mcp_tokens WHERE user_id = ?').get(user.id).n >= 20) return json(400, { error: 'Up to 20 tokens. Revoke one you no longer use.' });
+        const token = `slk_${randomBytes(32).toString('base64url')}`;
+        const id = randomBytes(6).toString('hex');
+        db.prepare('INSERT INTO mcp_tokens (hash, id, user_id, label, created_at) VALUES (?, ?, ?, ?, ?)').run(sha256(token), id, user.id, label || 'Claude', now());
+        // The only time the token itself is ever shown.
+        return json(200, { id, token, url: `${origin}/mcp` });
+      });
+    }
+    const revoke = url.pathname.match(/^\/api\/mcp\/tokens\/([a-f0-9]{12})$/);
+    if (revoke && req.method === 'DELETE') {
+      db.prepare('DELETE FROM mcp_tokens WHERE id = ? AND user_id = ?').run(revoke[1], user.id);
+      return json(200, { ok: true });
+    }
+    return json(404, { error: 'Not found' });
+  }
+
+  // Wrong tokens count like sign-in attempts: 20 per address per 10 minutes.
+  function failed(req) {
+    const ip = clientIp(req);
+    const entry = attempts.get(`mcp:${ip}`);
+    if (!entry || entry.resetAt < now()) attempts.set(`mcp:${ip}`, { count: 1, resetAt: now() + 10 * 60_000 });
+    else entry.count += 1;
+  }
+  function limitedFailures(req) {
+    const entry = attempts.get(`mcp:${clientIp(req)}`);
+    return Boolean(entry && entry.resetAt >= now() && entry.count >= 20);
+  }
+
   // 20 sign-in attempts per address per 10 minutes.
   function limited(req) {
-    const ip = String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+    const ip = clientIp(req);
     const entry = attempts.get(ip);
     if (!entry || entry.resetAt < now()) {
       attempts.set(ip, { count: 1, resetAt: now() + 10 * 60_000 });
@@ -218,6 +318,9 @@ export function createGateway({
     if (reqHost !== host) return res.writeHead(421, { 'Content-Type': 'text/plain' }).end('Misdirected request');
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
 
+    // Agents, not browsers: a token instead of a session (checked inside).
+    if (url.pathname === '/mcp') return handleMcp(req, res);
+
     // Writes must come from our own pages. (The app also wants X-Studio on /api writes.)
     if (!['GET', 'HEAD'].includes(req.method) && req.headers.origin !== origin) {
       return res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Cross-site request refused.');
@@ -269,6 +372,7 @@ export function createGateway({
       }
       return res.writeHead(302, { Location: '/login' }).end();
     }
+    if (url.pathname === '/api/mcp/tokens' || url.pathname.startsWith('/api/mcp/tokens/')) return tokenRoutes(req, res, url, user);
     if (url.pathname === '/api/me') {
       return res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify({ email: user.email, hosted: true }));
     }
@@ -281,6 +385,21 @@ export function createGateway({
   }
 
   return { handle, startAll, apps, db };
+}
+
+function clientIp(req) {
+  return String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+}
+
+async function readBody(req, max) {
+  let size = 0;
+  const chunks = [];
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > max) throw new Error('Request body too large.');
+    chunks.push(chunk);
+  }
+  return Buffer.concat(chunks).toString('utf8');
 }
 
 function redirectLogin(res, message) {

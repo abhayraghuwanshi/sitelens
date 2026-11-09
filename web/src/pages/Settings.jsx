@@ -4,7 +4,7 @@ import { useAsync, navigate } from '../hooks.js';
 import { Card, ErrorState, Loading, humanBytes } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ProductsCard, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
-import { BingSettings } from './settings/BingSettings.jsx';
+import { BingSettings, KeyForm } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
@@ -31,7 +31,7 @@ const TABS = [
 
 const PANELS = {
   google: { title: 'Google account', render: ({ state, onChange }) => <ConnectCard auth={state.auth} onChange={onChange} /> },
-  github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings sources={state.sources} onChange={onChange} /> },
+  github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings state={state} sources={state.sources} onChange={onChange} /> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
   metrics: { title: 'Custom metrics', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
@@ -40,7 +40,7 @@ const PANELS = {
   bing: { title: 'Bing Webmaster Tools', render: () => <BingSettings /> },
   anthropic: { title: 'Claude', render: () => <AnthropicSettings /> },
   openrouter: { title: 'OpenRouter', render: () => <OpenRouterSettings /> },
-  mcp: { title: 'Claude Code & Claude Desktop', render: () => <McpSettings /> },
+  mcp: { title: 'Claude Code & Claude Desktop', render: ({ state }) => <McpSettings hosted={state.hosted} /> },
 };
 
 // Settings: #/settings?tab=<tab> · #/settings?i=<integration> opens one integration's panel.
@@ -126,8 +126,10 @@ function SitesSettings({ state, params, onChange }) {
   );
 }
 
-function GitHubSettings({ sources, onChange }) {
+function GitHubSettings({ state, sources, onChange }) {
   const gh = sources.github;
+  const connect = useAsync(() => api.get('/connect').catch(() => ({})), []);
+  const canConnect = Boolean(connect.data?.github);
   const [token, setToken] = useState('');
   const [importPath, setImportPath] = useState('');
   const [msg, setMsg] = useState(null);
@@ -148,16 +150,28 @@ function GitHubSettings({ sources, onChange }) {
   }
 
   return (
-    <Card title="GitHub" sub="Traffic, stars and release downloads for every repo the token can push to">
+    <Card title="GitHub" sub={canConnect ? 'Traffic, stars and release downloads for the repos you choose' : 'Traffic, stars and release downloads for every repo the token can push to'}>
       <div class="stack">
         <div class="row small">
           <span class={`dot${gh.tokenSource ? ' on' : ''}`} />
           {gh.tokenSource
-            ? <>Token from {gh.tokenSource === 'env' ? <code>GITHUB_TOKEN</code> : 'Settings'}{gh.login && <> · <b>@{gh.login}</b></>}
+            ? <>{gh.tokenSource === 'oauth' ? 'Connected to GitHub' : <>Token from {gh.tokenSource === 'env' ? <code>GITHUB_TOKEN</code> : 'Settings'}</>}{gh.login && <> · <b>@{gh.login}</b></>}
                 {gh.data.ok && <> · {gh.data.repos} repos stored</>}
                 {gh.lastError && <span style={{ color: 'var(--critical-ink)' }}> · {gh.lastError}</span>}</>
             : 'No token yet'}
         </div>
+        {canConnect && (
+          <div class="row">
+            <a class="btn primary" href="/auth/github">{gh.tokenSource === 'oauth' ? 'Connect again' : 'Connect GitHub'}</a>
+            {gh.tokenSource === 'oauth' && <a class="btn" href={connect.data.githubRepos} target="_blank" rel="noreferrer">Choose repos</a>}
+            {gh.tokenSource === 'oauth' && <button class="btn" type="button" disabled={Boolean(busy)}
+              onClick={() => act('sync', () => api.post('/github/sync'), (r) => `Synced ${r.repos} repos${r.failures ? `, ${r.failures} failed` : ''}.`)}>
+              {busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>}
+            {gh.tokenSource === 'oauth' && <button class="btn ghost danger" type="button" disabled={Boolean(busy)}
+              onClick={() => act('disconnect', () => api.post('/github/token', { token: '' }), () => 'Disconnected.')}>Disconnect</button>}
+          </div>
+        )}
+        <KeyForm open={!canConnect}>
         <form class="row" onSubmit={(e) => {
           e.preventDefault();
           act('token', () => api.post('/github/token', { token }), (r) => `Saved — signed in as @${r.login}. First sync started.`);
@@ -170,12 +184,15 @@ function GitHubSettings({ sources, onChange }) {
             onClick={() => act('sync', () => api.post('/github/sync'), (r) => `Synced ${r.repos} repos${r.failures ? `, ${r.failures} failed` : ''}.`)}>
             {busy === 'sync' ? 'Syncing…' : 'Sync now'}</button>}
         </form>
+        </KeyForm>
         <p class="note">
-          Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">fine-grained token</a> with
+          {canConnect
+            ? <>Connect asks GitHub which repos Studio may see; change them any time with Choose repos. Studio reads traffic and stars, and only writes when you open a pull request from the article editor.</>
+            : <>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">fine-grained token</a> with
           repository access to your repos and <b>Administration: read</b> (traffic needs it) plus <b>Metadata: read</b> — or a classic token with <code>repo</code>.
-          It's stored in <code>.data/studio.json</code> (owner-only), or set <code>GITHUB_TOKEN</code> in <code>.env</code>. Studio syncs hourly into <code>.data/github.db</code>.
+          It's stored in <code>.data/studio.json</code> (owner-only), or set <code>GITHUB_TOKEN</code> in <code>.env</code>. Studio syncs hourly into <code>.data/github.db</code>.</>}
         </p>
-        <details class="advanced">
+        {!state.hosted && <details class="advanced">
         <summary>Advanced: import older history</summary>
         <form class="stack" onSubmit={(e) => {
           e.preventDefault();
@@ -190,7 +207,7 @@ function GitHubSettings({ sources, onChange }) {
             <button class="btn" type="submit" disabled={!importPath.trim() || Boolean(busy)}>{busy === 'import' ? 'Importing…' : 'Import once'}</button>
           </div>
         </form>
-        </details>
+        </details>}
         {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
       </div>
     </Card>
