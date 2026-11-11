@@ -83,14 +83,15 @@ export function Calendar({ sites, params }) {
       ]} />
 
       <div class="grid cols-2-1">
-        <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush class="cal-month">
-          <MonthGrid m={m} metric={useMetric} selected={selected} />
-          <Legend />
-        </Card>
-        <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
-          <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} onChange={data.reload} />
+        {/* Claude sits under the month so the two columns end at about the same height. */}
+        <div class="stack cal-left" style={{ gap: '16px', minWidth: 0 }}>
+          <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush class="cal-month">
+            <MonthGrid m={m} metric={useMetric} selected={selected} />
+            <Legend />
+          </Card>
           <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
         </div>
+        <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} onChange={data.reload} />
       </div>
     </>
   );

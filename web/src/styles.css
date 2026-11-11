@@ -737,10 +737,10 @@ button.cal-day:hover { border-color: var(--border-strong); }
 .cal-legend i.swatch.tone-down { background: color-mix(in srgb, var(--critical) 10%, var(--surface)); }
 .cal-legend i.swatch.tone-down2 { background: color-mix(in srgb, var(--critical) 24%, var(--surface)); }
 .cal-legend i.dot { width: 7px; height: 7px; }
-/* As tall as the month, not as tall as the day story and Claude beside it. */
-.cal-month { align-self: start; }
-/* Not sticky: the Claude card sits below it in the same column and would scroll under it. */
-.cal-story { align-self: start; }
+/* Month and Claude on the left, the day story on the right; neither stretches to the other's height. */
+.cal-left, .cal-story { align-self: start; }
+/* A long analysis scrolls inside the card instead of stretching the page. */
+.cal-left .claude-comment { max-height: 360px; overflow-y: auto; }
 .cal-headline { margin: 0; font-size: var(--text-lg); font-weight: 600; line-height: 1.4; }
 .tone-text-up2, .tone-text-up { color: var(--good-ink); }
 .tone-text-down2, .tone-text-down { color: var(--critical-ink); }
