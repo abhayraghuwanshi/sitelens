@@ -35,7 +35,7 @@ export function CustomMetricsCard({ site, range, annotations }) {
     <div class={`grid ${metrics.length > 1 ? 'cols-2' : ''}`}>
       {metrics.map((m) => (
         <Card key={m.id} title={m.label} sub={m.error ? 'Custom metric' : `${shortDay(m.range.start)} – ${shortDay(m.range.end)} · ${m.source === 'd1' ? 'Cloudflare D1' : m.source}`}
-          actions={<a class="btn ghost" href={`#/settings?i=metrics&edit=${m.id}`}>Edit</a>}>
+          actions={m.from === 'file' ? <span class="muted small">From .sitelens.yml</span> : <a class="btn ghost" href={`#/settings?i=metrics&edit=${m.id}`}>Edit</a>}>
           {m.error ? (
             <div class="stack" style={{ gap: '4px' }}>
               <p class="small" style={{ margin: 0, color: 'var(--critical-ink)' }}>{m.error.message}</p>

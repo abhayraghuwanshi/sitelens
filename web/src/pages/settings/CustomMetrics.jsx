@@ -27,7 +27,7 @@ export function CustomMetricsSettings({ sites, params }) {
   if (status.error) return <ErrorState error={status.error} onRetry={status.reload} />;
   if (!status.data) return <Loading height={320} />;
   const { connectors, metrics } = status.data;
-  const fromLink = params.get('edit') && metrics.find((m) => m.id === params.get('edit'));
+  const fromLink = params.get('edit') && metrics.find((m) => m.id === params.get('edit') && m.from !== 'file');
   const current = editing || (fromLink && editing !== false ? fromLink : null);
   const siteLabel = (id) => real.find((s) => s.id === id)?.label || id;
 
@@ -46,12 +46,17 @@ export function CustomMetricsSettings({ sites, params }) {
               <tbody>
                 {metrics.map((m) => (
                   <tr key={m.id}>
-                    <td><b>{m.label}</b><div class="muted small">{siteLabel(m.siteId)}</div></td>
+                    <td><b>{m.label}</b><div class="muted small">{siteLabel(m.siteId)}{m.from === 'file' && ' · from .sitelens.yml'}</div></td>
                     <td class="small">{connectors.find((c) => c.type === m.source.type)?.label || m.source.type}</td>
                     <td class="small muted">{SUMMARIES.find((s) => s.key === m.summary)?.label}</td>
                     <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                      <button class="btn ghost" type="button" onClick={() => setEditing(m)}>Edit</button>
-                      <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/metrics/${m.id}`); status.reload(); }}>Remove</button>
+                      {/* A file's metric changes in the site's repo, not here. */}
+                      {m.from === 'file' ? <span class="muted small">Edit in the repo</span> : (
+                        <>
+                          <button class="btn ghost" type="button" onClick={() => setEditing(m)}>Edit</button>
+                          <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/metrics/${m.id}`); status.reload(); }}>Remove</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}

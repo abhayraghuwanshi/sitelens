@@ -440,3 +440,35 @@ test('saveSection starts a file in the site’s repo, or locally when it has non
   assert.equal((await local.applied(site)).alerts.traffic.pct, 0.3);
   await assert.rejects(local.saveSection({ ...site, demo: true }, 'alerts', ''), /demo/);
 });
+
+test('metrics: a D1 source and a read-only query, or an error saying what’s wrong', () => {
+  const db = '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0';
+  const ok = parseSiteConfig(`version: 1
+metrics:
+  - label: Active installs
+    summary: average
+    d1: &db { account: ${'A'.repeat(32)}, database: ${db} }
+    sql: SELECT date AS day, count(*) AS value FROM pings WHERE date >= {{start}} GROUP BY 1
+  - label: New installs
+    d1: *db
+    sql: SELECT date AS day, sum(first_run) AS value FROM pings GROUP BY 1
+`);
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.config.metrics.length, 2);
+  assert.deepEqual(ok.config.metrics[1].source, { type: 'd1', accountId: 'a'.repeat(32), databaseId: db });
+  assert.equal(ok.config.metrics[0].summary, 'average');
+  assert.equal(ok.config.metrics[1].summary, 'sum');
+
+  const bad = parseSiteConfig(`version: 1
+metrics:
+  - { label: A, d1: { account: nope, database: ${db} }, sql: SELECT 1 AS day, 1 AS value }
+  - { label: B, d1: { account: ${'a'.repeat(32)}, database: ${db} }, sql: DELETE FROM pings }
+  - { label: C, sql: SELECT 1 AS day, 1 AS value }
+  - { label: D, summary: median, d1: { account: ${'a'.repeat(32)}, database: ${db} }, sql: SELECT 1 AS day, 1 AS value }
+`);
+  assert.equal(bad.config, null);
+  assert.match(bad.errors[0], /metrics\[0\]\.d1\.account/);
+  assert.match(bad.errors[1], /metrics\[1\]\.sql: Only SELECT/);
+  assert.match(bad.errors[2], /metrics\[2\] \(C\) needs exactly one source/);
+  assert.match(bad.errors[3], /metrics\[3\]\.summary/);
+});

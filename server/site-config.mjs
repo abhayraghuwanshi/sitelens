@@ -21,11 +21,13 @@ import { normalizeGoals, GOAL_SOURCES } from './products.mjs';
 import { ValidationError } from './store.mjs';
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
+import { CONNECTORS, SUMMARIES, checkSelect } from './custom-metrics.mjs';
 
 const API = 'https://api.github.com';
 const DEMO_FILE = fileURLToPath(new URL('./demo-sitelens.yml', import.meta.url));
 const TTL = 10 * 60_000;
 const MAX_FUNNELS = 10;
+const MAX_METRICS = 12;
 const EVENT_RE = /^[A-Za-z][\w]{0,39}$/;
 
 // What kind of thing the site is. It tells an agent (and a reader) which goals
@@ -45,7 +47,7 @@ export const KINDS = {
 const SITE_RULES = { traffic: 'GA4 sessions & users', search: 'Search Console clicks' };
 export const GOAL_ALERT_DEFAULTS = Object.freeze({ when: 'drop', pct: 0.5, min: 5 });
 
-const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search'];
+const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search', 'metrics'];
 const GOAL_KEYS = ['label', 'event', 'page', 'source', 'role', 'value', 'alert'];
 
 /* ---------- parsing (pure) ---------- */
@@ -167,6 +169,39 @@ function parseAlerts(input, warnings) {
     };
   }
   return out;
+}
+
+// Custom metrics: daily numbers from the site's own database, charted next to
+// GA4. The source's ids live here (they aren't secrets); its token stays in
+// Settings or .env. Each connector's fields go under its type, like
+// `d1: { account: …, database: … }`.
+function parseMetric(m, i, warnings) {
+  const path = `metrics[${i}]`;
+  if (!isMap(m)) throw new ValidationError(`${path} must be a metric like { label: Daily pings, d1: { account, database }, sql: SELECT … }.`);
+  const types = Object.keys(CONNECTORS).filter((t) => m[t] !== undefined);
+  unknownKeys(m, ['label', 'unit', 'summary', 'sql', ...Object.keys(CONNECTORS)], `${path}.`, warnings);
+  const label = String(m.label ?? '').trim().slice(0, 80);
+  if (!label) throw new ValidationError(`${path} needs a label.`);
+  if (types.length !== 1) throw new ValidationError(`${path} (${label}) needs exactly one source: ${Object.keys(CONNECTORS).join(', ')}.`);
+  const type = types[0];
+  const connector = CONNECTORS[type];
+  const given = m[type];
+  if (!isMap(given)) throw new ValidationError(`${path}.${type} must be a map like { ${connector.fields.map((f) => f.yaml).join(', ')} }.`);
+  unknownKeys(given, connector.fields.map((f) => f.yaml), `${path}.${type}.`, warnings);
+  const source = { type };
+  for (const f of connector.fields) {
+    const value = String(given[f.yaml] ?? '').trim().toLowerCase();
+    if (!f.pattern.test(value)) throw new ValidationError(`${path}.${type}.${f.yaml}: ${f.hint}`);
+    source[f.key] = value;
+  }
+  if (m.summary !== undefined && !SUMMARIES.includes(m.summary)) throw new ValidationError(`${path}.summary must be ${SUMMARIES.join(', ')}.`);
+  let sql;
+  try {
+    sql = checkSelect(String(m.sql ?? '').trim().slice(0, 8000));
+  } catch (err) {
+    throw new ValidationError(`${path}.sql: ${err.message}`);
+  }
+  return { label, unit: String(m.unit ?? '').trim().slice(0, 24), summary: m.summary || 'sum', source, sql };
 }
 
 // What the site wants to be found for. One block feeds Demand's query groups,
@@ -349,6 +384,18 @@ export function parseSiteConfig(text, { host = '' } = {}) {
   if (raw.search !== undefined) attempt(() => {
     config.search = parseSearch(raw.search, warnings);
   });
+  if (raw.metrics !== undefined) {
+    if (!Array.isArray(raw.metrics)) errors.push('metrics must be a list.');
+    else if (raw.metrics.length > MAX_METRICS) errors.push(`Up to ${MAX_METRICS} metrics.`);
+    else {
+      config.metrics = [];
+      raw.metrics.forEach((m, i) => attempt(() => {
+        const metric = parseMetric(m, i, warnings);
+        if (config.metrics.some((x) => x.label.toLowerCase() === metric.label.toLowerCase())) throw new ValidationError(`metrics[${i}]: another metric is already called “${metric.label}”.`);
+        config.metrics.push(metric);
+      }));
+    }
+  }
   return errors.length ? { config: null, errors, warnings } : { config, errors, warnings };
 }
 

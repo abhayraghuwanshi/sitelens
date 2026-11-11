@@ -4,6 +4,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from '../server/store.mjs';
+import { parseSiteConfig } from '../server/site-config.mjs';
 import { createCustomMetrics, metricRange, bindWindow, checkSelect, normalizeRows, buildSeries } from '../server/custom-metrics.mjs';
 
 const NOW = Date.parse('2026-11-04T15:00:00Z'); // a Wednesday
@@ -22,12 +23,12 @@ function fakeD1(rows) {
   return { calls, fetchImpl };
 }
 
-async function setup(rows, env = { CLOUDFLARE_API_TOKEN: 'cf-good' }) {
+async function setup(rows, env = { CLOUDFLARE_API_TOKEN: 'cf-good' }, siteConfig = null) {
   const dir = await mkdtemp(join(tmpdir(), 'studio-metrics-'));
   const store = createStore(dir);
   await store.saveSite({ id: 'site1', host: 'example.org' });
   const d1 = fakeD1(rows);
-  const metrics = createCustomMetrics({ store, env, fetchImpl: d1.fetchImpl, now: () => NOW });
+  const metrics = createCustomMetrics({ store, siteConfig, env, fetchImpl: d1.fetchImpl, now: () => NOW });
   return { dir, store, metrics, ...d1 };
 }
 
@@ -156,6 +157,34 @@ test('validation, preview and removal', async () => {
     assert.equal(status.metrics[0].summary, 'latest');
     await metrics.remove(saved.id);
     assert.equal((await metrics.list()).length, 0);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('metrics from a site’s .sitelens.yml are listed and run, but not editable here', async () => {
+  const { config, errors } = parseSiteConfig(`version: 1
+metrics:
+  - label: New installs
+    unit: installs
+    d1: { account: ${ACCOUNT}, database: ${DB} }
+    sql: SELECT date AS day, sum(first_run) AS value FROM pings WHERE date >= {{start}} AND date < {{end}} GROUP BY 1
+`);
+  assert.deepEqual(errors, []);
+  const siteConfig = { applied: async (site) => (site.id === 'site1' ? config : null) };
+  const { dir, metrics, calls } = await setup([{ day: '2026-11-04', value: 3 }], undefined, siteConfig);
+  try {
+    const [m] = await metrics.list();
+    assert.equal(m.from, 'file');
+    assert.equal(m.siteId, 'site1');
+    assert.deepEqual(m.source, { type: 'd1', accountId: ACCOUNT, databaseId: DB });
+    assert.equal((await metrics.list())[0].id, m.id, 'the id is stable');
+    const [run] = (await metrics.forSite('site1', '7d')).metrics;
+    assert.equal(run.total, 3);
+    assert.equal(run.from, 'file');
+    await assert.rejects(metrics.remove(m.id), /\.sitelens\.yml/);
+    await assert.rejects(metrics.save({ ...m, label: 'Renamed' }), /\.sitelens\.yml/);
+    assert.equal(calls[0].body.params.length, 2, 'the window is bound');
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

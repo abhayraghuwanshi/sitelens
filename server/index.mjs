@@ -167,7 +167,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   // Hosted, the analyst's calls to this app stay in-process: over the network
   // they would reach the gateway, which knows no session for them.
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
-  const customMetrics = createCustomMetrics({ store, env, fetchImpl });
+  const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
   // Calendar days are local, so the story's "today" is too.
