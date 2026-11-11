@@ -656,8 +656,12 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       if (!found && names.length && !failed) notes.push(`Looked for .sitelens/${host}.yml and .sitelens.yml on the default branch of ${names.join(', ')}; none there. A file that isn’t pushed yet can’t be read.`);
     }
     if (!found) return { found: false, failed, source: null, config: null, errors: [], warnings: [], notes, checkedAt: now() };
-    return { found: true, source: found.source, text: found.text, ...parseSiteConfig(found.text, { host }), notes, checkedAt: now() };
+    return { found: true, source: found.source, text: found.text, notes, checkedAt: now() };
   }
+
+  // The cache keeps the file's text, and each read parses it: a parse cached on
+  // disk would outlive a deploy that teaches Studio a new key.
+  const parsed = (value, host) => (value.found ? { ...value, ...parseSiteConfig(value.text, { host }) } : value);
 
   async function get(site, { fresh = false } = {}) {
     const host = cleanHost(site.host);
@@ -675,7 +679,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
         value = { ...hit.value, notes: [...hit.value.notes.filter((n) => !n.startsWith('Couldn’t re-read')), `Couldn’t re-read it, so the last good copy is used: ${value.notes.join(' ')}`] };
       }
       return value;
-    });
+    }).then((v) => parsed(v, host));
     if (value.config) lastGood.set(site.id, { host, value });
     return value;
   }

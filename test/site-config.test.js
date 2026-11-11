@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection } from '../server/site-config.mjs';
 import { readFile } from 'node:fs/promises';
+import { openCacheDb } from '../server/cache.mjs';
 
 const FULL = `
 version: 1
@@ -471,4 +472,16 @@ metrics:
   assert.match(bad.errors[1], /metrics\[1\]\.sql: Only SELECT/);
   assert.match(bad.errors[2], /metrics\[2\] \(C\) needs exactly one source/);
   assert.match(bad.errors[3], /metrics\[3\]\.summary/);
+});
+
+test('a copy cached on disk by an older Studio is parsed again, so new keys apply after a deploy', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const cacheDb = openCacheDb(join(dir, 'cache.db'));
+  const text = `metrics:\n  - { label: Pings, d1: { account: ${'a'.repeat(32)}, database: 0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0 }, sql: 'SELECT 1 AS day, 1 AS value' }\n`;
+  // What an older Studio cached: the file plus a parse that didn't know metrics.
+  cacheDb.set(`site-config:${site.id}:${site.host}`, Date.now() - 60 * 60_000, JSON.stringify({ found: true, source: { type: 'local' }, text, config: { version: 1 }, errors: [], warnings: ['metrics: not a setting Studio knows'], notes: [] }));
+  const cfg = createSiteConfig({ dir, cacheDb, fetchImpl: async () => { throw new Error('offline'); } });
+  const got = await cfg.get(site);
+  assert.equal(got.config.metrics[0].label, 'Pings');
+  assert.deepEqual(got.warnings, []);
 });
