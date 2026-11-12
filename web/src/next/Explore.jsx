@@ -13,6 +13,7 @@ import { Events } from '../pages/Events.jsx';
 import { Sessions } from '../pages/Sessions.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page } from './Page.jsx';
+import { Campaigns } from './Campaigns.jsx';
 
 // Explore: every full report from the classic layout, as tabs. The Story links
 // into these for detail. Ranges follow what each report reads: GA4 reports take
@@ -23,6 +24,8 @@ export const EXPLORE_TABS = [
   { key: 'pages', label: 'Pages', mode: 'content', component: PagesTab },
   // Articles measured every cycle in Google, Bing and AI: grow, improve or cut.
   // A cycle is its own period, so the tab has no date range.
+  // Tagged links (utm), every source / medium, and Google Ads when GA4 is linked to it.
+  { key: 'campaigns', label: 'Campaigns', mode: 'api', component: Campaigns },
   { key: 'cycles', label: 'Content cycles', mode: 'content', component: ContentCycles, ownPeriod: true },
   { key: 'ai', label: 'AI answers', mode: 'api', component: AiSearch },
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },

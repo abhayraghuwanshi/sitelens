@@ -285,6 +285,24 @@ a.nx-cause:hover { color: var(--accent); }
 .alert-num i { font-style: normal; color: var(--text-3); font-size: var(--text-sm); }
 .alert-save { position: sticky; bottom: 0; display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 12px 0; background: var(--bg); border-top: 1px solid var(--border); }
 
+/* Campaigns (Campaigns.jsx) */
+.cmp-name { min-width: 200px; }
+.cmp-name > span { min-width: 0; overflow-wrap: anywhere; }
+.cmp-name > .cmp-stack { display: inline-flex; flex-direction: column; gap: 2px; vertical-align: top; }
+.cmp-via { font-size: var(--text-sm); color: var(--text-3); }
+.cmp-chev { display: inline-block; vertical-align: top; flex: none; margin: 4px 8px 0 0; color: var(--text-3); transition: transform 0.15s; }
+.cmp-chev.open { transform: rotate(90deg); }
+table.data tr.cmp-part td { background: var(--bg); }
+table.data tr.cmp-part .cmp-name { padding-left: 36px; }
+.cmp-table td.num .delta { margin-left: 6px; font-size: var(--text-xs); }
+.cmp-warn { color: var(--critical-ink); font-size: var(--text-sm); }
+.cmp-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 170px), 1fr)); gap: 12px; }
+.cmp-form .cmp-wide { grid-column: 1 / -1; }
+.cmp-form input, .cmp-form select { width: 100%; box-sizing: border-box; }
+.cmp-link { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
+.cmp-link code { flex: 1 1 320px; word-break: break-all; padding: 8px 10px; border-radius: 8px; background: var(--bg); border: 1px solid var(--border); }
+@media (prefers-reduced-motion: reduce) { .cmp-chev { transition: none; } }
+
 /* Phones */
 @media (max-width: 640px) {
   /* Explore's tabs stay one row and swipe sideways. */
@@ -307,4 +325,18 @@ a.nx-cause:hover { color: var(--accent); }
   table.data.review td.num::before { content: attr(data-label) " "; color: var(--text-3); }
   table.data.review td.cell-suggest { flex: 1 0 55%; }
   table.data.review td.cell-decide { margin-left: auto; }
+  /* Campaign tables: one block per row, numbers labelled. */
+  table.data.cmp-table, table.data.cmp-table tbody { display: block; width: 100%; }
+  table.data.cmp-table thead { display: none; }
+  table.data.cmp-table tr { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 14px; padding: 12px 16px; border-top: 1px solid var(--border); }
+  table.data.cmp-table tbody tr:first-child { border-top: 0; }
+  table.data.cmp-table td { display: block; padding: 0; border: 0; }
+  table.data.cmp-table td:empty { display: none; }
+  table.data.cmp-table td.cmp-name { display: flex; align-items: flex-start; flex-basis: 100%; min-width: 0; }
+  table.data.cmp-table tr.selected, table.data.cmp-table tr.cmp-part { background: var(--bg); }
+  table.data.cmp-table tr.selected { background: var(--accent-soft); }
+  table.data.cmp-table tr td, table.data.cmp-table tbody tr:hover td { background: none; }
+  table.data.cmp-table td.num { font-size: var(--text-sm); text-align: left; }
+  table.data.cmp-table td.num::before { content: attr(data-label) " "; color: var(--text-3); }
+  table.data tr.cmp-part .cmp-name { padding-left: 20px; }
 }
