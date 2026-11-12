@@ -2,7 +2,7 @@ import { api, qs } from '../../api.js';
 import { useAsync } from '../../hooks.js';
 import { Icon } from '../../components/icons.jsx';
 
-// Settings → Products → Goals: what a product counts as progress (steps) and
+// Settings → Sites & products → Goals: what a product counts as progress (steps) and
 // as a result (outcomes). Empty means Studio guesses from the site's event names.
 const TYPES = [
   { key: 'event', label: 'Site event', needs: 'site' },

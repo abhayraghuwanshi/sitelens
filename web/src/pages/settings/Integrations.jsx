@@ -97,7 +97,7 @@ const GROUPS = [
     title: 'Agents',
     items: [
       {
-        key: 'mcp', name: 'Claude Code & Claude Desktop', icon: 'terminal', panel: 'mcp',
+        key: 'mcp', name: 'Claude Code & Claude Desktop (MCP)', icon: 'terminal', panel: 'mcp',
         desc: 'Ask your agent about traffic, search and launches, and have it leave comments on your charts.',
         status: ({ hosted }) => ({ on: false, text: hosted ? 'Set up once per agent with an access token' : 'Set up once per agent · no key needed' }),
       },

@@ -226,7 +226,7 @@ function GoalsCard({ goals, editHref }) {
   const list = goals.list;
   const revenue = list.some((g) => g.revenue > 0);
   return (
-    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
+    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Sites & products' : 'Guessed by Studio until you set your own'}
       actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.from === 'file' ? 'Edit in Setup' : goals.custom ? 'Edit' : 'Set goals'}</a>}>
       {list.length ? (
         <div class="table-wrap">

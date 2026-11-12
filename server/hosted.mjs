@@ -32,6 +32,10 @@ import { guardOutgoingFetch } from './net-guard.mjs';
 
 const COOKIE = '__Host-sitelens';
 const SESSION_DAYS = 30;
+// How long a new MCP token lasts; 0 is never (until revoked). The default limits
+// what a token copied out of someone's Claude config is good for.
+export const TOKEN_DAYS = [30, 90, 365, 0];
+const DEFAULT_TOKEN_DAYS = 90;
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
@@ -113,6 +117,8 @@ export function createGateway({
     CREATE TABLE IF NOT EXISTS mcp_tokens (hash TEXT PRIMARY KEY, id TEXT NOT NULL UNIQUE, user_id TEXT NOT NULL REFERENCES users(id),
       label TEXT NOT NULL, created_at INTEGER NOT NULL, last_used INTEGER);
   `);
+  // Tokens made before expiry existed keep lasting until revoked (NULL).
+  if (!db.prepare('PRAGMA table_info(mcp_tokens)').all().some((c) => c.name === 'expires_at')) db.exec('ALTER TABLE mcp_tokens ADD COLUMN expires_at INTEGER');
   const origin = `https://${host}`;
   const apps = new Map(); // user id → app
   const loginStates = new Map(); // state → expires at
@@ -175,8 +181,9 @@ export function createGateway({
   function tokenUser(req) {
     const match = String(req.headers.authorization || '').match(/^Bearer (slk_[A-Za-z0-9_-]{20,100})$/);
     if (!match) return null;
-    const row = db.prepare('SELECT t.id AS token_id, u.id, u.email FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ?').get(sha256(match[1]));
+    const row = db.prepare('SELECT t.id AS token_id, t.expires_at, u.id, u.email FROM mcp_tokens t JOIN users u ON u.id = t.user_id WHERE t.hash = ?').get(sha256(match[1]));
     if (!row || !allowedEmails.has(row.email)) return null;
+    if (row.expires_at !== null && row.expires_at <= now()) return null;
     db.prepare('UPDATE mcp_tokens SET last_used = ? WHERE id = ?').run(now(), row.token_id);
     return { id: row.id, email: row.email };
   }
@@ -215,21 +222,26 @@ export function createGateway({
     const json = (status, body) => res.writeHead(status, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' }).end(JSON.stringify(body));
     if (req.method !== 'GET' && req.headers['x-studio'] !== '1') return json(403, { error: 'Missing X-Studio header.' });
     if (url.pathname === '/api/mcp/tokens' && req.method === 'GET') {
-      const tokens = db.prepare('SELECT id, label, created_at AS createdAt, last_used AS lastUsed FROM mcp_tokens WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
-      return json(200, { url: `${origin}/mcp`, tokens: tokens.map((t) => ({ ...t })) });
+      const tokens = db.prepare('SELECT id, label, created_at AS createdAt, last_used AS lastUsed, expires_at AS expiresAt FROM mcp_tokens WHERE user_id = ? ORDER BY created_at DESC').all(user.id);
+      return json(200, { url: `${origin}/mcp`, days: TOKEN_DAYS, defaultDays: DEFAULT_TOKEN_DAYS, tokens: tokens.map((t) => ({ ...t, expired: t.expiresAt !== null && t.expiresAt <= now() })) });
     }
     if (url.pathname === '/api/mcp/tokens' && req.method === 'POST') {
       return readBody(req, 10_000).then((raw) => {
         let label = '';
+        let days = DEFAULT_TOKEN_DAYS;
         try {
-          label = String(JSON.parse(raw || '{}').label || '').trim().slice(0, 60);
-        } catch { /* default label */ }
+          const body = JSON.parse(raw || '{}');
+          label = String(body.label || '').trim().slice(0, 60);
+          if (body.days !== undefined) days = Number(body.days);
+        } catch { /* defaults */ }
+        if (!TOKEN_DAYS.includes(days)) return json(400, { error: `A token lasts ${TOKEN_DAYS.filter(Boolean).join(', ')} days, or 0 for until revoked.` });
         if (db.prepare('SELECT COUNT(*) AS n FROM mcp_tokens WHERE user_id = ?').get(user.id).n >= 20) return json(400, { error: 'Up to 20 tokens. Revoke one you no longer use.' });
         const token = `slk_${randomBytes(32).toString('base64url')}`;
         const id = randomBytes(6).toString('hex');
-        db.prepare('INSERT INTO mcp_tokens (hash, id, user_id, label, created_at) VALUES (?, ?, ?, ?, ?)').run(sha256(token), id, user.id, label || 'Claude', now());
+        const expiresAt = days ? now() + days * 86_400_000 : null;
+        db.prepare('INSERT INTO mcp_tokens (hash, id, user_id, label, created_at, expires_at) VALUES (?, ?, ?, ?, ?, ?)').run(sha256(token), id, user.id, label || 'Claude', now(), expiresAt);
         // The only time the token itself is ever shown.
-        return json(200, { id, token, url: `${origin}/mcp` });
+        return json(200, { id, token, url: `${origin}/mcp`, expiresAt });
       });
     }
     const revoke = url.pathname.match(/^\/api\/mcp\/tokens\/([a-f0-9]{12})$/);

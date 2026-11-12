@@ -48,6 +48,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
     : section === 'todos' ? 'todos'
     : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'timeline', 'setup'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
+    : (section === 'settings' || section === 'account') && (route.params.get('tab') === 'mcp' || route.params.get('i') === 'mcp') ? 'mcp'
     : section === 'settings' || section === 'account' ? 'account'
     : 'explore';
 
@@ -89,7 +90,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
           <>
             <label class="nx-label" for="nx-site">Site</label>
             <select id="nx-site" class="nx-site" value={current.id}
-              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' ? 'story' : tab === 'explore' ? view : tab === 'todos' ? 'todos' : tab}`; }}>
+              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' || tab === 'mcp' ? 'story' : tab === 'explore' ? view : tab === 'todos' ? 'todos' : tab}`; }}>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (sample)' : ''}</option>)}
             </select>
             <nav class="nx-nav" aria-label={current.label}>
@@ -102,6 +103,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
           </>
         )}
         <div class="nx-foot">
+          <NavItem href="#/account?tab=mcp" icon="terminal" active={tab === 'mcp'}>MCP</NavItem>
           <NavItem href="#/account" icon="lock" active={tab === 'account'}>Account</NavItem>
           <div class="nx-foot-row">
             <span class="nx-conn" title={auth.email || ''}>

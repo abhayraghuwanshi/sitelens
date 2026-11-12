@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createAlerts, detectAnomaly, detectDrop, detectStarSpike, denseSeries, mergeAlerts, normalizeSettings,
-  lastDays, localDay, desktopNotify, postWebhook, digestText,
+  lastDays, localDay, desktopNotify, postWebhook, digestText, alertNotice, digestNotice,
 } from '../server/alerts.mjs';
 import { ValidationError } from '../server/store.mjs';
 
@@ -274,4 +274,14 @@ test('goals marked alert in .sitelens.yml alert on a drop, and the file tunes si
   // One report for both event goals; the step without alert isn't queried.
   assert.equal(reports.length, 1);
   assert.deepEqual(reports[0].dimensionFilter.andGroup.expressions[1].filter.inListFilter.values, ['sign_up', 'purchase']);
+});
+
+test('desktop notices: title, subtitle and detail, several items one per line', () => {
+  const one = alertNotice([{ title: 'New Tab by Cooldesk: users down 3 (-6%)', detail: '50 users on the listing.', subject: { label: 'New Tab by Cooldesk' } }]);
+  assert.deepEqual(one, { title: 'New Tab by Cooldesk', subtitle: 'users down 3 (-6%)', body: '50 users on the listing.' });
+  const many = alertNotice(['A', 'B', 'C', 'D', 'E'].map((t) => ({ title: t, detail: '' })));
+  assert.equal(many.subtitle, '5 new alerts');
+  assert.deepEqual(many.body.split('\n'), ['• A', '• B', '• C', 'and 2 more in Alerts']);
+  const d = digestNotice({ day: '2026-11-07', sites: [{ label: 'cooldesk', sessions: 28, sessionsChange: 0.75 }, { label: 'infraplan', error: 'x' }], extensions: [{ label: 'New Tab', users: 50 }], alerts: [{}] });
+  assert.deepEqual(d, { title: 'SiteLens daily digest', subtitle: 'Saturday 7 Nov · 1 alert', body: 'cooldesk: 28 visits (+75%)\ninfraplan: couldn’t read\nNew Tab: 50 users' });
 });

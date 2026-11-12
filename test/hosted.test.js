@@ -264,7 +264,7 @@ test('MCP over HTTP: a personal token picks the user, tools see only their data,
   assert.equal((await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
 
   const sites = JSON.parse((await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_sites', arguments: {} } })).body);
-  assert.match(sites.result.content[0].text, /alice-only\.com/);
+  assert.match(sites.result.content.at(-1).text, /alice-only\.com/);
 
   // Bob can't see or revoke Alice's tokens.
   assert.equal(JSON.parse((await call('/api/mcp/tokens', { cookie: bob })).body).tokens.length, 0);
@@ -278,4 +278,28 @@ test('MCP over HTTP: a personal token picks the user, tools see only their data,
 
   await call(`/api/mcp/tokens/${made.id}`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
   assert.equal((await rpc({ jsonrpc: '2.0', id: 7, method: 'ping' })).status, 401);
+});
+
+test('MCP tokens expire: 90 days by default, a chosen length, or never; an expired one is refused', async () => {
+  const alice = (await signIn('alice@example.com')).cookie;
+  const day = 86_400_000;
+  const rpc = (token) => call('/mcp', { method: 'POST', body: { jsonrpc: '2.0', id: 1, method: 'ping' }, headers: { authorization: `Bearer ${token}` } });
+
+  const plain = JSON.parse((await write('/api/mcp/tokens', { label: 'default' }, alice)).body);
+  assert.ok(Math.abs(plain.expiresAt - (Date.now() + 90 * day)) < 60_000);
+  const year = JSON.parse((await write('/api/mcp/tokens', { label: 'year', days: 365 }, alice)).body);
+  assert.ok(Math.abs(year.expiresAt - (Date.now() + 365 * day)) < 60_000);
+  const forever = JSON.parse((await write('/api/mcp/tokens', { label: 'forever', days: 0 }, alice)).body);
+  assert.equal(forever.expiresAt, null);
+  assert.equal((await write('/api/mcp/tokens', { label: 'odd', days: 7 }, alice)).status, 400);
+  assert.equal((await rpc(plain.token)).status, 200);
+  assert.equal((await rpc(forever.token)).status, 200);
+
+  // Past its date: refused, and the list says so.
+  gateway.db.prepare('UPDATE mcp_tokens SET expires_at = ? WHERE id = ?').run(Date.now() - 1000, plain.id);
+  assert.equal((await rpc(plain.token)).status, 401);
+  const listed = JSON.parse((await call('/api/mcp/tokens', { cookie: alice })).body).tokens;
+  assert.equal(listed.find((t) => t.id === plain.id).expired, true);
+  assert.equal(listed.find((t) => t.id === forever.id).expired, false);
+  for (const t of [plain, year, forever]) await call(`/api/mcp/tokens/${t.id}`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
 });

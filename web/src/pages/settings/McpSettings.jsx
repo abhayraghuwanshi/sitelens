@@ -56,19 +56,21 @@ export function McpSettings({ hosted = false }) {
 function HostedMcp() {
   const list = useAsync(() => api.get('/mcp/tokens'), []);
   const [label, setLabel] = useState('');
+  const [days, setDays] = useState(null);
   const [made, setMade] = useState(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
   if (list.error) return <ErrorState error={list.error} onRetry={list.reload} />;
   if (!list.data) return <Loading height={240} />;
-  const { url, tokens } = list.data;
+  const { url, tokens, days: lengths = [30, 90, 365, 0], defaultDays = 90 } = list.data;
+  const lasts = days ?? defaultDays;
 
   async function create(event) {
     event.preventDefault();
     setBusy(true);
     setError(null);
     try {
-      setMade(await api.post('/mcp/tokens', { label: label.trim() || 'Claude Code' }));
+      setMade(await api.post('/mcp/tokens', { label: label.trim() || 'Claude Code', days: lasts }));
       setLabel('');
       list.reload();
     } catch (err) {
@@ -94,12 +96,15 @@ function HostedMcp() {
         <form class="row" onSubmit={create}>
           <input style={{ flex: '1', minWidth: '220px', maxWidth: '320px' }} placeholder="Name, e.g. MacBook Claude Code" value={label}
             onInput={(e) => setLabel(e.currentTarget.value)} aria-label="Token name" maxLength={60} />
+          <select value={lasts} onChange={(e) => setDays(Number(e.currentTarget.value))} aria-label="Token lasts">
+            {lengths.map((d) => <option key={d} value={d}>{d ? `Expires in ${d === 365 ? '1 year' : `${d} days`}` : 'Never expires'}</option>)}
+          </select>
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Creating…' : 'Create access token'}</button>
         </form>
         {error && <ErrorState error={error} />}
         {made && (
           <p class="small" style={{ margin: 0, color: 'var(--good-ink)' }}>
-            Token created. It’s in the commands below and won’t be shown again, so copy one now.
+            Token created{made.expiresAt ? `, good until ${new Date(made.expiresAt).toLocaleDateString()}` : ''}. It’s in the commands below and won’t be shown again, so copy one now.
           </p>
         )}
         <p class="small" style={{ margin: 0 }}><b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.</p>
@@ -111,13 +116,16 @@ function HostedMcp() {
         <Snippet label="claude_desktop_config.json" text={desktop} />
         {tokens.length > 0 && (
           <table class="data">
-            <thead><tr><th>Token</th><th>Created</th><th>Last used</th><th /></tr></thead>
+            <thead><tr><th>Token</th><th>Created</th><th>Last used</th><th>Expires</th><th /></tr></thead>
             <tbody>
               {tokens.map((t) => (
                 <tr key={t.id}>
                   <td>{t.label}</td>
                   <td class="small">{new Date(t.createdAt).toLocaleDateString()}</td>
                   <td class="small">{t.lastUsed ? new Date(t.lastUsed).toLocaleString() : <span class="muted">never</span>}</td>
+                  <td class="small">{t.expired
+                    ? <span style={{ color: 'var(--critical-ink)' }}>Expired {new Date(t.expiresAt).toLocaleDateString()}</span>
+                    : t.expiresAt ? new Date(t.expiresAt).toLocaleDateString() : <span class="muted">never</span>}</td>
                   <td class="num"><button class="btn ghost danger" type="button" onClick={() => revoke(t.id)}>Revoke</button></td>
                 </tr>
               ))}
@@ -126,7 +134,7 @@ function HostedMcp() {
         )}
         <p class="note" style={{ margin: 0 }}>
           One token per computer or agent, so you can revoke one without the others. Studio keeps only a fingerprint of each token, never the token itself.
-          Anyone with a token can read your Studio data, so treat it like a password.
+          Anyone with a token can read your Studio data, so treat it like a password. When one expires, Claude gets “access token required”: make a new one and run its command again.
         </p>
       </div>
     </Card>

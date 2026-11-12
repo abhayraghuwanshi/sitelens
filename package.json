@@ -16,6 +16,7 @@
     "test": "node --no-warnings=ExperimentalWarning --test",
     "sync": "node scripts/sync-shared.mjs",
     "check-sql": "node scripts/check-sql.mjs",
+    "leads": "node scripts/reddit-leads.mjs",
     "screenshot": "node scripts/screenshot.mjs",
     "trailer": "node scripts/record-trailer.mjs",
     "trailer:video": "node scripts/record-video.mjs",

@@ -24,8 +24,8 @@ const PUBLIC_SAMPLE = {
 
 const TABS = [
   { key: 'integrations', label: 'Integrations' },
-  { key: 'sites', label: 'Sites' },
-  { key: 'products', label: 'Products' },
+  { key: 'mcp', label: 'MCP' },
+  { key: 'sites', label: 'Sites & products' },
   { key: 'alerts', label: 'Alerts' },
 ];
 
@@ -47,8 +47,11 @@ const PANELS = {
 export function Settings({ state, params, onChange }) {
   const flashError = params.get('error');
   const connected = params.get('connected');
-  const panel = PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
-  const tab = panel ? 'integrations' : TABS.some((t) => t.key === params.get('tab')) ? params.get('tab') : 'integrations';
+  // MCP has its own tab so it's easy to find; old ?i=mcp links land there.
+  const panel = params.get('i') !== 'mcp' && PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
+  // Sites and products share one tab: old ?tab=products links (with ?edit=<product id>) land there.
+  const asked = params.get('tab') === 'products' ? 'sites' : params.get('tab');
+  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'integrations';
 
   // Pick up the new sign-in once, then drop the flag so a reload can't repeat it.
   useEffect(() => {
@@ -72,28 +75,35 @@ export function Settings({ state, params, onChange }) {
           {PANELS[panel].render({ state, params, onChange })}
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
+      {tab === 'mcp' && <McpSettings hosted={state.hosted} />}
       {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} />}
-      {tab === 'products' && <ProductsCard params={params} />}
       {tab === 'alerts' && <AlertsSettings />}
     </>
   );
 }
 
+// Sites & products: each site with what its product runs on (edited together in
+// the site's form), then products that have no website, like an extension.
 function SitesSettings({ state, params, onChange }) {
   const { auth, sites } = state;
+  // ?tab=products&edit=<product id> is about a product, not a site.
+  const forProduct = params.get('tab') === 'products';
+  const siteEdit = forProduct ? '' : params.get('edit');
   // ?edit=<site id> opens that site's form, e.g. from a tab that needs a setting; ?edit=new opens a blank one.
-  const [editing, setEditing] = useState(() => (params.get('edit') === 'new' ? {} : sites.find((s) => s.id === params.get('edit') && !s.demo) || null));
+  const [editing, setEditing] = useState(() => (siteEdit === 'new' ? {} : sites.find((s) => s.id === siteEdit && !s.demo) || null));
+  const setup = useAsync(() => api.get('/products/setup').catch(() => null), []);
+  const productOf = (id) => setup.data?.products.find((p) => p.siteId === id);
   // "Add a site" clicked again while this tab is already open.
-  const wantsNew = params.get('edit') === 'new';
+  const wantsNew = siteEdit === 'new';
   useEffect(() => {
     if (wantsNew) setEditing((e) => e || {});
   }, [wantsNew, params.toString()]);
   return (
     <>
-      <Card title="Sites" sub="Each site can use GA4, Search Console and BigQuery independently"
+      <Card title="Sites" sub="Each site’s analytics and everything it runs on: domains, hosting, repos, store listings and goals"
         actions={<button class="btn primary" type="button" onClick={() => setEditing({})}><Icon name="plus" size={13} /> Add site</button>} flush>
         <table class="data">
-          <thead><tr><th>Site</th><th>GA4</th><th>Search Console</th><th>BigQuery</th><th /></tr></thead>
+          <thead><tr><th>Site</th><th>GA4</th><th>Search Console</th><th>BigQuery</th><th>Runs on</th><th /></tr></thead>
           <tbody>
             {sites.map((s) => (
               <tr key={s.id}>
@@ -102,6 +112,7 @@ function SitesSettings({ state, params, onChange }) {
                 <td class="small">{s.demo ? 'demo' : s.searchSite || <span class="muted">—</span>}</td>
                 <td class="small mono">{s.demo ? 'demo events' : s.bq ? `${s.bq.dataProject}.${s.bq.dataset}` : <span class="muted">—</span>}
                   {s.bq?.sessionsTable && <div class="chip accent" style={{ marginTop: '3px' }}>rollup</div>}</td>
+                <td class="small">{s.demo ? 'demo' : productSummary(productOf(s.id), setup.data) || <span class="muted">—</span>}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
                   <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>
                   {!s.demo && <button class="btn ghost" type="button" onClick={() => setEditing(s)}>Edit</button>}
@@ -122,8 +133,18 @@ function SitesSettings({ state, params, onChange }) {
           onSaved={(site) => { setEditing(null); onChange(); navigate(`/site/${site.id}`); }} />
       )}
 
+      <ProductsCard params={forProduct ? params : null} />
+
     </>
   );
+}
+
+// What a site's product runs on, in one line: hosting, repos, extensions, goals.
+function productSummary(p, setup) {
+  if (!p) return '';
+  const hosting = setup?.hosting.find((h) => h.key === p.hosting?.provider)?.label;
+  const n = (count, word) => count && `${count} ${word}${count > 1 ? 's' : ''}`;
+  return [hosting, n(p.repos.length, 'repo'), n(p.extensionIds.length, 'extension'), n(p.goals?.length, 'goal')].filter(Boolean).join(' · ');
 }
 
 function GitHubSettings({ state, sources, onChange }) {

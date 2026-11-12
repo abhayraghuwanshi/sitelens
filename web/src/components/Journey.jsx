@@ -15,7 +15,7 @@ function stageHref(key, site, productId) {
   if (key === 'traffic' && site) return `#/site/${site.id}/overview`;
   if (key === 'deploy') return site ? `#/firebase?site=${site.id}` : '#/github';
   if (key === 'outcome') return productId ? `#/outcomes/${productId}` : '#/extensions';
-  if (key === 'domain' && !site) return '#/settings?tab=products';
+  if (key === 'domain' && !site) return '#/settings?tab=sites';
   return '';
 }
 

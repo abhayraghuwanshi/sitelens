@@ -175,14 +175,53 @@ export function digestText(digest) {
   return lines.join('\n');
 }
 
+/* ---------- Desktop notifications ---------- */
+
+// What a desktop notification says, in macOS's three parts: the title names
+// what it's about, the subtitle what happened, the body the detail. Several
+// items go one per line, never run together on one.
+const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1).trimEnd()}…` : text);
+const dayName = (day) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+export function alertNotice(fresh) {
+  if (fresh.length === 1) {
+    const [a] = fresh;
+    const label = a.subject?.label || '';
+    // "New Tab by Cooldesk: users down 3 (-6%)" → title the label, subtitle the rest.
+    const what = label && a.title.startsWith(`${label}: `) ? a.title.slice(label.length + 2) : a.title;
+    return { title: label && what !== a.title ? label : 'SiteLens alert', subtitle: clip(what, 90), body: a.detail || '' };
+  }
+  const lines = fresh.slice(0, 3).map((a) => `• ${clip(a.title, 70)}`);
+  if (fresh.length > 3) lines.push(`and ${fresh.length - 3} more in Alerts`);
+  return { title: 'SiteLens', subtitle: `${fresh.length} new alerts`, body: lines.join('\n') };
+}
+
+export function digestNotice(digest) {
+  const lines = [];
+  for (const s of digest.sites) {
+    if (s.error) lines.push(`${s.label}: couldn’t read`);
+    else lines.push(`${s.label}: ${num(s.sessions)} visits${Number.isFinite(s.sessionsChange) ? ` (${pct(s.sessionsChange)})` : ''}`);
+  }
+  for (const e of digest.extensions) if (e.users !== null) lines.push(`${e.label}: ${num(e.users)} users`);
+  const shown = lines.slice(0, 3);
+  if (lines.length > 3) shown.push(`and ${lines.length - 3} more`);
+  const alerts = digest.alerts.length;
+  return {
+    title: 'SiteLens daily digest',
+    subtitle: `${dayName(digest.day)}${alerts ? ` · ${alerts} alert${alerts === 1 ? '' : 's'}` : ''}`,
+    body: shown.join('\n') || 'No traffic to report.',
+  };
+}
+
 /* ---------- Delivery ---------- */
 
 // argv keeps the text out of the AppleScript source, so nothing needs escaping.
-export function desktopNotify(title, body, { exec = execFile, platform = process.platform } = {}) {
+// macOS shows the title and subtitle on one line each and about two lines of body.
+export function desktopNotify(title, body, { subtitle = '', exec = execFile, platform = process.platform } = {}) {
   if (platform !== 'darwin') return Promise.resolve({ ok: false, error: 'Desktop notifications need macOS.' });
-  const script = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run';
+  const script = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv) subtitle (item 3 of argv)\nend run';
   return new Promise((resolve) => {
-    exec('osascript', ['-e', script, String(title).slice(0, 120), String(body).slice(0, 400)], { timeout: 10_000 }, (err) =>
+    exec('osascript', ['-e', script, String(title).slice(0, 120), String(body).slice(0, 400), String(subtitle).slice(0, 120)], { timeout: 10_000 }, (err) =>
       resolve(err ? { ok: false, error: err.message } : { ok: true }));
   });
 }
@@ -220,7 +259,7 @@ export function createAlerts({
   log = console,
 }) {
   const deliver = notify || {
-    desktop: (title, body) => desktopNotify(title, body),
+    desktop: (title, body, opts) => desktopNotify(title, body, opts),
     webhook: (url, text) => postWebhook(url, text, fetchImpl),
   };
   let running = null;
@@ -571,13 +610,13 @@ export function createAlerts({
     const result = {};
     const parts = [];
     if (fresh.length) {
-      const title = fresh.length === 1 ? 'SiteLens alert' : `SiteLens: ${fresh.length} new alerts`;
-      const body = fresh.length === 1 ? `${fresh[0].title}. ${fresh[0].detail}` : fresh.map((a) => a.title).join(' · ');
-      if (cfg.desktop) result.desktop = await deliver.desktop(title, body);
+      const n = alertNotice(fresh);
+      if (cfg.desktop) result.desktop = await deliver.desktop(n.title, n.body, { subtitle: n.subtitle });
       parts.push(fresh.map((a) => `⚠️ ${a.title} — ${a.detail}`).join('\n'));
     }
     if (digest) {
-      if (cfg.desktop) result.digestDesktop = await deliver.desktop(`SiteLens digest · ${digest.day}`, digest.text.split('\n').slice(1, 4).join(' · '));
+      const n = digestNotice(digest);
+      if (cfg.desktop) result.digestDesktop = await deliver.desktop(n.title, n.body, { subtitle: n.subtitle });
       parts.push(digest.text);
     }
     if (cfg.webhookUrl && parts.length) result.webhook = await deliver.webhook(cfg.webhookUrl, parts.join('\n\n'));
@@ -638,7 +677,7 @@ export function createAlerts({
       const cfg = await settings();
       const text = 'Test notification from SiteLens Studio — alerts will arrive like this.';
       return {
-        desktop: cfg.desktop ? await deliver.desktop('SiteLens Studio', text) : { ok: false, error: 'Desktop notifications are off.' },
+        desktop: cfg.desktop ? await deliver.desktop('SiteLens Studio', 'Alerts arrive like this: what it’s about, what happened, then the detail.', { subtitle: 'Test notification' }) : { ok: false, error: 'Desktop notifications are off.' },
         webhook: cfg.webhookUrl ? await deliver.webhook(cfg.webhookUrl, text) : { ok: false, error: 'No webhook URL set.' },
       };
     },

@@ -55,7 +55,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
     );
   }
   if (!r) {
-    return <Card title="AI referral sessions"><p class="muted small">Link a GA4 property to this site in Settings → Sites to see sessions from AI assistants.</p></Card>;
+    return <Card title="AI referral sessions"><p class="muted small">Link a GA4 property to this site in Settings → Sites & products to see sessions from AI assistants.</p></Card>;
   }
   const labels = dates.map(dayLabel);
   const top = r.assistants.slice(0, 5);

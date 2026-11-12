@@ -101,7 +101,7 @@ function GitHubOverview({ range, site }) {
           <span>
             {scope.repos.length
               ? `Repos for ${scope.host || 'this site'}: picked in its settings, linked in a product, or with it as their homepage`
-              : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites, or set a repo’s homepage to the site.`}
+              : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites & products, or set a repo’s homepage to the site.`}
           </span>
           {scope.note && <span style={{ color: 'var(--critical-ink)' }}>{scope.note}</span>}
           <a href={`#/settings?tab=sites&edit=${scope.siteId}`}>Pick repos</a>

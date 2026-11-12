@@ -1066,6 +1066,10 @@ table.data.compact .cell-path { max-width: none; }
 .ai-answer-text { white-space: pre-wrap; max-height: 260px; overflow: auto; color: var(--text-2); }
 
 /* Content cycles */
+.cycle-steps { list-style: none; margin: 12px 0 0; padding: 0; display: grid; gap: 10px; }
+.cycle-steps li { position: relative; padding-left: 22px; }
+.cycle-steps li::before { content: ''; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--muted, #888); box-sizing: border-box; }
+.cycle-steps li.done::before { background: var(--good-ink, #2a7); border-color: var(--good-ink, #2a7); }
 .cycle-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: var(--gap, 16px); }
 .cycle-cat .link-btn { white-space: nowrap; }
 .cycle-cat.on { outline: 2px solid var(--accent); outline-offset: -1px; }

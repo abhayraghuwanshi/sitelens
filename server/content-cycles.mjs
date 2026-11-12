@@ -522,7 +522,10 @@ export function createContentCycles({ dbPath, store, auth, articles, bing, aiSea
     const liveN = cycleOn(s.start, s.days, today());
     const live = cycleWindow(s.start, s.days, liveN);
     const lastData = addDays(today(), -SEARCH_LAG_DAYS + 1);
-    const current = { ...live, day: Math.min(s.days, Math.floor((ms(today()) - ms(live.start)) / DAY) + 1), measuredTo: lastData < live.start ? null : lastData < live.end ? lastData : live.end };
+    const current = { ...live, day: Math.min(s.days, Math.floor((ms(today()) - ms(live.start)) / DAY) + 1), measuredTo: lastData < live.start ? null : lastData < live.end ? lastData : live.end,
+      // The UI says when things happen: the first day with numbers (Search Console
+      // is about two days behind) and when the cycle is closed and judged (catchUp).
+      firstDataOn: addDays(live.start, SEARCH_LAG_DAYS - 1), verdictsOn: addDays(live.end, SEARCH_LAG_DAYS + 1), paused: !s.on };
     const history = stored.map((c) => {
       const rows = [...snapshotsOf(site, c.n).values()];
       return { n: c.n, start: c.start, end: c.end, visits: sumOf(rows, (r) => r.visits), conversions: sumOf(rows, (r) => r.conversions),

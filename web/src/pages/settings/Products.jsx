@@ -5,7 +5,7 @@ import { Card, ErrorState, Loading } from '../../components/ui.jsx';
 import { Icon } from '../../components/icons.jsx';
 import { GoalsEditor } from './Goals.jsx';
 
-// Settings → Products: a product is set up stage by stage, the same order as its
+// Settings → Sites & products: a product is set up stage by stage, the same order as its
 // journey: domains & hosting → analytics → code & releases → distribution → community → goals.
 export function ProductsCard({ params }) {
   const data = useAsync(() => api.get('/products/setup'), []);
@@ -46,19 +46,21 @@ export function ProductsCard({ params }) {
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!data.data) return <Loading height={120} />;
   const setup = data.data;
-  const { products, suggestions } = setup;
+  const { suggestions } = setup;
+  // A site's product shows in the sites table above; only products without a site list here.
+  const products = setup.products.filter((p) => !p.siteId);
   const hostingLabel = (p) => setup.hosting.find((h) => h.key === p.hosting?.provider)?.label;
 
   if (editing) {
     return (
       <ProductForm key={editing.id || 'new'} initial={editing} setup={setup} focus={params?.get('focus') || ''}
-        onCancel={() => { setEditing(null); navigate('/settings?tab=products'); }}
+        onCancel={() => { setEditing(null); navigate('/settings?tab=sites'); }}
         onSaved={(p) => navigate(`/product/${p.id}`)} />
     );
   }
 
   return (
-    <Card title="Products" sub="A site’s product is edited with the site in Settings → Sites. Add one here for something without a website, like an extension."
+    <Card title="Products without a website" sub="Something with no site of its own, like an extension or a CLI. A site’s product is edited with the site, above."
       actions={
         <div class="row">
           {suggestions.map((s) => (
@@ -78,9 +80,7 @@ export function ProductsCard({ params }) {
                 <td class="small">{hostingLabel(p) || <span class="muted">not set</span>}</td>
                 <td class="small muted">{[p.siteId && 'GA4', p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                  {p.siteId
-                    ? <a class="btn ghost" href={`#/settings?tab=sites&edit=${p.siteId}`}>Edit site</a>
-                    : <button class="btn ghost" type="button" onClick={() => setEditing(p)}>Edit</button>}
+                  <button class="btn ghost" type="button" onClick={() => setEditing(p)}>Edit</button>
                   <button class="btn ghost danger" type="button" onClick={() => remove(p.id)}>Remove</button>
                 </td>
               </tr>
@@ -88,7 +88,7 @@ export function ProductsCard({ params }) {
           </tbody>
         </table>
       )}
-      {!products.length && <p class="muted" style={{ padding: '8px 16px' }}>No products yet.</p>}
+      {!products.length && <p class="muted" style={{ padding: '8px 16px' }}>None yet.</p>}
       {error && <div style={{ padding: '0 16px 12px' }}><ErrorState error={error} /></div>}
     </Card>
   );
@@ -120,7 +120,7 @@ export function useFocusStage(focus, ready = true) {
   }, [focus, ready]);
 }
 
-// Products without a website. A site's product is edited with the site (Settings → Sites).
+// Products without a website. A site's product is edited with the site (Settings → Sites & products).
 function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
   const { options } = setup;
   const [form, setForm] = useState(() => productFormState(initial, setup));
@@ -148,7 +148,7 @@ function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
           <input required value={form.label} placeholder="Cooldesk" onInput={(e) => set({ label: e.currentTarget.value })} />
         </label>
         {!options.sites.length || (
-          <small class="muted">Has a website? Set it up in <a href="#/settings?tab=sites">Settings → Sites</a> instead: the site and its product are edited together there.</small>
+          <small class="muted">Has a website? Set it up in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a> instead: the site and its product are edited together there.</small>
         )}
       </Card>
       <ProductStages form={form} set={set} setup={setup} />
@@ -334,7 +334,7 @@ function Hosting({ hosting, setup, siteId, onChange }) {
               {setup.vercel.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
             </select>
             {setup.vercel.error && <small>{setup.vercel.error}</small>}
-            {!siteId && <small>Deploys are matched to a site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites</a>.</small>}
+            {!siteId && <small>Deploys are matched to a site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a>.</small>}
           </label>
         ) : <p class="note" style={{ margin: 0 }}>Connect Vercel in <a href="#/settings?i=vercel">Integrations → Vercel</a> to read deploys.</p>
       )}
@@ -384,7 +384,7 @@ function FirebaseBackend({ value, siteId, onChange }) {
         </label>
       ))}
       {value.service && <small>Linked backend: <span class="mono">{value.project} / {value.service}</span></small>}
-      {value.service && !siteId && <small class="muted">Request logs are stored per site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites</a>.</small>}
+      {value.service && !siteId && <small class="muted">Request logs are stored per site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a>.</small>}
       {error && <small class="muted">{error}</small>}
     </div>
   );

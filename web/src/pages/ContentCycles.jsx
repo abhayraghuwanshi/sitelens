@@ -41,10 +41,32 @@ export function ContentCycles({ site }) {
     <>
       <CycleHead site={site} d={d} cycle={cycle} setCycle={setCycle} onSaved={data.reload} />
       {d.cycles.length > 1 && <History cycles={d.cycles} />}
-      {d.report ? <Report site={site} r={d.report} onSaved={data.reload} /> : (
-        <Card><Empty title="Nothing to measure yet">Search Console reports about three days behind, so this cycle’s first numbers arrive on day 3 or 4.</Empty></Card>
-      )}
+      {d.report ? <Report site={site} r={d.report} current={d.current} onSaved={data.reload} /> : <Waiting c={d.current} />}
     </>
+  );
+}
+
+// Before the first numbers: what the cycle is doing and on which dates it fills in.
+function Waiting({ c }) {
+  const steps = [
+    { on: c.start, label: 'Cycle started', text: 'Studio counts every article from this day.' },
+    { on: c.firstDataOn, label: 'First numbers', text: `Google and Bing report each day about two days late, so ${shortDate(c.start)} shows up here on ${shortDate(c.firstDataOn)}. After that, one more day arrives each morning.` },
+    { on: c.end, label: 'Cycle ends', text: `The last day counted. Cycle ${c.n + 1} starts the next day.` },
+    { on: c.verdictsOn, label: 'Verdicts', text: 'Once the last day has arrived, each article is judged: grow, improve, keep or cut.' },
+  ];
+  const today = new Date().toISOString().slice(0, 10);
+  return (
+    <Card title={`Waiting for ${shortDate(c.start)}’s numbers`} sub={c.paused ? 'Paused: resume to keep measuring' : `They arrive on ${shortDate(c.firstDataOn)}`}>
+      <p>Nothing is wrong. Search engines publish each day’s clicks about two days after it ends, so a new cycle starts empty.</p>
+      <ol class="cycle-steps">
+        {steps.map((s) => (
+          <li key={s.label} class={s.on <= today ? 'done' : ''}>
+            <b>{shortDate(s.on)}</b> · {s.label}
+            <div class="small muted">{s.text}</div>
+          </li>
+        ))}
+      </ol>
+    </Card>
   );
 }
 
@@ -135,7 +157,7 @@ function History({ cycles }) {
   );
 }
 
-function Report({ site, r, onSaved }) {
+function Report({ site, r, current, onSaved }) {
   const t = r.totals;
   const [only, setOnly] = useState('');
   const [category, setCategory] = useState('');
@@ -145,7 +167,9 @@ function Report({ site, r, onSaved }) {
   return (
     <>
       <p class="note" style={{ margin: 0 }}>
-        {r.kind === 'live' ? `Cycle ${r.n} so far: ${r.start} to ${r.end}. Changes compare it with the cycle before, scaled to the same number of days.` : `Cycle ${r.n}: ${r.start} to ${r.end}.`}
+        {r.kind === 'live'
+          ? `Cycle ${r.n} so far: ${shortDate(r.start)} to ${shortDate(r.end)}. Search engines report about two days late, so the newest day can still fill in and the next one arrives tomorrow. Changes compare it with the cycle before, scaled to the same number of days.${current?.verdictsOn ? ` Verdicts are final on ${shortDate(current.verdictsOn)}.` : ''}`
+          : `Cycle ${r.n}: ${r.start} to ${r.end}.`}
         {' '}{r.goals?.length ? `“Acted” counts readers who went on to ${r.goals.map((g) => g.replace(/_/g, ' ')).join(' or ')}.` : 'No download or sign-up event found in GA4, so “acted” stays at 0.'}
         {' '}{r.sources?.ai ? `${formatNumber(r.sources.ai)} AI answers were checked in this window.` : 'No AI answer checks ran in this window, so citations are 0. Run them from AI search.'}
       </p>
