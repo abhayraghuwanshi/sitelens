@@ -114,8 +114,12 @@ test('only the public host is answered, and health checks need no host', async (
   assert.equal((await call('/healthz', { headers: { host: '10.0.0.1' } })).status, 200);
 });
 
-test('without a session: pages go to sign-in, the API says 401', async () => {
-  assert.equal((await call('/')).headers.location, '/login');
+test('without a session: / is the home page, other pages go to sign-in, the API says 401', async () => {
+  const home = await call('/');
+  assert.equal(home.status, 200);
+  assert.match(home.body, /href="\/login">Enter Studio/);
+  assert.equal((await call('/home')).status, 200);
+  assert.equal((await call('/settings')).headers.location, '/login');
   const api = await call('/api/state');
   assert.equal(api.status, 401);
   assert.equal(JSON.parse(api.body).kind, 'login');
@@ -149,6 +153,9 @@ test('invited users sign in with a secure cookie', async () => {
   assert.equal(state.auth.email, 'alice@example.com');
   // Invite emails match whatever case Google returns.
   assert.equal((await signIn('bob@example.com')).done.headers.location, '/');
+  // Signed in, / is the app and the home page's button goes straight in.
+  assert.doesNotMatch((await call('/', { cookie })).body, /Did what you shipped/);
+  assert.match((await call('/home', { cookie })).body, /href="\/">Enter Studio/);
 });
 
 test('cross-site writes are refused', async () => {

@@ -29,6 +29,7 @@ import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
 import { guardOutgoingFetch } from './net-guard.mjs';
+import { homePage, FAVICON } from './home.mjs';
 
 const COOKIE = '__Host-sitelens';
 const SESSION_DAYS = 30;
@@ -378,6 +379,11 @@ export function createGateway({
     }
 
     const user = sessionUser(req);
+    // The public home page: at /home for everyone, at / for visitors without a session.
+    if (url.pathname === '/home' || (!user && url.pathname === '/')) {
+      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(homePage({ signedIn: Boolean(user) }));
+    }
     if (!user) {
       if (url.pathname.startsWith('/api/')) {
         return res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Sign in to continue.', kind: 'login' }));
@@ -423,7 +429,7 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 function loginPage(error) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · SiteLens Studio</title><link rel="icon" type="image/svg+xml" href="/favicon.svg">
+<title>Sign in · SiteLens Studio</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <style>
   :root { color-scheme: light dark; --bg: #f7f7f8; --card: #fff; --text: #17171c; --muted: #62626e; --line: #e3e3e8; --accent: #3b5bdb; --err: #c92a2a; }
   @media (prefers-color-scheme: dark) { :root { --bg: #111114; --card: #1b1b20; --text: #ececf1; --muted: #9a9aa6; --line: #2c2c34; --accent: #748ffc; --err: #ff8787; } }
@@ -433,12 +439,14 @@ function loginPage(error) {
   p { color: var(--muted); margin: 0 0 24px; }
   a.btn { display: block; text-align: center; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; }
   .err { color: var(--err); margin: 0 0 16px; }
+  .home { display: block; margin-top: 16px; text-align: center; color: var(--muted); font-size: 14px; }
 </style></head>
 <body><main>
   <h1>SiteLens Studio</h1>
   <p>Invite only. Sign in with the Google account you were invited with.</p>
   ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
   <a class="btn" href="/login/google">Sign in with Google</a>
+  <a class="home" href="/home">← What is SiteLens?</a>
 </main></body></html>`;
 }
 
