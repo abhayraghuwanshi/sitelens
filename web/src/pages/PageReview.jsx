@@ -90,15 +90,15 @@ export function PageReview({ site, range = '90d' }) {
                       {r.title && <code class="small muted">{r.path}</code>}
                       {!r.inSitemap && <span class="rv-tag warn">not in sitemap</span>}
                     </td>
-                    <td class="num">{num(r.visits)}</td>
-                    <td class="num">{r.visits ? formatPercent(r.engagementRate, 0) : '—'}</td>
-                    <td class="num" title={`Google ${formatNumber(r.google?.impressions || 0)} · ${formatNumber(r.google?.clicks || 0)}, Bing ${formatNumber(r.bing?.impressions || 0)} · ${formatNumber(r.bing?.clicks || 0)}`}>
+                    <td class="num" data-label="Visits">{num(r.visits)}</td>
+                    <td class="num" data-label="Stayed">{r.visits ? formatPercent(r.engagementRate, 0) : '—'}</td>
+                    <td class="num" data-label="Search" title={`Google ${formatNumber(r.google?.impressions || 0)} · ${formatNumber(r.google?.clicks || 0)}, Bing ${formatNumber(r.bing?.impressions || 0)} · ${formatNumber(r.bing?.clicks || 0)}`}>
                       {r.google || r.bing ? <>{num((r.google?.impressions || 0) + (r.bing?.impressions || 0))} <span class="muted">· {formatNumber((r.google?.clicks || 0) + (r.bing?.clicks || 0))}</span></> : <span class="muted">—</span>}
                     </td>
-                    <td class="num">{r.google?.position ? formatDecimal(r.google.position, 1) : '—'}</td>
-                    <td class="num">{num(r.ai)}</td>
-                    <td><span class={`rv-tag ${TONE[r.suggestion]}`}>{LABELS[r.suggestion]}</span>{r.goal?.target && <span class="rv-goal" title={`Goal: ${r.goal.target.title}`}>{r.goal.progress?.reached ? '✓ goal' : 'goal set'}</span>}</td>
-                    <td onClick={(e) => e.stopPropagation()}><DecisionSelect site={site} row={r} onSaved={data.reload} /></td>
+                    <td class="num" data-label="Pos.">{r.google?.position ? formatDecimal(r.google.position, 1) : '—'}</td>
+                    <td class="num" data-label="AI">{num(r.ai)}</td>
+                    <td class="cell-suggest"><span class={`rv-tag ${TONE[r.suggestion]}`}>{LABELS[r.suggestion]}</span>{r.goal?.target && <span class="rv-goal" title={`Goal: ${r.goal.target.title}`}>{r.goal.progress?.reached ? '✓ goal' : 'goal set'}</span>}</td>
+                    <td class="cell-decide" onClick={(e) => e.stopPropagation()}><DecisionSelect site={site} row={r} onSaved={data.reload} /></td>
                   </tr>
               ))}
             </tbody>

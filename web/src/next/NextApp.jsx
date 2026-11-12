@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useState } from 'preact/hooks';
 import { usePersistent } from '../hooks.js';
 import { Icon } from '../components/icons.jsx';
 import { Logo } from '../components/Logo.jsx';
@@ -40,6 +40,9 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   useEffect(() => {
     if (site && site.id !== lastSite) setLastSite(site.id);
   }, [site?.id]);
+  // Phones: the sidebar folds into a top bar, and the menu closes once you go somewhere.
+  const [menu, setMenu] = useState(false);
+  useEffect(() => { setMenu(false); }, [route.parts.join('/'), route.params.toString()]);
 
   const todos = useTodos({ status: 'open' });
   const alertCounts = useUnreadAlerts();
@@ -81,11 +84,18 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
 
   return (
     <div class="nx">
-      <aside class="nx-side">
-        <a class="nx-brand" href="#/" aria-label="SiteLens Studio, all sites">
-          <Logo size={26} title="" />
-          <span>SiteLens <span class="nx-dim">Studio</span></span>
-        </a>
+      <aside class={`nx-side${menu ? ' open' : ''}`}>
+        <div class="nx-side-top">
+          <a class="nx-brand" href="#/" aria-label="SiteLens Studio, all sites">
+            <Logo size={26} title="" />
+            <span>SiteLens <span class="nx-dim">Studio</span></span>
+          </a>
+          <button type="button" class="nx-icon-btn nx-menu-btn" onClick={() => setMenu(!menu)}
+            aria-expanded={menu} aria-controls="nx-side-body" aria-label={menu ? 'Close menu' : 'Open menu'}>
+            <Icon name={menu ? 'x' : 'menu'} />
+          </button>
+        </div>
+        <div class="nx-side-body" id="nx-side-body">
         <nav class="nx-nav" aria-label="Main">
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
           <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
@@ -125,6 +135,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
               <button type="submit" class="nx-switch nx-signout">Sign out</button>
             </form>
           )}
+        </div>
         </div>
       </aside>
       <main class="nx-main">{body}</main>
