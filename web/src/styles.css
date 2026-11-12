@@ -1085,3 +1085,7 @@ input.cycle-cat-input { width: 120px; height: auto; min-height: 0; padding: 0 4p
 input.cycle-cat-input:hover, input.cycle-cat-input:focus { border-color: var(--border); background: var(--surface); }
 .btn.cycle-act { padding: 2px 8px; font-size: var(--text-xs); }
 @media (max-width: 520px) { .cycle-cats { grid-template-columns: 1fr; } }
+
+/* Settings → Sites & products: the list's header, with both "Add" buttons together */
+.sp-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.sp-head p { margin: 0; max-width: 60ch; }

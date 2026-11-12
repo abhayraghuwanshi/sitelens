@@ -9,7 +9,8 @@ import { Settings } from '../pages/Settings.jsx';
 import { Outcomes } from '../pages/Outcomes.jsx';
 import { Extensions } from '../pages/Extensions.jsx';
 import { Health } from '../pages/Health.jsx';
-import { Alerts } from '../pages/Alerts.jsx';
+import { useUnreadAlerts } from '../pages/Alerts.jsx';
+import { AlertsPage, AlertSettings } from './Alerts.jsx';
 import { GitHub } from '../pages/GitHub.jsx';
 import { Posts } from '../pages/Posts.jsx';
 import { Mentions } from '../pages/Mentions.jsx';
@@ -41,13 +42,15 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   }, [site?.id]);
 
   const todos = useTodos({ status: 'open' });
+  const alertCounts = useUnreadAlerts();
   const openFor = (id) => (todos.data?.todos || []).filter((t) => t.site === id).length;
   const story = current ? { href: `#/site/${current.id}${route.params.get('range') ? `?range=${route.params.get('range')}` : ''}`, label: `${current.label} story` } : null;
 
   const tab = !section ? 'sites'
     : section === 'todos' ? 'todos'
-    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'timeline', 'setup'].includes(view) ? view : 'explore')
+    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'alerts', 'timeline', 'setup'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
+    : section === 'alerts' ? 'alerts'
     : (section === 'settings' || section === 'account') && (route.params.get('tab') === 'mcp' || route.params.get('i') === 'mcp') ? 'mcp'
     : section === 'settings' || section === 'account' ? 'account'
     : 'explore';
@@ -58,6 +61,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'todos') body = <Page title="To-dos" sub={`Changes to make on ${site.label}`}><TodosPage key={site.id} site={site} sites={sites} /></Page>;
+  else if (section === 'site' && view === 'alerts') body = <Page title="Alerts" sub={`What moved on ${site.label}`}><AlertsPage key={site.id} site={site} sites={sites} /></Page>;
   else if (section === 'todos') body = <Page title="To-dos" sub="Every site’s changes to make"><TodosPage sites={sites} /></Page>;
   else if (section === 'site' && view === 'outcomes') body = <OutcomesPage key={site.id} site={site} params={route.params} back={story} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
@@ -66,7 +70,8 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
   else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
-  else if (section === 'alerts') body = <Page title="Alerts"><Alerts /></Page>;
+  else if (section === 'alerts' && route.params.get('view') === 'settings') body = <Page title="Alert settings" sub="What to watch on every site, and where alerts go" back={{ href: '#/alerts', label: 'All alerts' }}><AlertSettings /></Page>;
+  else if (section === 'alerts') body = <Page title="All alerts" sub="What moved on every site"><AlertsPage sites={sites} /></Page>;
   else if (WIDE[section]) {
     const View = WIDE[section];
     body = <Page title={section[0].toUpperCase() + section.slice(1)} back={story}><View id={siteId} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
@@ -84,18 +89,20 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
         <nav class="nx-nav" aria-label="Main">
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
           <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
+          <NavItem href="#/alerts" icon="bell" active={section === 'alerts'}>All alerts {alertCounts.unread ? <span class="nx-count">{alertCounts.unread}</span> : null}</NavItem>
           <NavItem href={ADD_SITE} icon="plus" active={section === 'account' && route.params.get('edit') === 'new'}>Add a site</NavItem>
         </nav>
         {current && (
           <>
             <label class="nx-label" for="nx-site">Site</label>
             <select id="nx-site" class="nx-site" value={current.id}
-              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' || tab === 'mcp' ? 'story' : tab === 'explore' ? view : tab === 'todos' ? 'todos' : tab}`; }}>
+              onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' || tab === 'mcp' ? 'story' : tab === 'explore' ? view : tab}`; }}>
               {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (sample)' : ''}</option>)}
             </select>
             <nav class="nx-nav" aria-label={current.label}>
               <NavItem href={href('story')} icon="sparkles" active={tab === 'story'}>Story</NavItem>
               <NavItem href={href('todos')} icon="check" active={tab === 'todos' && section === 'site'}>To-dos {openFor(current.id) ? <span class="nx-count">{openFor(current.id)}</span> : null}</NavItem>
+              <NavItem href={href('alerts')} icon="bell" active={tab === 'alerts' && section === 'site'}>Alerts {alertCounts.bySite[current.id] ? <span class="nx-count">{alertCounts.bySite[current.id]}</span> : null}</NavItem>
               <NavItem href={href('timeline')} icon="calendar" active={tab === 'timeline'}>Timeline</NavItem>
               <NavItem href={href('explore')} icon="layers" active={tab === 'explore'}>Explore</NavItem>
               <NavItem href={href('setup')} icon="settings" active={tab === 'setup'}>Setup</NavItem>

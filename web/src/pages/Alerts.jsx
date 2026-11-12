@@ -4,8 +4,22 @@ import { api } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, Loading, ErrorState, Empty } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { AlertsSettings } from './settings/AlertsSettings.jsx';
 
-export function Alerts() {
+// #/alerts is the feed and digest; #/alerts?view=settings is the rules and where alerts go.
+export function Alerts({ params }) {
+  if (params?.get('view') === 'settings') {
+    return (
+      <>
+        <a class="back-link" href="#/alerts">← Alerts</a>
+        <AlertsSettings />
+      </>
+    );
+  }
+  return <AlertsFeed />;
+}
+
+function AlertsFeed() {
   const data = useAsync(() => api.get('/alerts'), []);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
@@ -31,6 +45,7 @@ export function Alerts() {
 
   const runNow = (
     <div class="row">
+      <a class="btn" href="#/alerts?view=settings"><Icon name="settings" size={13} /> Settings</a>
       {unread > 0 && <button class="btn" type="button" disabled={Boolean(busy)}
         onClick={() => act('read', () => api.post('/alerts/read', { all: true }), (r) => `Marked ${r.changed} as read.`)}>Mark all read</button>}
       <button class="btn primary" type="button" disabled={Boolean(busy)}
@@ -46,7 +61,7 @@ export function Alerts() {
         <div class="state">
           <h3>Alerts are paused</h3>
           <p>Nothing is checked in the background until you turn them back on.</p>
-          <a class="btn" href="#/settings?tab=alerts">Alert settings</a>
+          <a class="btn" href="#/alerts?view=settings">Alert settings</a>
         </div>
       )}
       {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
@@ -154,12 +169,13 @@ function Digest({ digest }) {
   );
 }
 
-// Sidebar entry with an unread count; refreshes every 5 minutes and after actions here.
-export function AlertsNavItem({ active }) {
-  const [unread, setUnread] = useState(0);
+// Unread alert count; refreshes every 5 minutes and after actions on the Alerts page.
+// Returns { unread, bySite }.
+export function useUnreadAlerts() {
+  const [unread, setUnread] = useState({ unread: 0, bySite: {} });
   useEffect(() => {
     let alive = true;
-    const load = () => api.get('/alerts/unread').then((r) => alive && setUnread(r.unread)).catch(() => {});
+    const load = () => api.get('/alerts/unread').then((r) => alive && setUnread(r)).catch(() => {});
     load();
     const timer = setInterval(load, 5 * 60_000);
     window.addEventListener('alerts-changed', load);
@@ -169,6 +185,12 @@ export function AlertsNavItem({ active }) {
       window.removeEventListener('alerts-changed', load);
     };
   }, []);
+  return unread;
+}
+
+// Classic sidebar entry with the unread count.
+export function AlertsNavItem({ active }) {
+  const { unread } = useUnreadAlerts();
   return (
     <a class={`nav-item${active ? ' active' : ''}`} href="#/alerts">
       <Icon name="bell" /> Alerts {unread > 0 && <span class="count badge">{unread}</span>}

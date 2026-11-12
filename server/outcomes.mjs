@@ -475,6 +475,8 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     // from event names and linked sources.
     const fileGoals = (await siteConfig?.applied(site))?.goals || null;
     const goalsFrom = fileGoals?.length ? 'file' : product.goals?.length ? 'settings' : 'auto';
+    // Where that file is, so the page can open it (GitHub link, or a local path).
+    const fileSource = goalsFrom === 'file' && siteConfig?.get ? (await siteConfig.get(site).catch(() => null))?.source || null : null;
     const custom = goalsFrom !== 'auto';
     const goals = goalsFrom === 'file' ? fileGoals : custom ? product.goals : autoGoals(classifyEvents(siteBase?.events || []), { hasStore: product.extensionIds.length > 0, hasRepos: product.repos.length > 0 });
 
@@ -569,6 +571,7 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
       goals: {
         custom,
         from: goalsFrom,
+        file: fileSource,
         list: measured,
         keyEvents: siteBase?.keyEvents ?? null,
         // For the goal editor: what the site sends, most used first.

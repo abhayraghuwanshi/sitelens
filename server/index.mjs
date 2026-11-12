@@ -257,7 +257,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
             edit: `#/site/${site.id}/demand`,
           },
           alerts: {
-            from: 'studio', items: [`Sessions & users: ${pct(rules.traffic)}`, `Search clicks: ${pct(rules.search)}`], edit: '#/settings?tab=alerts',
+            from: 'studio', items: [`Sessions & users: ${pct(rules.traffic)}`, `Search clicks: ${pct(rules.search)}`], edit: '#/alerts?view=settings',
             // The draft file has no alerts, so start from the thresholds used today.
             draft: ['alerts:', ...['traffic', 'search'].map((k) => `  ${k}: ${rules[k].enabled ? `{ pct: ${Math.round(rules[k].pct * 100)}, min: ${rules[k].minVolume} }` : 'off'}`)].join('\n'),
           },

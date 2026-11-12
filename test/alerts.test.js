@@ -5,6 +5,7 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  tagSites,
   createAlerts, detectAnomaly, detectDrop, detectStarSpike, denseSeries, mergeAlerts, normalizeSettings,
   lastDays, localDay, desktopNotify, postWebhook, digestText, alertNotice, digestNotice,
 } from '../server/alerts.mjs';
@@ -135,9 +136,9 @@ test('daily run alerts on a traffic spike once, and delivers to desktop + webhoo
   const second = await alerts.run({ daily: true });
   assert.equal(second.fired.length, 0, 'same alert key must not fire twice');
   assert.equal((await alerts.feed()).alerts.length, 1);
-  assert.equal(await alerts.unread(), 1);
+  assert.equal((await alerts.unread()).unread, 1);
   await alerts.markRead({ all: true });
-  assert.equal(await alerts.unread(), 0);
+  assert.equal((await alerts.unread()).unread, 0);
 });
 
 test('hourly tick skips GA4 until the digest hour, then runs daily once', async () => {
@@ -284,4 +285,16 @@ test('desktop notices: title, subtitle and detail, several items one per line', 
   assert.deepEqual(many.body.split('\n'), ['• A', '• B', '• C', 'and 2 more in Alerts']);
   const d = digestNotice({ day: '2026-11-07', sites: [{ label: 'cooldesk', sessions: 28, sessionsChange: 0.75 }, { label: 'infraplan', error: 'x' }], extensions: [{ label: 'New Tab', users: 50 }], alerts: [{}] });
   assert.deepEqual(d, { title: 'SiteLens daily digest', subtitle: 'Saturday 7 Nov · 1 alert', body: 'cooldesk: 28 visits (+75%)\ninfraplan: couldn’t read\nNew Tab: 50 users' });
+});
+
+test('tagSites files alerts under a site directly or through its product', () => {
+  const products = [{ siteId: 'cooldesk', repos: ['Me/CoolDesk-Extension'], extensionIds: ['abcdefghijklmnopabcdefghijklmnop'] }, { siteId: '', repos: ['me/lib'] }];
+  const tagged = tagSites([
+    { id: '1', subject: { type: 'site', id: 'infraplan' } },
+    { id: '2', subject: { type: 'repo', id: 'me/cooldesk-extension' } },
+    { id: '3', subject: { type: 'extension', id: 'abcdefghijklmnopabcdefghijklmnop' } },
+    { id: '4', subject: { type: 'repo', id: 'me/lib' } },
+    { id: '5', subject: { type: 'mention', id: 'cooldesk' } },
+  ], products);
+  assert.deepEqual(tagged.map((a) => a.site), ['infraplan', 'cooldesk', 'cooldesk', '', '']);
 });

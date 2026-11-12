@@ -1,14 +1,13 @@
 import { useEffect, useState } from 'preact/hooks';
-import { api } from '../api.js';
+import { api, qs } from '../api.js';
 import { useAsync, navigate } from '../hooks.js';
 import { Card, ErrorState, Loading, humanBytes } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
-import { ProductsCard, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
+import { ProductsCard, ProductForm, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings, KeyForm } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
-import { AlertsSettings } from './settings/AlertsSettings.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
@@ -26,7 +25,6 @@ const TABS = [
   { key: 'integrations', label: 'Integrations' },
   { key: 'mcp', label: 'MCP' },
   { key: 'sites', label: 'Sites & products' },
-  { key: 'alerts', label: 'Alerts' },
 ];
 
 const PANELS = {
@@ -53,6 +51,11 @@ export function Settings({ state, params, onChange }) {
   const asked = params.get('tab') === 'products' ? 'sites' : params.get('tab');
   const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'integrations';
 
+  // Alert settings moved to the Alerts page; old ?tab=alerts links land there.
+  useEffect(() => {
+    if (params.get('tab') === 'alerts') location.replace('#/alerts?view=settings');
+  }, [params.get('tab')]);
+
   // Pick up the new sign-in once, then drop the flag so a reload can't repeat it.
   useEffect(() => {
     if (!connected) return;
@@ -77,31 +80,77 @@ export function Settings({ state, params, onChange }) {
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
       {tab === 'mcp' && <McpSettings hosted={state.hosted} />}
       {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} />}
-      {tab === 'alerts' && <AlertsSettings />}
     </>
   );
 }
 
-// Sites & products: each site with what its product runs on (edited together in
-// the site's form), then products that have no website, like an extension.
+// Sites & products. The list and a form are never on screen together: the list
+// (sites, then products without a website) with both "Add" buttons on top, or
+// one form on its own with a way back. The URL says which, so Back works:
+//   ?tab=sites                    the list
+//   ?tab=sites&edit=new|<site>    add / edit a site (and what it runs on)
+//   ?tab=sites&product=new|<id>   add / edit a product without a website
+//   ?tab=products&edit=<id>       older product links, sent to the right form
 function SitesSettings({ state, params, onChange }) {
   const { auth, sites } = state;
-  // ?tab=products&edit=<product id> is about a product, not a site.
-  const forProduct = params.get('tab') === 'products';
-  const siteEdit = forProduct ? '' : params.get('edit');
-  // ?edit=<site id> opens that site's form, e.g. from a tab that needs a setting; ?edit=new opens a blank one.
-  const [editing, setEditing] = useState(() => (siteEdit === 'new' ? {} : sites.find((s) => s.id === siteEdit && !s.demo) || null));
-  const setup = useAsync(() => api.get('/products/setup').catch(() => null), []);
-  const productOf = (id) => setup.data?.products.find((p) => p.siteId === id);
-  // "Add a site" clicked again while this tab is already open.
-  const wantsNew = siteEdit === 'new';
+  const setup = useAsync(() => api.get('/products/setup'), []);
+  const base = location.hash.startsWith('#/account') ? '/account' : '/settings';
+  const go = (extra = {}) => navigate(`${base}${qs({ tab: 'sites', ...extra })}`);
+
+  const legacy = params.get('tab') === 'products' ? params.get('edit') || '' : '';
+  const legacyProduct = legacy && legacy !== 'new' ? setup.data?.products.find((p) => p.id === legacy) : null;
+  // A site's product is edited with its site.
+  const legacySite = legacyProduct?.siteId || (legacy === 'new' && params.get('site')) || '';
   useEffect(() => {
-    if (wantsNew) setEditing((e) => e || {});
-  }, [wantsNew, params.toString()]);
+    if (legacySite) go({ edit: legacySite, focus: params.get('focus') });
+  }, [legacySite]);
+
+  const siteEdit = legacy ? '' : params.get('edit') || '';
+  const productEdit = params.get('product') || (legacy && !legacySite ? legacy : '');
+  const back = <a class="back-link" href={`#${base}?tab=sites`}>← Sites &amp; products</a>;
+
+  if (siteEdit) {
+    const site = siteEdit === 'new' ? {} : sites.find((s) => s.id === siteEdit && !s.demo);
+    if (!site) return <>{back}<ErrorState error={{ message: 'That site was removed or can’t be edited.' }} /></>;
+    return (
+      <>
+        {back}
+        <SiteForm key={site.id || 'new'} initial={site} auth={auth} focus={params.get('focus') || ''}
+          onCancel={() => go()}
+          onSaved={(saved) => { onChange(); navigate(`/site/${saved.id}`); }} />
+      </>
+    );
+  }
+
+  if (setup.error) return <ErrorState error={setup.error} onRetry={setup.reload} />;
+
+  if (productEdit) {
+    if (!setup.data) return <>{back}<Loading height={200} /></>;
+    if (legacySite) return <Loading height={200} />;
+    const product = productEdit === 'new' ? {} : setup.data.products.find((p) => p.id === productEdit && !p.siteId);
+    if (!product) return <>{back}<ErrorState error={{ message: 'That product was removed, or it belongs to a site: edit it from the site.' }} /></>;
+    return (
+      <>
+        {back}
+        <ProductForm key={product.id || 'new'} initial={product} setup={setup.data} focus={params.get('focus') || ''}
+          onCancel={() => go()}
+          onSaved={(saved) => navigate(`/product/${saved.id}`)} />
+      </>
+    );
+  }
+
+  const productOf = (id) => setup.data?.products.find((p) => p.siteId === id);
   return (
     <>
-      <Card title="Sites" sub="Each site’s analytics and everything it runs on: domains, hosting, repos, store listings and goals"
-        actions={<button class="btn primary" type="button" onClick={() => setEditing({})}><Icon name="plus" size={13} /> Add site</button>} flush>
+      <div class="sp-head">
+        <p class="muted small">A site is set up with everything it runs on: analytics, domains, hosting, repos, store listings and goals. A product without a website, like an extension or a CLI, is set up on its own.</p>
+        <div class="row">
+          <button class="btn primary" type="button" onClick={() => go({ edit: 'new' })}><Icon name="plus" size={13} /> Add a site</button>
+          <button class="btn" type="button" onClick={() => go({ product: 'new' })}><Icon name="plus" size={13} /> Add a product without a website</button>
+        </div>
+      </div>
+
+      <Card title={`Sites (${sites.length})`} flush>
         <table class="data">
           <thead><tr><th>Site</th><th>GA4</th><th>Search Console</th><th>BigQuery</th><th>Runs on</th><th /></tr></thead>
           <tbody>
@@ -115,8 +164,8 @@ function SitesSettings({ state, params, onChange }) {
                 <td class="small">{s.demo ? 'demo' : productSummary(productOf(s.id), setup.data) || <span class="muted">—</span>}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
                   <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>
-                  {!s.demo && <button class="btn ghost" type="button" onClick={() => setEditing(s)}>Edit</button>}
-                  <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); }}>
+                  {!s.demo && <button class="btn ghost" type="button" onClick={() => go({ edit: s.id })}>Edit</button>}
+                  <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); setup.reload(); }}>
                     {s.demo ? 'Hide' : 'Remove'}
                   </button>
                 </td>
@@ -124,17 +173,10 @@ function SitesSettings({ state, params, onChange }) {
             ))}
           </tbody>
         </table>
-        {!sites.length && <p class="muted" style={{ padding: '8px 16px' }}>No sites yet.</p>}
+        {!sites.length && <p class="muted" style={{ padding: '8px 16px' }}>No sites yet. Add one above.</p>}
       </Card>
 
-      {editing && (
-        <SiteForm key={editing.id || 'new'} initial={editing} auth={auth} focus={params.get('focus') || ''}
-          onCancel={() => setEditing(null)}
-          onSaved={(site) => { setEditing(null); onChange(); navigate(`/site/${site.id}`); }} />
-      )}
-
-      <ProductsCard params={forProduct ? params : null} />
-
+      {setup.data ? <ProductsCard setup={setup.data} onReload={setup.reload} onEdit={(id) => go({ product: id })} /> : <Loading height={120} />}
     </>
   );
 }

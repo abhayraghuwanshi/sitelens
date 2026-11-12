@@ -7,21 +7,9 @@ import { GoalsEditor } from './Goals.jsx';
 
 // Settings → Sites & products: a product is set up stage by stage, the same order as its
 // journey: domains & hosting → analytics → code & releases → distribution → community → goals.
-export function ProductsCard({ params }) {
-  const data = useAsync(() => api.get('/products/setup'), []);
-  const [editing, setEditing] = useState(null);
+// The list only: adding and editing open ProductForm on its own (Settings → Sites & products).
+export function ProductsCard({ setup, onReload, onEdit }) {
   const [error, setError] = useState(null);
-  const editId = params?.get('edit') || '';
-
-  useEffect(() => {
-    if (!data.data) return;
-    // A site's product is edited with the site, so old links land there.
-    const product = editId && editId !== 'new' ? data.data.products.find((p) => p.id === editId) : null;
-    const siteId = product?.siteId || (editId === 'new' && params.get('site')) || '';
-    if (siteId) navigate(`/settings${qs({ tab: 'sites', edit: siteId, focus: params.get('focus') })}`);
-    else if (editId === 'new') setEditing({});
-    else if (editId) setEditing(product);
-  }, [editId, data.data]);
 
   async function add(product) {
     setError(null);
@@ -37,38 +25,26 @@ export function ProductsCard({ params }) {
     setError(null);
     try {
       await api.del(`/products/${id}`);
-      data.reload();
+      onReload();
     } catch (err) {
       setError(err);
     }
   }
 
-  if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
-  if (!data.data) return <Loading height={120} />;
-  const setup = data.data;
   const { suggestions } = setup;
-  // A site's product shows in the sites table above; only products without a site list here.
+  // A site's product shows in the sites table; only products without a site list here.
   const products = setup.products.filter((p) => !p.siteId);
   const hostingLabel = (p) => setup.hosting.find((h) => h.key === p.hosting?.provider)?.label;
 
-  if (editing) {
-    return (
-      <ProductForm key={editing.id || 'new'} initial={editing} setup={setup} focus={params?.get('focus') || ''}
-        onCancel={() => { setEditing(null); navigate('/settings?tab=sites'); }}
-        onSaved={(p) => navigate(`/product/${p.id}`)} />
-    );
-  }
-
   return (
-    <Card title="Products without a website" sub="Something with no site of its own, like an extension or a CLI. A site’s product is edited with the site, above."
-      actions={
+    <Card title={`Products without a website (${products.length})`}
+      actions={suggestions.length ? (
         <div class="row">
           {suggestions.map((s) => (
-            <button key={s.id} class="btn" type="button" onClick={() => add(s)}><Icon name="sparkles" size={13} /> Add {s.label}</button>
+            <button key={s.id} class="btn ghost" type="button" onClick={() => add(s)}><Icon name="sparkles" size={13} /> Add {s.label}</button>
           ))}
-          <button class="btn primary" type="button" onClick={() => setEditing({})}><Icon name="plus" size={13} /> Add product</button>
         </div>
-      } flush>
+      ) : null} flush>
       {products.length > 0 && (
         <table class="data">
           <thead><tr><th>Product</th><th>Domains</th><th>Hosting</th><th>Sources</th><th /></tr></thead>
@@ -76,11 +52,11 @@ export function ProductsCard({ params }) {
             {products.map((p) => (
               <tr key={p.id}>
                 <td><a href={`#/product/${p.id}`}><b>{p.label}</b></a></td>
-                <td class="small mono">{(p.domains || []).map((d) => d.name).join(', ') || <span class="muted">from site</span>}</td>
+                <td class="small mono">{(p.domains || []).map((d) => d.name).join(', ') || <span class="muted">—</span>}</td>
                 <td class="small">{hostingLabel(p) || <span class="muted">not set</span>}</td>
-                <td class="small muted">{[p.siteId && 'GA4', p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
+                <td class="small muted">{[p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                  <button class="btn ghost" type="button" onClick={() => setEditing(p)}>Edit</button>
+                  <button class="btn ghost" type="button" onClick={() => onEdit(p.id)}>Edit</button>
                   <button class="btn ghost danger" type="button" onClick={() => remove(p.id)}>Remove</button>
                 </td>
               </tr>
@@ -88,7 +64,7 @@ export function ProductsCard({ params }) {
           </tbody>
         </table>
       )}
-      {!products.length && <p class="muted" style={{ padding: '8px 16px' }}>None yet.</p>}
+      {!products.length && <p class="muted" style={{ padding: '8px 16px' }}>None yet. Most products have a website and are set up with their site.</p>}
       {error && <div style={{ padding: '0 16px 12px' }}><ErrorState error={error} /></div>}
     </Card>
   );
@@ -121,7 +97,7 @@ export function useFocusStage(focus, ready = true) {
 }
 
 // Products without a website. A site's product is edited with the site (Settings → Sites & products).
-function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
+export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
   const { options } = setup;
   const [form, setForm] = useState(() => productFormState(initial, setup));
   useFocusStage(focus);

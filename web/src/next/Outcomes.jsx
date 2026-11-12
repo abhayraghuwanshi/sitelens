@@ -226,6 +226,15 @@ function Sources({ d }) {
   );
 }
 
+// The site's .sitelens.yml: on GitHub it opens in a new tab; a local or demo
+// file has no page of its own, so it opens Setup, which shows it.
+function FileLink({ file, site }) {
+  const name = file?.type === 'repo' ? `${file.repo}/${file.path}` : file?.type === 'demo' ? 'the built-in demo file' : file?.path ? file.path.split('/').pop() : 'the site’s repo file';
+  const stop = (e) => e.stopPropagation();
+  if (file?.url) return <a href={file.url} target="_blank" rel="noreferrer" onClick={stop} title="Open on GitHub"><code>{name}</code> <Icon name="external" size={11} /></a>;
+  return <a href={`#/site/${site.id}/setup`} onClick={stop} title={file?.path || ''}><code>{name}</code></a>;
+}
+
 // The goals everything above is measured against, folded away.
 function Goals({ d, site, onRefresh, refreshing }) {
   const g = d.goals;
@@ -235,7 +244,7 @@ function Goals({ d, site, onRefresh, refreshing }) {
     <details class="nx-card nx-goals">
       <summary>
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
-          <span class="nx-dim"> · {fromFile ? 'from the site’s repo file' : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
+          <span class="nx-dim"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
         <span class="nx-action-row">
           <a class="nx-btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit in Setup' : g.custom ? 'Edit goals' : 'Set goals'}</a>
           <button class="nx-btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>

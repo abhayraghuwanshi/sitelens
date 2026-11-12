@@ -152,7 +152,7 @@ export function App() {
     body = <Calendar sites={sites} params={route.params} />;
   } else if (section === 'alerts') {
     title = 'Alerts';
-    body = <Alerts />;
+    body = <Alerts params={route.params} />;
   } else if (section === 'mentions') {
     title = 'Mentions';
     body = <Mentions range={effectiveRange} />;

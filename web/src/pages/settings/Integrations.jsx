@@ -114,7 +114,7 @@ const GROUPS = [
           : google.connected ? { on: true, text: 'Runs on your Google sign-in' } : { on: false, text: 'Needs Google sign-in' }),
       },
       {
-        key: 'notify', name: 'Slack / Discord & desktop', icon: 'bell', href: '#/settings?tab=alerts',
+        key: 'notify', name: 'Slack / Discord & desktop', icon: 'bell', href: '#/alerts?view=settings',
         desc: 'Where alerts and the daily digest go.',
         status: ({ notifications: n }) => (!n.enabled ? { on: false, text: 'Alerts are paused' }
           : { on: n.webhook || n.desktop, text: [n.webhook && 'Webhook', n.desktop && 'macOS notifications'].filter(Boolean).join(' · ') || 'No destination yet' }),
