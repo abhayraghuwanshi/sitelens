@@ -40,7 +40,7 @@ export function BingSettings() {
           <span class={`dot${s.source ? ' on' : ''}`} />
           {s.source
             ? <>{s.source === 'oauth' ? 'Connected to Bing' : <>API key from {s.source === 'env' ? <code>BING_WEBMASTER_KEY</code> : 'Settings'}</>} · {s.sites.length} site{s.sites.length === 1 ? '' : 's'}
-                {s.error && <span style={{ color: 'var(--critical-ink)' }}> · {s.error}</span>}</>
+                {s.error && <span class="text-bad"> · {s.error}</span>}</>
             : 'Not connected'}
         </div>
         {canConnect && (

@@ -137,7 +137,7 @@ function SiteHealth({ site, range }) {
                     </>
                   ) : <td colSpan={5} class="small" style={{ color: r?.error ? 'var(--critical-ink)' : undefined }}>{r?.error ? <Linked text={r.error} /> : <span class="muted">Not run yet</span>}</td>}
                   <td class="small muted" style={{ whiteSpace: 'nowrap' }}>{r ? stamp(r.at) : ''}
-                    {r?.lastError && <div style={{ color: 'var(--critical-ink)' }} title={r.lastError.message}>Last run failed {formatAgo(r.lastError.at)}</div>}</td>
+                    {r?.lastError && <div class="text-bad" title={r.lastError.message}>Last run failed {formatAgo(r.lastError.at)}</div>}</td>
                 </tr>
               );
             })}
@@ -163,7 +163,7 @@ function SiteHealth({ site, range }) {
                   <td class="small">{stamp(i.start)}</td>
                   <td class="small">{i.resolvedAt ? duration(i.resolvedAt - i.start) : 'ongoing'}</td>
                   <td class="small">{i.error}</td>
-                  <td class="small">{i.resolvedAt ? <span class="chip good">resolved</span> : <span class="chip" style={{ color: 'var(--critical-ink)' }}>down</span>}</td>
+                  <td class="small">{i.resolvedAt ? <span class="chip good">resolved</span> : <span class="chip text-bad">down</span>}</td>
                 </tr>
               ))}
             </tbody>

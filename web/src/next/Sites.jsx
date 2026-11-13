@@ -14,17 +14,17 @@ export function Sites({ sites, auth, viewer }) {
 
   return (
     <Page title="Sites" sub="Last 28 whole days, against the 28 before"
-      actions={viewer ? null : <a class="nx-btn primary" href={ADD_SITE}><Icon name="plus" size={14} /> Add a site</a>}>
+      actions={viewer ? null : <a class="btn primary" href={ADD_SITE}><Icon name="plus" size={14} /> Add a site</a>}>
       {!viewer && !sites.some((s) => !s.demo) && <GetStarted auth={auth} />}
       <div class="nx-sites">
         {rows.map(({ site, story }) => (
           <a key={site.id} class="nx-card nx-site-card" href={`#/site/${site.id}`}>
-            <span class="nx-site-name"><b>{site.label}</b><span class="nx-dim">{site.demo ? 'Sample data' : site.host}</span></span>
+            <span class="nx-site-name"><b>{site.label}</b><span class="muted">{site.demo ? 'Sample data' : site.host}</span></span>
             <span class="nx-site-line">{story ? story.headline : stories.loading ? 'Reading the story…' : 'No story yet: edit the site to connect Google Analytics or Search Console.'}</span>
             {story && (
               <span class="nx-site-num">
                 <b>{Math.round(story.value).toLocaleString('en-US')}</b>
-                <span class={story.change === null ? 'nx-dim' : story.change >= 0 ? 'good' : 'bad'}>
+                <span class={story.change === null ? 'muted' : story.change >= 0 ? 'good' : 'bad'}>
                   {changeText(story)}
                 </span>
               </span>
@@ -48,14 +48,14 @@ function GetStarted({ auth }) {
     <section class="nx-card nx-start" aria-label="Get started">
       <div>
         <h2>Get started</h2>
-        <p class="nx-dim">The sample site below shows what you’ll see. Three steps to see your own.</p>
+        <p class="muted">The sample site below shows what you’ll see. Three steps to see your own.</p>
       </div>
       <ol class="nx-steps">
         {steps.map((s, i) => (
           <li key={s.title} class={s.done ? 'done' : ''}>
             <span class="nx-step-num" aria-hidden="true">{s.done ? <Icon name="check" size={14} /> : i + 1}</span>
-            <span class="nx-step-text"><b>{s.title}</b><span class="nx-dim">{s.done ? 'Done.' : s.text}</span></span>
-            {!s.done && <a class={`nx-btn${s.primary ? ' primary' : ''}`} href={s.href}>{s.action}</a>}
+            <span class="nx-step-text"><b>{s.title}</b><span class="muted">{s.done ? 'Done.' : s.text}</span></span>
+            {!s.done && <a class={`btn${s.primary ? ' primary' : ''}`} href={s.href}>{s.action}</a>}
           </li>
         ))}
       </ol>

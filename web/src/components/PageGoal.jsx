@@ -113,7 +113,7 @@ export function GoalPanel({ site, path, goal, onSaved, close = [] }) {
         )}
       </div>
       {goal.note && <p class="small muted">{goal.note}</p>}
-      {error && <p class="small" style={{ color: 'var(--critical-ink)' }}>{error}</p>}
+      {error && <p class="small text-bad">{error}</p>}
     </div>
   );
 }

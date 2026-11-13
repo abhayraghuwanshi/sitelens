@@ -58,16 +58,16 @@ export function Retention({ site, range }) {
           )}
         </div>
         <div class="nx-jsum-stats nx-tiles">
-          <div><b>{formatNumber(newPeople)}</b><span class="nx-dim small">new visitors · {cohorts.length} weekly groups</span></div>
-          <div><b>{avg[1] ? formatPercent(avg[1].rate) : '–'}</b><span class="nx-dim small">came back the next week{avg[1] ? ` · ${formatNumber(avg[1].users)} of ${formatNumber(avg[1].size)}` : ''}</span></div>
-          <div><b>{avg[4] ? formatPercent(avg[4].rate) : '–'}</b><span class="nx-dim small">{avg[4] ? 'still coming back 4 weeks later' : 'week 4: needs 5 weeks of data'}</span></div>
-          <div><b>{daysOfData}</b><span class="nx-dim small">days of data{dataFrom ? ` · since ${weekLabel(dataFrom)}` : ''}</span></div>
+          <div><b>{formatNumber(newPeople)}</b><span class="muted small">new visitors · {cohorts.length} weekly groups</span></div>
+          <div><b>{avg[1] ? formatPercent(avg[1].rate) : '–'}</b><span class="muted small">came back the next week{avg[1] ? ` · ${formatNumber(avg[1].users)} of ${formatNumber(avg[1].size)}` : ''}</span></div>
+          <div><b>{avg[4] ? formatPercent(avg[4].rate) : '–'}</b><span class="muted small">{avg[4] ? 'still coming back 4 weeks later' : 'week 4: needs 5 weeks of data'}</span></div>
+          <div><b>{daysOfData}</b><span class="muted small">days of data{dataFrom ? ` · since ${weekLabel(dataFrom)}` : ''}</span></div>
         </div>
         {notes.length > 0 && (
           <div>
             <h3 class="nx-jsum-h">What it means</h3>
             <ul class="nx-jfind nx-jfind-3">
-              {notes.map((n) => <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="nx-dim small">{n.detail}</span></li>)}
+              {notes.map((n) => <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="muted small">{n.detail}</span></li>)}
             </ul>
           </div>
         )}
@@ -91,7 +91,7 @@ export function Retention({ site, range }) {
                 <tr key={c.cohort}>
                   <th class="l">
                     Week of {weekLabel(c.cohort)}
-                    {c.partial && <span class="nx-dim small" title={`Data starts ${weekLabel(dataFrom)}, partway through this week`}> · partial</span>}
+                    {c.partial && <span class="muted small" title={`Data starts ${weekLabel(dataFrom)}, partway through this week`}> · partial</span>}
                   </th>
                   <td class="size">{formatNumber(c.size)}</td>
                   {Array.from({ length: width - 1 }, (_, i) => {
@@ -112,7 +112,7 @@ export function Retention({ site, range }) {
             </tbody>
           </table>
         </div>
-        <p class="nx-dim small" style={{ margin: '10px 0 6px' }}>
+        <p class="muted small" style={{ margin: '10px 0 6px' }}>
           {hover
             ? `Week of ${weekLabel(hover.c.cohort)} · week ${hover.cell.offset}: ${formatNumber(hover.cell.users)} of ${formatNumber(hover.c.size)} came back.`
             : 'Each cell: the share of that row’s people who visited again that week, and how many. Stronger colour = more came back. “·” = that week hasn’t happened yet.'}
@@ -125,7 +125,7 @@ export function Retention({ site, range }) {
           <div class="nx-jsum-bar"><h3 class="nx-jsum-h">On average, how many are still coming back</h3></div>
           <LineChart labels={avg.map((_, w) => (w === 0 ? 'First week' : `Week ${w}`))} series={[{ label: 'Came back', values: avg.map((v) => (v ? v.rate : NaN)) }]}
             format={(v) => formatPercent(v, 0)} height={200} area={false} />
-          <p class="nx-dim small" style={{ margin: '6px 0 0' }}>All groups together, weighted by size. A curve that flattens out means a core of people keep returning.</p>
+          <p class="muted small" style={{ margin: '6px 0 0' }}>All groups together, weighted by size. A curve that flattens out means a core of people keep returning.</p>
         </section>
       ) : null}
     </>

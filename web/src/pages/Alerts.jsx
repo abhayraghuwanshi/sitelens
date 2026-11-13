@@ -123,7 +123,7 @@ function Digest({ digest }) {
           <thead><tr><th>Site</th><th>Sessions</th><th>vs 7d</th><th>Users</th><th>Search clicks</th></tr></thead>
           <tbody>
             {digest.sites.map((s) => s.error ? (
-              <tr key={s.id}><td><b>{s.label}</b></td><td colspan={4} class="small" style={{ color: 'var(--critical-ink)' }}>{s.error}</td></tr>
+              <tr key={s.id}><td><b>{s.label}</b></td><td colspan={4} class="small text-bad">{s.error}</td></tr>
             ) : (
               <tr key={s.id}>
                 <td><a href={`#/site/${s.id}/overview`}><b>{s.label}</b></a></td>
@@ -186,16 +186,6 @@ export function useUnreadAlerts() {
     };
   }, []);
   return unread;
-}
-
-// Classic sidebar entry with the unread count.
-export function AlertsNavItem({ active }) {
-  const { unread } = useUnreadAlerts();
-  return (
-    <a class={`nav-item${active ? ' active' : ''}`} href="#/alerts">
-      <Icon name="bell" /> Alerts {unread > 0 && <span class="count badge">{unread}</span>}
-    </a>
-  );
 }
 
 const n = (v) => Number(v || 0).toLocaleString();

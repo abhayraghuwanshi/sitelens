@@ -30,7 +30,7 @@ export const todoApi = {
 };
 
 // "Add to to-dos" for something Studio suggested; once added, a link to the list.
-export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls = 'nx-btn' }) {
+export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls = 'btn' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   if (added) {
@@ -83,7 +83,7 @@ export function NewTodo({ site, link = '', placeholder = 'What needs doing? e.g.
       <div class="todo-new-row">
         <input type="text" value={title} placeholder={placeholder} aria-label="New to-do" maxLength={200}
           onInput={(e) => setTitle(e.currentTarget.value)} />
-        <button type="submit" class="nx-btn primary" disabled={busy || !title.trim()}><Icon name="plus" size={13} /> {busy ? 'Adding…' : 'Add'}</button>
+        <button type="submit" class="btn primary" disabled={busy || !title.trim()}><Icon name="plus" size={13} /> {busy ? 'Adding…' : 'Add'}</button>
       </div>
       {more
         ? <textarea rows={3} value={detail} placeholder="Details: what to change, why, links…" aria-label="Details" onInput={(e) => setDetail(e.currentTarget.value)} />
@@ -112,8 +112,8 @@ function TodoItem({ todo, sites, showSite }) {
           <input type="text" value={title} maxLength={200} aria-label="To-do" onInput={(e) => setTitle(e.currentTarget.value)} />
           <textarea rows={3} value={detail} placeholder="Details" aria-label="Details" onInput={(e) => setDetail(e.currentTarget.value)} />
           <div class="todo-new-row">
-            <button type="submit" class="nx-btn primary">Save</button>
-            <button type="button" class="nx-btn" onClick={() => { setEditing(false); setTitle(todo.title); setDetail(todo.detail || ''); }}>Cancel</button>
+            <button type="submit" class="btn primary">Save</button>
+            <button type="button" class="btn" onClick={() => { setEditing(false); setTitle(todo.title); setDetail(todo.detail || ''); }}>Cancel</button>
           </div>
           {error && <p class="nx-error" role="alert">{error}</p>}
         </form>
@@ -178,14 +178,14 @@ function TodoDetails({ id, site }) {
               </li>
             ))}
           </ol>
-        ) : <p class="nx-dim small">None yet. Add yours below, or ask Claude to work on it.</p>}
+        ) : <p class="muted small">None yet. Add yours below, or ask Claude to work on it.</p>}
         <WriteUp id={todo.id} />
       </div>
       <div class="todo-section">
         <span class="nx-label-sm">Ask Claude in a terminal</span>
         <div class="todo-ask">
           <code>{ask}</code>
-          <button type="button" class="nx-btn" onClick={() => navigator.clipboard?.writeText(ask)}>Copy</button>
+          <button type="button" class="btn" onClick={() => navigator.clipboard?.writeText(ask)}>Copy</button>
         </div>
       </div>
     </div>
@@ -195,7 +195,7 @@ function TodoDetails({ id, site }) {
 const num = (v) => (Number.isFinite(v) ? Math.round(v).toLocaleString('en-US') : '–');
 const delta = (r) => {
   const d = (r.value || 0) - (r.previous || 0);
-  return <span class={d > 0 ? 'good' : d < 0 ? 'bad' : 'nx-dim'}>{d > 0 ? '+' : ''}{num(d)}</span>;
+  return <span class={d > 0 ? 'good' : d < 0 ? 'bad' : 'muted'}>{d > 0 ? '+' : ''}{num(d)}</span>;
 };
 
 function Rows({ title, note, rows, cols }) {
@@ -203,7 +203,7 @@ function Rows({ title, note, rows, cols }) {
   return (
     <div class="todo-section">
       <span class="nx-label-sm">{title}</span>
-      {note && <span class="nx-dim small">{note}</span>}
+      {note && <span class="muted small">{note}</span>}
       <table class="todo-table">
         <thead><tr>{cols.map(([label]) => <th key={label}>{label}</th>)}</tr></thead>
         <tbody>{rows.map((r, i) => <tr key={i}>{cols.map(([label, cell]) => <td key={label}>{cell(r)}</td>)}</tr>)}</tbody>
@@ -216,7 +216,7 @@ const MOVED = [['', (r) => r.key], ['Now', (r) => num(r.value)], ['Before', (r) 
 const SEARCHES = [['Search', (r) => r.query], ['Clicks', (r) => num(r.clicks)], ['Impressions', (r) => num(r.impressions)], ['CTR', (r) => `${r.ctr}%`], ['Position', (r) => r.position]];
 
 function TodoData({ c }) {
-  if (c.note) return <p class="nx-dim small">{c.note}</p>;
+  if (c.note) return <p class="muted small">{c.note}</p>;
   const main = c.source || c.page || c.query;
   const t = c.searchTotals;
   const added = c.whenAdded;
@@ -226,7 +226,7 @@ function TodoData({ c }) {
         <span class="nx-label-sm">The numbers · {c.period.from} to {c.period.to}, against {c.period.comparedWith}</span>
         {main && <p><b>{main.key}</b>: {num(main.value)} {c.query ? 'search clicks' : 'visits'}, {num(main.previous)} before ({delta(main)}).</p>}
         {t && <p>In Google: {num(t.clicks)} clicks from {num(t.impressions)} impressions, {t.ctr}% CTR, average position {t.position}.</p>}
-        {added && <p class="nx-dim small">When added: {Object.entries(added).filter(([k]) => !['from', 'to'].includes(k)).map(([k, v]) => `${k} ${typeof v === 'number' ? num(v) : v}`).join(' · ')}{added.from ? ` (${added.from} to ${added.to})` : ''}</p>}
+        {added && <p class="muted small">When added: {Object.entries(added).filter(([k]) => !['from', 'to'].includes(k)).map(([k, v]) => `${k} ${typeof v === 'number' ? num(v) : v}`).join(' · ')}{added.from ? ` (${added.from} to ${added.to})` : ''}</p>}
         {c.sinceDone && <p class="todo-since">{c.sinceDone.value !== undefined ? <><b>Since done:</b> {num(c.sinceDone.value)} {c.sinceDone.metric} in {c.sinceDone.days} days, against {num(c.sinceDone.before)} in the {c.sinceDone.days} days before.</> : c.sinceDone.note}</p>}
         {c.finding && <p>{c.finding.title ? <><b>{c.finding.title}</b> {c.finding.detail} {c.finding.action && <>Do: {c.finding.action}</>}</> : c.finding.note}</p>}
       </div>
@@ -266,8 +266,8 @@ function WriteUp({ id }) {
       <textarea rows={2} value={form.changes} placeholder="What you changed (files, PR, old → new title)" aria-label="What you changed" onInput={set('changes')} />
       <textarea rows={2} value={form.expected} placeholder="What should happen, and when to look again" aria-label="What should happen" onInput={set('expected')} />
       <div class="todo-new-row">
-        <button type="submit" class="nx-btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save write-up'}</button>
-        <button type="button" class="nx-btn" onClick={() => setOpen(false)}>Cancel</button>
+        <button type="submit" class="btn primary" disabled={busy}>{busy ? 'Saving…' : 'Save write-up'}</button>
+        <button type="button" class="btn" onClick={() => setOpen(false)}>Cancel</button>
       </div>
       {error && <p class="nx-error" role="alert">{error}</p>}
     </form>
@@ -282,7 +282,7 @@ export function TodoList({ todos, sites, showSite = false, empty }) {
     <>
       {open.length ? (
         <ul class="todos">{open.map((t) => <TodoItem key={t.id + t.status} todo={t} sites={sites} showSite={showSite} />)}</ul>
-      ) : <p class="nx-dim">{empty}</p>}
+      ) : <p class="muted">{empty}</p>}
       {done.length > 0 && (
         <>
           <button type="button" class="todo-link" aria-expanded={showDone} onClick={() => setShowDone(!showDone)}>
@@ -302,7 +302,7 @@ export function TodosPage({ site, sites }) {
     <>
       <section class="nx-card">
         <NewTodo site={site} />
-        <p class="nx-note">Add them here, from “What to do next” on the Story, or from an article. Tick one off when the change is live: it goes on the Timeline that day, so the charts show whether it helped.</p>
+        <p class="note">Add them here, from “What to do next” on the Story, or from an article. Tick one off when the change is live: it goes on the Timeline that day, so the charts show whether it helped.</p>
       </section>
       <section class="nx-card" aria-label="To-dos">
         {list.error ? <ErrorState error={list.error} onRetry={list.reload} />

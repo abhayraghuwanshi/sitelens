@@ -36,7 +36,7 @@ export function OutcomesPage({ site, params, back }) {
     body = (
       <section class="nx-card">
         <p class="nx-lede">Outcomes are measured per product: this site plus its store listing or repos, and the goals that count as a result (a download, an install, a sign-up).</p>
-        <div class="nx-action-row"><a class="nx-btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
+        <div class="nx-action-row"><a class="btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
       </section>
     );
   } else body = <OutcomeBody key={`${product.id}:${range}`} site={site} product={product} range={range} />;
@@ -81,7 +81,7 @@ function Actions({ site, insights, range }) {
   return (
     <section class="nx-card nx-next" aria-label="What to do">
       <SectionHead n="2" title="What to do" more={{ href: `#/site/${site.id}/todos`, label: 'Your to-dos' }} />
-      {!insights.length && <p class="nx-dim">Nothing stands out yet. Findings appear once there’s enough traffic and at least one goal event.</p>}
+      {!insights.length && <p class="muted">Nothing stands out yet. Findings appear once there’s enough traffic and at least one goal event.</p>}
       {fix.length > 0 && (
         <div class="nx-step-group">
           <div class="nx-label-sm"><Icon name="triangle" size={12} /> Fix first</div>
@@ -104,7 +104,7 @@ function Actions({ site, insights, range }) {
           <ul class="nx-list">
             {know.map((i) => (
               <li key={i.key}>
-                <b>{i.title}.</b> <span class="nx-dim">{i.detail}{i.action && ` ${i.action}`}</span>
+                <b>{i.title}.</b> <span class="muted">{i.detail}{i.action && ` ${i.action}`}</span>
               </li>
             ))}
           </ul>
@@ -120,16 +120,16 @@ function Finding({ site, item, range, todo }) {
   return (
     <div class={`nx-action${todo ? ' started' : ''}${item.tone === 'bad' ? ' nx-action-bad' : ''}`}>
       <b>{item.title}</b>
-      {item.detail && <span class="nx-dim">{item.detail}</span>}
+      {item.detail && <span class="muted">{item.detail}</span>}
       {item.action && <span><b class="nx-do">Do</b> {item.action}</span>}
       {(item.action || link) && <div class="nx-action-row">
         {link && (
-          <a class="nx-btn" href={link} {...(link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>
+          <a class="btn" href={link} {...(link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>
             {item.link ? <>Open GA4 <Icon name="external" size={11} /></> : 'See that day'}
           </a>
         )}
         {item.action && (
-          <AddTodo site={site} added={todo} class="nx-btn quiet"
+          <AddTodo site={site} added={todo} class="btn ghost"
             todo={{ title: item.title, detail: why, link: item.link || `#/site/${site.id}/outcomes?range=${range}`, from: `outcome:${item.key}`, subject: { kind: 'outcome', key: item.key } }} />
         )}
       </div>}
@@ -165,14 +165,14 @@ function Path({ funnel, host, series }) {
                     <span class="nx-path" title={s.event || ''}>{s.label}</span>
                     <div class="nx-bar"><span class={i === funnel.steps.length - 1 ? 'last' : ''} style={{ width: `${Math.max(1.5, Math.min(100, (s.users / top) * 100))}%` }} /></div>
                     <span class="nx-num">{fmt(s.users)}</span>
-                    <span class={`small ${leak ? 'bad' : 'nx-dim'}`}>{i ? `${pct(s.rate)} go on` : ''}</span>
+                    <span class={`small ${leak ? 'bad' : 'muted'}`}>{i ? `${pct(s.rate)} go on` : ''}</span>
                   </div>
                 );
               })}
             </div>
-          ) : <p class="nx-dim">No site visitors in this range, or the site isn’t linked to a GA4 property.</p>}
+          ) : <p class="muted">No site visitors in this range, or the site isn’t linked to a GA4 property.</p>}
           {funnel.store && (
-            <p class="nx-note" style={{ marginTop: '10px' }}>
+            <p class="note" style={{ marginTop: '10px' }}>
               Beside it, to the Web Store: {fmt(funnel.store.visitors)} listing visitors came from {host || 'the site'} ({pct(funnel.store.rate)} of site visitors), and {fmt(funnel.store.installs)} installed.
             </p>
           )}
@@ -206,7 +206,7 @@ function Sources({ d }) {
         <h2 class="nx-h2"><span class="nx-step" aria-hidden="true">4</span>Who converts</h2>
         {cuts.length > 1 && <Segmented label="Split by" value={cut.key} options={cuts.map((c) => ({ key: c.key, label: c.label }))} onChange={setPick} />}
       </div>
-      <p class="nx-note">{cut.note} The best rate with at least 5 visitors is marked.</p>
+      <p class="note">{cut.note} The best rate with at least 5 visitors is marked.</p>
       <div class={`nx-table nx-conv${cut.engaged ? ' engaged' : ''}`}>
         <div class="nx-tr nx-th"><span /><span class="nx-num">Visitors</span><span class="nx-num">{cut.col}</span><span>Rate</span>{cut.engaged && <span class="nx-num">Engaged</span>}</div>
         {cut.rows.slice(0, 12).map((r) => {
@@ -244,10 +244,10 @@ function Goals({ d, site, onRefresh, refreshing }) {
     <details class="nx-card nx-goals">
       <summary>
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
-          <span class="nx-dim"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
+          <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
         <span class="nx-action-row">
-          <a class="nx-btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
-          <button class="nx-btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>
+          <a class="btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
+          <button class="btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>
         </span>
       </summary>
       <div class="nx-table nx-goal-table">
@@ -255,14 +255,14 @@ function Goals({ d, site, onRefresh, refreshing }) {
         {g.list.map((x) => (
           <div class="nx-tr" key={x.id}>
             <span>{x.label}</span>
-            <span class="small nx-dim">{SOURCE_LABEL[x.source]}{x.match && <> · <span class="mono">{x.match}</span></>}</span>
+            <span class="small muted">{SOURCE_LABEL[x.source]}{x.match && <> · <span class="mono">{x.match}</span></>}</span>
             <span class="small">{x.role === 'outcome' ? 'Outcome' : 'Step'}</span>
-            <span class="nx-num">{x.unavailable ? <span class="nx-dim small">{x.unavailable}</span> : fmt(x.count)}</span>
-            <span class="nx-num nx-dim">{x.previous === null || x.previous === undefined ? '–' : fmt(x.previous)}</span>
+            <span class="nx-num">{x.unavailable ? <span class="muted small">{x.unavailable}</span> : fmt(x.count)}</span>
+            <span class="nx-num muted">{x.previous === null || x.previous === undefined ? '–' : fmt(x.previous)}</span>
           </div>
         ))}
       </div>
-      {g.keyEvents === 0 && g.list.some((x) => x.source === 'event') && <p class="nx-note">GA4 has none of these events marked as key events, so its own reports show 0 conversions.</p>}
+      {g.keyEvents === 0 && g.list.some((x) => x.source === 'event') && <p class="note">GA4 has none of these events marked as key events, so its own reports show 0 conversions.</p>}
     </details>
   );
 }

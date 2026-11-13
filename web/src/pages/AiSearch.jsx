@@ -286,7 +286,7 @@ function AnswerChecks({ site, initial, onDone }) {
       {msg && <p class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
       {fromFile ? (
         <p class="note">
-          These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+          These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in the site’s settings</a>
         </p>
       ) : a.from === 'auto' && !site.demo && (
         <p class="note">
@@ -370,7 +370,7 @@ function WeeklyToggle({ on, onChange }) {
 // One assistant's latest answer to one question.
 function Verdict({ l }) {
   if (!l) return <span class="small muted">—</span>;
-  if (l.error) return <span class="small" style={{ color: 'var(--critical-ink)' }} title={l.error}>error</span>;
+  if (l.error) return <span class="small text-bad" title={l.error}>error</span>;
   if (l.cited) return <span class="chip good" title={l.mentioned ? 'Named you and cited your site' : 'Cited your site'}>{l.mentioned ? 'Named · ' : ''}#{l.rank}</span>;
   if (l.mentioned) return <span class="chip good">Named</span>;
   if (l.inResults) return <span class="chip" title="Your site was in its search results but not named or cited">seen</span>;

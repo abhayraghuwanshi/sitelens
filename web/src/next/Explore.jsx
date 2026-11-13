@@ -14,7 +14,7 @@ import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page } from './Page.jsx';
 import { Campaigns } from './Campaigns.jsx';
 
-// Explore: every full report from the classic layout, as tabs. The Story links
+// Explore: every full report, as tabs. The Story links
 // into these for detail. Ranges follow what each report reads: GA4 reports take
 // the API ranges, BigQuery ones 7/28/90 days, Bing its long history.
 export const EXPLORE_TABS = [
@@ -33,7 +33,7 @@ export const EXPLORE_TABS = [
   { key: 'retention', label: 'Retention', mode: 'warehouse', component: Retention },
   { key: 'events', label: 'Events', mode: 'warehouse', component: Events },
   { key: 'sql', label: 'SQL', mode: 'warehouse', component: SqlConsole },
-  { key: 'overview', label: 'Classic overview', mode: 'api', component: Overview },
+  { key: 'overview', label: 'Overview', mode: 'api', component: Overview },
 ];
 
 // Pages: the high level on top (Google and Bing for the site) and every page
@@ -106,9 +106,9 @@ export function ExploreFrame({ site, view, params, auth, ranges: lists }) {
         next.set('range', key);
         location.hash = `/site/${site.id}/${tab.key}?${next}`;
       }} />}>
-      <nav class="nx-tabs" aria-label="Reports">
+      <nav class="tabs" aria-label="Reports">
         {shown.map((t) => (
-          <a key={t.key} class={`nx-tab${t === tab ? ' active' : ''}`} href={`#/site/${site.id}/${t.key}`} aria-current={t === tab ? 'page' : undefined}>{t.label}</a>
+          <a key={t.key} class={t === tab ? 'active' : undefined} href={`#/site/${site.id}/${t.key}`} aria-current={t === tab ? 'page' : undefined}>{t.label}</a>
         ))}
       </nav>
       <div class="nx-explore-body">

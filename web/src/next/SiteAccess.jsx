@@ -19,7 +19,7 @@ function DesktopNote({ site }) {
     <section class="nx-card nx-access" aria-label="People with access">
       <div>
         <h3 class="nx-fn-title">People with access</h3>
-        <p class="nx-dim small" style={{ margin: 0 }}>
+        <p class="muted small" style={{ margin: 0 }}>
           This desktop app runs on your computer, so only you can open it. To let others view {site.label} (view only, just this site), share it from the hosted Studio:
           add the site there, then add people by email on its Edit page.
         </p>
@@ -75,7 +75,7 @@ function SharedList({ site }) {
       <div class="nx-jsum-bar">
         <div>
           <h3 class="nx-fn-title">People with access</h3>
-          <p class="nx-dim small" style={{ margin: 0 }}>
+          <p class="muted small" style={{ margin: 0 }}>
             They can look at {site.label}’s dashboards and reports. They can’t change anything, see your other sites, or reach your Google, GitHub or other accounts.
           </p>
         </div>
@@ -96,15 +96,15 @@ function SharedList({ site }) {
                 <span class="nx-access-avatar" aria-hidden="true">{p.email[0].toUpperCase()}</span>
                 <span class="nx-access-who">
                   <b>{p.email}</b>
-                  <span class="nx-dim small">View only · added {day(p.addedAt)} · {p.lastSeen ? `last here ${day(p.lastSeen)}` : 'hasn’t signed in yet'}</span>
+                  <span class="muted small">View only · added {day(p.addedAt)} · {p.lastSeen ? `last here ${day(p.lastSeen)}` : 'hasn’t signed in yet'}</span>
                 </span>
                 <button class="btn ghost" type="button" disabled={busy} onClick={() => run(() => api.del(`/shares${qs({ site: site.id, email: p.email })}`))}
                   aria-label={`Remove ${p.email}`}>Remove</button>
               </li>
             ))}
           </ul>
-        ) : <p class="nx-dim small" style={{ margin: 0 }}>Only you can see this site.</p>}
-      <p class="nx-dim small nx-access-how">
+        ) : <p class="muted small" style={{ margin: 0 }}>Only you can see this site.</p>}
+      <p class="muted small nx-access-how">
         Send them this link; they sign in with the Google account for that email: <code>{signIn}</code>{' '}
         <button class="btn ghost" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
         <br />Removing someone ends their access straight away. Their visits run your BigQuery queries, on your Google Cloud bill.

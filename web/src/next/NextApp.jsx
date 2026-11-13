@@ -27,14 +27,14 @@ import './next.css';
 
 // The story-first layout: Sites → one site's Story, its Timeline, and Explore for
 // every full report. A site is set up on its Edit page (Account → Sites & products),
-// which also holds sharing, left-out visits and what Studio measures. It lives beside the classic layout (App.jsx)
-// and reuses its pages, so nothing has to be rebuilt to fit in.
+// which also holds sharing, left-out visits and what Studio measures. It is Studio's
+// only layout, and reuses the report pages in pages/.
 // Routes: #/ · #/site/<id>[/story|todos|outcomes|timeline|explore|<explore view>]
 // (#/site/<id>/setup, from older links, opens that site's Edit page) · #/todos · #/account
-// Classic routes (#/calendar, #/settings, #/outcomes…) still open here.
+// Older routes (#/calendar, #/settings, #/outcomes…) still open here.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
 
-export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload }) {
+export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const { sites, auth } = state;
   const [lastSite, setLastSite] = usePersistent('site', 'demo');
   const [section, siteId, view = 'story'] = route.parts;
@@ -104,7 +104,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
         <div class="nx-side-top">
           <a class="nx-brand" href="#/" aria-label="SiteLens Studio, all sites">
             <Logo size={26} title="" />
-            <span>SiteLens <span class="nx-dim">Studio</span></span>
+            <span>SiteLens <span class="muted">Studio</span></span>
           </a>
           <button type="button" class="nx-icon-btn nx-menu-btn" onClick={() => setMenu(!menu)}
             aria-expanded={menu} aria-controls="nx-side-body" aria-label={menu ? 'Close menu' : 'Open menu'}>
@@ -146,7 +146,6 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
             </span>)}
             <button type="button" class="nx-icon-btn" onClick={onTheme} aria-label="Switch theme" title="Switch theme"><Icon name={themeIcon} /></button>
           </div>
-          {!state.hosted && <button type="button" class="nx-switch" onClick={onClassic}>Back to the classic layout</button>}
           {state.hosted && (
             <form method="post" action="/logout">
               <button type="submit" class="nx-switch nx-signout">Sign out</button>

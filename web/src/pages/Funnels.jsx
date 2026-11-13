@@ -73,7 +73,7 @@ export function Funnels({ site, range }) {
             {c.name}{c.from === 'suggested' && <span class="nx-fn-tag">suggested</span>}
           </button>
         ))}
-        {!suggestions.data && !suggestions.error && <span class="nx-dim small">Finding suggestions…</span>}
+        {!suggestions.data && !suggestions.error && <span class="muted small">Finding suggestions…</span>}
         <button type="button" class={`nx-fn-chip ghost${editing || (run && !current) ? ' active' : ''}`} onClick={() => setEditing(!editing)} aria-expanded={editing}>
           <Icon name={editing ? 'x' : 'plus'} size={12} /> {editing ? 'Close editor' : current ? 'Edit steps' : 'Custom funnel'}
         </button>
@@ -108,7 +108,7 @@ function labeller(goals) {
 function FunnelView({ data, name, label }) {
   const steps = data.steps;
   const first = steps[0]?.sessions || 0;
-  if (!first) return <p class="nx-dim">No visits reached the first step in this period.</p>;
+  if (!first) return <p class="muted">No visits reached the first step in this period.</p>;
   const last = steps.at(-1);
   // The step that loses the largest share of the people who reached the one before it.
   const leak = steps.slice(1).reduce((worst, s, k) => (s.stepRate < 1 && (!worst || s.stepRate < worst.s.stepRate) ? { s, i: k + 1 } : worst), null);
@@ -118,14 +118,14 @@ function FunnelView({ data, name, label }) {
       <div class="nx-jsum-bar">
         <div>
           <h3 class="nx-fn-title">{name}</h3>
-          <p class="nx-dim small" style={{ margin: 0 }}>Visits that did each step in this order, in one visit.</p>
+          <p class="muted small" style={{ margin: 0 }}>Visits that did each step in this order, in one visit.</p>
         </div>
       </div>
       <div class="nx-jsum-stats nx-tiles">
-        <div><b>{formatNumber(first)}</b><span class="nx-dim small">started · {label.short(steps[0])}</span></div>
-        <div><b class={last.sessions ? 'good' : ''}>{formatNumber(last.sessions)}</b><span class="nx-dim small">finished · {label.short(last)}</span></div>
-        <div><b>{formatPercent(last.rate)}</b><span class="nx-dim small">made it all the way</span></div>
-        {leak && <div><b class="bad">−{formatPercent(1 - leak.s.stepRate, 0)}</b><span class="nx-dim small">biggest drop · before step {leak.i + 1}</span></div>}
+        <div><b>{formatNumber(first)}</b><span class="muted small">started · {label.short(steps[0])}</span></div>
+        <div><b class={last.sessions ? 'good' : ''}>{formatNumber(last.sessions)}</b><span class="muted small">finished · {label.short(last)}</span></div>
+        <div><b>{formatPercent(last.rate)}</b><span class="muted small">made it all the way</span></div>
+        {leak && <div><b class="bad">−{formatPercent(1 - leak.s.stepRate, 0)}</b><span class="muted small">biggest drop · before step {leak.i + 1}</span></div>}
       </div>
 
       <div class="nx-fn-flow" role="list">
@@ -140,7 +140,7 @@ function FunnelView({ data, name, label }) {
                   {prev.sessions > s.sessions
                     ? <><b>−{formatPercent(1 - s.stepRate, 0)}</b><span class="small">{formatNumber(prev.sessions - s.sessions)} left</span></>
                     : <b class="good">none lost</b>}
-                  {s.avgSeconds !== null && <span class="small nx-dim">~{formatDuration(s.avgSeconds)}</span>}
+                  {s.avgSeconds !== null && <span class="small muted">~{formatDuration(s.avgSeconds)}</span>}
                 </div>
               )}
               <div class="nx-fn-step" role="listitem" key={`s${i}`}>
@@ -153,7 +153,7 @@ function FunnelView({ data, name, label }) {
                   {prev && <span class="nx-fn-ghost" style={{ height: `${Math.max(1, (prev.sessions / first) * 100)}%` }} />}
                   <span class={`nx-fn-bar${i === steps.length - 1 ? ' last' : ''}`} style={{ height: `${Math.max(1, (s.sessions / first) * 100)}%` }} />
                 </div>
-                <div class="nx-fn-count"><b>{formatNumber(s.sessions)}</b> <span class="nx-dim small">{formatPercent(s.rate, s.rate < 0.1 ? 1 : 0)}</span></div>
+                <div class="nx-fn-count"><b>{formatNumber(s.sessions)}</b> <span class="muted small">{formatPercent(s.rate, s.rate < 0.1 ? 1 : 0)}</span></div>
               </div>
             </>
           );
@@ -164,7 +164,7 @@ function FunnelView({ data, name, label }) {
         <div>
           <h3 class="nx-jsum-h">What it means</h3>
           <ul class="nx-jfind nx-jfind-3">
-            {notes.map((n) => <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="nx-dim small">{n.detail}</span></li>)}
+            {notes.map((n) => <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="muted small">{n.detail}</span></li>)}
           </ul>
         </div>
       )}

@@ -51,7 +51,7 @@ export function VercelSettings() {
           {s.tokenSource
             ? <>{s.tokenSource === 'oauth' ? 'Connected to Vercel' : <>Token from {s.tokenSource === 'env' ? <code>VERCEL_TOKEN</code> : 'Settings'}</>}{s.login && <> · <b>{s.login}</b></>}
                 {s.teamId && <> · <span class="mono">{s.teamId}</span></>}
-                {s.lastError && <span style={{ color: 'var(--critical-ink)' }}> · {s.lastError}</span>}</>
+                {s.lastError && <span class="text-bad"> · {s.lastError}</span>}</>
             : 'No token yet'}
         </div>
         {canConnect && (

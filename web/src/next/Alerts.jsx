@@ -54,9 +54,9 @@ export function AlertsPage({ site, sites }) {
       {!settings.enabled && (
         <section class="nx-card nx-warn alert-paused">
           <div>
-            <b>Alerts are paused.</b> <span class="nx-dim">Nothing is checked in the background until you turn them back on.</span>
+            <b>Alerts are paused.</b> <span class="muted">Nothing is checked in the background until you turn them back on.</span>
           </div>
-          <a class="nx-btn" href="#/alerts?view=settings">Turn on</a>
+          <a class="btn" href="#/alerts?view=settings">Turn on</a>
         </section>
       )}
 
@@ -64,20 +64,20 @@ export function AlertsPage({ site, sites }) {
         <div class="alert-bar">
           <div class="alert-status">
             <span class="alert-big">{unread ? `${unread} unread` : 'All caught up'}</span>
-            <span class="nx-dim small">
+            <span class="muted small">
               {lastRun ? `Last checked ${formatRelative(lastRun.at)}${lastRun.daily ? '' : ' (GitHub & Web Store only)'}` : 'Not checked yet'}
               {' · '}GitHub and Web Store hourly, GA4 and Search Console daily after {hourLabel(settings.digestHour)}
             </span>
           </div>
           <div class="alert-actions">
             {unread > 0 && (
-              <button type="button" class="nx-btn" disabled={Boolean(busy)}
+              <button type="button" class="btn" disabled={Boolean(busy)}
                 onClick={() => act('read', () => api.post('/alerts/read', { all: true, site: site?.id || '' }), (r) => `Marked ${r.changed} as read.`)}>
                 Mark all read
               </button>
             )}
-            <a class="nx-btn" href="#/alerts?view=settings"><Icon name="settings" size={13} /> Settings</a>
-            <button type="button" class="nx-btn primary" disabled={Boolean(busy)}
+            <a class="btn" href="#/alerts?view=settings"><Icon name="settings" size={13} /> Settings</a>
+            <button type="button" class="btn primary" disabled={Boolean(busy)}
               onClick={() => act('run', () => api.post('/alerts/run', { digest: true }),
                 (r) => `Checked everything: ${r.fired.length ? `${r.fired.length} new alert${r.fired.length === 1 ? '' : 's'}` : 'nothing new'}${r.errors.length ? `, ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} failed` : ''}.`)}>
               <Icon name="refresh" size={13} /> {busy === 'run' ? 'Checking…' : 'Check now'}
@@ -85,7 +85,7 @@ export function AlertsPage({ site, sites }) {
           </div>
         </div>
         {siteDigest && !siteDigest.error && (
-          <p class="nx-note">
+          <p class="note">
             Latest digest ({digest.day}): <b>{n(siteDigest.sessions)}</b> sessions ({pct(siteDigest.sessionsChange)} vs the 7-day average), <b>{n(siteDigest.users)}</b> users
             {siteDigest.clicks !== undefined && <>, <b>{n(siteDigest.clicks)}</b> search clicks</>}.
           </p>
@@ -101,7 +101,7 @@ export function AlertsPage({ site, sites }) {
 
       <section class="nx-card" aria-label="Alerts">
         {fresh.length ? <ul class="alerts">{grouped(fresh).map(row)}</ul> : (
-          <p class="nx-dim" style={{ margin: 0 }}>
+          <p class="muted" style={{ margin: 0 }}>
             {alerts.length ? 'No new alerts.' : `No alerts${site ? ` for ${site.label}` : ''} yet. When traffic, search clicks, goals, stars or installs move past their limits, they show up here.`}
           </p>
         )}
@@ -158,7 +158,7 @@ function AlertItem({ group, label, site, onRead }) {
         </span>
         {open && (
           <ul class="alert-earlier">
-            {earlier.map((a) => <li key={a.id}><span>{a.title}</span> <span class="nx-dim">{formatRelative(a.at)}</span></li>)}
+            {earlier.map((a) => <li key={a.id}><span>{a.title}</span> <span class="muted">{formatRelative(a.at)}</span></li>)}
           </ul>
         )}
       </div>
@@ -171,7 +171,7 @@ function DigestCard({ digest }) {
     <section class="nx-card">
       <div class="nx-section-head">
         <h2 class="nx-h2">Daily digest</h2>
-        <span class="nx-dim small">{digest.day} · built {formatRelative(digest.at)}</span>
+        <span class="muted small">{digest.day} · built {formatRelative(digest.at)}</span>
       </div>
       {digest.sites.length > 0 && (
         <table class="todo-table">
@@ -183,9 +183,9 @@ function DigestCard({ digest }) {
               <tr key={s.id}>
                 <td><a href={`#/site/${s.id}/alerts`}>{s.label}</a></td>
                 <td>{n(s.sessions)}</td>
-                <td class={s.sessionsChange > 0 ? 'good' : s.sessionsChange < 0 ? 'bad' : 'nx-dim'}>{pct(s.sessionsChange)}</td>
+                <td class={s.sessionsChange > 0 ? 'good' : s.sessionsChange < 0 ? 'bad' : 'muted'}>{pct(s.sessionsChange)}</td>
                 <td>{n(s.users)}</td>
-                <td>{s.clicks === undefined ? <span class="nx-dim">–</span> : n(s.clicks)}</td>
+                <td>{s.clicks === undefined ? <span class="muted">–</span> : n(s.clicks)}</td>
               </tr>
             ))}
           </tbody>
@@ -207,7 +207,7 @@ function DigestCard({ digest }) {
         </table>
       )}
       {(digest.mentions || digest.github) && (
-        <p class="nx-note">
+        <p class="note">
           {digest.github && <>GitHub: <b>+{n(digest.github.stars)}</b> stars, <b>{n(digest.github.views)}</b> repo views. </>}
           {digest.mentions && <>Mentions: <b>{n(digest.mentions.count)}</b> new, top <a href={digest.mentions.link} target="_blank" rel="noreferrer">{digest.mentions.top}</a>.</>}
         </p>
@@ -281,11 +281,11 @@ export function AlertSettings() {
         <h2 class="nx-h2">Checking</h2>
         <label class="alert-toggle">
           <input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.currentTarget.checked })} />
-          <span><b>Check in the background</b><span class="nx-dim small">GitHub and Web Store every hour, GA4 and Search Console once a day.</span></span>
+          <span><b>Check in the background</b><span class="muted small">GitHub and Web Store every hour, GA4 and Search Console once a day.</span></span>
         </label>
         <label class="alert-toggle">
           <input type="checkbox" checked={form.includeDemo} onChange={(e) => set({ includeDemo: e.currentTarget.checked })} />
-          <span><b>Include the demo site</b><span class="nx-dim small">Its sample data can raise alerts too.</span></span>
+          <span><b>Include the demo site</b><span class="muted small">Its sample data can raise alerts too.</span></span>
         </label>
         <label class="alert-field">
           <span>Daily check and digest at</span>
@@ -297,10 +297,10 @@ export function AlertSettings() {
 
       <section class="nx-card">
         <h2 class="nx-h2">Where alerts go</h2>
-        <p class="nx-note">Every alert lands in Studio. You can also send it to these:</p>
+        <p class="note">Every alert lands in Studio. You can also send it to these:</p>
         <label class="alert-toggle">
           <input type="checkbox" checked={form.desktop} onChange={(e) => set({ desktop: e.currentTarget.checked })} />
-          <span><b>macOS notifications</b><span class="nx-dim small">From the desktop app, while it’s running.</span></span>
+          <span><b>macOS notifications</b><span class="muted small">From the desktop app, while it’s running.</span></span>
         </label>
         <label class="alert-field wide">
           <span>Slack or Discord webhook</span>
@@ -308,17 +308,17 @@ export function AlertSettings() {
             onInput={(e) => set({ webhookUrl: e.currentTarget.value })} />
         </label>
         <div class="alert-actions start">
-          <button type="button" class="nx-btn" disabled={Boolean(busy)}
+          <button type="button" class="btn" disabled={Boolean(busy)}
             onClick={() => act('test', () => api.post('/alerts/test'), (r) => ['desktop', 'webhook'].map((k) => `${k === 'desktop' ? 'macOS' : 'Webhook'}: ${r[k].ok ? 'sent' : r[k].error}`).join(' · '))}>
             {busy === 'test' ? 'Sending…' : 'Send a test'}
           </button>
-          <span class="nx-dim small">Test uses the saved settings.</span>
+          <span class="muted small">Test uses the saved settings.</span>
         </div>
       </section>
 
       <section class="nx-card">
         <h2 class="nx-h2">What to watch</h2>
-        <p class="nx-note">
+        <p class="note">
           A metric alerts when it moves past the change against its 7-day average, the bigger side has the minimum volume, and its z-score on the last 28 days passes the limit.
           Each alert fires once. A site’s .sitelens.yml can tune its own traffic and search limits.
         </p>
@@ -331,7 +331,7 @@ export function AlertSettings() {
                 <div key={key} class={`alert-rule${rule.enabled ? '' : ' off'}`}>
                   <label class="alert-rule-name">
                     <input type="checkbox" checked={rule.enabled} onChange={(e) => setRule(key, 'enabled', e.currentTarget.checked)} />
-                    <span>{name}{g.note?.[key] && <span class="nx-dim small">{g.note[key]}</span>}</span>
+                    <span>{name}{g.note?.[key] && <span class="muted small">{g.note[key]}</span>}</span>
                   </label>
                   <div class="alert-limits">
                     {Object.keys(rule).filter((f) => f !== 'enabled').map((field) => {
@@ -357,8 +357,8 @@ export function AlertSettings() {
       </section>
 
       <div class="alert-save">
-        <button type="submit" class="nx-btn primary" disabled={Boolean(busy) || !dirty}>{busy === 'save' ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
-        {dirty && <button type="button" class="nx-btn" onClick={() => setForm(structuredClone(data.data))}>Discard</button>}
+        <button type="submit" class="btn primary" disabled={Boolean(busy) || !dirty}>{busy === 'save' ? 'Saving…' : dirty ? 'Save changes' : 'Saved'}</button>
+        {dirty && <button type="button" class="btn" onClick={() => setForm(structuredClone(data.data))}>Discard</button>}
         {msg && <span class={`small ${msg.ok ? 'good' : 'nx-error'}`} role="status">{msg.text}</span>}
       </div>
     </form>

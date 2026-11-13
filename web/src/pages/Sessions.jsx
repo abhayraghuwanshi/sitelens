@@ -107,20 +107,20 @@ function Summary({ s, site, outcome, query, onPage, flow, depth, setDepth }) {
     : 'All sessions in the period';
   return (
     <section class="nx-card nx-jsum" aria-label="Sessions summary">
-      <p class="nx-dim small" style={{ margin: 0 }}>{scope}</p>
+      <p class="muted small" style={{ margin: 0 }}>{scope}</p>
       <div class="nx-jsum-stats nx-tiles">
-        <div><b>{fmt(s.sessions)}</b><span class="nx-dim small">sessions</span></div>
-        <div><b>{fmt(s.people)}</b><span class="nx-dim small">people · {pct(s.returning, s.sessions)} returning visits</span></div>
-        <div><b>{pct(s.onePage, s.sessions)}</b><span class="nx-dim small">saw only one page</span></div>
-        <div><b>{formatDuration(s.medianSec)}</b><span class="nx-dim small">median time on site</span></div>
-        {label && <div><b class={s.converted ? 'good' : ''}>{fmt(s.converted)}</b><span class="nx-dim small">{label.toLowerCase()} · {pct(s.converted, s.sessions)}</span></div>}
+        <div><b>{fmt(s.sessions)}</b><span class="muted small">sessions</span></div>
+        <div><b>{fmt(s.people)}</b><span class="muted small">people · {pct(s.returning, s.sessions)} returning visits</span></div>
+        <div><b>{pct(s.onePage, s.sessions)}</b><span class="muted small">saw only one page</span></div>
+        <div><b>{formatDuration(s.medianSec)}</b><span class="muted small">median time on site</span></div>
+        {label && <div><b class={s.converted ? 'good' : ''}>{fmt(s.converted)}</b><span class="muted small">{label.toLowerCase()} · {pct(s.converted, s.sessions)}</span></div>}
       </div>
       {notes.length > 0 && (
         <div>
           <h3 class="nx-jsum-h">What stands out</h3>
           <ul class="nx-jfind nx-jfind-3">
             {notes.map((n) => (
-              <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="nx-dim small">{n.detail}</span></li>
+              <li key={n.title} class={`tone-${n.tone}`}><b>{n.title}</b><span class="muted small">{n.detail}</span></li>
             ))}
           </ul>
         </div>
@@ -133,7 +133,7 @@ function Summary({ s, site, outcome, query, onPage, flow, depth, setDepth }) {
         {flow.error ? <ErrorState error={flow.error} onRetry={flow.reload} />
           : !flow.data ? <Loading height={340} />
           : <Sankey edges={flow.data.edges} total={flow.data.total} height={340} onSelect={onPage} />}
-        <p class="nx-dim small" style={{ margin: '6px 0 0' }}>Reloads collapsed. Click a page to filter everything to it.</p>
+        <p class="muted small" style={{ margin: '6px 0 0' }}>Reloads collapsed. Click a page to filter everything to it.</p>
       </div>
       <div class="nx-ssum-lists">
         <TopList title="Landed on" rows={s.landing} total={s.sessions} label={label} name={pageName} onPick={onPage} />
@@ -157,9 +157,9 @@ function TopList({ title, rows, total, label, name = (x) => x, onPick, head }) {
             <>
               <span class="nx-ssum-name" title={x.name}>{name(x.name)}</span>
               <span class="nx-num">{fmt(x.n)} {x.exitRate != null
-                ? <span class={`small ${x.exitRate >= 0.7 ? 'bad' : 'nx-dim'}`} title="Exit rate: the share of this page's views that were the last page of the session">{Math.round(x.exitRate * 100)}% exit</span>
-                : <span class="nx-dim small">{pct(x.n, total)}</span>}</span>
-              {label && <span class="nx-num small"><b class={x.converted ? 'good' : 'nx-dim'}>{fmt(x.converted)}</b></span>}
+                ? <span class={`small ${x.exitRate >= 0.7 ? 'bad' : 'muted'}`} title="Exit rate: the share of this page's views that were the last page of the session">{Math.round(x.exitRate * 100)}% exit</span>
+                : <span class="muted small">{pct(x.n, total)}</span>}</span>
+              {label && <span class="nx-num small"><b class={x.converted ? 'good' : 'muted'}>{fmt(x.converted)}</b></span>}
               <span class="nx-bar nx-ssum-bar"><span style={{ width: `${Math.max(1.5, (x.n / max) * 100)}%` }} /></span>
             </>
           );
@@ -167,7 +167,7 @@ function TopList({ title, rows, total, label, name = (x) => x, onPick, head }) {
             ? <button type="button" class={`nx-ssum-row${label ? '' : ' nolabel'}`} key={x.name} title={`Show sessions that visited ${x.name}`} onClick={() => onPick(x.name)}>{inner}</button>
             : <div class={`nx-ssum-row${label ? '' : ' nolabel'}`} key={x.name}>{inner}</div>;
         })}
-        {!rows.length && <span class="nx-dim small">Nothing recorded.</span>}
+        {!rows.length && <span class="muted small">Nothing recorded.</span>}
       </div>
     </div>
   );

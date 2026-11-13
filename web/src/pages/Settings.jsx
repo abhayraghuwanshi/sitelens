@@ -223,7 +223,7 @@ function GitHubSettings({ state, sources, onChange }) {
           {gh.tokenSource
             ? <>{gh.tokenSource === 'oauth' ? 'Connected to GitHub' : <>Token from {gh.tokenSource === 'env' ? <code>GITHUB_TOKEN</code> : 'Settings'}</>}{gh.login && <> · <b>@{gh.login}</b></>}
                 {gh.data.ok && <> · {gh.data.repos} repos stored</>}
-                {gh.lastError && <span style={{ color: 'var(--critical-ink)' }}> · {gh.lastError}</span>}</>
+                {gh.lastError && <span class="text-bad"> · {gh.lastError}</span>}</>
             : 'No token yet'}
         </div>
         {canConnect && (

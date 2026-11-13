@@ -105,7 +105,7 @@ function TopicDetail({ t }) {
                 <td class="num">{x.clicks == null ? '—' : formatNumber(x.clicks)}</td>
                 <td class="small">
                   {x.page ? <code>{x.page}</code> : <span class="muted">—</span>}
-                  {x.wrongPage && <span style={{ color: 'var(--critical-ink)' }}> · not {t.page}</span>}
+                  {x.wrongPage && <span class="text-bad"> · not {t.page}</span>}
                   {x.potential > 0 && <span class="muted"> · top 3 ≈ +{formatNumber(x.potential)}</span>}
                 </td>
               </tr>

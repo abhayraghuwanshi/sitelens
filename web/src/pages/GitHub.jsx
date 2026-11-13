@@ -62,7 +62,7 @@ function SyncBar({ sync, onSynced }) {
       <span><Icon name="github" size={13} /> {sync.login || sync.data.login ? `@${sync.login || sync.data.login}` : 'GitHub token'} · syncs hourly while Studio runs</span>
       <span>{sync.running || busy ? 'Syncing…' : lastSync ? `last sync ${formatRelative(lastSync)}` : 'not synced yet'}</span>
       {sync.rateRemaining !== null && <span>{formatNumber(sync.rateRemaining)} API calls left this hour</span>}
-      {(error || sync.lastError) && <span style={{ color: 'var(--critical-ink)' }}>{error || sync.lastError}</span>}
+      {(error || sync.lastError) && <span class="text-bad">{error || sync.lastError}</span>}
       <button class="btn ghost" type="button" disabled={busy || sync.running} onClick={run}><Icon name="refresh" size={13} /> Sync now</button>
     </div>
   );
@@ -103,7 +103,7 @@ function GitHubOverview({ range, site }) {
               ? `Repos for ${scope.host || 'this site'}: picked in its settings, linked in a product, or with it as their homepage`
               : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites & products, or set a repo’s homepage to the site.`}
           </span>
-          {scope.note && <span style={{ color: 'var(--critical-ink)' }}>{scope.note}</span>}
+          {scope.note && <span class="text-bad">{scope.note}</span>}
           <a href={`#/settings?tab=sites&edit=${scope.siteId}`}>Pick repos</a>
           <a href="#/github">Show all repos</a>
         </div>

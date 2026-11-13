@@ -69,7 +69,7 @@ export function FirebaseSettings({ auth }) {
                   <td class="small"><span class="mono">{l.project}</span> / <b>{l.service}</b></td>
                   <td class="num">{formatNumber(l.requests)}</td>
                   <td class="small">
-                    {l.error ? <span style={{ color: 'var(--critical-ink)' }}>{l.error}</span> : l.lastSync ? formatRelative(l.lastSync) : <span class="muted">pending</span>}
+                    {l.error ? <span class="text-bad">{l.error}</span> : l.lastSync ? formatRelative(l.lastSync) : <span class="muted">pending</span>}
                   </td>
                   <td class="num"><button class="btn ghost danger" type="button" disabled={Boolean(busy)} onClick={() => unlink(l.siteId)}>Unlink</button></td>
                 </tr>

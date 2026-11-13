@@ -350,7 +350,7 @@ function AddLink({ date, site, onAdded }) {
       <div class="row" style={{ gap: '8px' }}>
         <button class="btn primary" type="submit" disabled={busy}><Icon name="plus" size={13} /> Add to {dayLabel(date)}</button>
         <button class="btn ghost" type="button" onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
-        {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+        {error && <span class="small text-bad">{error}</span>}
       </div>
     </form>
   );

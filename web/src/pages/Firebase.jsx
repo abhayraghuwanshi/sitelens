@@ -132,7 +132,7 @@ function SiteTraffic({ link, range, onSynced }) {
     return (
       <>
         {header}
-        {syncError && <p class="small" style={{ color: 'var(--critical-ink)' }}>{syncError}</p>}
+        {syncError && <p class="small text-bad">{syncError}</p>}
         <Empty title="No requests synced yet">The first sync pulls the last 30 days of logs and takes a minute. Press <b>Sync now</b> if it hasn't started.</Empty>
       </>
     );

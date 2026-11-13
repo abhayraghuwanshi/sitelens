@@ -124,7 +124,7 @@ function HostedMcp() {
                   <td class="small">{new Date(t.createdAt).toLocaleDateString()}</td>
                   <td class="small">{t.lastUsed ? new Date(t.lastUsed).toLocaleString() : <span class="muted">never</span>}</td>
                   <td class="small">{t.expired
-                    ? <span style={{ color: 'var(--critical-ink)' }}>Expired {new Date(t.expiresAt).toLocaleDateString()}</span>
+                    ? <span class="text-bad">Expired {new Date(t.expiresAt).toLocaleDateString()}</span>
                     : t.expiresAt ? new Date(t.expiresAt).toLocaleDateString() : <span class="muted">never</span>}</td>
                   <td class="num"><button class="btn ghost danger" type="button" onClick={() => revoke(t.id)}>Revoke</button></td>
                 </tr>

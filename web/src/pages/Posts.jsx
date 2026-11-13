@@ -208,7 +208,7 @@ function Accounts({ data, open, onSaved }) {
         <div class="row" style={{ marginTop: '4px' }}>
           <button class="btn" type="button" onClick={() => setRows([...rows, { platform: 'hn', handle: '' }])}><Icon name="plus" size={13} /> Add account</button>
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
-          {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+          {error && <span class="small text-bad">{error}</span>}
         </div>
         <p class="note" style={{ margin: 0 }}>No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
       </form>
@@ -255,7 +255,7 @@ function AddByUrl({ products, onAdded }) {
         </div>
         <div class="row">
           <button class="btn primary" type="submit"><Icon name="plus" size={13} /> Add post</button>
-          {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+          {error && <span class="small text-bad">{error}</span>}
         </div>
       </form>
     </details>

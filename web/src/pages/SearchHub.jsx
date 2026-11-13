@@ -246,7 +246,7 @@ export function PageDetail({ site, path, links = true }) {
         {links && site.modes?.content && path !== '/' && <a class="btn ghost" href={`#/site/${site.id}/pages?article=${encodeURIComponent(path)}`}>Open the page</a>}
         {links && <a class="btn ghost" href={`#/site/${site.id}/pages?path=${encodeURIComponent(path)}`}>Traffic</a>}
       </div>
-      {check.error && <p class="small" style={{ color: 'var(--critical-ink)' }}>{check.error.message}</p>}
+      {check.error && <p class="small text-bad">{check.error.message}</p>}
       {check.data && (
         <dl class="index-status">
           <dt>Google</dt>
@@ -294,7 +294,7 @@ export function BingVolume({ seeds }) {
         <select value={market} onChange={(e) => setMarket(e.currentTarget.value)} aria-label="Market">{MARKETS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
         <button type="submit" class="btn primary" disabled={res.busy || !text.trim()}>{res.busy ? 'Looking…' : 'Look up'}</button>
       </form>
-      {res.error && <p class="small" style={{ color: 'var(--critical-ink)' }}>{res.error.message}{res.error.kind === 'needs-bing' && <> <a href="#/settings?i=bing">Connect Bing</a></>}</p>}
+      {res.error && <p class="small text-bad">{res.error.message}{res.error.kind === 'needs-bing' && <> <a href="#/settings?i=bing">Connect Bing</a></>}</p>}
       {res.data && (
         <div class="table-wrap">
           <table class="data">

@@ -100,7 +100,7 @@ function Today({ site, onYesterday }) {
           <div class="nx-label-sm">How they came</div>
           <ul class="nx-rows">
             {rep.channels.slice(0, 5).map((c) => (
-              <li key={c.channel}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{c.channel}</span><span class="nx-num">{fmt(c.sessions)}</span><span class="nx-dim small">{Math.round(c.engagementRate * 100)}% engaged</span></a></li>
+              <li key={c.channel}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{c.channel}</span><span class="nx-num">{fmt(c.sessions)}</span><span class="muted small">{Math.round(c.engagementRate * 100)}% engaged</span></a></li>
             ))}
           </ul>
         </div>
@@ -108,12 +108,12 @@ function Today({ site, onYesterday }) {
           <div class="nx-label-sm">Where they landed</div>
           <ul class="nx-rows">
             {rep.entryPages.slice(0, 5).map((p) => (
-              <li key={p.path}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{capital(pageName(p.path))}</span><span class="nx-num">{fmt(p.sessions)}</span><span class="nx-dim small">{Math.round(p.engagementRate * 100)}% engaged</span></a></li>
+              <li key={p.path}><a href={`#/site/${site.id}/pages?range=today`}><span class="nx-path">{capital(pageName(p.path))}</span><span class="nx-num">{fmt(p.sessions)}</span><span class="muted small">{Math.round(p.engagementRate * 100)}% engaged</span></a></li>
             ))}
           </ul>
         </div>
       </div>
-      <p class="nx-note">
+      <p class="note">
         Today’s story stops here: Search Console reports 2–3 days late, and downloads, journeys and the reasons people leave fill in once the day is over.{' '}
         <button type="button" class="nx-link" onClick={onYesterday}>See yesterday in full</button>
       </p>
@@ -140,7 +140,7 @@ function NeedsYou({ site }) {
       <h2 class="nx-h2"><Icon name="triangle" size={16} /> {items.length === 1 ? '1 thing needs you' : `${items.length} things need you`}</h2>
       <ul class="nx-list">
         {items.map((i) => (
-          <li key={i.key}><a href={i.href}><b>{i.title}</b> <span class="nx-dim">{i.detail}</span></a></li>
+          <li key={i.key}><a href={i.href}><b>{i.title}</b> <span class="muted">{i.detail}</span></a></li>
         ))}
       </ul>
     </section>
@@ -175,7 +175,7 @@ function Traffic({ site, story, metrics, marks }) {
                 </li>
               ))}
             </ul>
-          ) : <p class="nx-dim">No single source or page moved much.</p>}
+          ) : <p class="muted">No single source or page moved much.</p>}
         </div>
         <div>
           <div class="nx-label-sm">{days.length === 1 ? `Against a usual ${days[0].weekday}` : 'Days that stood out'}</div>
@@ -187,11 +187,11 @@ function Traffic({ site, story, metrics, marks }) {
                 <li key={d.date}>
                   <a href={`#/site/${site.id}/timeline?month=${d.date.slice(0, 7)}&day=${d.date}`}>{d.text}</a>
                   {d.events.map((e) => <Cause key={e.label + e.date} e={e} lead={e.date === d.date ? 'Same day' : 'Day before'} />)}
-                  {!d.events.length && <span class="nx-cause nx-dim">Nothing you shipped around then.</span>}
+                  {!d.events.length && <span class="nx-cause muted">Nothing you shipped around then.</span>}
                 </li>
               ))}
             </ul>
-          ) : <p class="nx-dim">Every day was close to a usual one for its weekday.</p>}
+          ) : <p class="muted">Every day was close to a usual one for its weekday.</p>}
         </div>
       </div>
     </section>
@@ -231,7 +231,7 @@ function Sources({ site, rows, changes, range }) {
           </div>
         ))}
       </div>
-      <p class="nx-note">“Direct” is every visit without a referrer: typed links, app links and likely bots.</p>
+      <p class="note">“Direct” is every visit without a referrer: typed links, app links and likely bots.</p>
     </section>
   );
 }
@@ -284,11 +284,11 @@ function HowTheyCome({ site, range }) {
           <li key={x.key}>
             <a href={`#/site/${site.id}/journeys?range=${range}&open=${encodeURIComponent(x.key)}`}>
               <span class="nx-jwho">
-                <b>{x.name} <span class="nx-dim">→</span> {pageTitle(x.landing)}</b>
-                <span class="nx-dim small">{x.landing === '/' ? site.host : x.landing}</span>
+                <b>{x.name} <span class="muted">→</span> {pageTitle(x.landing)}</b>
+                <span class="muted small">{x.landing === '/' ? site.host : x.landing}</span>
               </span>
-              <span class="nx-stat"><b>{fmt(x.sessions)}</b><span class="nx-dim small">visits</span></span>
-              <span class="nx-stat"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b><span class="nx-dim small">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}% ` : ''}{j.outcome.label.toLowerCase()}</span></span>
+              <span class="nx-stat"><b>{fmt(x.sessions)}</b><span class="muted small">visits</span></span>
+              <span class="nx-stat"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b><span class="muted small">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}% ` : ''}{j.outcome.label.toLowerCase()}</span></span>
               <Icon name="chevron" size={14} />
             </a>
           </li>
@@ -360,11 +360,11 @@ function Leavers({ site, range }) {
             <span class="nx-swatch" style={{ background: GROUP_COLOR[g.group] }} aria-hidden="true" />
             <b class="nx-num">{fmt(g.left)}</b>
             <b>{g.group}</b>
-            <span class="nx-dim">{reason(g)}</span>
+            <span class="muted">{reason(g)}</span>
           </li>
         ))}
       </ul>
-      <p class="nx-note">From the site’s goals: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
+      <p class="note">From the site’s goals: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
     </section>
   );
 }
@@ -432,14 +432,14 @@ function OutcomeKind({ icon, title, note, href, items }) {
       <div class="nx-label-sm"><Icon name={icon} size={12} /> {title}<span class="nx-okind-src">{note}</span></div>
       <div class="nx-okind-lead">
         <b>{amount(lead.count)}</b>
-        <span>{lead.label}{lead.note && <span class="nx-dim small"> · {lead.note}</span>}</span>
+        <span>{lead.label}{lead.note && <span class="muted small"> · {lead.note}</span>}</span>
         <Shift item={lead} />
       </div>
       {rest.length > 0 && (
         <ul class="nx-okind-rows">
           {rest.map((x) => (
             <li key={x.id}>
-              <span class="nx-path">{x.label}{x.note && <span class="nx-dim small"> · {x.note}</span>}</span>
+              <span class="nx-path">{x.label}{x.note && <span class="muted small"> · {x.note}</span>}</span>
               <span class="nx-num">{amount(x.count)}</span>
               <Shift item={x} />
             </li>
@@ -451,7 +451,7 @@ function OutcomeKind({ icon, title, note, href, items }) {
 }
 
 const amount = (v) => (v === null || v === undefined ? '–' : v < 10 && v % 1 ? v.toFixed(1) : fmt(v));
-const Shift = ({ item }) => (item.count === null ? <span /> : hasHistory(item) ? <Change value={item.count} previous={item.previous} /> : <span class="nx-dim small">no history</span>);
+const Shift = ({ item }) => (item.count === null ? <span /> : hasHistory(item) ? <Change value={item.count} previous={item.previous} /> : <span class="muted small">no history</span>);
 
 // What to do next (server/next-steps.mjs): fix what dropped, get found in
 // search, convert more, and do more of what worked. Each one can go on your
@@ -475,7 +475,7 @@ function NextSteps({ site, range }) {
   return (
     <section class="nx-card nx-next" aria-label="What to do next">
       <SectionHead title="What to do next" more={{ href: `#/site/${site.id}/todos`, label: open ? `Your to-dos (${open})` : 'Your to-dos' }} />
-      <p class="nx-dim">{steps.length
+      <p class="muted">{steps.length
         ? 'From this period’s numbers. Add one to your to-dos, and tick it off when the change is live: it goes on the Timeline that day, so you can see whether it worked.'
         : 'Nothing stands out for this period. Add your own changes to your to-dos.'}</p>
       {GROUPS.map((g) => {
@@ -490,11 +490,11 @@ function NextSteps({ site, range }) {
                 return (
                   <div class={`nx-action${todo ? ' started' : ''}`} key={x.key}>
                     <b>{x.title}</b>
-                    <span class="nx-dim">{x.why}</span>
+                    <span class="muted">{x.why}</span>
                     {x.worth && <dl class="nx-kv"><dt>{g.key === 'fix' ? 'Lost' : 'Worth'}</dt><dd class={g.key === 'fix' ? 'bad' : 'good'}>{x.worth}</dd></dl>}
                     <div class="nx-action-row">
-                      <a class="nx-btn" href={x.link} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>{x.linkLabel}</a>
-                      <AddTodo site={site} added={todo} class="nx-btn quiet" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
+                      <a class="btn" href={x.link} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>{x.linkLabel}</a>
+                      <AddTodo site={site} added={todo} class="btn ghost" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
                     </div>
                   </div>
                 );
@@ -520,10 +520,10 @@ const pageName = (path) => (path === '/' ? 'the home page' : !path || path === '
 // A change against the period before. From almost nothing, the starting
 // number says more than a percentage does ("from 1", not "up 12200%").
 export function Change({ value, previous }) {
-  if (!previous) return value ? <span class="good small">new</span> : <span class="nx-dim">–</span>;
+  if (!previous) return value ? <span class="good small">new</span> : <span class="muted">–</span>;
   if (previous * 4 < value) return <span class="good small">from {fmt(previous)}</span>;
   const p = Math.round((value / previous - 1) * 100);
-  if (!p) return <span class="nx-dim small">same</span>;
+  if (!p) return <span class="muted small">same</span>;
   return <span class={`${p > 0 ? 'good' : 'bad'} small`}>{p > 0 ? '↑' : '↓'} {Math.abs(p)}%</span>;
 }
 

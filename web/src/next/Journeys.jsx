@@ -79,8 +79,8 @@ export function JourneysPage({ site, params }) {
   const [open, setOpen] = useState(params.get('open') || '');
 
   let body;
-  if (!site.modes?.warehouse) body = <p class="nx-dim">Journeys need the site’s GA4 BigQuery export. Connect it in the site’s settings.</p>;
-  else if (j.config.data && !j.outcome) body = <p class="nx-dim">Journeys need an outcome to count: add a goal event in the site’s settings (for example a download or a sign-up).</p>;
+  if (!site.modes?.warehouse) body = <p class="muted">Journeys need the site’s GA4 BigQuery export. Connect it in the site’s settings.</p>;
+  else if (j.config.data && !j.outcome) body = <p class="muted">Journeys need an outcome to count: add a goal event in the site’s settings (for example a download or a sign-up).</p>;
   else if (j.data.error) body = <ErrorState error={j.data.error} onRetry={j.data.reload} />;
   else if (!j.data.data) body = <Loading height={320} />;
   else {
@@ -93,7 +93,7 @@ export function JourneysPage({ site, params }) {
           <JourneyRow key={x.key} site={site} j={x} steps={j.steps} outcome={j.outcome} range={range}
             open={current === x.key} onToggle={() => setOpen(current === x.key ? '-' : x.key)} />
         ))}
-        <p class="nx-note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
+        <p class="note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
       </div>
     );
   }
@@ -124,11 +124,11 @@ function JourneyRow({ site, j, steps, outcome, range, open, onToggle }) {
   return (
     <div class={`nx-journey${open ? ' open' : ''}`}>
       <button type="button" class="nx-jrow" onClick={onToggle} aria-expanded={open}>
-        <span><b>{j.name}</b>{kind && <span class="nx-dim small"> · {kind}</span>}
-          {first.length > 0 && <span class="nx-dim small nx-jfirst">first came from {first.slice(0, 2).map(([name]) => name).join(', ')}</span>}</span>
+        <span><b>{j.name}</b>{kind && <span class="muted small"> · {kind}</span>}
+          {first.length > 0 && <span class="muted small nx-jfirst">first came from {first.slice(0, 2).map(([name]) => name).join(', ')}</span>}</span>
         <span class="nx-path">{pageName(j.landing)}</span>
         <span class="nx-num">{fmt(j.sessions)}</span>
-        <span class="nx-num"><b class={j.converted ? 'good' : ''}>{fmt(j.converted)}</b> <span class="nx-dim small">{pct(j.converted, j.sessions)}</span></span>
+        <span class="nx-num"><b class={j.converted ? 'good' : ''}>{fmt(j.converted)}</b> <span class="muted small">{pct(j.converted, j.sessions)}</span></span>
         <Icon name="chevron" size={14} />
       </button>
       {open && (
@@ -139,10 +139,10 @@ function JourneyRow({ site, j, steps, outcome, range, open, onToggle }) {
               const lost = prev ? Math.round((1 - s.n / prev) * 100) : 0;
               return (
                 <div class="nx-fstep" key={s.label}>
-                  <span class="nx-dim">{s.label}</span>
+                  <span class="muted">{s.label}</span>
                   <span class="nx-bar"><span class={s.last ? 'last' : ''} style={{ width: `${Math.max(1.5, (s.n / Math.max(1, j.sessions)) * 100)}%` }} /></span>
                   <b class="nx-num">{fmt(s.n)}</b>
-                  <span class={`small ${i && lost >= 50 ? 'bad' : 'nx-dim'}`}>{i === 0 ? '' : lost > 0 ? `${lost}% dropped` : 'none dropped'}</span>
+                  <span class={`small ${i && lost >= 50 ? 'bad' : 'muted'}`}>{i === 0 ? '' : lost > 0 ? `${lost}% dropped` : 'none dropped'}</span>
                 </div>
               );
             })}
@@ -150,16 +150,16 @@ function JourneyRow({ site, j, steps, outcome, range, open, onToggle }) {
           <p class="nx-lede">{read(j, rate, steps)}</p>
           <SystemSplit j={j} outcome={outcome} />
           {j.name === 'No referrer' && (
-            <p class="nx-dim small">
+            <p class="muted small">
               {first.length
                 ? <>Where these visitors first came from: {first.map(([name, n]) => `${name} ${fmt(n)}`).join(' · ')}. The other {fmt(Math.max(0, j.sessions - firstKnown))} have no known source: links opened from apps, email or bookmarks, typed addresses, or bots.</>
                 : <>None of these visitors has a known first source: links opened from apps, email or bookmarks, typed addresses, or bots. Tag links you share (and links your app opens) with utm_source to see them here.</>}
             </p>
           )}
           <div class="nx-action-row">
-            <a class="nx-btn" href={`#/site/${site.id}/sessions?range=${range}&path=${encodeURIComponent(j.landing)}`}>Sessions that landed here</a>
-            <a class="nx-btn" href={`#/site/${site.id}/sessions?range=${range}&start=${encodeURIComponent(j.landing)}`}>Where they went next</a>
-            {SEARCH.has(j.name) && <a class="nx-btn" href={`#/site/${site.id}/search`}>Searches behind it</a>}
+            <a class="btn" href={`#/site/${site.id}/sessions?range=${range}&path=${encodeURIComponent(j.landing)}`}>Sessions that landed here</a>
+            <a class="btn" href={`#/site/${site.id}/sessions?range=${range}&start=${encodeURIComponent(j.landing)}`}>Where they went next</a>
+            {SEARCH.has(j.name) && <a class="btn" href={`#/site/${site.id}/search`}>Searches behind it</a>}
           </div>
         </div>
       )}
@@ -216,10 +216,10 @@ function Summary({ j }) {
   return (
     <section class="nx-card nx-jsum" aria-label="Summary">
       <div class="nx-jsum-stats">
-        <div><b>{fmt(total.sessions)}</b><span class="nx-dim small">visits</span></div>
-        <div><b class={total.converted ? 'good' : ''}>{fmt(total.converted)}</b><span class="nx-dim small">{label.toLowerCase()}</span></div>
-        <div><b>{pct(total.converted, total.sessions)}</b><span class="nx-dim small">of visits convert</span></div>
-        <div><b>{pct(total.noReferrer, total.sessions)}</b><span class="nx-dim small">came with no referrer</span></div>
+        <div><b>{fmt(total.sessions)}</b><span class="muted small">visits</span></div>
+        <div><b class={total.converted ? 'good' : ''}>{fmt(total.converted)}</b><span class="muted small">{label.toLowerCase()}</span></div>
+        <div><b>{pct(total.converted, total.sessions)}</b><span class="muted small">of visits convert</span></div>
+        <div><b>{pct(total.noReferrer, total.sessions)}</b><span class="muted small">came with no referrer</span></div>
       </div>
       <div class="nx-jsum-grid">
         <div>
@@ -234,7 +234,7 @@ function Summary({ j }) {
                 <span role="cell">{x.name}</span>
                 <span class="nx-bar" role="cell"><span style={{ width: `${Math.max(1.5, (x.sessions / max) * 100)}%` }} /></span>
                 <span class="nx-num" role="cell">{fmt(x.sessions)}</span>
-                <span class="nx-num" role="cell"><b class={x.converted ? 'good' : 'nx-dim'}>{fmt(x.converted)}</b> <span class="nx-dim small nx-jsys-pct">{pct(x.converted, x.sessions)}</span></span>
+                <span class="nx-num" role="cell"><b class={x.converted ? 'good' : 'muted'}>{fmt(x.converted)}</b> <span class="muted small nx-jsys-pct">{pct(x.converted, x.sessions)}</span></span>
               </div>
             ))}
           </div>
@@ -246,7 +246,7 @@ function Summary({ j }) {
               {notes.map((n) => (
                 <li key={n.title} class={`tone-${n.tone}`}>
                   <b>{n.title}</b>
-                  <span class="nx-dim small">{n.detail}</span>
+                  <span class="muted small">{n.detail}</span>
                 </li>
               ))}
             </ul>
@@ -305,7 +305,7 @@ function SystemSplit({ j, outcome }) {
     const rows = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
     if (!rows.length) return null;
     return (
-      <p class="nx-dim small nx-jsplit">
+      <p class="muted small nx-jsplit">
         {title}: {rows.map(([name, n], i) => (
           <span key={name}>{i ? ' · ' : ''}{name} {fmt(n)}{conv?.[name] ? <> (<span class="good">{fmt(conv[name])}</span> {outcome.label.toLowerCase()})</> : ''}</span>
         ))}
