@@ -13,7 +13,7 @@
 // GA4 fills sessionCampaignName with labels like (organic), (referral) or
 // (direct) when a visit has no utm_campaign; those aren't campaigns.
 
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { getRange, hostFilter } from '../shared/sitelens/reports.js';
 import { createCache } from './cache.mjs';
 

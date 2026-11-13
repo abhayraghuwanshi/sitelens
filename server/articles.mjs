@@ -10,7 +10,7 @@
 // Nothing is stored; sitemap and page reads are cached for hours, traffic for minutes.
 
 import { gunzipSync } from 'node:zlib';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { getRange, hostFilter } from '../shared/sitelens/reports.js';
 import { querySearchAnalytics, searchRange, hostPageFilter } from '../shared/sitelens/gsc.js';
 import { sourceFamily } from './journey.mjs';

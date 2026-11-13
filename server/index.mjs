@@ -156,7 +156,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const bing = createBing({ dbPath: join(store.dir, 'bing.db'), store, env, fetchImpl });
   const searchHub = createSearchHub({ engines, bing, auth, fetchImpl });
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
-  const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig });
+  const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig, cacheDb });
   const campaigns = createCampaigns({ auth, siteConfig });
   const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb });
   const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });

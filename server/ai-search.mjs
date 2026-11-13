@@ -19,7 +19,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import Anthropic from '@anthropic-ai/sdk';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { getRange, hostFilter, AI_REFERRER_SOURCES, AI_CHANNEL_GROUP, AI_MEDIUM } from '../shared/sitelens/reports.js';
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';

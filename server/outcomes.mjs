@@ -5,7 +5,7 @@
 // insights. Goal events are detected from the event names the site already
 // sends, so nothing needs configuring and GA4 "key events" aren't required.
 
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { baseDomain } from '../shared/sitelens/site.js';
 import { listingAnalytics } from './cws-ga.mjs';
@@ -15,6 +15,10 @@ import { createCache } from './cache.mjs';
 
 const DAY = 86_400_000;
 const TTL = 15 * 60_000;
+// A saved result keeps answering (while a fresh one loads) for this long.
+const STALE_FOR = DAY;
+// After a partial failure (often a GA4 rate limit), wait this long before asking again.
+const RETRY_AFTER = 60_000;
 const n = (v) => Number(v) || 0;
 const sum = (list) => list.reduce((a, b) => a + (b || 0), 0);
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
@@ -377,8 +381,13 @@ export function rollup(measured) {
 
 // ---------- the service ----------
 
-export function createOutcomes({ store, products, auth, listingProperty, siteConfig = null, now = Date.now }) {
-  const cache = createCache();
+export function createOutcomes({ store, products, auth, listingProperty, siteConfig = null, cacheDb = null, now = Date.now }) {
+  // Whole results, saved to disk so a restart doesn't send every report again.
+  const cache = createCache({ db: cacheDb, name: 'outcomes', staleFor: cacheDb ? STALE_FOR : 0, now });
+  // Each part that loaded, so a retry after a partial failure only asks for what failed.
+  const pieces = createCache({ now });
+  // Results with failed parts, kept briefly so refreshing doesn't hammer GA4.
+  const partial = new Map(); // cache key → { at, data }
 
   async function report(site, body) {
     const filter = hostFilter(site.host, { includeSubdomains: site.includeSubdomains });
@@ -449,16 +458,17 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     };
   }
 
-  async function build(id, rangeKey) {
+  async function build(id, rangeKey, fresh = false) {
     const product = (await products.list()).find((p) => p.id === id);
     if (!product) throw new SourceError('Unknown product.', { kind: 'notfound' });
     const range = historyRange(rangeKey, now());
     const site = product.siteId ? (await store.sites()).find((s) => s.id === product.siteId) || null : null;
     const live = site && !site.demo && site.propertyId;
     const errors = {};
+    const scope = `${id}:${rangeKey}:${range.end}:`;
     const safely = async (key, fn) => {
       try {
-        return await fn();
+        return await pieces.wrap(scope + key, TTL, fresh, fn);
       } catch (err) {
         errors[key] = err.message;
         return null;
@@ -611,12 +621,29 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     },
     clear(id) {
       cache.clear(`outcomes:${id}:`);
+      pieces.clear(`${id}:`);
+      for (const key of partial.keys()) if (key.startsWith(`outcomes:${id}:`)) partial.delete(key);
     },
     async get(id, rangeKey, { fresh = false } = {}) {
       const key = `outcomes:${id}:${rangeKey}:${historyRange(rangeKey, now()).end}`;
-      const data = await cache.wrap(key, TTL, fresh, () => build(id, rangeKey));
-      if (Object.keys(data.errors).length) cache.clear(key);
-      return data;
+      const recent = partial.get(key);
+      if (recent && recent.at + RETRY_AFTER > now()) return recent.data;
+      partial.delete(key);
+      // A result with failed parts isn't cached (or saved over a good one): it's
+      // thrown past the cache and answered from here until the retry window ends.
+      const load = async () => {
+        const data = await build(id, rangeKey, fresh);
+        if (Object.keys(data.errors).length) throw Object.assign(new Error('partial'), { partial: data });
+        return data;
+      };
+      try {
+        return await cache.wrap(key, TTL, fresh, load);
+      } catch (err) {
+        if (!err.partial) throw err;
+        if (partial.size > 200) partial.clear();
+        partial.set(key, { at: now(), data: err.partial });
+        return err.partial;
+      }
     },
   };
 }

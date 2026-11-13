@@ -16,7 +16,7 @@
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
 import { historyRange } from './github.mjs';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 
 const API = 'https://api.vercel.com';

@@ -9,7 +9,7 @@
 //    GA4's API has no exits, so that part is left out.
 // Results are kept on disk and refreshed in the background like other reports.
 
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter, getRange } from '../shared/sitelens/reports.js';
 import { createCache } from './cache.mjs';
 

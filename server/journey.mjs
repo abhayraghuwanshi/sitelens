@@ -7,7 +7,7 @@
 
 import { connect } from 'node:tls';
 import { resolve4, resolve6, resolveCname } from 'node:dns/promises';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { baseDomain } from '../shared/sitelens/site.js';
 import { historyRange, SourceError } from './github.mjs';

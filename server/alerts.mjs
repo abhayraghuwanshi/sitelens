@@ -9,7 +9,7 @@
 
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { ValidationError } from './store.mjs';
 
