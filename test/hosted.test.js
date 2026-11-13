@@ -310,3 +310,61 @@ test('MCP tokens expire: 90 days by default, a chosen length, or never; an expir
   assert.equal(listed.find((t) => t.id === forever.id).expired, false);
   for (const t of [plain, year, forever]) await call(`/api/mcp/tokens/${t.id}`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
 });
+
+test('sharing a site: the person sees only that site, read-only, and loses it when removed', async () => {
+  const alice = (await signIn('alice@example.com')).cookie;
+  await write('/api/sites', { host: 'shared-a.com' }, alice);
+  await write('/api/sites', { host: 'private-a.com' }, alice);
+  const sites = JSON.parse((await call('/api/state', { cookie: alice })).body).sites;
+  const shared = sites.find((s) => s.host === 'shared-a.com');
+  const secret = sites.find((s) => s.host === 'private-a.com');
+
+  // Not invited, and nothing shared yet: no way in.
+  assert.equal((await signIn('carol@example.com')).cookie, '');
+
+  // Only the owner of a site can share it, and the email is checked.
+  const bob = (await signIn('bob@example.com')).cookie;
+  assert.equal((await write('/api/shares', { site: shared.id, email: 'carol@example.com' }, bob)).status, 404);
+  assert.equal((await write('/api/shares', { site: shared.id, email: 'nope' }, alice)).status, 400);
+  const added = await write('/api/shares', { site: shared.id, email: 'Carol@Example.com' }, alice);
+  assert.equal(added.status, 200);
+  assert.deepEqual(JSON.parse(added.body).people.map((p) => p.email), ['carol@example.com']);
+
+  // Carol signs in to view: Google is asked for her email only, nothing offline.
+  const start = await call('/login/google?viewer=1', { headers: { 'fly-client-ip': '203.0.113.9' } });
+  const params = new URL(start.headers.location).searchParams;
+  assert.equal(params.get('scope'), 'openid email');
+  assert.equal(params.get('access_type'), null);
+  const done = await call(`/login/callback?code=carol@example.com&state=${params.get('state')}`, { headers: { 'fly-client-ip': '203.0.113.9' } });
+  const carol = String(done.headers['set-cookie']).split(';')[0];
+  assert.equal(done.headers.location, '/');
+
+  // She sees the shared site, marked, and nothing else of Alice's (nor the sample).
+  const state = JSON.parse((await call('/api/state', { cookie: carol })).body);
+  assert.deepEqual(state.sites.map((s) => s.host), ['shared-a.com']);
+  assert.equal(state.sites[0].shared.by, 'alice@example.com');
+  assert.equal(state.viewer, true);
+  // Reads of the shared site reach Alice's app; the other site doesn't exist for her.
+  assert.equal((await call(`/api/sites/${shared.id}/config`, { cookie: carol })).status, 200);
+  assert.equal((await call(`/api/sites/${secret.id}/config`, { cookie: carol })).status, 404);
+  // No changes, no SQL, no connecting accounts, no sites or shares of her own.
+  assert.equal((await call(`/api/sites/${shared.id}`, { method: 'DELETE', cookie: carol, headers: { origin: ORIGIN, 'x-studio': '1' } })).status, 403);
+  assert.equal((await write(`/api/sites/${shared.id}/warehouse/sql`, { sql: 'SELECT 1' }, carol)).status, 403);
+  assert.equal((await write('/api/sites', { host: 'carol.com' }, carol)).status, 403);
+  assert.equal((await write('/api/shares', { site: shared.id, email: 'dave@example.com' }, carol)).status, 403);
+  assert.equal((await call('/api/google/properties', { cookie: carol })).status, 403);
+  assert.equal((await call('/api/mcp/tokens', { cookie: carol })).status, 403);
+  // Alice's site is still there after all that.
+  assert.ok(JSON.parse((await call('/api/state', { cookie: alice })).body).sites.some((s) => s.id === shared.id));
+
+  // An invited person it's shared with sees it beside their own sites.
+  await write('/api/shares', { site: shared.id, email: 'bob@example.com' }, alice);
+  const bobSites = JSON.parse((await call('/api/state', { cookie: bob })).body).sites;
+  assert.ok(bobSites.some((s) => s.id === shared.id && s.shared?.by === 'alice@example.com'));
+  assert.ok(!bobSites.some((s) => s.id === secret.id));
+
+  // Removing her ends her access at once.
+  const removed = await call(`/api/shares?site=${shared.id}&email=carol@example.com`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
+  assert.deepEqual(JSON.parse(removed.body).people.map((p) => p.email), ['bob@example.com']);
+  assert.equal((await call('/api/state', { cookie: carol })).status, 401);
+});

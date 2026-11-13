@@ -7,15 +7,15 @@ export const ADD_SITE = '#/account?tab=sites&edit=new';
 
 // Every site, one sentence each from its own Story (last 28 whole days),
 // sorted so the site that moved most comes first.
-export function Sites({ sites, auth }) {
+export function Sites({ sites, auth, viewer }) {
   const stories = useAsync(() => Promise.all(sites.map((s) => api.get(`/sites/${s.id}/story?range=28d`).catch(() => null))), [sites.map((s) => s.id).join()]);
   const rows = sites.map((s, i) => ({ site: s, story: stories.data?.[i] || null }));
   if (stories.data) rows.sort((a, b) => Math.abs(b.story?.change ?? 0) - Math.abs(a.story?.change ?? 0));
 
   return (
     <Page title="Sites" sub="Last 28 whole days, against the 28 before"
-      actions={<a class="nx-btn primary" href={ADD_SITE}><Icon name="plus" size={14} /> Add a site</a>}>
-      {!sites.some((s) => !s.demo) && <GetStarted auth={auth} />}
+      actions={viewer ? null : <a class="nx-btn primary" href={ADD_SITE}><Icon name="plus" size={14} /> Add a site</a>}>
+      {!viewer && !sites.some((s) => !s.demo) && <GetStarted auth={auth} />}
       <div class="nx-sites">
         {rows.map(({ site, story }) => (
           <a key={site.id} class="nx-card nx-site-card" href={`#/site/${site.id}`}>

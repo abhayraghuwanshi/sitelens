@@ -5,6 +5,7 @@ import { Logo } from '../components/Logo.jsx';
 import { ErrorState } from '../components/ui.jsx';
 import { Calendar } from '../pages/Calendar.jsx';
 import { Setup } from '../pages/Setup.jsx';
+import { SiteAccess } from './SiteAccess.jsx';
 import { Settings } from '../pages/Settings.jsx';
 import { Outcomes } from '../pages/Outcomes.jsx';
 import { Extensions } from '../pages/Extensions.jsx';
@@ -59,7 +60,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
     : 'explore';
 
   let body;
-  if (!section) body = <Sites sites={sites} auth={auth} />;
+  if (!section) body = <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (section === 'site' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
@@ -69,7 +70,8 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site' && view === 'outcomes') body = <OutcomesPage key={site.id} site={site} params={route.params} back={story} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
-  else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}><LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
+  else if (section === 'site' && view === 'setup' && site.shared) body = <ErrorState error={{ message: `Setup is for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
+  else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}>{!site.demo && <SiteAccess site={site} hosted={state.hosted} />}<LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
   else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
@@ -100,33 +102,35 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
           <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
           <NavItem href="#/alerts" icon="bell" active={section === 'alerts'}>All alerts {alertCounts.unread ? <span class="nx-count">{alertCounts.unread}</span> : null}</NavItem>
-          <NavItem href={ADD_SITE} icon="plus" active={section === 'account' && route.params.get('edit') === 'new'}>Add a site</NavItem>
+          {!state.viewer && <NavItem href={ADD_SITE} icon="plus" active={section === 'account' && route.params.get('edit') === 'new'}>Add a site</NavItem>}
         </nav>
         {current && (
           <>
             <label class="nx-label" for="nx-site">Site</label>
             <select id="nx-site" class="nx-site" value={current.id}
               onChange={(e) => { location.hash = `/site/${e.currentTarget.value}/${tab === 'sites' || tab === 'account' || tab === 'mcp' ? 'story' : tab === 'explore' ? view : tab}`; }}>
-              {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (sample)' : ''}</option>)}
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (sample)' : s.shared ? ' (shared with you)' : ''}</option>)}
             </select>
+            {current.shared && <p class="nx-shared" title={`Shared by ${current.shared.by}`}><Icon name="eye" size={13} /> View only · shared by {current.shared.by}</p>}
             <nav class="nx-nav" aria-label={current.label}>
               <NavItem href={href('story')} icon="sparkles" active={tab === 'story'}>Story</NavItem>
               <NavItem href={href('todos')} icon="check" active={tab === 'todos' && section === 'site'}>To-dos {openFor(current.id) ? <span class="nx-count">{openFor(current.id)}</span> : null}</NavItem>
               <NavItem href={href('alerts')} icon="bell" active={tab === 'alerts' && section === 'site'}>Alerts {alertCounts.bySite[current.id] ? <span class="nx-count">{alertCounts.bySite[current.id]}</span> : null}</NavItem>
               <NavItem href={href('timeline')} icon="calendar" active={tab === 'timeline'}>Timeline</NavItem>
               <NavItem href={href('explore')} icon="layers" active={tab === 'explore'}>Explore</NavItem>
-              <NavItem href={href('setup')} icon="settings" active={tab === 'setup'}>Setup</NavItem>
+              {!current.shared && <NavItem href={href('setup')} icon="settings" active={tab === 'setup'}>Setup</NavItem>}
             </nav>
           </>
         )}
         <div class="nx-foot">
-          <NavItem href="#/account?tab=mcp" icon="terminal" active={tab === 'mcp'}>MCP</NavItem>
-          <NavItem href="#/account" icon="lock" active={tab === 'account'}>Account</NavItem>
+          {!state.viewer && <NavItem href="#/account?tab=mcp" icon="terminal" active={tab === 'mcp'}>MCP</NavItem>}
+          {!state.viewer && <NavItem href="#/account" icon="lock" active={tab === 'account'}>Account</NavItem>}
           <div class="nx-foot-row">
+            {state.viewer ? <span class="nx-conn"><Icon name="eye" size={13} /> Viewing shared sites</span> : (
             <span class="nx-conn" title={auth.email || ''}>
               <span class={`nx-dot${auth.connected && !auth.expired ? ' on' : ''}`} aria-hidden="true" />
               {auth.connected ? (auth.expired ? 'Token expired' : 'Google connected') : 'Not connected'}
-            </span>
+            </span>)}
             <button type="button" class="nx-icon-btn" onClick={onTheme} aria-label="Switch theme" title="Switch theme"><Icon name={themeIcon} /></button>
           </div>
           {!state.hosted && <button type="button" class="nx-switch" onClick={onClassic}>Back to the classic layout</button>}

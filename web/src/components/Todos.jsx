@@ -142,7 +142,7 @@ function TodoItem({ todo, sites, showSite }) {
           <button type="button" class="todo-link" onClick={() => run(() => todoApi.remove(todo.id))}>Delete</button>
         </span>
         {error && <span class="nx-error small" role="alert">{error}</span>}
-        {open && <TodoDetails id={todo.id} />}
+        {open && <TodoDetails id={todo.id} site={todo.site} />}
       </div>
     </li>
   );
@@ -150,8 +150,9 @@ function TodoItem({ todo, sites, showSite }) {
 
 // The data behind a to-do (server/todo-context.mjs) and its write-ups, plus the
 // line to hand it to Claude in a terminal (the MCP server reads the same thing).
-function TodoDetails({ id }) {
-  const d = useAsync(() => api.get(`/todos/${id}`), [id]);
+function TodoDetails({ id, site }) {
+  // The site goes along so a to-do on a site shared with you opens too (hosted).
+  const d = useAsync(() => api.get(`/todos/${id}${qs({ site })}`), [id, site]);
   useEffect(() => {
     const reload = () => d.reload();
     addEventListener(CHANGED, reload);
