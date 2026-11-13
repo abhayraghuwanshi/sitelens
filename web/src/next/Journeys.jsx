@@ -7,7 +7,7 @@ import { Page } from './Page.jsx';
 
 // Journeys: where a visit came from × the page it landed on × what it did,
 // from BigQuery (so the site's leave-out rule applies). Steps and the outcome
-// are the site's own goals in Setup.
+// are the site's own goals (set on its Edit page).
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
 const RANGES = [{ key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
@@ -79,8 +79,8 @@ export function JourneysPage({ site, params }) {
   const [open, setOpen] = useState(params.get('open') || '');
 
   let body;
-  if (!site.modes?.warehouse) body = <p class="nx-dim">Journeys need the site’s GA4 BigQuery export. Connect it in Setup.</p>;
-  else if (j.config.data && !j.outcome) body = <p class="nx-dim">Journeys need an outcome to count: add a goal event in Setup (for example a download or a sign-up).</p>;
+  if (!site.modes?.warehouse) body = <p class="nx-dim">Journeys need the site’s GA4 BigQuery export. Connect it in the site’s settings.</p>;
+  else if (j.config.data && !j.outcome) body = <p class="nx-dim">Journeys need an outcome to count: add a goal event in the site’s settings (for example a download or a sign-up).</p>;
   else if (j.data.error) body = <ErrorState error={j.data.error} onRetry={j.data.reload} />;
   else if (!j.data.data) body = <Loading height={320} />;
   else {
@@ -93,7 +93,7 @@ export function JourneysPage({ site, params }) {
           <JourneyRow key={x.key} site={site} j={x} steps={j.steps} outcome={j.outcome} range={range}
             open={current === x.key} onToggle={() => setOpen(current === x.key ? '-' : x.key)} />
         ))}
-        <p class="nx-note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (Setup).' : ''}</p>
+        <p class="nx-note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
       </div>
     );
   }

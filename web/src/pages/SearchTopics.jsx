@@ -29,9 +29,9 @@ export function SearchTopics({ site, range }) {
     return (
       <Card title="Topics" sub="What the site wants to be found for">
         <p class="note" style={{ margin: 0 }}>
-          Add topics in Setup (each with the page that should rank and the queries it should win), and this shows how each one does,
+          Add topics in the site’s settings (each with the page that should rank and the queries it should win), and this shows how each one does,
           which page Google really ranks, and which targets it never shows.{' '}
-          <a href={setup}>Add topics in Setup</a>
+          <a href={setup}>Add topics</a>
         </p>
       </Card>
     );
@@ -83,7 +83,7 @@ export function SearchTopics({ site, range }) {
       </div>
       <p class="note" style={{ margin: '8px 16px 12px' }}>
         Queries go to the first topic that matches, after Brand, the same as on Demand. “About +N clicks” uses a generic CTR-by-position curve: a way to rank the work, not a forecast.{' '}
-        <a href={setup}>Change topics in Setup</a>
+        <a href={setup}>Change topics</a>
       </p>
     </Card>
   );

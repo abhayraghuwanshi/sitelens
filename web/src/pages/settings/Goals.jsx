@@ -40,7 +40,7 @@ export function GoalsEditor({ goals, onChange, siteId, hasStore, hasRepos }) {
       {fileGoals > 0 && (
         <p class="note" style={{ margin: 0 }}>
           <b>The site’s repo file sets {fileGoals} goal{fileGoals === 1 ? '' : 's'}</b>, and those are the ones measured; the goals here aren’t used while it does.{' '}
-          <a href={`#/site/${siteId}/setup`}>Edit them in Setup</a>
+          <a href={`#/site/${siteId}/setup`}>Edit them below, under What Studio measures</a>
         </p>
       )}
       {!goals.length && (

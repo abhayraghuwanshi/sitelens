@@ -21,7 +21,7 @@ function DesktopNote({ site }) {
         <h3 class="nx-fn-title">People with access</h3>
         <p class="nx-dim small" style={{ margin: 0 }}>
           This desktop app runs on your computer, so only you can open it. To let others view {site.label} (view only, just this site), share it from the hosted Studio:
-          add the site there, then add people by email in its Setup.
+          add the site there, then add people by email on its Edit page.
         </p>
       </div>
       <div class="nx-access-add">
@@ -32,7 +32,7 @@ function DesktopNote({ site }) {
   );
 }
 
-// Setup → People with access (hosted): the people this site is shared with,
+// Site Edit page → People with access (hosted): the people this site is shared with,
 // view only. They sign in with Google at /login; the gateway (server/hosted.mjs)
 // sends their reads of this site to your workspace and refuses everything else.
 function SharedList({ site }) {

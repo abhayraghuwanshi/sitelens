@@ -20,7 +20,7 @@ export function Sites({ sites, auth, viewer }) {
         {rows.map(({ site, story }) => (
           <a key={site.id} class="nx-card nx-site-card" href={`#/site/${site.id}`}>
             <span class="nx-site-name"><b>{site.label}</b><span class="nx-dim">{site.demo ? 'Sample data' : site.host}</span></span>
-            <span class="nx-site-line">{story ? story.headline : stories.loading ? 'Reading the story…' : 'No story yet: connect Google Analytics or Search Console in Setup.'}</span>
+            <span class="nx-site-line">{story ? story.headline : stories.loading ? 'Reading the story…' : 'No story yet: edit the site to connect Google Analytics or Search Console.'}</span>
             {story && (
               <span class="nx-site-num">
                 <b>{Math.round(story.value).toLocaleString('en-US')}</b>

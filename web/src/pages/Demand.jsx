@@ -127,7 +127,7 @@ function FileGroups({ site, groups, colors }) {
         ))}
         <p class="note" style={{ margin: 0 }}>
           First matching group wins. They’re made from your brand, topics and competitors.{' '}
-          <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+          <a href={`#/site/${site.id}/setup`}>Change them in the site’s settings</a>
         </p>
       </div>
     </Card>

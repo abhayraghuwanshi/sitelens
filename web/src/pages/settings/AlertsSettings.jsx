@@ -24,7 +24,7 @@ const LABELS = {
   stars: 'GitHub stars spike',
   issues: 'New GitHub issues',
   mentions: 'New mentions (HN, Reddit, Product Hunt)',
-  goals: 'Goals marked to alert, per site in Setup',
+  goals: 'Goals marked to alert, per site in each site’s settings',
 };
 
 export function AlertsSettings() {

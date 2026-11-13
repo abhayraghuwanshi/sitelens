@@ -305,7 +305,7 @@ function HowTheyCome({ site, range }) {
 }
 
 // Who reached the site's goal steps and left without the outcome, by device and
-// system (BigQuery). The steps and outcome are the site's own goals from Setup.
+// system (BigQuery). The steps and outcome are the site's own goals (its Edit page).
 const GROUP_COLOR = { 'Phones and tablets': 'var(--series-muted)', Chromebooks: 'var(--series-5)', Mac: 'var(--series-4)', Windows: 'var(--series-1)', Linux: 'var(--series-7)', Other: 'var(--border-strong)' };
 
 function Leavers({ site, range }) {
@@ -364,7 +364,7 @@ function Leavers({ site, range }) {
           </li>
         ))}
       </ul>
-      <p class="nx-note">From the site’s goals in Setup: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
+      <p class="nx-note">From the site’s goals: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
     </section>
   );
 }

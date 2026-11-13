@@ -11,7 +11,7 @@ import { Results, SectionHead } from './Story.jsx';
 // One site's outcomes (server/outcomes.mjs), in the order you'd act on them:
 // what it led to, what to do about it, where people drop off, and which
 // channels and pages bring the people who convert. The goals behind it are
-// at the bottom, one link from Setup.
+// at the bottom, one link from the site's Edit page.
 const RANGES = [{ key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const pct = (v) => (v === null || v === undefined ? '–' : `${(v * 100).toFixed(v > 0 && v < 0.1 ? 1 : 0)}%`);
@@ -36,7 +36,7 @@ export function OutcomesPage({ site, params, back }) {
     body = (
       <section class="nx-card">
         <p class="nx-lede">Outcomes are measured per product: this site plus its store listing or repos, and the goals that count as a result (a download, an install, a sign-up).</p>
-        <div class="nx-action-row"><a class="nx-btn primary" href={`#/site/${site.id}/setup`}>Set up goals in Setup</a></div>
+        <div class="nx-action-row"><a class="nx-btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
       </section>
     );
   } else body = <OutcomeBody key={`${product.id}:${range}`} site={site} product={product} range={range} />;
@@ -227,7 +227,7 @@ function Sources({ d }) {
 }
 
 // The site's .sitelens.yml: on GitHub it opens in a new tab; a local or demo
-// file has no page of its own, so it opens Setup, which shows it.
+// file has no page of its own, so it opens the site's Edit page, which shows it.
 function FileLink({ file, site }) {
   const name = file?.type === 'repo' ? `${file.repo}/${file.path}` : file?.type === 'demo' ? 'the built-in demo file' : file?.path ? file.path.split('/').pop() : 'the site’s repo file';
   const stop = (e) => e.stopPropagation();
@@ -246,7 +246,7 @@ function Goals({ d, site, onRefresh, refreshing }) {
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
           <span class="nx-dim"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
         <span class="nx-action-row">
-          <a class="nx-btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit in Setup' : g.custom ? 'Edit goals' : 'Set goals'}</a>
+          <a class="nx-btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
           <button class="nx-btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>
         </span>
       </summary>

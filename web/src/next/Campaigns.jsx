@@ -15,7 +15,7 @@ export function Campaigns({ site, range }) {
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   const d = data.data;
   if (d.needsGa4) {
-    return <Card title="Campaigns"><p class="muted" style={{ margin: 0 }}>Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/site/${site.id}/setup`}>Setup</a>.</p></Card>;
+    return <Card title="Campaigns"><p class="muted" style={{ margin: 0 }}>Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/site/${site.id}/setup`}>its settings</a>.</p></Card>;
   }
   return (
     <>

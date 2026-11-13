@@ -42,7 +42,7 @@ const PANELS = {
 };
 
 // Settings: #/settings?tab=<tab> · #/settings?i=<integration> opens one integration's panel.
-export function Settings({ state, params, onChange }) {
+export function Settings({ state, params, onChange, siteExtras }) {
   const flashError = params.get('error');
   const connected = params.get('connected');
   // MCP has its own tab so it's easy to find; old ?i=mcp links land there.
@@ -79,7 +79,7 @@ export function Settings({ state, params, onChange }) {
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
       {tab === 'mcp' && <McpSettings hosted={state.hosted} />}
-      {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} />}
+      {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} siteExtras={siteExtras} />}
     </>
   );
 }
@@ -91,7 +91,9 @@ export function Settings({ state, params, onChange }) {
 //   ?tab=sites&edit=new|<site>    add / edit a site (and what it runs on)
 //   ?tab=sites&product=new|<id>   add / edit a product without a website
 //   ?tab=products&edit=<id>       older product links, sent to the right form
-function SitesSettings({ state, params, onChange }) {
+// siteExtras(site): what the new layout shows under an existing site's form
+// (sharing, left-out visits, what Studio measures), so a site is set up in one place.
+function SitesSettings({ state, params, onChange, siteExtras }) {
   const { auth, sites } = state;
   const setup = useAsync(() => api.get('/products/setup'), []);
   const base = location.hash.startsWith('#/account') ? '/account' : '/settings';
@@ -118,6 +120,7 @@ function SitesSettings({ state, params, onChange }) {
         <SiteForm key={site.id || 'new'} initial={site} auth={auth} focus={params.get('focus') || ''}
           onCancel={() => go()}
           onSaved={(saved) => { onChange(); navigate(`/site/${saved.id}`); }} />
+        {site.id && siteExtras?.(site)}
       </>
     );
   }
@@ -163,7 +166,7 @@ function SitesSettings({ state, params, onChange }) {
                   {s.bq?.sessionsTable && <div class="chip accent" style={{ marginTop: '3px' }}>rollup</div>}</td>
                 <td class="small">{s.demo ? 'demo' : productSummary(productOf(s.id), setup.data) || <span class="muted">—</span>}</td>
                 <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                  <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>
+                  {(s.demo || !siteExtras) && <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>}
                   {!s.demo && <button class="btn ghost" type="button" onClick={() => go({ edit: s.id })}>Edit</button>}
                   <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); setup.reload(); }}>
                     {s.demo ? 'Hide' : 'Remove'}

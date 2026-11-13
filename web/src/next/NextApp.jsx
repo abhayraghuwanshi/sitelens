@@ -25,10 +25,12 @@ import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
 import { TodosPage, useTodos } from '../components/Todos.jsx';
 import './next.css';
 
-// The story-first layout: Sites → one site's Story, its Timeline, Explore for
-// every full report, and Setup. It lives beside the classic layout (App.jsx)
+// The story-first layout: Sites → one site's Story, its Timeline, and Explore for
+// every full report. A site is set up on its Edit page (Account → Sites & products),
+// which also holds sharing, left-out visits and what Studio measures. It lives beside the classic layout (App.jsx)
 // and reuses its pages, so nothing has to be rebuilt to fit in.
-// Routes: #/ · #/site/<id>[/story|todos|outcomes|timeline|explore|setup|<explore view>] · #/todos · #/account
+// Routes: #/ · #/site/<id>[/story|todos|outcomes|timeline|explore|<explore view>]
+// (#/site/<id>/setup, from older links, opens that site's Edit page) · #/todos · #/account
 // Classic routes (#/calendar, #/settings, #/outcomes…) still open here.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
 
@@ -45,6 +47,12 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   const [menu, setMenu] = useState(false);
   useEffect(() => { setMenu(false); }, [route.parts.join('/'), route.params.toString()]);
 
+  // Setup moved onto the site's Edit page; the sample site can't be edited, so it keeps a read-only page.
+  const setupMoved = section === 'site' && view === 'setup' && site && !site.demo && !site.shared;
+  useEffect(() => {
+    if (setupMoved) location.replace(`#/account?tab=sites&edit=${encodeURIComponent(site.id)}`);
+  }, [setupMoved, site?.id]);
+
   const todos = useTodos({ status: 'open' });
   const alertCounts = useUnreadAlerts();
   const openFor = (id) => (todos.data?.todos || []).filter((t) => t.site === id).length;
@@ -52,7 +60,7 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
 
   const tab = !section ? 'sites'
     : section === 'todos' ? 'todos'
-    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'alerts', 'timeline', 'setup'].includes(view) ? view : 'explore')
+    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'alerts', 'timeline'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
     : section === 'alerts' ? 'alerts'
     : (section === 'settings' || section === 'account') && (route.params.get('tab') === 'mcp' || route.params.get('i') === 'mcp') ? 'mcp'
@@ -70,10 +78,11 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
   else if (section === 'site' && view === 'outcomes') body = <OutcomesPage key={site.id} site={site} params={route.params} back={story} />;
   else if (section === 'site' && view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={withSite(route.params, site.id)} /></Page>;
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
-  else if (section === 'site' && view === 'setup' && site.shared) body = <ErrorState error={{ message: `Setup is for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
-  else if (section === 'site' && view === 'setup') body = <Page title="Setup" sub={`What Studio reads and measures for ${site.label}`}>{!site.demo && <SiteAccess site={site} hosted={state.hosted} />}<LeaveOut site={site} onSaved={onReload} /><Setup site={site} /></Page>;
+  else if (section === 'site' && view === 'setup' && site.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
+  else if (setupMoved) body = null;
+  else if (section === 'site' && view === 'setup') body = <Page title="What Studio measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
-  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} /></Page>;
+  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
   else if (section === 'alerts' && route.params.get('view') === 'settings') body = <Page title="Alert settings" sub="What to watch on every site, and where alerts go" back={{ href: '#/alerts', label: 'All alerts' }}><AlertSettings /></Page>;
   else if (section === 'alerts') body = <Page title="All alerts" sub="What moved on every site"><AlertsPage sites={sites} /></Page>;
@@ -81,6 +90,11 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
     const View = WIDE[section];
     body = <Page title={section[0].toUpperCase() + section.slice(1)} back={story}><View id={siteId} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
   } else body = <ErrorState error={{ message: 'This page isn’t in the new layout yet.' }} />;
+
+  // Under an existing site's Edit form: who can see it, which visits it leaves out, and what Studio measures.
+  function siteExtras(s) {
+    return <><SiteAccess site={s} hosted={state.hosted} /><LeaveOut site={s} onSaved={onReload} /><Setup site={s} connections={false} /></>;
+  }
 
   const href = (t) => (t === 'story' ? `#/site/${current.id}` : t === 'explore' ? `#/site/${current.id}/${EXPLORE_TABS[0].key}` : `#/site/${current.id}/${t}`);
 
@@ -118,7 +132,6 @@ export function NextApp({ state, route, onClassic, onTheme, themeIcon, onReload 
               <NavItem href={href('alerts')} icon="bell" active={tab === 'alerts' && section === 'site'}>Alerts {alertCounts.bySite[current.id] ? <span class="nx-count">{alertCounts.bySite[current.id]}</span> : null}</NavItem>
               <NavItem href={href('timeline')} icon="calendar" active={tab === 'timeline'}>Timeline</NavItem>
               <NavItem href={href('explore')} icon="layers" active={tab === 'explore'}>Explore</NavItem>
-              {!current.shared && <NavItem href={href('setup')} icon="settings" active={tab === 'setup'}>Setup</NavItem>}
             </nav>
           </>
         )}

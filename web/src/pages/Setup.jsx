@@ -22,7 +22,7 @@ const FROM = {
   auto: { chip: '', text: 'Studio’s guess' },
 };
 
-export function Setup({ site }) {
+export function Setup({ site, connections = true }) {
   const [fresh, setFresh] = useState(0);
   const data = useAsync(() => api.get(`/sites/${site.id}/setup${qs({ fresh: fresh ? 1 : undefined })}`), [site.id, fresh]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
@@ -31,7 +31,7 @@ export function Setup({ site }) {
 
   return (
     <>
-      <Connections site={site} target={target} />
+      {connections && <Connections site={site} target={target} />}
       <Card title="What Studio measures" sub="Goals, funnels, search and alerts"
         actions={!site.demo && <button class="btn ghost" type="button" disabled={data.loading} onClick={() => setFresh(fresh + 1)}><Icon name="refresh" size={13} /> Reload</button>}>
         <div class="stack" style={{ gap: '10px' }}>

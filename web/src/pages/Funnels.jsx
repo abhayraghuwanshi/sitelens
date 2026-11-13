@@ -244,8 +244,8 @@ function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label
         <p class="note">
           A page matches its exact path; an event matches its GA4 name. Each step has to happen after the one before, in the same visit.
           {' '}{declared.length
-            ? <>Changes here are for exploring and aren’t saved. To keep a funnel, add it in <a href={`#/site/${site.id}/setup`}>Setup</a>.</>
-            : <>To keep it, add it in <a href={`#/site/${site.id}/setup`}>Setup</a>: <CopyYaml steps={run || steps} /></>}
+            ? <>Changes here are for exploring and aren’t saved. To keep a funnel, add it in <a href={`#/site/${site.id}/setup`}>the site’s settings</a>.</>
+            : <>To keep it, add it in <a href={`#/site/${site.id}/setup`}>the site’s settings</a>: <CopyYaml steps={run || steps} /></>}
         </p>
       </div>
     </section>

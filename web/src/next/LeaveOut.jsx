@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 
-// Setup's "Left out" card: the countries whose unengaged visits a site leaves
+// The site Edit page's "Left out" card: the countries whose unengaged visits a site leaves
 // out of its BigQuery views (Story 4, Sessions, Paths, Funnels, Retention).
 // GA4's own reports can't drop single visits, so the Story notes them instead.
 export function LeaveOut({ site, onSaved }) {
