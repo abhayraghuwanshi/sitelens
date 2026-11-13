@@ -90,7 +90,7 @@ function StartCycles({ site, d, onSaved }) {
         <p>When a cycle ends, each article gets a verdict against its previous cycle. <b>Grow</b> means write more like it, <b>improve</b> means it's shown but loses the click, and <b>cut</b> means nothing found it two cycles running. Articles are compared within their category (your search topics, else the URL section), so a niche guide isn't judged against your biggest post.</p>
         {(d.needs.search || d.needs.ga4) && <p class="note">{d.needs.search ? 'No Search Console property is linked, so Google numbers will be missing. ' : ''}{d.needs.ga4 ? 'No GA4 property is linked, so visits and conversions will be missing.' : ''}</p>}
       </div>
-      <div class="row" style={{ marginTop: '12px', alignItems: 'center', gap: '12px' }}>
+      <div class="row mt-12 items-center gap-12">
         <label class="small">Cycle length <input type="number" min="7" max="60" value={days} style={{ width: '64px' }} onInput={(e) => setDays(e.currentTarget.value)} /> days</label>
         <label class="small"><input type="checkbox" checked={askAi} onChange={(e) => setAskAi(e.currentTarget.checked)} /> Run AI answer checks at the start of each cycle (uses API credits)</label>
         <button class="btn primary" type="button" onClick={start}>Start the first cycle today</button>
@@ -120,14 +120,14 @@ function CycleHead({ site, d, cycle, setCycle, onSaved }) {
   const shown = cycle || (d.cycles.length ? String(d.cycles.at(-1).n) : 'live');
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span>{`Cycle ${c.n}, day ${c.day} of ${s.days} (${shortDate(c.start)} to ${shortDate(c.end)})${s.on ? '' : ', paused'}`}</span>
         <Segmented label="Which cycle" value={shown} onChange={setCycle} options={options} />
         <label class="small"><input type="checkbox" checked={s.askAi} onChange={(e) => save({ askAi: e.currentTarget.checked })} /> AI checks each cycle</label>
         <button class="btn ghost" type="button" onClick={() => save({ on: !s.on })}>{s.on ? 'Pause' : 'Resume'}</button>
       </div>
-      {d.demo && <p class="note" style={{ margin: 0 }}>Sample cycles: open one of your own sites to run real ones.</p>}
-      {msg && <p class="note" style={{ margin: 0 }}>{msg}</p>}
+      {d.demo && <p class="note m-0">Sample cycles: open one of your own sites to run real ones.</p>}
+      {msg && <p class="note m-0">{msg}</p>}
     </>
   );
 }
@@ -166,14 +166,14 @@ function Report({ site, r, current, onSaved }) {
   const todos = useTodos({ site: site.id });
   return (
     <>
-      <p class="note" style={{ margin: 0 }}>
+      <p class="note m-0">
         {r.kind === 'live'
           ? `Cycle ${r.n} so far: ${shortDate(r.start)} to ${shortDate(r.end)}. Search engines report about two days late, so the newest day can still fill in and the next one arrives tomorrow. Changes compare it with the cycle before, scaled to the same number of days.${current?.verdictsOn ? ` Verdicts are final on ${shortDate(current.verdictsOn)}.` : ''}`
           : `Cycle ${r.n}: ${r.start} to ${r.end}.`}
         {' '}{r.goals?.length ? `“Acted” counts readers who went on to ${r.goals.map((g) => g.replace(/_/g, ' ')).join(' or ')}.` : 'No download or sign-up event found in GA4, so “acted” stays at 0.'}
         {' '}{r.sources?.ai ? `${formatNumber(r.sources.ai)} AI answers were checked in this window.` : 'No AI answer checks ran in this window, so citations are 0. Run them from AI search.'}
       </p>
-      {off.length > 0 && <p class="note" style={{ margin: 0 }}>{off.map(([k, v]) => `${{ google: 'Search Console', bing: 'Bing', ga4: 'GA4' }[k]}: ${v || 'not connected'}.`).join(' ')}</p>}
+      {off.length > 0 && <p class="note m-0">{off.map(([k, v]) => `${{ google: 'Search Console', bing: 'Bing', ga4: 'GA4' }[k]}: ${v || 'not connected'}.`).join(' ')}</p>}
 
       <KpiStrip items={[
         { label: 'Articles', value: formatNumber(t.articles), meta: `${formatNumber(t.unseen)} unseen by Google and Bing` },
@@ -216,7 +216,7 @@ function Report({ site, r, current, onSaved }) {
               <tbody>{rows.map((x) => <ArticleRow key={x.path} site={site} x={x} categories={r.categories} todos={todos.data?.todos || []} onSaved={onSaved} />)}</tbody>
             </table>
           </div>
-        ) : <div style={{ padding: '16px' }}><Empty title="Nothing matches">Try another verdict or category.</Empty></div>}
+        ) : <div class="pad-16"><Empty title="Nothing matches">Try another verdict or category.</Empty></div>}
       </Card>
       <p class="note">Value ranks articles within a category. It counts each visit as 1, each reader who acted as 5, and each AI citation as 3, because someone who read the answer may never visit. <b>Grow</b> goes to the top third of a category when its readers stay, <b>cut</b> to articles with no clicks, no AI and no readers two cycles running. Acting on a verdict saves it as the page’s decision on the Pages review.</p>
     </>
@@ -275,7 +275,7 @@ function ArticleRow({ site, x, categories, todos, onSaved }) {
       <td style={{ minWidth: '240px' }}>
         <span class={`rv-tag ${VERDICTS[x.verdict].tone}`} title={VERDICTS[x.verdict].title}>{VERDICTS[x.verdict].label}</span>
         {x.decision && <span class="rv-goal" title={x.decision.note || ''}>{DECIDED[x.decision.decision] || x.decision.decision}</span>}
-        <div class="small muted" style={{ marginTop: '4px' }}>{x.why}</div>
+        <div class="small muted mt-4">{x.why}</div>
         <Act site={site} x={x} todos={todos} onSaved={onSaved} />
       </td>
     </tr>
@@ -317,7 +317,7 @@ function Act({ site, x, todos, onSaved }) {
   const link = pageHref(site, x.path);
   if (x.verdict === 'grow') {
     return (
-      <div class="row" style={{ marginTop: '6px', gap: '6px' }}>
+      <div class="row mt-6 gap-6">
         <AddTodo site={site} added={added} class="btn cycle-act" label="To-do: write a follow-up"
           todo={{ title: `Write a follow-up to ${x.title || x.path}${x.google?.query ? ` around “${x.google.query}”` : ''}`, detail: x.why, link, from, subject: { kind: 'search', key: x.path } }} />
       </div>
@@ -326,7 +326,7 @@ function Act({ site, x, todos, onSaved }) {
   if (x.verdict === 'cut' || x.verdict === 'improve') {
     const decided = x.decision?.decision;
     return (
-      <div class="row" style={{ marginTop: '6px', gap: '6px' }}>
+      <div class="row mt-6 gap-6">
         {decided ? <button class="btn ghost cycle-act" type="button" disabled={busy} onClick={() => act('clear')}>Undo decision</button>
           : <button class="btn cycle-act" type="button" disabled={busy} onClick={() => act(x.verdict)}>{x.verdict === 'cut' ? 'Mark to remove' : 'Mark to improve'}</button>}
         {x.verdict === 'improve' && <a class="btn ghost cycle-act" href={pageHref(site, x.path)}>Open in editor</a>}

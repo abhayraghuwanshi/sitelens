@@ -72,7 +72,7 @@ function SiteHealth({ site, range }) {
   const last = [...buckets].reverse().find((b) => b.checks);
 
   return (
-    <div class="stack" style={{ gap: '16px' }}>
+    <div class="stack gap-16">
       <KpiStrip items={[
         { label: `Uptime · ${d.range.key}`, value: formatPct(uptime.pct), meta: `${uptime.checks} checks${uptime.down ? ` · ${uptime.down} failed` : ''}` },
         { label: 'Avg response', value: uptime.avgMs === null ? '—' : `${uptime.avgMs}ms`, meta: uptime.p95Ms === null ? '' : `p95 ${uptime.p95Ms}ms` },
@@ -90,7 +90,7 @@ function SiteHealth({ site, range }) {
               ))}
             </div>
             <div class="uptime-axis"><span>{stamp(d.range.from)}</span><span>now</span></div>
-            <div style={{ marginTop: '16px' }}>
+            <div class="mt-16">
               <LineChart height={180} labels={buckets.map((b) => labelOf(b.at))}
                 series={[{ label: 'Response time', values: buckets.map((b) => (b.avgMs === null ? NaN : b.avgMs)) }]} area={false}
                 format={(v) => `${Math.round(v)}ms`} tooltipTitle={(i) => stamp(buckets[i].at)} />
@@ -103,14 +103,14 @@ function SiteHealth({ site, range }) {
         actions={!d.demo && <button class="btn" type="button" disabled={run.busy || d.running} onClick={runNow}>
           <Icon name="refresh" size={13} /> {run.busy || d.running ? 'Running PageSpeed…' : 'Run PageSpeed now'}</button>}>
         <div class="stack">
-          {run.msg && <p class="small" style={{ margin: 0, color: run.msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}><Linked text={run.msg.text} /></p>}
+          {run.msg && <p class={`small m-0 ${run.msg.ok ? 'text-good' : 'text-bad'}`}><Linked text={run.msg.text} /></p>}
           <div class="vitals-grid">
             {['lcp', 'inp', 'cls'].map((m) => (
               <VitalTrend key={m} metric={m} headline={vitals[m]} series={crux?.series || []} monthly={crux?.source === 'bigquery'} />
             ))}
           </div>
           {!crux?.series?.length && (
-            <p class="note" style={{ margin: 0 }}>
+            <p class="note m-0">
               {crux?.error ? <Linked text={crux.error} /> : 'No CrUX history yet — it’s fetched with each PageSpeed run.'}
             </p>
           )}
@@ -136,7 +136,7 @@ function SiteHealth({ site, range }) {
                       <td class="num">{formatMetric('fcp', r.fcp)}</td>
                     </>
                   ) : <td colSpan={5} class="small" style={{ color: r?.error ? 'var(--critical-ink)' : undefined }}>{r?.error ? <Linked text={r.error} /> : <span class="muted">Not run yet</span>}</td>}
-                  <td class="small muted" style={{ whiteSpace: 'nowrap' }}>{r ? stamp(r.at) : ''}
+                  <td class="small muted nowrap">{r ? stamp(r.at) : ''}
                     {r?.lastError && <div class="text-bad" title={r.lastError.message}>Last run failed {formatAgo(r.lastError.at)}</div>}</td>
                 </tr>
               );

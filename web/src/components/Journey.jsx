@@ -68,7 +68,7 @@ function StageDetail({ stage, href }) {
           ))}
         </ul>
       ) : (
-        <p class="note" style={{ margin: 0 }}>{stage.headline}.</p>
+        <p class="note m-0">{stage.headline}.</p>
       )}
       {stage.key === 'deploy' && stage.ships?.length > 1 && (
         <ul class="journey-ships">
@@ -90,7 +90,7 @@ function StageDetail({ stage, href }) {
         </table>
       )}
       {stage.key === 'domain' && <p class="note">Checked with public RDAP, DNS and a TLS handshake every 6 hours. No registrar login needed.</p>}
-      {href && <a class="btn ghost" href={href} style={{ alignSelf: 'flex-start' }}>Open the full view <Icon name="external" size={12} /></a>}
+      {href && <a class="btn ghost self-start" href={href}>Open the full view <Icon name="external" size={12} /></a>}
     </div>
   );
 }

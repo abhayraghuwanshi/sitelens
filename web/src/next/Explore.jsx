@@ -54,7 +54,7 @@ function PagesTab({ site, range, params }) {
   if (params.get('view') === 'searches') {
     return (
       <div class="pages-one">
-        <div class="meta-line" style={{ alignItems: 'center' }}>
+        <div class="meta-line items-center">
           <a class="btn ghost" href={`#/site/${site.id}/pages`}>← All pages</a>
           <span class="muted small">Searches across the site</span>
         </div>

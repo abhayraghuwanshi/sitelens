@@ -142,7 +142,7 @@ function ExtensionCard({ ext, range, onChange }) {
 
         {usersSeries.filter(Number.isFinite).length >= 2 ? (
           <div>
-            <div class="small muted" style={{ marginBottom: '4px' }}>Users from daily listing snapshots</div>
+            <div class="small muted mb-4">Users from daily listing snapshots</div>
             <LineChart labels={labels} series={[{ label: 'Users', values: usersSeries }]} format={(v, axis) => formatNumber(v, { compact: axis })} height={180} area={false} {...marks} />
           </div>
         ) : (
@@ -251,7 +251,7 @@ function ListingAnalytics({ ext, range, marks }) {
       </div>
       <div class="grid cols-2-1">
         <div>
-          <div class="small muted" style={{ marginBottom: '4px' }}>Where installers come from</div>
+          <div class="small muted mb-4">Where installers come from</div>
           <table class="data">
             <thead><tr><th>Source</th><th class="num">Visitors</th><th class="num">Installs</th><th class="num">Converts</th></tr></thead>
             <tbody>
@@ -267,7 +267,7 @@ function ListingAnalytics({ ext, range, marks }) {
           </table>
         </div>
         <div>
-          <div class="small muted" style={{ marginBottom: '4px' }}>Installs by country</div>
+          <div class="small muted mb-4">Installs by country</div>
           {countries.length ? <BarList rows={countries} label={(r) => countryName(r.country)} value={(r) => r.installs} format={formatNumber} />
             : <p class="muted small">No installs in this range.</p>}
         </div>

@@ -79,7 +79,7 @@ export function Pages({ site, range, params }) {
               ))}
             </tbody>
           </table>
-          {!rows.length && <p class="muted" style={{ padding: '8px 16px' }}>No pages match “{filter}”.</p>}
+          {!rows.length && <p class="muted inset">No pages match “{filter}”.</p>}
         </div>
       </Card>
     </>
@@ -95,7 +95,7 @@ export function PageTrend({ site, range, path }) {
   if (!trend.data) return <Loading height={200} />;
   return (
     <>
-      <div class="row" style={{ gap: '6px' }}>
+      <div class="row gap-6">
         {['screenPageViews', 'activeUsers', 'sessions'].map((m) => (
           <button key={m} type="button" class={`btn${m === metric ? ' primary' : ''}`} onClick={() => setMetric(m)}>
             {{ screenPageViews: 'Views', activeUsers: 'Users', sessions: 'Sessions' }[m]}

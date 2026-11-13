@@ -172,7 +172,7 @@ function Path({ funnel, host, series }) {
             </div>
           ) : <p class="muted">No site visitors in this range, or the site isn’t linked to a GA4 property.</p>}
           {funnel.store && (
-            <p class="note" style={{ marginTop: '10px' }}>
+            <p class="note mt-10">
               Beside it, to the Web Store: {fmt(funnel.store.visitors)} listing visitors came from {host || 'the site'} ({pct(funnel.store.rate)} of site visitors), and {fmt(funnel.store.installs)} installed.
             </p>
           )}

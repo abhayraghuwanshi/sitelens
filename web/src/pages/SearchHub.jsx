@@ -193,7 +193,7 @@ function Side({ s }) {
 function RankTable({ rows, first, queryPages = [], site, pages }) {
   const [open, setOpen] = useState('');
   const [all, setAll] = useState(false);
-  if (!rows.length) return <p class="muted small" style={{ padding: '8px 16px' }}>Nothing reported for this range.</p>;
+  if (!rows.length) return <p class="muted small inset">Nothing reported for this range.</p>;
   const shown = all ? rows : rows.slice(0, 25);
   return (
     <div class="table-wrap">
@@ -241,7 +241,7 @@ export function PageDetail({ site, path, links = true }) {
   const b = check.data?.bing;
   return (
     <div class="page-detail">
-      <div class="row" style={{ gap: '8px', flexWrap: 'wrap' }}>
+      <div class="row gap-8 wrap">
         <button type="button" class="btn" disabled={check.busy} onClick={run}><Icon name="search" size={12} /> {check.busy ? 'Checking…' : check.data ? 'Check again' : 'Check index status'}</button>
         {links && site.modes?.content && path !== '/' && <a class="btn ghost" href={`#/site/${site.id}/pages?article=${encodeURIComponent(path)}`}>Open the page</a>}
         {links && <a class="btn ghost" href={`#/site/${site.id}/pages?path=${encodeURIComponent(path)}`}>Traffic</a>}
@@ -289,7 +289,7 @@ export function BingVolume({ seeds }) {
   };
   return (
     <Card title="Search volume (Bing)" sub="How often people search for any keyword, including ones you don’t rank for yet. Google publishes no volumes.">
-      <form class="row" style={{ gap: '8px', flexWrap: 'wrap' }} onSubmit={look}>
+      <form class="row gap-8 wrap" onSubmit={look}>
         <input type="text" style={{ flex: '1 1 280px' }} value={text} placeholder="raycast windows, raycast alternative" aria-label="Keywords, comma-separated" onInput={(e) => setText(e.currentTarget.value)} />
         <select value={market} onChange={(e) => setMarket(e.currentTarget.value)} aria-label="Market">{MARKETS.map((m) => <option key={m} value={m}>{m}</option>)}</select>
         <button type="submit" class="btn primary" disabled={res.busy || !text.trim()}>{res.busy ? 'Looking…' : 'Look up'}</button>

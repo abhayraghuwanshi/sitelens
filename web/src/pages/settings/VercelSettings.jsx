@@ -76,7 +76,7 @@ export function VercelSettings() {
           to the team that owns your projects. It's stored in <code>.data/studio.json</code> (owner-only), or set <code>VERCEL_TOKEN</code> (and
           optionally <code>VERCEL_TEAM_ID</code>) in <code>.env</code>. Leave the team empty to use your default team.</>}
         </p>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );

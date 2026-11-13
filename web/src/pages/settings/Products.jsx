@@ -55,7 +55,7 @@ export function ProductsCard({ setup, onReload, onEdit }) {
                 <td class="small mono">{(p.domains || []).map((d) => d.name).join(', ') || <span class="muted">—</span>}</td>
                 <td class="small">{hostingLabel(p) || <span class="muted">not set</span>}</td>
                 <td class="small muted">{[p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
-                <td class="num" style={{ whiteSpace: 'nowrap' }}>
+                <td class="num nowrap">
                   <button class="btn ghost" type="button" onClick={() => onEdit(p.id)}>Edit</button>
                   <button class="btn ghost danger" type="button" onClick={() => remove(p.id)}>Remove</button>
                 </td>
@@ -64,7 +64,7 @@ export function ProductsCard({ setup, onReload, onEdit }) {
           </tbody>
         </table>
       )}
-      {!products.length && <p class="muted" style={{ padding: '8px 16px' }}>None yet. Most products have a website and are set up with their site.</p>}
+      {!products.length && <p class="muted inset">None yet. Most products have a website and are set up with their site.</p>}
       {error && <div style={{ padding: '0 16px 12px' }}><ErrorState error={error} /></div>}
     </Card>
   );
@@ -174,7 +174,7 @@ export function ProductStages({ form, set, setup, inSite = false }) {
           <Ready ok={setup.community.reddit.ready} label="Reddit" href="#/settings?i=mentions" />
           <Ready ok={setup.community.ph.ready} label="Product Hunt" href="#/settings?i=mentions" />
         </div>
-        <p class="note" style={{ margin: 0 }}>Tip: when you post a link yourself, add <span class="mono">?utm_source=reddit&amp;utm_campaign=&lt;post&gt;</span> so GA4 can tie visits to that exact post.</p>
+        <p class="note m-0">Tip: when you post a link yourself, add <span class="mono">?utm_source=reddit&amp;utm_campaign=&lt;post&gt;</span> so GA4 can tie visits to that exact post.</p>
       </Stage>
 
       <Stage id="goals" icon="target" title="Goals" sub="What counts as progress and what counts as a result: a purchase, a sign-up, an install, a download. Outcomes measures these." done={form.goals.length > 0}>
@@ -210,8 +210,8 @@ function Stage({ id, icon, title, sub, done, children }) {
         <span class={`status-dot ${done === 'warn' ? 'warn' : done ? 'good' : 'off'}`} title={done === 'warn' ? 'Needs one more step' : done ? 'Set' : 'Not set'} />
         <span class="spacer" />
       </header>
-      <div class="card-body stack" style={{ gap: '10px' }}>
-        <p class="note" style={{ margin: 0 }}>{sub}</p>
+      <div class="card-body stack gap-10">
+        <p class="note m-0">{sub}</p>
         {children}
       </div>
     </section>
@@ -237,7 +237,7 @@ function Domains({ domains, registrars, hostingNames, onChange, onHostingGuess }
   }
   const update = (name, patch) => onChange(domains.map((d) => (d.name === name ? { ...d, ...patch } : d)));
   return (
-    <div class="stack" style={{ gap: '8px' }}>
+    <div class="stack gap-8">
       {domains.map((d) => (
         <DomainRow key={d.name} domain={d} registrars={registrars} hostingNames={hostingNames} onChange={(patch) => update(d.name, patch)}
           onRemove={() => onChange(domains.filter((x) => x.name !== d.name))} onHostingGuess={onHostingGuess} />
@@ -291,7 +291,7 @@ function Hosting({ hosting, setup, siteId, onChange }) {
   const provider = hosting.provider || '';
   const chosen = setup.hosting.find((h) => h.key === provider);
   return (
-    <div class="stack" style={{ gap: '10px' }}>
+    <div class="stack gap-10">
       <div class="provider-grid" role="radiogroup" aria-label="Hosting provider">
         {setup.hosting.map((h) => (
           <button key={h.key} type="button" role="radio" aria-checked={provider === h.key} class={`provider${provider === h.key ? ' on' : ''}`}
@@ -312,14 +312,14 @@ function Hosting({ hosting, setup, siteId, onChange }) {
             {setup.vercel.error && <small>{setup.vercel.error}</small>}
             {!siteId && <small>Deploys are matched to a site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a>.</small>}
           </label>
-        ) : <p class="note" style={{ margin: 0 }}>Connect Vercel in <a href="#/settings?i=vercel">Integrations → Vercel</a> to read deploys.</p>
+        ) : <p class="note m-0">Connect Vercel in <a href="#/settings?i=vercel">Integrations → Vercel</a> to read deploys.</p>
       )}
       {chosen && !chosen.feed && (
         <>
           <label class="field" style={{ maxWidth: '360px' }}><span class="field-label">Plan or note <small>optional</small></span>
             <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : ''} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
           </label>
-          <p class="note" style={{ margin: 0 }}>{chosen.label} has no deploy feed Studio can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
+          <p class="note m-0">{chosen.label} has no deploy feed Studio can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
         </>
       )}
     </div>
@@ -345,7 +345,7 @@ function FirebaseBackend({ value, siteId, onChange }) {
     }
   }
   return (
-    <div class="stack" style={{ gap: '8px' }}>
+    <div class="stack gap-8">
       <div class="row" style={{ alignItems: 'flex-end' }}>
         <label class="field">Firebase project ID
           <input value={project} placeholder="my-app-12345" onInput={(e) => setProject(e.currentTarget.value.trim())} />

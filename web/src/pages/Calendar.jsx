@@ -41,7 +41,7 @@ export function Calendar({ sites, params }) {
   return (
     <>
       <div class="toolbar">
-        <div class="row" style={{ gap: '4px' }}>
+        <div class="row gap-4">
           <button class="btn icon-btn" type="button" aria-label="Previous month" onClick={() => goMonth(-1)}>
             <Icon name="chevron" size={14} class="flip" />
           </button>
@@ -347,7 +347,7 @@ function AddLink({ date, site, onAdded }) {
       <h3 class="cal-sub">Add a post link</h3>
       <label class="field">Post URL<input required autoFocus type="url" value={url} placeholder="https://www.reddit.com/r/…" onInput={(e) => setUrl(e.currentTarget.value)} /></label>
       <label class="field"><span class="field-label">Title <small>optional</small></span><input value={title} placeholder="What it was about" onInput={(e) => setTitle(e.currentTarget.value)} /></label>
-      <div class="row" style={{ gap: '8px' }}>
+      <div class="row gap-8">
         <button class="btn primary" type="submit" disabled={busy}><Icon name="plus" size={13} /> Add to {dayLabel(date)}</button>
         <button class="btn ghost" type="button" onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
         {error && <span class="small text-bad">{error}</span>}

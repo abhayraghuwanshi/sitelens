@@ -64,12 +64,12 @@ function AlertsFeed() {
           <a class="btn" href="#/alerts?view=settings">Alert settings</a>
         </div>
       )}
-      {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
 
       <div class="grid cols-2">
         <Card title="Feed" sub={lastRun ? `Last check ${formatRelative(lastRun.at)}${lastRun.daily ? ' · full' : ' · GitHub & Web Store'}` : 'Not checked yet'} actions={runNow}>
           {alerts.length === 0 ? (
-            <p class="note" style={{ margin: 0 }}>
+            <p class="note m-0">
               No alerts yet. Studio checks GitHub and Web Store snapshots every hour, and GA4 and Search Console once a day after {hourLabel(settings.digestHour)}.
             </p>
           ) : (
@@ -109,7 +109,7 @@ function AlertRow({ alert, label, onRead }) {
           {!alert.read && <button class="icon-btn" type="button" title="Mark as read" aria-label="Mark as read" onClick={onRead}><Icon name="x" size={12} /></button>}
         </div>
         <div class="detail">{alert.detail}</div>
-        <div class="muted small" style={{ marginTop: '2px' }}>{label} · {formatRelative(alert.at)}</div>
+        <div class="muted small mt-2">{label} · {formatRelative(alert.at)}</div>
       </div>
     </div>
   );
@@ -152,17 +152,17 @@ function Digest({ digest }) {
         </table>
       )}
       {digest.mentions && (
-        <p class="small" style={{ margin: 0 }}>
+        <p class="small m-0">
           <Icon name="chat" size={13} /> Mentions: <b>{n(digest.mentions.count)}</b> new · top <a href={digest.mentions.link} target="_blank" rel="noreferrer">{digest.mentions.top}</a>
         </p>
       )}
       {digest.github && (
-        <p class="small" style={{ margin: 0 }}>
+        <p class="small m-0">
           <Icon name="github" size={13} /> GitHub: <b>+{n(digest.github.stars)}</b> stars, <b>{n(digest.github.views)}</b> repo views
           {digest.github.top && <> · most viewed <a href={`#/github?repo=${encodeURIComponent(digest.github.top)}`}>{digest.github.top}</a></>}
         </p>
       )}
-      <p class="small" style={{ margin: 0 }}>
+      <p class="small m-0">
         {digest.alerts.length ? `${digest.alerts.length} alert${digest.alerts.length === 1 ? '' : 's'} in the 24 hours before it.` : 'No alerts in the 24 hours before it.'}
       </p>
     </div>

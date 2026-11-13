@@ -88,7 +88,7 @@ function ArticleList({ site, range }) {
 
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span><Icon name="globe" size={13} /> {d.sitemaps.length ? `${formatNumber(d.sitemapUrls)} URLs from ${d.sitemaps.length} sitemap${d.sitemaps.length === 1 ? '' : 's'}` : 'no sitemap'}</span>
         <span><Icon name="github" size={13} /> {d.repos.length ? d.repos.map((r) => `${r.name} (${r.files} file${r.files === 1 ? '' : 's'})`).join(', ') : 'no repo'}</span>
         <Segmented label="Which pages" value={scope} onChange={setScope} options={[
@@ -100,7 +100,7 @@ function ArticleList({ site, range }) {
         </button>
       </div>
 
-      {notes.map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}><b>{{ sitemap: 'Sitemap', code: 'GitHub', ga4: 'GA4', search: 'Search Console' }[k]}:</b> {v}</p>)}
+      {notes.map(([k, v]) => <p class="note m-0" key={k}><b>{{ sitemap: 'Sitemap', code: 'GitHub', ga4: 'GA4', search: 'Search Console' }[k]}:</b> {v}</p>)}
 
       <KpiStrip items={[
         { label: all ? 'Pages' : 'Articles', value: formatNumber(t.articles), meta: `${formatNumber(t.withTraffic)} with traffic` },
@@ -138,7 +138,7 @@ function ArticleList({ site, range }) {
             </table>
           </div>
         ) : (
-          <div style={{ padding: '16px' }}>
+          <div class="pad-16">
             <Empty title={d.rows.length ? 'Nothing matches' : 'No articles found'}>
               {d.rows.length ? 'Try another filter.' : all ? 'No sitemap URLs or content files were found.' : 'Nothing under /blog, /docs, /posts and the like. Switch to All pages to see every sitemap URL.'}
             </Empty>
@@ -173,7 +173,7 @@ function Row({ r, site }) {
       <td class="num">{r.search ? formatNumber(r.search.clicks) : <span class="muted">—</span>}</td>
       <td class="num" title={r.search ? `Avg. position ${formatDecimal(r.search.position)}` : ''}>{r.search ? formatNumber(r.search.impressions) : <span class="muted">—</span>}</td>
       <td class="small">{q ? <span title={`${formatNumber(q.clicks)} clicks · ${formatNumber(q.impressions)} impressions · position ${formatDecimal(q.position)}`}>{q.query}</span> : <span class="muted">—</span>}</td>
-      <td class="small muted mono" style={{ whiteSpace: 'nowrap' }} title={r.published ? 'Published' : r.lastmod ? 'Sitemap lastmod' : ''}>{r.published || r.lastmod || '—'}</td>
+      <td class="small muted mono nowrap" title={r.published ? 'Published' : r.lastmod ? 'Sitemap lastmod' : ''}>{r.published || r.lastmod || '—'}</td>
     </tr>
   );
 }

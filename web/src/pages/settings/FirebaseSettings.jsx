@@ -117,7 +117,7 @@ export function FirebaseSettings({ auth }) {
           the App Hosting API (that needs full project access). Logs are synced into <code>.data/firebase.db</code> every 30 minutes; IP addresses are
           hashed with a daily salt and never stored.
         </p>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );

@@ -38,7 +38,7 @@ export function Outcomes({ id, range, params }) {
   return (
     <>
       {!siteId && products.length > 1 && (
-        <div class="row" style={{ marginBottom: '12px' }}>
+        <div class="row mb-12">
           <Segmented label="Product" value={product.id} options={products.map((p) => ({ key: p.id, label: p.label }))} onChange={(key) => navigate(`/outcomes/${key}`)} />
         </div>
       )}
@@ -62,7 +62,7 @@ function OutcomeView({ product, range }) {
   return (
     <>
       <SummaryLine summary={{ text: d.headline, status: worst }} />
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
         <span class="spacer" />
         <a class="btn" href={editGoals}><Icon name="target" size={13} /> {fromFile ? 'View config' : d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
@@ -186,7 +186,7 @@ function Funnel({ funnel, host }) {
         })}
       </ol>
       {funnel.store && (
-        <p class="note" style={{ marginTop: '12px' }}>
+        <p class="note mt-12">
           <b>Side path to the Web Store:</b> {formatNumber(funnel.store.visitors)} listing visitors came from {host || 'the site'} ({pct(funnel.store.rate)} of site visitors), {formatNumber(funnel.store.installs)} installed.
         </p>
       )}

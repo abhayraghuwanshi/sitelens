@@ -49,7 +49,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
   if (error) {
     return (
       <Card title="AI referral sessions">
-        <p class="small" style={{ margin: 0, color: 'var(--critical-ink)' }}>{error.message}</p>
+        <p class="small m-0 text-bad">{error.message}</p>
         {error.hint && <p class="note">{error.hint}</p>}
       </Card>
     );
@@ -77,7 +77,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
           <LineChart labels={labels} series={series} height={220} area={view === 'share'}
             format={view === 'share' ? (v) => `${formatNumber(v, { compact: true })}%` : (v, axis) => formatNumber(v, { compact: axis })} />
         ) : <p class="muted small">No sessions from AI assistants in this range yet.</p>}
-        <p class="note" style={{ marginBottom: 0 }}>Google AI Overviews clicks count as Google organic in GA4 and Search Console, so they can’t be split out.</p>
+        <p class="note mb-0">Google AI Overviews clicks count as Google organic in GA4 and Search Console, so they can’t be split out.</p>
       </Card>
 
       <div class="grid cols-2">
@@ -98,7 +98,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
                 </tbody>
               </table>
             </div>
-          ) : <p class="muted small" style={{ padding: '8px 16px' }}>Nothing yet.</p>}
+          ) : <p class="muted small inset">Nothing yet.</p>}
         </Card>
         <Card title="Landing pages from AI" flush>
           {r.landing.length ? (
@@ -117,7 +117,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
                 </tbody>
               </table>
             </div>
-          ) : <p class="muted small" style={{ padding: '8px 16px' }}>Nothing yet.</p>}
+          ) : <p class="muted small inset">Nothing yet.</p>}
         </Card>
       </div>
     </>
@@ -129,7 +129,7 @@ function Crawlers({ c, site }) {
     if (site.demo) return null;
     return (
       <Card title="AI bots on your server">
-        <p class="muted small" style={{ margin: 0 }}>
+        <p class="muted small m-0">
           GA4 can’t see bots. Link this site’s hosting logs to see which AI assistants and crawlers read your pages:{' '}
           <a href="#/settings?i=firebase">Firebase App Hosting</a>.
         </p>
@@ -179,7 +179,7 @@ function Crawlers({ c, site }) {
               </tbody>
             </table>
           </div>
-        ) : <p class="muted small" style={{ padding: '8px 16px' }}>No pages read by AI bots in this range.</p>}
+        ) : <p class="muted small inset">No pages read by AI bots in this range.</p>}
       </Card>
     </div>
   );
@@ -256,7 +256,7 @@ function AnswerChecks({ site, initial, onDone }) {
         <Empty title="Add an API key to run answer checks">
           Each assistant answers your questions with live web search; Studio records whether it names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
           Claude uses an Anthropic key; ChatGPT, Gemini, Perplexity and Grok share one OpenRouter key.
-          <div class="row" style={{ marginTop: '10px', gap: '8px' }}>
+          <div class="row mt-10 gap-8">
             <a class="btn primary" href="#/settings?i=openrouter">Add an OpenRouter key</a>
             <a class="btn" href="#/settings?i=anthropic">Add an Anthropic key</a>
           </div>
@@ -275,7 +275,7 @@ function AnswerChecks({ site, initial, onDone }) {
         </div>
       )}
       {editing && (
-        <form class="stack" onSubmit={save} style={{ gap: '8px', marginBottom: '12px' }}>
+        <form class="stack gap-8 mb-12" onSubmit={save}>
           <textarea rows={Math.max(4, a.prompts.length + 1)} value={draft} onInput={(e) => setDraft(e.currentTarget.value)} aria-label="Questions, one per line" />
           <div class="row">
             <button class="btn primary" type="submit">Save questions</button>
@@ -283,7 +283,7 @@ function AnswerChecks({ site, initial, onDone }) {
           </div>
         </form>
       )}
-      {msg && <p class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {msg && <p class={`small ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       {fromFile ? (
         <p class="note">
           These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in the site’s settings</a>
@@ -328,11 +328,11 @@ function AnswerChecks({ site, initial, onDone }) {
                           return (
                             <div key={e.key} class="ai-answer">
                               <div class="ai-answer-head"><b>{e.label}</b><span class="small muted">{l.model || e.model || ''}</span><Verdict l={l} /></div>
-                              {l.error ? <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>{l.error}</p> : (
+                              {l.error ? <p class="small text-bad m-0">{l.error}</p> : (
                                 <>
                                   <div class="small ai-answer-text">{l.answer}</div>
                                   {l.domains?.length > 0 && (
-                                    <div class="row" style={{ gap: '4px', flexWrap: 'wrap' }}>
+                                    <div class="row gap-4 wrap">
                                       {l.domains.map((d) => <span key={d.domain} class={`chip${d.own ? ' accent' : ''}`}>{d.domain} · {d.citations}</span>)}
                                     </div>
                                   )}
@@ -350,7 +350,7 @@ function AnswerChecks({ site, initial, onDone }) {
           </tbody>
         </table>
       </div>
-      <p class="note" style={{ marginBottom: 0 }}>
+      <p class="note mb-0">
         Each assistant answers with its own web search, as a neutral assistant that doesn’t know whose site it is. “Named” matches {a.terms.slice(0, 4).map((t) => `“${t}”`).join(', ')}; <span class="chip good">#2</span> means it cited your site, second among the sites it cited; “seen” means your site was in its search results but not cited.
         Answers vary run to run, so the hit rate matters more than one result. Per question, Claude costs roughly $0.05–0.20 and each OpenRouter assistant $0.01–0.05.
         {!site.demo && <> <WeeklyToggle on={a.weekly} onChange={(weekly) => api.post('/ai-search/settings', { weekly }).then(() => setA({ ...a, weekly }))} /></>}

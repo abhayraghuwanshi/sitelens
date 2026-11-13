@@ -90,7 +90,7 @@ export function AlertsPage({ site, sites }) {
             {siteDigest.clicks !== undefined && <>, <b>{n(siteDigest.clicks)}</b> search clicks</>}.
           </p>
         )}
-        {msg && <p class={`small ${msg.ok ? 'good' : 'nx-error'}`} style={{ margin: 0 }} role="status">{msg.text}</p>}
+        {msg && <p class={`small ${msg.ok ? 'good' : 'nx-error'} m-0`} role="status">{msg.text}</p>}
         {lastRun?.errors?.length > 0 && (
           <details class="alert-failed">
             <summary>{lastRun.errors.length} source{lastRun.errors.length === 1 ? '' : 's'} couldn’t be read last time</summary>
@@ -101,7 +101,7 @@ export function AlertsPage({ site, sites }) {
 
       <section class="nx-card" aria-label="Alerts">
         {fresh.length ? <ul class="alerts">{grouped(fresh).map(row)}</ul> : (
-          <p class="muted" style={{ margin: 0 }}>
+          <p class="muted m-0">
             {alerts.length ? 'No new alerts.' : `No alerts${site ? ` for ${site.label}` : ''} yet. When traffic, search clicks, goals, stars or installs move past their limits, they show up here.`}
           </p>
         )}

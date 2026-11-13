@@ -39,7 +39,7 @@ export function Firebase({ range, params }) {
   return (
     <>
       {!scoped && links.length > 1 && (
-        <div class="health-sites" role="group" aria-label="Site" style={{ marginBottom: '16px' }}>
+        <div class="health-sites mb-16" role="group" aria-label="Site">
           {links.map((l) => (
             <button key={l.siteId} type="button" class={`btn${l.siteId === link.siteId ? ' primary' : ''}`} aria-pressed={l.siteId === link.siteId}
               onClick={() => navigate(`/firebase${qs({ site: l.siteId })}`)}>{l.label}</button>
@@ -78,7 +78,7 @@ function Setup({ onLinked }) {
         <a class="btn ghost" href="#/settings?i=firebase">Link by hand</a>
       </div>
       {error && (
-        <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>
+        <p class="small text-bad m-0">
           {error.message} {error.hint && <span class="muted">{error.hint}</span>}
           {error.kind === 'needs-logging-scope' && <> <a href="#/settings?i=google">Sign in again</a></>}
         </p>
@@ -112,7 +112,7 @@ function SiteTraffic({ link, range, onSynced }) {
   }
 
   const header = (
-    <div class="meta-line" style={{ alignItems: 'center' }}>
+    <div class="meta-line items-center">
       <span><Icon name="flame" size={13} /> <span class="mono">{link.project}</span> · backend <b>{link.service}</b></span>
       <span>{link.lastSync ? `Synced ${formatRelative(link.lastSync)}` : 'Not synced yet'}</span>
       <a href={`https://console.firebase.google.com/project/${link.project}/apphosting`} target="_blank" rel="noreferrer">Firebase console <Icon name="external" size={11} /></a>
@@ -141,7 +141,7 @@ function SiteTraffic({ link, range, onSynced }) {
   return (
     <>
       {header}
-      {syncError && <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>{syncError}</p>}
+      {syncError && <p class="small text-bad m-0">{syncError}</p>}
       <KpiStrip items={[
         { label: 'Human page loads', value: formatNumber(t.human), meta: `${formatNumber(Math.round(t.visitorDays / Math.max(1, d.series.visitors.filter((v) => v !== null).length)))} visitors a day` },
         { label: 'Bot share', value: t.botShare === null ? '—' : formatPercent(t.botShare, 0), meta: 'of page loads' },
@@ -279,7 +279,7 @@ export function ServerTrafficCard({ site, range }) {
   return (
     <Card title="Server-side visitors" sub={`Firebase request log · ${historyKey(range)} · humans and bots GA4 never sees`}
       actions={<a class="small" href={`#/firebase${qs({ site: site.id })}`}>Open Firebase →</a>}>
-      <div class="grid cols-2" style={{ gap: '16px', marginBottom: 0 }}>
+      <div class="grid cols-2 gap-16 mb-0">
         <div>
           <KpiStrip items={[
             { label: 'Human page loads', value: formatNumber(t.human) },
@@ -291,7 +291,7 @@ export function ServerTrafficCard({ site, range }) {
             format={(v, axis) => formatNumber(v, { compact: axis })} />
         </div>
         <div>
-          <div class="small muted" style={{ marginBottom: '8px' }}>AI crawlers and assistants</div>
+          <div class="small muted mb-8">AI crawlers and assistants</div>
           {s.bots.length
             ? <BarList rows={s.bots} value={(r) => r.hits} label={(r) => r.bot} format={formatNumber} extra={(r) => r.label} />
             : <p class="muted small">No AI bots fetched a page in this range.</p>}

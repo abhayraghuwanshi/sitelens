@@ -51,7 +51,7 @@ export function PageReview({ site, range = '90d' }) {
   return (
     <>
       <div class="review-head">
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           {d.rows.length} pages{d.sources.sitemap ? `, ${d.sources.sitemap} from the sitemap` : ''}. Numbers cover {d.period?.label || 'the last 90 days'}{d.period?.search ? ` (search: ${d.period.search})` : ''}. Suggestions are judged on 90 days of visits, Google{d.sources.bing ? ', Bing' : ''} and AI, so a quiet day doesn’t change them; the decision is yours.
           {' '}<button class="btn ghost" type="button" title="Read the sitemap, GA4, Google and Bing again" onClick={() => data.reload({ fresh: true })} disabled={data.loading}><Icon name="refresh" size={12} /> Refresh</button>
         </p>

@@ -65,7 +65,7 @@ export function Funnels({ site, range }) {
   const label = labeller(goals);
 
   return (
-    <div class="stack" style={{ gap: '16px' }}>
+    <div class="stack gap-16">
       <nav class="nx-fn-picker" aria-label="Funnels">
         {choices.map((c) => (
           <button key={c.key} type="button" class={`nx-fn-chip${current?.key === c.key ? ' active' : ''}`} title={c.why || c.steps.map(label.short).join(' → ')}
@@ -118,7 +118,7 @@ function FunnelView({ data, name, label }) {
       <div class="nx-jsum-bar">
         <div>
           <h3 class="nx-fn-title">{name}</h3>
-          <p class="muted small" style={{ margin: 0 }}>Visits that did each step in this order, in one visit.</p>
+          <p class="muted small m-0">Visits that did each step in this order, in one visit.</p>
         </div>
       </div>
       <div class="nx-jsum-stats nx-tiles">
@@ -236,7 +236,7 @@ function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label
         <datalist id="funnel-events">
           {eventNames.map((n) => <option key={n} value={n} />)}
         </datalist>
-        <div class="row" style={{ marginTop: '6px' }}>
+        <div class="row mt-6">
           <button class="btn" type="button" disabled={steps.length >= 8} onClick={() => setSteps([...steps, { kind: 'event', value: '' }])}>
             <Icon name="plus" size={13} /> Add step
           </button>

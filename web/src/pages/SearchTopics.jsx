@@ -28,7 +28,7 @@ export function SearchTopics({ site, range }) {
   if (!topics.length) {
     return (
       <Card title="Topics" sub="What the site wants to be found for">
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           Add topics in the site’s settings (each with the page that should rank and the queries it should win), and this shows how each one does,
           which page Google really ranks, and which targets it never shows.{' '}
           <a href={setup}>Add topics</a>
@@ -91,7 +91,7 @@ export function SearchTopics({ site, range }) {
 
 function TopicDetail({ t }) {
   return (
-    <div class="stack" style={{ gap: '10px' }}>
+    <div class="stack gap-10">
       {t.targets.length > 0 && (
         <table class="data">
           <thead><tr><th>Target query</th><th>Where</th><th class="num">Pos.</th><th class="num">Impr.</th><th class="num">Clicks</th><th>Page Google ranks</th></tr></thead>

@@ -26,7 +26,7 @@ export function Bing({ site, range }) {
             {data.error.kind === 'needs-bing'
               ? 'One API key shows Bing clicks, queries, pages and crawl health for every site you’ve verified in Bing.'
               : data.error.hint}
-            <div style={{ marginTop: '10px' }}><a class="btn primary" href="#/settings?i=bing">Open Bing settings</a></div>
+            <div class="mt-10"><a class="btn primary" href="#/settings?i=bing">Open Bing settings</a></div>
           </Empty>
         ) : <ErrorState error={data.error} onRetry={data.reload} />}
       </>
@@ -104,7 +104,7 @@ export function Stat({ label, value, bad }) {
 }
 
 function QueryTable({ rows, first, field, path }) {
-  if (!rows.length) return <p class="muted small" style={{ padding: '8px 16px' }}>Nothing reported for this range.</p>;
+  if (!rows.length) return <p class="muted small inset">Nothing reported for this range.</p>;
   const show = (v) => {
     if (!path) return v;
     try {
@@ -155,13 +155,13 @@ export function Submit({ site, quota, host }) {
   }
   return (
     <Card title="Submit URLs to Bing" sub={left ? `${formatNumber(left.daily)} left today · ${formatNumber(left.monthly)} this month` : ''}>
-      <form class="stack" onSubmit={submit} style={{ gap: '8px' }}>
+      <form class="stack gap-8" onSubmit={submit}>
         <textarea rows={4} value={text} placeholder={`${host}new-page\n${host}blog/launch`} onInput={(e) => setText(e.currentTarget.value)} aria-label="URLs to submit" />
         <div class="row">
           <button class="btn primary" type="submit" disabled={busy || !text.trim()}>{busy ? 'Submitting…' : 'Submit'}</button>
-          {msg && <span class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</span>}
+          {msg && <span class={`small ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</span>}
         </div>
-        <p class="note" style={{ margin: 0 }}>One URL per line. Use it after a deploy or a new post so Bing (and the AI answers built on it) picks the page up within hours.</p>
+        <p class="note m-0">One URL per line. Use it after a deploy or a new post so Bing (and the AI answers built on it) picks the page up within hours.</p>
       </form>
     </Card>
   );

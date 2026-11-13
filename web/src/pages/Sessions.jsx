@@ -55,7 +55,7 @@ export function Sessions({ site, range, params }) {
               <tbody>
                 {data.data.sessions.map((s) => (
                   <tr key={`${s.user}:${s.sessionId}`}>
-                    <td style={{ whiteSpace: 'nowrap' }}>
+                    <td class="nowrap">
                       {new Date(s.startedAt).toLocaleString('en', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                       <div class="muted small">{s.returning ? 'Returning' : 'New'}</div>
                     </td>
@@ -74,7 +74,7 @@ export function Sessions({ site, range, params }) {
                 ))}
               </tbody>
             </table>
-            {!data.data.sessions.length && <p class="muted" style={{ padding: '8px 16px' }}>No sessions match.</p>}
+            {!data.data.sessions.length && <p class="muted inset">No sessions match.</p>}
           </div>
           <div style={{ padding: '8px 16px 10px' }}><WarehouseMeta data={data.data} /></div>
         </Card>
@@ -107,7 +107,7 @@ function Summary({ s, site, outcome, query, onPage, flow, depth, setDepth }) {
     : 'All sessions in the period';
   return (
     <section class="nx-card nx-jsum" aria-label="Sessions summary">
-      <p class="muted small" style={{ margin: 0 }}>{scope}</p>
+      <p class="muted small m-0">{scope}</p>
       <div class="nx-jsum-stats nx-tiles">
         <div><b>{fmt(s.sessions)}</b><span class="muted small">sessions</span></div>
         <div><b>{fmt(s.people)}</b><span class="muted small">people · {pct(s.returning, s.sessions)} returning visits</span></div>

@@ -34,7 +34,7 @@ export function LeaveOut({ site, onSaved }) {
       <div class="nx-section-head"><h2 class="nx-h2" id="leave-out-h">Left out</h2>
         {count.data && <span class="muted small">{count.data.leftOut} of {count.data.total} visits in the last 28 days</span>}
       </div>
-      <p class="muted" style={{ margin: 0 }}>Visits that look like bots, left out of every view that reads BigQuery. GA4’s own numbers can’t drop single visits; the Story says how many they still include.</p>
+      <p class="muted m-0">Visits that look like bots, left out of every view that reads BigQuery. GA4’s own numbers can’t drop single visits; the Story says how many they still include.</p>
       <label class="field">
         <span>Countries, as GA4 names them</span>
         <input id="leave-out-countries" value={countries} onInput={(e) => setCountries(e.currentTarget.value)} placeholder="Singapore, China" />
@@ -43,7 +43,7 @@ export function LeaveOut({ site, onSaved }) {
         <input id="leave-out-unengaged" type="checkbox" checked={unengagedOnly} onChange={(e) => setUnengagedOnly(e.currentTarget.checked)} />
         <span>Only visits GA4 didn’t count as engaged, so real readers there still count</span>
       </label>
-      <div class="nx-action-row" style={{ alignItems: 'center' }}>
+      <div class="nx-action-row items-center">
         <button type="submit" class="btn primary" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
         {message && <span class="muted small" role="status">{message}</span>}
       </div>

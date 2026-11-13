@@ -32,7 +32,7 @@ export function CustomMetricsSettings({ sites, params }) {
   const siteLabel = (id) => real.find((s) => s.id === id)?.label || id;
 
   return (
-    <div class="stack" style={{ gap: '16px' }}>
+    <div class="stack gap-16">
       {connectors.map((c) => <SecretCard key={c.type} connector={c} onChange={status.reload} />)}
 
       {current ? (
@@ -49,7 +49,7 @@ export function CustomMetricsSettings({ sites, params }) {
                     <td><b>{m.label}</b><div class="muted small">{siteLabel(m.siteId)}{m.from === 'file' && ' · from .sitelens.yml'}</div></td>
                     <td class="small">{connectors.find((c) => c.type === m.source.type)?.label || m.source.type}</td>
                     <td class="small muted">{SUMMARIES.find((s) => s.key === m.summary)?.label}</td>
-                    <td class="num" style={{ whiteSpace: 'nowrap' }}>
+                    <td class="num nowrap">
                       {/* A file's metric changes in the site's repo, not here. */}
                       {m.from === 'file' ? <span class="muted small">Edit in the repo</span> : (
                         <>
@@ -63,7 +63,7 @@ export function CustomMetricsSettings({ sites, params }) {
               </tbody>
             </table>
           ) : (
-            <p class="muted" style={{ padding: '8px 16px' }}>{real.length ? 'No custom metrics yet.' : 'Add a site first; each metric belongs to one site.'}</p>
+            <p class="muted inset">{real.length ? 'No custom metrics yet.' : 'Add a site first; each metric belongs to one site.'}</p>
           )}
         </Card>
       )}
@@ -103,13 +103,13 @@ function SecretCard({ connector: c, onChange }) {
           {c.secret.source === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save('')}>Remove</button>}
         </form>
         {c.type === 'd1' && (
-          <p class="note" style={{ margin: 0 }}>
+          <p class="note m-0">
             Create a token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">dash.cloudflare.com/profile/api-tokens</a> with
             {' '}<b>Account → D1 → Read</b> for the account that holds the database. It’s stored in <code>.data/studio.json</code> (owner-only), or
             set <code>{c.secret.env}</code> in <code>.env</code>.
           </p>
         )}
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );

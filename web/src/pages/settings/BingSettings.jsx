@@ -57,7 +57,7 @@ export function BingSettings() {
             {s.source === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save(null, '')}>Remove</button>}
           </form>
         </KeyForm>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
 
         {s.source && s.matches.length > 0 && (
           <table class="data">
@@ -79,7 +79,7 @@ export function BingSettings() {
           </table>
         )}
 
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           {canConnect
             ? <>Your sites need to be in <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a> first: there, “Import from Google Search Console” adds them all in one click.
                 Studio only reads; sites are matched to yours by domain.</>

@@ -25,10 +25,10 @@ export function WhatHappened({ site, range, story }) {
 
   return (
     <Card title="What happened" sub={`${short(d.range.from)} – ${short(d.range.to)}, against the ${storyRange.replace('d', '')} days before${storyRange !== range ? ' · whole days only' : ''}`}>
-      <div class="stack" style={{ gap: '14px' }}>
+      <div class="stack gap-12">
         <SummaryLine summary={{ text: d.headline, status: d.tone }} />
         {(d.changes.length > 0 || d.days.length > 0) && (
-          <div class="grid cols-2" style={{ marginBottom: 0 }}>
+          <div class="grid cols-2 mb-0">
             <div>
               <div class="story-label">What moved it</div>
               {d.changes.length ? (
@@ -58,7 +58,7 @@ export function WhatHappened({ site, range, story }) {
             </div>
           </div>
         )}
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           {d.shipped ? `${d.shipped} thing${d.shipped === 1 ? '' : 's'} shipped in this period: deploys, releases and posts.` : 'Nothing shipped in this period.'}{' '}
           <a href={`#/site/${site.id}/ship`}>See what shipped</a> · <a href={`#/calendar${qs({ site: site.id })}`}>Calendar</a>
         </p>

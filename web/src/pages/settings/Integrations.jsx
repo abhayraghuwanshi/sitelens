@@ -132,7 +132,7 @@ export function IntegrationGrid({ onOpen }) {
   const missing = g.connected ? GOOGLE_CAPS.filter((c) => !has(g.scopes, c.scope)) : [];
 
   return (
-    <div class="stack" style={{ gap: '24px' }}>
+    <div class="stack gap-22">
       <section class="integration wide">
         <span class="integration-icon"><Icon name="users" size={18} /></span>
         <div class="integration-body">
@@ -145,7 +145,7 @@ export function IntegrationGrid({ onOpen }) {
           </div>
           <p>One sign-in covers GA4, Search Console, BigQuery, PageSpeed and Firebase logs.</p>
           {g.connected && (
-            <div class="row" style={{ gap: '6px' }}>
+            <div class="row gap-6">
               {GOOGLE_CAPS.map((c) => (
                 <span key={c.label} class={`chip${has(g.scopes, c.scope) ? ' good' : ''}`}>{has(g.scopes, c.scope) ? '✓' : '✗'} {c.label}</span>
               ))}

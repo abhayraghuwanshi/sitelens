@@ -18,10 +18,10 @@ function claudeDesktopConfig(setup) {
 // One client's registration: connected shows a line, anything else shows the setup.
 function ClientStatus({ status, name }) {
   if (status?.state === 'connected') {
-    return <p class="small" style={{ margin: 0, color: 'var(--good-ink)' }}>✓ <b>{name}</b> is connected (server “{status.name}”). Nothing to do; restart open sessions if the tools don’t show up.</p>;
+    return <p class="small m-0 text-good">✓ <b>{name}</b> is connected (server “{status.name}”). Nothing to do; restart open sessions if the tools don’t show up.</p>;
   }
   if (status?.state === 'stale') {
-    return <p class="small" style={{ margin: 0, color: 'var(--critical-ink)' }}><b>{name}</b> has “{status.name}” pointing at another copy (<code>{status.script}</code>). Run the setup below again to point it at this install.</p>;
+    return <p class="small m-0 text-bad"><b>{name}</b> has “{status.name}” pointing at another copy (<code>{status.script}</code>). Run the setup below again to point it at this install.</p>;
   }
   return null;
 }
@@ -103,13 +103,13 @@ function HostedMcp() {
         </form>
         {error && <ErrorState error={error} />}
         {made && (
-          <p class="small" style={{ margin: 0, color: 'var(--good-ink)' }}>
+          <p class="small m-0 text-good">
             Token created{made.expiresAt ? `, good until ${new Date(made.expiresAt).toLocaleDateString()}` : ''}. It’s in the commands below and won’t be shown again, so copy one now.
           </p>
         )}
-        <p class="small" style={{ margin: 0 }}><b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.</p>
+        <p class="small m-0"><b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.</p>
         <Snippet label="Terminal" text={code} />
-        <p class="small" style={{ margin: 0 }}>
+        <p class="small m-0">
           <b>Claude Desktop</b> (optional): add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code>, merged into any
           existing <code>mcpServers</code>, then restart Claude Desktop. It needs Node.js installed.
         </p>
@@ -132,7 +132,7 @@ function HostedMcp() {
             </tbody>
           </table>
         )}
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           One token per computer or agent, so you can revoke one without the others. Studio keeps only a fingerprint of each token, never the token itself.
           Anyone with a token can read your Studio data, so treat it like a password. When one expires, Claude gets “access token required”: make a new one and run its command again.
         </p>
@@ -155,7 +155,7 @@ function LocalMcp() {
         <ClientStatus status={code} name="Claude Code" />
         {code?.state !== 'connected' && (
           <>
-            <p class="small" style={{ margin: 0 }}>
+            <p class="small m-0">
               <b>Claude Code:</b> run this once in a terminal, then check it with <code>claude mcp list</code>.
             </p>
             <Snippet label="Terminal" text={claudeCodeCommand(s)} />
@@ -164,14 +164,14 @@ function LocalMcp() {
         <ClientStatus status={desktop} name="Claude Desktop" />
         {desktop?.state !== 'connected' && (
           <>
-            <p class="small" style={{ margin: 0 }}>
+            <p class="small m-0">
               <b>Claude Desktop</b>{desktop?.state === 'missing' ? ' (optional, not set up yet)' : ''}: add this to <code>~/Library/Application Support/Claude/claude_desktop_config.json</code> (merge it into
               any existing <code>mcpServers</code>), then restart Claude Desktop.
             </p>
             <Snippet label="claude_desktop_config.json" text={claudeDesktopConfig(s)} />
           </>
         )}
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           The analytics tools (<code>daily_metrics</code>, <code>breakdown</code>, <code>day_story</code>, <code>events</code>) ask this app, so keep
           Studio open while you use them. <code>schema</code> and <code>query</code> read the local databases directly and work without it.
           Tokens and settings in <code>studio.json</code> are never exposed. These paths point at this install; if you move the app, copy the command again.

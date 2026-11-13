@@ -68,7 +68,7 @@ export function MentionsSettings() {
     <Card title="Mentions" sub="Hacker News (no key), Reddit and Product Hunt mentions of your sites, repos and extensions">
       <div class="stack">
         {derived.length > 0 && (
-          <p class="note" style={{ margin: 0 }}>
+          <p class="note m-0">
             Searched automatically: {derived.map((t) => <code key={t.term} style={{ marginRight: '6px' }}>{t.term}</code>)}
           </p>
         )}
@@ -102,7 +102,7 @@ export function MentionsSettings() {
               onClick={() => run(() => api.post('/mentions/credentials', { redditClientId: '' }), 'Removed.')}>Remove</button>
           )}
         </form>
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           Create a “script” app at <a href="https://www.reddit.com/prefs/apps" target="_blank" rel="noreferrer">reddit.com/prefs/apps</a> (redirect URI can be
           {' '}<code>http://localhost</code>). Reddit may ask you to register for API access first. Or set <code>REDDIT_CLIENT_ID</code> and <code>REDDIT_CLIENT_SECRET</code> in <code>.env</code>.
         </p>
@@ -120,11 +120,11 @@ export function MentionsSettings() {
               onClick={() => run(() => api.post('/mentions/credentials', { productHuntToken: '' }), 'Removed.')}>Remove</button>
           )}
         </form>
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           Create an app at <a href="https://www.producthunt.com/v2/oauth/applications" target="_blank" rel="noreferrer">producthunt.com/v2/oauth/applications</a> and
           copy its <b>developer token</b>, or set <code>PRODUCTHUNT_TOKEN</code> in <code>.env</code>. Product Hunt’s API has no search, so it watches the launches listed above.
         </p>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );

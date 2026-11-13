@@ -45,7 +45,7 @@ export function SiteHealthCard() {
           Optional: an <a href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">API key</a> for the PageSpeed Insights
           and Chrome UX Report APIs switches to weekly CrUX history. Paste it here (stored in <code>.data/studio.json</code>, owner-only) or set <code>GOOGLE_API_KEY</code> in <code>.env</code>.
         </p>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );

@@ -15,7 +15,7 @@ export function Campaigns({ site, range }) {
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   const d = data.data;
   if (d.needsGa4) {
-    return <Card title="Campaigns"><p class="muted" style={{ margin: 0 }}>Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/site/${site.id}/setup`}>its settings</a>.</p></Card>;
+    return <Card title="Campaigns"><p class="muted m-0">Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/site/${site.id}/setup`}>its settings</a>.</p></Card>;
   }
   return (
     <>
@@ -41,7 +41,7 @@ function CampaignTable({ data }) {
   if (!campaigns.length) {
     return (
       <Card title="Tagged campaigns" sub="Visits that came through a link with utm_campaign">
-        <p class="muted" style={{ margin: 0 }}>No tagged links brought visits in this range. Share links made with the builder below and each one shows up here with what it brought.</p>
+        <p class="muted m-0">No tagged links brought visits in this range. Share links made with the builder below and each one shows up here with what it brought.</p>
       </Card>
     );
   }
@@ -134,7 +134,7 @@ function AdsCard({ ads }) {
   if (!ads.linked) {
     return (
       <Card title="Google Ads" sub="Spend and results per ad campaign">
-        <p class="muted small" style={{ margin: 0 }}>
+        <p class="muted small m-0">
           This GA4 property isn’t linked to Google Ads, so there’s no ad spend to show. Link them in GA4 (Admin → Product links → Google Ads)
           and each ad campaign’s cost, clicks and key events appear here. Ads elsewhere (Meta, LinkedIn, Reddit) show up in the tables above when their links carry utm tags.
         </p>

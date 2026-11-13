@@ -165,7 +165,7 @@ function SitesSettings({ state, params, onChange, siteExtras }) {
                 <td class="small mono">{s.demo ? 'demo events' : s.bq ? `${s.bq.dataProject}.${s.bq.dataset}` : <span class="muted">—</span>}
                   {s.bq?.sessionsTable && <div class="chip accent" style={{ marginTop: '3px' }}>rollup</div>}</td>
                 <td class="small">{s.demo ? 'demo' : productSummary(productOf(s.id), setup.data) || <span class="muted">—</span>}</td>
-                <td class="num" style={{ whiteSpace: 'nowrap' }}>
+                <td class="num nowrap">
                   {(s.demo || !siteExtras) && <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>}
                   {!s.demo && <button class="btn ghost" type="button" onClick={() => go({ edit: s.id })}>Edit</button>}
                   <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); setup.reload(); }}>
@@ -176,7 +176,7 @@ function SitesSettings({ state, params, onChange, siteExtras }) {
             ))}
           </tbody>
         </table>
-        {!sites.length && <p class="muted" style={{ padding: '8px 16px' }}>No sites yet. Add one above.</p>}
+        {!sites.length && <p class="muted inset">No sites yet. Add one above.</p>}
       </Card>
 
       {setup.data ? <ProductsCard setup={setup.data} onReload={setup.reload} onEdit={(id) => go({ product: id })} /> : <Loading height={120} />}
@@ -265,7 +265,7 @@ function GitHubSettings({ state, sources, onChange }) {
           act('import', () => api.post('/github/import', { path: importPath }),
             (r) => `Imported ${Object.entries(r.imported).map(([t, n]) => `${n} ${t}`).join(', ')}.`);
         }}>
-          <p class="note" style={{ margin: 0 }}>
+          <p class="note m-0">
             GitHub only serves the last 14 days of traffic. If you ran ghstats before, copy its history in once — Studio keeps no link to that file afterwards.
           </p>
           <div class="row">
@@ -274,7 +274,7 @@ function GitHubSettings({ state, sources, onChange }) {
           </div>
         </form>
         </details>}
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );
@@ -322,8 +322,8 @@ function ConnectCard({ auth, onChange }) {
           <div class="stack">
             {auth.oauthAvailable ? (
               <>
-                <a class="btn primary" href="/auth/google" style={{ alignSelf: 'flex-start' }}>{auth.connected ? 'Sign in again' : 'Continue with Google'}</a>
-                {auth.connected && <p class="note" style={{ margin: 0 }}>Signing in again picks up permissions added since you last connected, like Cloud logs for Firebase.</p>}
+                <a class="btn primary self-start" href="/auth/google">{auth.connected ? 'Sign in again' : 'Continue with Google'}</a>
+                {auth.connected && <p class="note m-0">Signing in again picks up permissions added since you last connected, like Cloud logs for Firebase.</p>}
               </>
             ) : (
               <p class="note">
@@ -340,8 +340,8 @@ function ConnectCard({ auth, onChange }) {
               From the <a href="https://developers.google.com/oauthplayground/" target="_blank" rel="noreferrer">OAuth Playground</a> with scopes
               <code> analytics.readonly webmasters.readonly bigquery logging.read</code>. Lasts about an hour — same as the extension.
             </p>
-            <button class="btn" type="submit" disabled={busy || !token.trim()} style={{ alignSelf: 'flex-start' }}>{busy ? 'Verifying…' : 'Verify token'}</button>
-            {error && <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>{error.message}</p>}
+            <button class="btn self-start" type="submit" disabled={busy || !token.trim()}>{busy ? 'Verifying…' : 'Verify token'}</button>
+            {error && <p class="small text-bad m-0">{error.message}</p>}
           </form>
           </details>
         </div>
@@ -369,14 +369,14 @@ function BqExportStatus({ propertyId, live, result }) {
     );
   }
   return (
-    <div class="note stack" style={{ gap: '6px' }}>
+    <div class="note stack gap-6">
       <span>{result.error ? `Couldn’t look for the export: ${result.error.message}.` : 'No BigQuery export found for this property.'} To turn it on:</span>
       <ol style={{ margin: 0, paddingLeft: '18px' }}>
         <li>In Google Analytics, open <b>Admin → Product links → BigQuery links</b> and click <b>Link</b>.</li>
         <li>Choose a Google Cloud project, tick <b>Daily</b> export, and submit.</li>
         <li>Come back and check again. The first day’s data arrives within 24 hours.</li>
       </ol>
-      <span class="row" style={{ gap: '8px' }}>
+      <span class="row gap-8">
         <a class="btn ghost" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Open GA4 Admin</a>
         <button class="btn ghost" type="button" onClick={() => result.reload()}>Check again</button>
       </span>

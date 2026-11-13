@@ -42,20 +42,20 @@ function PostList({ range }) {
 
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span><Icon name="users" size={13} /> {d.accounts.length} account{d.accounts.length === 1 ? '' : 's'}</span>
         <span>{d.lastSync ? `synced ${formatRelative(d.lastSync)}` : 'not synced yet'} · every 6 hours</span>
         <button class="btn ghost" type="button" disabled={sync.busy || d.syncing || !d.accounts.length} onClick={syncNow}>
           <Icon name="refresh" size={13} /> {sync.busy || d.syncing ? 'Syncing…' : 'Sync now'}
         </button>
-        {sync.msg && <span class="small" style={{ color: sync.msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{sync.msg.text}</span>}
+        {sync.msg && <span class={`small ${sync.msg.ok ? 'text-good' : 'text-bad'}`}>{sync.msg.text}</span>}
       </div>
 
       <Accounts data={d} open={!d.accounts.length} onSaved={data.reload} />
       <AddByUrl products={d.products} onAdded={data.reload} />
       <LinkBuilder data={d} />
 
-      {Object.entries(d.errors).filter(([k]) => k.startsWith('ga4:')).map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}><b>Traffic for {d.products.find((p) => `ga4:${p.id}` === k)?.label || k}:</b> {v}</p>)}
+      {Object.entries(d.errors).filter(([k]) => k.startsWith('ga4:')).map(([k, v]) => <p class="note m-0" key={k}><b>Traffic for {d.products.find((p) => `ga4:${p.id}` === k)?.label || k}:</b> {v}</p>)}
 
       <KpiStrip items={[
         { label: 'Posts', value: formatNumber(d.totals.posts), meta: 'in range' },
@@ -103,7 +103,7 @@ function PostList({ range }) {
             <tbody>
               {d.items.map((p) => (
                 <tr key={p.id}>
-                  <td class="small muted mono" style={{ whiteSpace: 'nowrap' }}>{new Date(p.createdAt).toISOString().slice(0, 10)}</td>
+                  <td class="small muted mono nowrap">{new Date(p.createdAt).toISOString().slice(0, 10)}</td>
                   <td>
                     <a href={postHref(p.id)}>{p.title}</a>
                     {' '}<a href={p.permalink} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a>
@@ -130,7 +130,7 @@ function PostList({ range }) {
             </tbody>
           </table>
         ) : (
-          <div style={{ padding: '16px' }}>
+          <div class="pad-16">
             <Empty title={d.accounts.length ? 'No posts in this range' : 'Add your accounts'}>
               {d.accounts.length ? 'Try a longer range, or sync now.' : 'Name your usernames above and Studio pulls in everything you’ve posted.'}
             </Empty>
@@ -191,7 +191,7 @@ function Accounts({ data, open, onSaved }) {
         <span class="sub">{data.accounts.map((a) => `${labelOf(a.platform)} · ${a.handle}`).join(', ') || 'none yet'}</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <form class="card-body stack" onSubmit={save} style={{ gap: '8px' }}>
+      <form class="card-body stack gap-8" onSubmit={save}>
         {rows.map((r, i) => {
           const p = fetchable.find((x) => x.key === r.platform);
           return (
@@ -205,12 +205,12 @@ function Accounts({ data, open, onSaved }) {
             </div>
           );
         })}
-        <div class="row" style={{ marginTop: '4px' }}>
+        <div class="row mt-4">
           <button class="btn" type="button" onClick={() => setRows([...rows, { platform: 'hn', handle: '' }])}><Icon name="plus" size={13} /> Add account</button>
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
           {error && <span class="small text-bad">{error}</span>}
         </div>
-        <p class="note" style={{ margin: 0 }}>No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
+        <p class="note m-0">No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
       </form>
     </details>
   );
@@ -239,7 +239,7 @@ function AddByUrl({ products, onAdded }) {
         <span class="sub">LinkedIn, X, Indie Hackers, a blog: anything without an API</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <form class="card-body stack" onSubmit={add} style={{ gap: '12px' }}>
+      <form class="card-body stack gap-12" onSubmit={add}>
         <div class="post-form">
           <label class="field">Post URL<input required type="url" value={form.url} placeholder="https://www.linkedin.com/posts/…" onInput={(e) => set({ url: e.currentTarget.value })} /></label>
           <label class="field">Posted on<input type="date" value={form.date} onInput={(e) => set({ date: e.currentTarget.value })} /></label>
@@ -291,7 +291,7 @@ function LinkBuilder({ data }) {
         <span class="sub">Share this instead of the bare URL, and the sessions it brings are counted exactly</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <div class="card-body stack" style={{ gap: '12px' }}>
+      <div class="card-body stack gap-12">
         <div class="post-form">
           <label class="field">Page
             <input type="url" list="link-builder-sites" value={form.url} placeholder="https://your-site.com/blog/post" onInput={(e) => set({ url: e.currentTarget.value })} />
@@ -307,12 +307,12 @@ function LinkBuilder({ data }) {
           <label class="field"><span class="field-label">Variant <small>optional</small></span><input value={form.content} placeholder="r-sideproject" onInput={(e) => set({ content: e.currentTarget.value })} /></label>
         </div>
         {link ? (
-          <div class="row" style={{ flexWrap: 'wrap' }}>
+          <div class="row wrap">
             <code class="mono small" style={{ wordBreak: 'break-all', flex: '1 1 320px' }}>{link}</code>
             <button class="btn primary" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
           </div>
         ) : (
-          <p class="small muted" style={{ margin: 0 }}>{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
+          <p class="small muted m-0">{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
         )}
       </div>
     </details>
@@ -360,11 +360,11 @@ function PostDetail({ id }) {
       <div class="post-head">
         <a class="btn ghost" href="#/posts"><Icon name="chevron" size={13} class="flip" /> All posts</a>
         <h2>{p.title}</h2>
-        <div class="meta-line" style={{ alignItems: 'center' }}>
+        <div class="meta-line items-center">
           <span>{d.platform.label}{p.community ? ` · ${p.community}` : ''}</span>
           <span>{longDate(day)}</span>
           {p.manual && <span>added by hand</span>}
-          <label class="row" style={{ gap: '6px' }}>Product
+          <label class="row gap-6">Product
             <select value={p.product} onChange={(e) => assign(e.currentTarget.value)}>
               <option value="">—</option>
               {d.products.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
@@ -385,12 +385,12 @@ function PostDetail({ id }) {
           {d.authError ? (
             <div class="state error" role="alert">
               <h3>Google sign-in expired</h3>
-              <p class="small" style={{ margin: 0 }}>Studio can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
+              <p class="small m-0">Studio can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
               <a class="btn primary" href="#/settings?i=google">Sign in to Google again</a>
             </div>
-          ) : d.error && <p class="note" style={{ margin: 0 }}><b>Google Analytics:</b> {d.error}</p>}
+          ) : d.error && <p class="note m-0"><b>Google Analytics:</b> {d.error}</p>}
           {Date.now() - p.createdAt < 86_400_000 && (
-            <p class="note" style={{ margin: 0 }}>Posted {formatRelative(p.createdAt)}. Google Analytics takes a few hours to report visits, so today’s numbers are still filling in.</p>
+            <p class="note m-0">Posted {formatRelative(p.createdAt)}. Google Analytics takes a few hours to report visits, so today’s numbers are still filling in.</p>
           )}
           <KpiStrip items={[
             { label: 'Sessions brought', value: d.sessions === null ? '—' : `${d.attribution === 'timing' ? '~' : ''}${formatNumber(d.sessions)}`,
@@ -426,7 +426,7 @@ function PostDetail({ id }) {
                     </tr>
                   ))}</tbody>
                 </table>
-              ) : <div style={{ padding: '16px' }}><Empty title={d.error ? 'Needs Google' : 'No visits yet'}>{d.error ? 'Landing pages come straight from Google Analytics.' : w ? 'Nothing from this post reached the site in its window.' : 'Traffic shows here once Google Analytics reports the post day.'}</Empty></div>}
+              ) : <div class="pad-16"><Empty title={d.error ? 'Needs Google' : 'No visits yet'}>{d.error ? 'Landing pages come straight from Google Analytics.' : w ? 'Nothing from this post reached the site in its window.' : 'Traffic shows here once Google Analytics reports the post day.'}</Empty></div>}
             </Card>
             <Card title="Referrers" sub={d.attribution === 'utm' ? 'Sources carrying the campaign' : `${d.platform.label} domains`} flush>
               {d.sources.length ? (
@@ -436,7 +436,7 @@ function PostDetail({ id }) {
                     <tr key={r.label}><td>{r.label}</td><td class="num">{formatNumber(r.sessions)}</td><td class="num">{formatNumber(r.newUsers)}</td></tr>
                   ))}</tbody>
                 </table>
-              ) : <div style={{ padding: '16px' }}><Empty title={d.error ? 'Needs Google' : 'No referrers yet'} /></div>}
+              ) : <div class="pad-16"><Empty title={d.error ? 'Needs Google' : 'No referrers yet'} /></div>}
             </Card>
           </div>
           {d.attribution === 'timing' && <p class="note">Sessions marked ~ are inferred from timing: visits from {d.platform.label} around the post. Share a tagged link (My posts → Make a tagged link) for exact numbers.</p>}

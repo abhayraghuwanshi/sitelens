@@ -83,7 +83,7 @@ function Breakdown({ site, range, name, paramKey }) {
     <>
       <BarList rows={data.data.values.slice(0, 15)} label={(r) => r.value} value={(r) => r.events} format={formatNumber}
         extra={(r) => `${formatPercent(r.events / total, 0)} · ${formatNumber(r.users)} users`} />
-      <p class="note" style={{ marginTop: '8px' }}>
+      <p class="note mt-8">
         <code>{name}</code> split by <code>{paramKey}</code>. In the GA4 UI this needs <code>{paramKey}</code> registered as a custom dimension first; the export already has it.
       </p>
     </>

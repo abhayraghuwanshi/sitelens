@@ -44,15 +44,15 @@ export function OpenRouterSettings() {
         </form>
 
         {engines.length > 0 && (
-          <div class="stack" style={{ gap: '8px' }}>
+          <div class="stack gap-8">
             <span class="small muted">Ask these assistants. Each uses the newest model OpenRouter lists for it, unless you set one.</span>
             {engines.map((e) => (
-              <div key={e.key} class="row small" style={{ gap: '10px', flexWrap: 'wrap' }}>
+              <div key={e.key} class="row small gap-10 wrap">
                 <label class="row" style={{ gap: '6px', minWidth: '120px' }}>
                   <input type="checkbox" checked={e.on} disabled={busy} onChange={(ev) => save({ engines: { [e.key]: ev.currentTarget.checked } }, `${e.label} ${ev.currentTarget.checked ? 'on' : 'off'}.`)} />
                   <b>{e.label}</b>
                 </label>
-                <form class="row" style={{ gap: '6px' }} onSubmit={(ev) => { ev.preventDefault(); save({ models: { [e.key]: models[e.key] ?? '' } }, models[e.key] ? `${e.label} uses ${models[e.key]}.` : `${e.label} uses the newest model.`); }}>
+                <form class="row gap-6" onSubmit={(ev) => { ev.preventDefault(); save({ models: { [e.key]: models[e.key] ?? '' } }, models[e.key] ? `${e.label} uses ${models[e.key]}.` : `${e.label} uses the newest model.`); }}>
                   <input type="text" style={{ width: '240px' }} placeholder={e.model || 'set a key to see the model'} value={models[e.key] ?? (e.custom ? e.model : '')}
                     onInput={(ev) => setModels({ ...models, [e.key]: ev.currentTarget.value })} aria-label={`${e.label} model`} />
                   <button class="btn ghost" type="submit" disabled={busy}>Set</button>
@@ -62,8 +62,8 @@ export function OpenRouterSettings() {
             ))}
           </div>
         )}
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
-        <p class="note" style={{ margin: 0 }}>
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
+        <p class="note m-0">
           Create a key at <a href="https://openrouter.ai/keys" target="_blank" rel="noreferrer">openrouter.ai/keys</a> and add credits at <a href="https://openrouter.ai/credits" target="_blank" rel="noreferrer">openrouter.ai/credits</a>.
           Prefer <code>OPENROUTER_API_KEY=…</code> in <code>.env</code>; a key pasted here is stored in <code>.data/studio.json</code>.
           Each question costs roughly $0.01–0.05 per assistant (the model’s tokens plus about $0.005–0.015 per web search). Checks only run when you press Run, or weekly if turned on.

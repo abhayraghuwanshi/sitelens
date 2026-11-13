@@ -139,7 +139,7 @@ export function ArticleEditor({ site, range, path, onClose }) {
       </header>
       {row && <p class="pv-verdict"><span class={`rv-tag ${TONE[row.suggestion]}`}>{LABELS[row.suggestion]}</span> {row.reason}</p>}
       {(s || row) && <KpiStrip items={pageNumbers(s, row, range, row?.period)} />}
-      {row?.period?.search && <p class="small muted" style={{ margin: 0 }}>Visits and AI cover {row.period.label}; search numbers cover {row.period.search}, since Search Console runs 2–3 days behind.</p>}
+      {row?.period?.search && <p class="small muted m-0">Visits and AI cover {row.period.label}; search numbers cover {row.period.search}, since Search Console runs 2–3 days behind.</p>}
 
       <nav class="pv-tabs" aria-label="Page sections">
         {TABS.map((t) => (
@@ -447,7 +447,7 @@ function History({ data }) {
   const last = data.updates[0];
   const per = (t, days) => (t ? t / days : 0);
   return (
-    <p class="note" style={{ margin: 0 }}>
+    <p class="note m-0">
       <b>Last updated here {last.date}</b>{last.body ? <> · <a href={last.body.split('\n')[0]} target="_blank" rel="noreferrer">pull request</a></> : ''}
       {c?.pending && ' · search numbers for the change arrive after about 3 days.'}
       {c && !c.pending && ` · ${c.days} days before vs after: ${formatDecimal(per(c.before.clicks, c.days))} → ${formatDecimal(per(c.after.clicks, c.days))} clicks/day, ${formatNumber(Math.round(per(c.before.impressions, c.days)))} → ${formatNumber(Math.round(per(c.after.impressions, c.days)))} impressions/day, position ${formatDecimal(c.before.position)} → ${formatDecimal(c.after.position)}.`}
@@ -483,9 +483,9 @@ function Trial({ site, path, data, onChange }) {
   const v = t?.verdict && VERDICT[t.verdict];
 
   return (
-    <div class="note" style={{ margin: 0 }}>
+    <div class="note m-0">
       {!t || t.status === 'decided' ? (
-        <div class="row" style={{ alignItems: 'center' }}>
+        <div class="row items-center">
           <span>
             {t ? <><b>Trial from {t.start}: {t.decision === 'keep' ? 'kept' : 'marked to remove'}</b> on {t.decidedAt}. </> : null}
             Tuned it? Give it {t ? 'another' : ''} 28 days: if search still doesn’t pick it up, it’s a page to remove.
@@ -495,7 +495,7 @@ function Trial({ site, path, data, onChange }) {
           </button>
         </div>
       ) : (
-        <div class="row" style={{ alignItems: 'center' }}>
+        <div class="row items-center">
           <span>
             {t.status === 'running'
               ? <><b>On trial since {t.start}</b> · day {t.elapsed} of {t.days}, verdict on {t.ends}{t.elapsed < 3 ? ' · search numbers arrive after about 3 days.' : numbers}</>
@@ -640,7 +640,7 @@ export function diffLines(a, b) {
 
 function Diff({ a, b }) {
   const lines = diffLines(a, b);
-  if (!lines.some((l) => l.op !== '=')) return <p class="small muted" style={{ padding: '16px' }}>No changes yet.</p>;
+  if (!lines.some((l) => l.op !== '=')) return <p class="small muted pad-16">No changes yet.</p>;
   // Changed lines with two lines of context; long unchanged runs collapse.
   const keep = lines.map((l, i) => lines.slice(Math.max(0, i - 2), i + 3).some((x) => x.op !== '='));
   return (
