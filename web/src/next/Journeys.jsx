@@ -103,7 +103,7 @@ export function JourneysPage({ site, params }) {
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />}>
       <a class="nx-more" href={`#/site/${site.id}?range=${range}`}>← Story</a>
       {j.data.data && j.outcome && <Summary j={j} />}
-      <section class="nx-card">{body}</section>
+      <section class="card card-plain">{body}</section>
     </Page>
   );
 }
@@ -214,7 +214,7 @@ function Summary({ j }) {
   const max = Math.max(...rows.map((x) => x.sessions));
   const notes = findings(j, total, label).slice(0, 5);
   return (
-    <section class="nx-card nx-jsum" aria-label="Summary">
+    <section class="card card-plain nx-jsum" aria-label="Summary">
       <div class="nx-jsum-stats">
         <div><b>{fmt(total.sessions)}</b><span class="muted small">visits</span></div>
         <div><b class={total.converted ? 'good' : ''}>{fmt(total.converted)}</b><span class="muted small">{label.toLowerCase()}</span></div>

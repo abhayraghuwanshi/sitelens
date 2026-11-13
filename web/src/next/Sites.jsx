@@ -18,7 +18,7 @@ export function Sites({ sites, auth, viewer }) {
       {!viewer && !sites.some((s) => !s.demo) && <GetStarted auth={auth} />}
       <div class="nx-sites">
         {rows.map(({ site, story }) => (
-          <a key={site.id} class="nx-card nx-site-card" href={`#/site/${site.id}`}>
+          <a key={site.id} class="card card-plain nx-site-card" href={`#/site/${site.id}`}>
             <span class="nx-site-name"><b>{site.label}</b><span class="muted">{site.demo ? 'Sample data' : site.host}</span></span>
             <span class="nx-site-line">{story ? story.headline : stories.loading ? 'Reading the story…' : 'No story yet: edit the site to connect Google Analytics or Search Console.'}</span>
             {story && (
@@ -45,7 +45,7 @@ function GetStarted({ auth }) {
     { done: false, title: 'Connect the rest (optional)', text: 'Bing, Vercel, GitHub, Firebase and more, each with one click where it can be.', href: '#/account', action: 'Integrations' },
   ];
   return (
-    <section class="nx-card nx-start" aria-label="Get started">
+    <section class="card card-plain nx-start" aria-label="Get started">
       <div>
         <h2>Get started</h2>
         <p class="muted">The sample site below shows what you’ll see. Three steps to see your own.</p>

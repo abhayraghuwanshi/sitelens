@@ -300,11 +300,11 @@ export function TodosPage({ site, sites }) {
   const list = useTodos(site ? { site: site.id } : {});
   return (
     <>
-      <section class="nx-card">
+      <section class="card card-plain">
         <NewTodo site={site} />
         <p class="note">Add them here, from “What to do next” on the Story, or from an article. Tick one off when the change is live: it goes on the Timeline that day, so the charts show whether it helped.</p>
       </section>
-      <section class="nx-card" aria-label="To-dos">
+      <section class="card card-plain" aria-label="To-dos">
         {list.error ? <ErrorState error={list.error} onRetry={list.reload} />
           : !list.data ? <Loading height={120} />
           : <TodoList todos={list.data.todos} sites={sites} showSite={!site} empty="Nothing to do yet." />}

@@ -34,7 +34,7 @@ export function OutcomesPage({ site, params, back }) {
   else if (!products.data) body = <Loading height={260} />;
   else if (!product) {
     body = (
-      <section class="nx-card">
+      <section class="card card-plain">
         <p class="nx-lede">Outcomes are measured per product: this site plus its store listing or repos, and the goals that count as a result (a download, an install, a sign-up).</p>
         <div class="nx-action-row"><a class="btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
       </section>
@@ -79,7 +79,7 @@ function Actions({ site, insights, range }) {
   const know = insights.filter((i) => i.tone === 'info');
 
   return (
-    <section class="nx-card nx-next" aria-label="What to do">
+    <section class="card card-plain nx-next" aria-label="What to do">
       <SectionHead n="2" title="What to do" more={{ href: `#/site/${site.id}/todos`, label: 'Your to-dos' }} />
       {!insights.length && <p class="muted">Nothing stands out yet. Findings appear once there’s enough traffic and at least one goal event.</p>}
       {fix.length > 0 && (
@@ -146,7 +146,7 @@ function Path({ funnel, host, series }) {
     ...(series.goals.some(Boolean) || !series.installs.length ? [{ label: series.goalsLabel, values: series.goals }] : []),
   ];
   return (
-    <section class="nx-card" aria-label="Where people drop off">
+    <section class="card card-plain" aria-label="Where people drop off">
       <SectionHead n="3" title="Where people drop off" />
       {funnel.leak && (
         <p class="nx-lede">
@@ -201,7 +201,7 @@ function Sources({ d }) {
   const best = Math.max(0, ...cut.rows.filter((r) => r.visitors >= 5).map((r) => r.rate || 0));
 
   return (
-    <section class="nx-card" aria-label="Who converts">
+    <section class="card card-plain" aria-label="Who converts">
       <div class="nx-section-head">
         <h2 class="nx-h2"><span class="nx-step" aria-hidden="true">4</span>Who converts</h2>
         {cuts.length > 1 && <Segmented label="Split by" value={cut.key} options={cuts.map((c) => ({ key: c.key, label: c.label }))} onChange={setPick} />}
@@ -241,7 +241,7 @@ function Goals({ d, site, onRefresh, refreshing }) {
   const fromFile = g.from === 'file';
   const edit = fromFile ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
   return (
-    <details class="nx-card nx-goals">
+    <details class="card card-plain nx-goals">
       <summary>
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
           <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>

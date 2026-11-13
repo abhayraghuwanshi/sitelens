@@ -106,7 +106,7 @@ function Summary({ s, site, outcome, query, onPage, flow, depth, setDepth }) {
     ? `Sessions${query.path ? ` that visited ${query.path}` : ''}${query.converted ? `${query.path ? ' and' : ''} that fired ${query.converted}` : ''}`
     : 'All sessions in the period';
   return (
-    <section class="nx-card nx-jsum" aria-label="Sessions summary">
+    <section class="card card-plain nx-jsum" aria-label="Sessions summary">
       <p class="muted small m-0">{scope}</p>
       <div class="nx-jsum-stats nx-tiles">
         <div><b>{fmt(s.sessions)}</b><span class="muted small">sessions</span></div>

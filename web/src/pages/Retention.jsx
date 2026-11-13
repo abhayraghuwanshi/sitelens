@@ -41,7 +41,7 @@ export function Retention({ site, range }) {
 
   return (
     <>
-      <section class="nx-card nx-jsum" aria-label="Retention summary">
+      <section class="card card-plain nx-jsum" aria-label="Retention summary">
         <div class="nx-ret-explain">
           <h3 class="nx-jsum-h">How this works</h3>
           <p>
@@ -73,7 +73,7 @@ export function Retention({ site, range }) {
         )}
       </section>
 
-      <section class="nx-card" aria-label="Weekly retention table">
+      <section class="card card-plain" aria-label="Weekly retention table">
         <div class="nx-jsum-bar">
           <h3 class="nx-jsum-h">Each week’s new visitors, and how many came back</h3>
         </div>
@@ -121,7 +121,7 @@ export function Retention({ site, range }) {
       </section>
 
       {width >= 4 ? (
-        <section class="nx-card" aria-label="Average retention curve">
+        <section class="card card-plain" aria-label="Average retention curve">
           <div class="nx-jsum-bar"><h3 class="nx-jsum-h">On average, how many are still coming back</h3></div>
           <LineChart labels={avg.map((_, w) => (w === 0 ? 'First week' : `Week ${w}`))} series={[{ label: 'Came back', values: avg.map((v) => (v ? v.rate : NaN)) }]}
             format={(v) => formatPercent(v, 0)} height={200} area={false} />

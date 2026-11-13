@@ -399,6 +399,7 @@ table.data tr.selected td { background: var(--accent-soft); }
    !important because they replace inline styles, which always won. */
 .m-0 { margin: 0 !important; }
 .inset { padding: var(--space-8) var(--space-16) !important; }
+.inset-m { margin: var(--space-8) var(--space-16) !important; }
 .pad-16 { padding: var(--space-16) !important; }
 .items-center { align-items: center !important; }
 .self-start { align-self: flex-start !important; }
@@ -1069,6 +1070,10 @@ table.data.compact .cell-path { max-width: none; }
 .cycle-engines td.small.muted { width: 84px; }
 .cycle-engines td:last-child { overflow: hidden; text-overflow: ellipsis; }
 table.review td.num { white-space: nowrap; }
+/* Fit the card at laptop width: titles wrap instead of pushing the table wider, and number columns sit closer. */
+table.data.review td.cell-path { max-width: none; min-width: 220px; white-space: normal; }
+table.data.review td.cell-path code { overflow-wrap: anywhere; }
+table.data.review th.num, table.data.review td.num { padding-inline: var(--space-10); }
 input.cycle-cat-input { width: 120px; height: auto; min-height: 0; padding: 0 4px; font-size: var(--text-xs); line-height: 1.6; border: 1px solid transparent; background: none; color: inherit; border-radius: var(--radius-xs); box-shadow: none; }
 input.cycle-cat-input:hover, input.cycle-cat-input:focus { border-color: var(--border); background: var(--surface); }
 .btn.cycle-act { padding: 2px 8px; font-size: var(--text-xs); }

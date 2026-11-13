@@ -16,7 +16,7 @@ export function SiteAccess({ site, hosted }) {
 // sharing happens instead of hiding it.
 function DesktopNote({ site }) {
   return (
-    <section class="nx-card nx-access" aria-label="People with access">
+    <section class="card card-plain nx-access" aria-label="People with access">
       <div>
         <h3 class="nx-fn-title">People with access</h3>
         <p class="muted small m-0">
@@ -71,7 +71,7 @@ function SharedList({ site }) {
   const people = list.data?.people || [];
 
   return (
-    <section class="nx-card nx-access" aria-label="People with access">
+    <section class="card card-plain nx-access" aria-label="People with access">
       <div class="nx-jsum-bar">
         <div>
           <h3 class="nx-fn-title">People with access</h3>

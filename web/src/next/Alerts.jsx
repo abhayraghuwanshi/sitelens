@@ -52,7 +52,7 @@ export function AlertsPage({ site, sites }) {
   return (
     <>
       {!settings.enabled && (
-        <section class="nx-card nx-warn alert-paused">
+        <section class="card card-plain nx-warn alert-paused">
           <div>
             <b>Alerts are paused.</b> <span class="muted">Nothing is checked in the background until you turn them back on.</span>
           </div>
@@ -60,7 +60,7 @@ export function AlertsPage({ site, sites }) {
         </section>
       )}
 
-      <section class="nx-card">
+      <section class="card card-plain">
         <div class="alert-bar">
           <div class="alert-status">
             <span class="alert-big">{unread ? `${unread} unread` : 'All caught up'}</span>
@@ -99,7 +99,7 @@ export function AlertsPage({ site, sites }) {
         )}
       </section>
 
-      <section class="nx-card" aria-label="Alerts">
+      <section class="card card-plain" aria-label="Alerts">
         {fresh.length ? <ul class="alerts">{grouped(fresh).map(row)}</ul> : (
           <p class="muted m-0">
             {alerts.length ? 'No new alerts.' : `No alerts${site ? ` for ${site.label}` : ''} yet. When traffic, search clicks, goals, stars or installs move past their limits, they show up here.`}
@@ -168,7 +168,7 @@ function AlertItem({ group, label, site, onRead }) {
 
 function DigestCard({ digest }) {
   return (
-    <section class="nx-card">
+    <section class="card card-plain">
       <div class="nx-section-head">
         <h2 class="nx-h2">Daily digest</h2>
         <span class="muted small">{digest.day} · built {formatRelative(digest.at)}</span>
@@ -277,7 +277,7 @@ export function AlertSettings() {
 
   return (
     <form class="alert-settings" onSubmit={save}>
-      <section class="nx-card">
+      <section class="card card-plain">
         <h2 class="nx-h2">Checking</h2>
         <label class="alert-toggle">
           <input type="checkbox" checked={form.enabled} onChange={(e) => set({ enabled: e.currentTarget.checked })} />
@@ -295,7 +295,7 @@ export function AlertSettings() {
         </label>
       </section>
 
-      <section class="nx-card">
+      <section class="card card-plain">
         <h2 class="nx-h2">Where alerts go</h2>
         <p class="note">Every alert lands in Studio. You can also send it to these:</p>
         <label class="alert-toggle">
@@ -316,7 +316,7 @@ export function AlertSettings() {
         </div>
       </section>
 
-      <section class="nx-card">
+      <section class="card card-plain">
         <h2 class="nx-h2">What to watch</h2>
         <p class="note">
           A metric alerts when it moves past the change against its 7-day average, the bigger side has the minimum volume, and its z-score on the last 28 days passes the limit.

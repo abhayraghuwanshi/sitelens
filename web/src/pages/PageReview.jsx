@@ -105,10 +105,10 @@ export function PageReview({ site, range = '90d' }) {
           </table>
         </div>
         {matching.length > rows.length && (
-          <button type="button" class="btn ghost" style={{ margin: '8px 16px' }} onClick={() => setAll(true)}>Show all {matching.length} pages</button>
+          <button type="button" class="btn ghost inset-m" onClick={() => setAll(true)}>Show all {matching.length} pages</button>
         )}
         {all && matching.length > 20 && (
-          <button type="button" class="btn ghost" style={{ margin: '8px 16px' }} onClick={() => setAll(false)}>Show the top 20</button>
+          <button type="button" class="btn ghost inset-m" onClick={() => setAll(false)}>Show the top 20</button>
         )}
       </Card>
     </>

@@ -124,7 +124,7 @@ function SourceTable({ data }) {
         </table>
       </div>
       {data.sources.length > 12 && (
-        <button type="button" class="btn ghost" style={{ margin: '8px 16px' }} onClick={() => setAll(!all)}>{all ? 'Show the top 12' : `Show all ${data.sources.length}`}</button>
+        <button type="button" class="btn ghost inset-m" onClick={() => setAll(!all)}>{all ? 'Show the top 12' : `Show all ${data.sources.length}`}</button>
       )}
     </Card>
   );

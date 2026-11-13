@@ -67,7 +67,7 @@ function Today({ site, onYesterday }) {
   const from = new Date(Date.now() - 28 * 86_400_000).toISOString().slice(0, 10);
   const past = useAsync(() => api.get(`/calendar/metrics${qs({ site: site.id, from, to })}`).catch(() => null), [site.id, to]);
   if (dash.error) return <ErrorState error={dash.error} onRetry={dash.reload} />;
-  if (!dash.data) return <section class="nx-card"><Loading height={240} /></section>;
+  if (!dash.data) return <section class="card card-plain"><Loading height={240} /></section>;
 
   const rep = dash.data.reports;
   const now = rep.overview.current;
@@ -84,7 +84,7 @@ function Today({ site, onYesterday }) {
     : `${fmt(now.sessions)} visits so far today${left > 0 ? `, with ${left} hour${left === 1 ? '' : 's'} to go` : ''}. A usual ${weekday} has ${fmt(usual)} by the end of the day.`;
 
   return (
-    <section class="nx-card" aria-label="Today">
+    <section class="card card-plain" aria-label="Today">
       <SectionHead n="1" title="Today so far" more={{ href: `#/site/${site.id}/pages?range=today`, label: 'Today’s pages' }} />
       <p class="nx-headline">{headline}</p>
       <p class="nx-lede">
@@ -136,7 +136,7 @@ function NeedsYou({ site }) {
   }
   if (!items.length) return null;
   return (
-    <section class="nx-card nx-warn" aria-label="Needs you">
+    <section class="card card-plain nx-warn" aria-label="Needs you">
       <h2 class="nx-h2"><Icon name="triangle" size={16} /> {items.length === 1 ? '1 thing needs you' : `${items.length} things need you`}</h2>
       <ul class="nx-list">
         {items.map((i) => (
@@ -151,7 +151,7 @@ function Traffic({ site, story, metrics, marks }) {
   const days = metrics?.days || [];
   const traffic = story.metric === 'sessions';
   return (
-    <section class="nx-card" aria-label="Traffic">
+    <section class="card card-plain" aria-label="Traffic">
       <SectionHead n="1" title="What happened" more={{ href: `#/site/${site.id}/timeline`, label: 'Timeline' }} />
       <p class={`nx-headline tone-${story.tone}`}>{story.headline}</p>
       {days.length > 1 && (
@@ -213,11 +213,11 @@ function Cause({ e, lead }) {
 }
 
 function Sources({ site, rows, changes, range }) {
-  if (!rows) return <section class="nx-card"><Loading height={160} /></section>;
+  if (!rows) return <section class="card card-plain"><Loading height={160} /></section>;
   const max = Math.max(1, ...rows.map((r) => r.value || 0));
   const lead = changes.find((c) => c.kind === 'source');
   return (
-    <section class="nx-card" aria-label="Who brings it">
+    <section class="card card-plain" aria-label="Who brings it">
       <SectionHead n="2" title="Who brings the visits" more={{ href: `#/site/${site.id}/pages?range=${range}`, label: 'All sources' }} />
       {lead && <p class="nx-lede">{lead.text}</p>}
       <div class="nx-table" role="table" aria-label="Visits by source">
@@ -238,10 +238,10 @@ function Sources({ site, rows, changes, range }) {
 
 function Landing({ site, rows, range }) {
   const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
-  if (!rows) return <section class="nx-card"><Loading height={160} /></section>;
+  if (!rows) return <section class="card card-plain"><Loading height={160} /></section>;
   const top = search.data?.opportunities?.[0];
   return (
-    <section class="nx-card" aria-label="Where they land">
+    <section class="card card-plain" aria-label="Where they land">
       <SectionHead n="3" title="Where they land" more={{ href: `#/site/${site.id}/pages?range=${range}`, label: 'All pages' }} />
       <ul class="nx-rows">
         {rows.map((r) => (
@@ -270,13 +270,13 @@ function HowTheyCome({ site, range }) {
   const j = useJourneys(site, range);
   const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
   if (j.config.data && !j.outcome) return null;
-  if (j.data.error) return <section class="nx-card"><ErrorState error={j.data.error} onRetry={j.data.reload} /></section>;
-  if (!j.data.data) return <section class="nx-card"><Loading height={180} /></section>;
+  if (j.data.error) return <section class="card card-plain"><ErrorState error={j.data.error} onRetry={j.data.reload} /></section>;
+  if (!j.data.data) return <section class="card card-plain"><Loading height={180} /></section>;
   const top = j.journeys.filter((x) => x.name !== 'Your own site').slice(0, 4);
   const best = j.journeys.find((x) => x.converted);
   const opp = search.data?.opportunities?.[0];
   return (
-    <section class="nx-card" aria-label="How they come">
+    <section class="card card-plain" aria-label="How they come">
       <SectionHead n="3" title="How they come" more={{ href: `#/site/${site.id}/journeys?range=${range}`, label: `All ${j.journeys.length} journeys` }} />
       {best && <p class="nx-lede">The strongest way in is {best.name} → {pageTitle(best.landing).replace(/^The/, 'the')}: {fmt(best.converted)} of its {fmt(best.sessions)} visits reached “{j.outcome.label}”.</p>}
       <ul class="nx-jlinks">
@@ -317,8 +317,8 @@ function Leavers({ site, range }) {
   const data = useAsync(() => (ready ? api.get(`/sites/${site.id}/warehouse/leavers${qs({ range, steps: steps.map((g) => g.match).join(','), outcome: outcome.match })}`) : null),
     [site.id, range, ready && outcome.match, steps.map((g) => g.match).join()]);
   if (!config.data || !ready) return null;
-  if (data.error) return <section class="nx-card"><ErrorState error={data.error} onRetry={data.reload} /></section>;
-  if (!data.data) return <section class="nx-card"><Loading height={180} /></section>;
+  if (data.error) return <section class="card card-plain"><ErrorState error={data.error} onRetry={data.reload} /></section>;
+  if (!data.data) return <section class="card card-plain"><Loading height={180} /></section>;
 
   const groups = data.data.groups;
   const left = groups.reduce((n, g) => n + g.left, 0);
@@ -344,7 +344,7 @@ function Leavers({ site, range }) {
   };
 
   return (
-    <section class="nx-card" aria-label="Why they don’t convert">
+    <section class="card card-plain" aria-label="Why they don’t convert">
       <SectionHead n="4" title="Why they leave without converting" more={{ href: `#/site/${site.id}/sessions?range=${range}`, label: 'Sessions' }} />
       <p class="nx-lede">
         {fmt(left)} visits reached “{reach[0].g.label}” and left without “{outcome.label}”; {fmt(converted)} went on to it.
@@ -381,7 +381,7 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
   const product = products.data?.products?.find((p) => p.siteId === site.id);
   const out = useAsync(() => (product ? api.get(`/outcomes/${product.id}${qs({ range })}`).catch(() => null) : null), [product?.id, range]);
   const metrics = useAsync(() => api.get(`/sites/${site.id}/metrics${qs({ range })}`).catch(() => ({ metrics: [] })), [site.id, range]);
-  if (!products.data || (product && !out.data && out.loading)) return <section class="nx-card"><Loading height={160} /></section>;
+  if (!products.data || (product && !out.data && out.loading)) return <section class="card card-plain"><Loading height={160} /></section>;
   const all = out.data?.goals?.list || [];
   if (!all.some((g) => g.role === 'outcome') && !metrics.data?.metrics?.length) return null;
   const outcomesHref = product ? `#/site/${site.id}/outcomes?range=${range}` : `#/site/${site.id}/setup`;
@@ -400,7 +400,7 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
   }));
 
   return (
-    <section class="nx-card" aria-label="What it led to">
+    <section class="card card-plain" aria-label="What it led to">
       <SectionHead n={n} title={title} more={product && more ? { href: outcomesHref, label: 'Outcomes' } : null} />
       <div class="nx-outcomes">
         {onSite.length > 0 && (
@@ -466,14 +466,14 @@ const GROUPS = [
 function NextSteps({ site, range }) {
   const next = useAsync(() => api.get(`/sites/${site.id}/next-steps${qs({ range })}`), [site.id, range]);
   const todos = useTodos({ site: site.id });
-  if (next.error) return <section class="nx-card"><ErrorState error={next.error} onRetry={next.reload} /></section>;
-  if (!next.data) return <section class="nx-card"><Loading height={200} /></section>;
+  if (next.error) return <section class="card card-plain"><ErrorState error={next.error} onRetry={next.reload} /></section>;
+  if (!next.data) return <section class="card card-plain"><Loading height={200} /></section>;
   const steps = next.data.steps;
   const added = new Map((todos.data?.todos || []).filter((t) => t.from).map((t) => [t.from, t]));
   const open = todos.data?.open || 0;
 
   return (
-    <section class="nx-card nx-next" aria-label="What to do next">
+    <section class="card card-plain nx-next" aria-label="What to do next">
       <SectionHead title="What to do next" more={{ href: `#/site/${site.id}/todos`, label: open ? `Your to-dos (${open})` : 'Your to-dos' }} />
       <p class="muted">{steps.length
         ? 'From this period’s numbers. Add one to your to-dos, and tick it off when the change is live: it goes on the Timeline that day, so you can see whether it worked.'

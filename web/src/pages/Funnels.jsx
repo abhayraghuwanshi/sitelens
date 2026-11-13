@@ -84,7 +84,7 @@ export function Funnels({ site, range }) {
           eventNames={(events.data?.events || []).map((e) => e.name)} run={run} label={label} />
       )}
 
-      <section class="nx-card" aria-label="Funnel">
+      <section class="card card-plain" aria-label="Funnel">
         {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
           : !result.data ? <Loading height={340} />
           : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} />}
@@ -211,7 +211,7 @@ function findings(steps, leak, label) {
 function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label }) {
   const update = (i, patch) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   return (
-    <section class="nx-card nx-fn-editor" aria-label="Edit funnel steps">
+    <section class="card card-plain nx-fn-editor" aria-label="Edit funnel steps">
       <div class="nx-jsum-bar">
         <h3 class="nx-jsum-h">Steps, in order</h3>
         <button class="btn primary" type="button" onClick={apply}><Icon name="play" size={13} /> Show this funnel</button>

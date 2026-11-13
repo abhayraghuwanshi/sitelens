@@ -30,7 +30,7 @@ export function LeaveOut({ site, onSaved }) {
   };
 
   return (
-    <form class="nx-card" onSubmit={save} aria-labelledby="leave-out-h">
+    <form class="card card-plain" onSubmit={save} aria-labelledby="leave-out-h">
       <div class="nx-section-head"><h2 class="nx-h2" id="leave-out-h">Left out</h2>
         {count.data && <span class="muted small">{count.data.leftOut} of {count.data.total} visits in the last 28 days</span>}
       </div>

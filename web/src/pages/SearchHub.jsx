@@ -221,7 +221,7 @@ function RankTable({ rows, first, queryPages = [], site, pages }) {
           ))}
         </tbody>
       </table>
-      {rows.length > 25 && <button type="button" class="btn ghost" style={{ margin: '8px 16px' }} onClick={() => setAll(!all)}>{all ? 'Show the top 25' : `Show all ${rows.length}`}</button>}
+      {rows.length > 25 && <button type="button" class="btn ghost inset-m" onClick={() => setAll(!all)}>{all ? 'Show the top 25' : `Show all ${rows.length}`}</button>}
     </div>
   );
 }
