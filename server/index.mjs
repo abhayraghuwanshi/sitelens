@@ -483,6 +483,12 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         converted: query.get('converted') || '',
         limit: Number(query.get('limit')) || 50,
       }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/sessions-summary$/, async ({ match, query }) =>
+      engines.sessionsSummary(await siteOr404(match[1]), query.get('range'), {
+        path: query.get('path') || '',
+        converted: query.get('converted') || '',
+        outcome: query.get('outcome') || '',
+      }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/events$/, async ({ match, query }) =>
       engines.events(await siteOr404(match[1]), query.get('range'), flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/journeys$/, async ({ match, query }) =>

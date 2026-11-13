@@ -4,7 +4,7 @@
 //
 // Every analysis is written against one `sessions` shape:
 //   user_id, session_id, session_date, first_touch_date, started_at, ended_at,
-//   device, country, source, medium, pages ARRAY<STRING>,
+//   device, os, browser, country, source, medium, pages ARRAY<STRING>,
 //   seq ARRAY<STRUCT<k STRING, ts INT64>>   -- 'page:/pricing' | 'event:sign_up'
 // It comes from raw events, or from the table `rollupSql` materializes.
 
@@ -95,7 +95,7 @@ const PARAM = (key, kind = 'string_value') => `(SELECT value.${kind} FROM UNNEST
 export function sessionsFromEvents(bq, range) {
   return `SELECT
     user_id, session_id, session_date, first_touch_date, started_at, ended_at,
-    device, country, source, medium, visit_source, visit_medium, engaged,
+    device, os, browser, country, source, medium, visit_source, visit_medium, engaged,
     -- Collapse reloads: drop a page view that repeats the previous one.
     ARRAY(
       SELECT p FROM UNNEST(raw_pages) AS p WITH OFFSET o
@@ -112,6 +112,8 @@ export function sessionsFromEvents(bq, range) {
       MIN(ts) AS started_at,
       MAX(ts) AS ended_at,
       ANY_VALUE(device) AS device,
+      ANY_VALUE(os) AS os,
+      ANY_VALUE(browser) AS browser,
       ANY_VALUE(country) AS country,
       ANY_VALUE(source) AS source,
       ANY_VALUE(medium) AS medium,
@@ -135,6 +137,8 @@ export function sessionsFromEvents(bq, range) {
         event_name,
         ${PATH_OF(PARAM('page_location'))} AS path,
         device.category AS device,
+        device.operating_system AS os,
+        device.web_info.browser AS browser,
         geo.country AS country,
         traffic_source.source AS source,
         traffic_source.medium AS medium,
@@ -323,6 +327,8 @@ export function sessionsListSql(bq, range, { path = '', converted = '', limit = 
     bq,
     range,
     `SELECT user_id, session_id, started_at, ended_at, device, country, source, medium,
+  IFNULL(visit_source, '(direct)') AS visit_source, ${systemGroup(bq)} AS system, ${browserOf(bq)} AS browser,
+  first_touch_date < session_date AS returning,
   ARRAY(SELECT p FROM UNNEST(pages) AS p WITH OFFSET o WHERE o < 30 ORDER BY o) AS pages,
   ARRAY_LENGTH(pages) AS page_count,
   ARRAY_LENGTH(seq) AS event_count,
@@ -344,6 +350,45 @@ LIMIT @limit`,
   };
 }
 
+// What the sessions matching the list's filters add up to — all of them, not
+// just the 100 the list shows — in one pass: totals, then the top landing pages,
+// exit pages, sources, systems, browsers and countries (with how many of each
+// reached the outcome, when the site has one).
+export function sessionsSummarySql(bq, range, { path = '', converted = '', outcome = '' } = {}) {
+  const out = EVENT_NAME.test(outcome) ? `EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')` : 'FALSE';
+  const dims = {
+    landing: `IFNULL(pages[SAFE_OFFSET(0)], '(not set)')`,
+    exit: `IFNULL(pages[SAFE_OFFSET(ARRAY_LENGTH(pages) - 1)], '(not set)')`,
+    source: `IFNULL(visit_source, '(direct)')`,
+    system: systemGroup(bq),
+    browser: browserOf(bq),
+    country: `IFNULL(NULLIF(country, ''), '(not set)')`,
+  };
+  const tops = Object.entries(dims).map(([name, expr]) =>
+    `  APPROX_TOP_COUNT(${expr}, 8) AS top_${name},\n  APPROX_TOP_COUNT(IF(${out}, ${expr}, NULL), 8) AS conv_${name}`).join(',\n');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT
+  COUNT(*) AS sessions,
+  COUNT(DISTINCT user_id) AS people,
+  COUNTIF(first_touch_date < session_date) AS returning,
+  COUNTIF(ARRAY_LENGTH(pages) <= 1) AS one_page,
+  COUNTIF(ended_at - started_at < 10000000) AS quick,
+  APPROX_QUANTILES(ended_at - started_at, 2)[OFFSET(1)] AS median_us,
+  COUNTIF(${out}) AS converted,
+  COUNTIF(${out} AND first_touch_date < session_date) AS converted_returning,
+${tops}
+FROM sessions
+WHERE (@path = '' OR @path IN UNNEST(pages))
+  AND (@converted = '' OR EXISTS (SELECT 1 FROM UNNEST(seq) WHERE k = @converted))`,
+  );
+  return {
+    sql,
+    params: { ...sessionParams(bq), path: String(path), converted: converted ? `event:${converted}` : '' },
+  };
+}
+
 /* ---------- raw-event analyses (event parameters only exist there) ---------- */
 
 export function eventsCatalogSql(bq, range) {
@@ -359,13 +404,15 @@ LIMIT 100`,
 }
 
 // Journeys: where a visit came from (visit_source) × the page it landed on, with how many
-// went on to each of the site's goal steps and to its outcome. Reads the
-// sessions view, so a site's leave-out rule applies. Rows with fewer than
-// `min` sessions are left to Explore.
+// went on to each of the site's goal steps and to its outcome, and the split by
+// system. Reads the sessions view, so a site's leave-out rule applies. Rows with
+// fewer than `min` sessions are left to Explore.
 export function journeysSql(bq, range, { steps = [], outcome = '', min = 3 } = {}) {
   const names = [...new Set(steps)].filter((s) => EVENT_NAME.test(s)).slice(0, 4);
   if (!EVENT_NAME.test(outcome)) throw new Error('Journeys need an outcome event from the site’s goals.');
   const hit = (name) => `COUNTIF(EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${name}'))`;
+  const converted = `EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')`;
+  const grp = systemGroup(bq);
   const sql = withSessions(
     bq,
     range,
@@ -373,6 +420,13 @@ export function journeysSql(bq, range, { steps = [], outcome = '', min = 3 } = {
   IFNULL(pages[SAFE_OFFSET(0)], '(not set)') AS landing,
   COUNT(*) AS sessions,
   COUNTIF(engaged) AS engaged,
+  -- For visits that came with no referrer: where that visitor first came from
+  -- (GA4's first-ever touch), so returning visitors aren't a blank.
+  APPROX_TOP_COUNT(IF(visit_source IS NULL OR visit_source = '(direct)', IFNULL(source, '(direct)'), NULL), 5) AS first_sources,
+  APPROX_TOP_COUNT(${grp}, 6) AS systems,
+  APPROX_TOP_COUNT(IF(${converted}, ${grp}, NULL), 6) AS systems_converted,
+  APPROX_TOP_COUNT(${browserOf(bq)}, 6) AS browsers,
+  APPROX_TOP_COUNT(IF(${converted}, ${browserOf(bq)}, NULL), 6) AS browsers_converted,
 ${names.map((n, i) => `  ${hit(n)} AS step_${i},`).join('\n')}
   ${hit(outcome)} AS converted
 FROM sessions
@@ -382,6 +436,46 @@ ORDER BY converted DESC, sessions DESC
 LIMIT 60`,
   );
   return { sql, params: { ...sessionParams(bq), min: clampInt(min, 1, 1000) }, steps: names };
+}
+
+// Every visit in the period by system, with how many reached the outcome: the
+// totals above the journeys, which only list combinations with `min` visits.
+export function journeysSummarySql(bq, range, { outcome = '' } = {}) {
+  if (!EVENT_NAME.test(outcome)) throw new Error('Journeys need an outcome event from the site’s goals.');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT ${systemGroup(bq)} AS grp, ${browserOf(bq)} AS browser,
+  COUNT(*) AS sessions,
+  COUNTIF(engaged) AS engaged,
+  COUNTIF(EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')) AS converted,
+  COUNTIF(visit_source IS NULL OR visit_source = '(direct)') AS no_referrer
+FROM sessions
+GROUP BY grp, browser
+ORDER BY sessions DESC`,
+  );
+  return { sql, params: sessionParams(bq) };
+}
+
+// A session's browser as GA4 names it. A rollup table built before `browser`
+// existed doesn't know it.
+function browserOf(bq) {
+  return bq.sessionsTable ? `'(not set)'` : `IFNULL(NULLIF(browser, ''), '(not set)')`;
+}
+
+// A session's system, named like the leavers' groups. A rollup table built
+// before `os` existed only knows the device category.
+function systemGroup(bq) {
+  const phone = `IFNULL(device, '') IN ('mobile', 'tablet')`;
+  if (bq.sessionsTable) return `IF(${phone}, 'Phones and tablets', 'Computers')`;
+  return `CASE
+    WHEN ${phone} THEN 'Phones and tablets'
+    WHEN os = 'Chrome OS' THEN 'Chromebooks'
+    WHEN os IN ('Macintosh', 'macOS') THEN 'Mac'
+    WHEN os = 'Windows' THEN 'Windows'
+    WHEN os = 'Linux' THEN 'Linux'
+    ELSE 'Other'
+  END`;
 }
 
 // Who reached a step but didn't convert, grouped by what they were on. Steps and

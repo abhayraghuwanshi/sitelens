@@ -104,9 +104,20 @@ export function useElementWidth() {
   const [width, setWidth] = useState(0);
   useEffect(() => {
     if (!ref.current) return undefined;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry.contentRect.width)));
+    // Re-render on the next frame, not inside the observer: a redraw that
+    // changes the page height (a scrollbar appearing) would otherwise resize
+    // the element again in the same frame ("ResizeObserver loop completed").
+    let frame = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.floor(entry.contentRect.width);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth((prev) => (prev === next ? prev : next)));
+    });
     observer.observe(ref.current);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
   return [ref, width];
 }

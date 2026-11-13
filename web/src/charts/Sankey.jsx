@@ -50,8 +50,8 @@ export function Sankey({ edges, total, maxNodes = 7, height = 460, onSelect }) {
                   onClick={() => onSelect && !muted && onSelect(node.name)}>
                   <rect x={node.x} y={node.y} width={layout.nodeWidth} height={Math.max(2, node.h)} rx={2}
                     fill={muted ? 'var(--series-muted)' : 'var(--series-1)'} />
-                  {node.h >= 11 && (
-                    <text x={labelRight ? node.x + layout.nodeWidth + 6 : node.x - 6} y={node.y + node.h / 2} dy="0.32em"
+                  {node.ly != null && (
+                    <text x={labelRight ? node.x + layout.nodeWidth + 6 : node.x - 6} y={node.ly} dy="0.32em"
                       text-anchor={labelRight ? 'start' : 'end'} fill="var(--text)" style={{ fontSize: 'var(--text-sm)', paintOrder: 'stroke', stroke: 'var(--surface)', strokeWidth: 3 }}>
                       {truncate(node.name, Math.max(12, Math.floor(layout.colGap / 7.5)))}
                       <tspan fill="var(--text-3)"> {formatNumber(node.value, { compact: true })}</tspan>
@@ -138,15 +138,26 @@ export function buildLayout(edges, { width, height, maxNodes }) {
   for (const col of columns) col.nodes.sort((a, b) => rank(a) - rank(b) || b.value - a.value);
   const scale = Math.min(...columns.filter((c) => c.nodes.length).map((c) => (usable - gap * (c.nodes.length - 1)) / c.nodes.reduce((a, n) => a + n.value, 0)));
 
+  // Later columns hold fewer sessions (most leave early), so their bars are
+  // short: spread them over the room the column has, up to a 30px gap.
+  const LABEL = 15;
   for (const col of columns) {
+    const sum = col.nodes.reduce((a, n) => a + n.value * scale, 0);
+    const spread = col.nodes.length > 1 ? Math.min(30, Math.max(gap, (usable - sum) / (col.nodes.length - 1))) : gap;
     let y = top;
+    let lastLabel = -Infinity;
     for (const n of col.nodes) {
       n.x = col.x;
       n.y = y;
       n.h = n.value * scale;
       n.outY = y;
       n.inY = y;
-      y += n.h + gap;
+      // Every page gets a label, nudged down so labels never overlap; one that
+      // would fall off the chart is left to the tooltip.
+      const ly = Math.max(y + Math.max(2, n.h) / 2, lastLabel + LABEL);
+      n.ly = ly <= height - 6 ? ly : null;
+      if (n.ly != null) lastLabel = ly;
+      y += n.h + spread;
     }
   }
 

@@ -125,6 +125,17 @@ test('a leave-out rule filters sessions by country and engagement, and leavers t
   assert.equal(sql.leftOutWhere({ ...bq, leaveOut: { countries: ["x') OR TRUE --"] } }), '');
 });
 
+test('sessions summary reads every matching session in one pass, with the outcome per top value', () => {
+  const built = sql.sessionsSummarySql(bq, range, { path: '/pricing', converted: 'sign_up', outcome: 'done' });
+  assert.match(built.sql, /COUNT\(DISTINCT user_id\) AS people/);
+  assert.match(built.sql, /APPROX_TOP_COUNT\(IF\(EXISTS\(SELECT 1 FROM UNNEST\(seq\) WHERE k = 'event:done'\), IFNULL\(pages\[SAFE_OFFSET\(0\)\]/);
+  assert.match(built.sql, /AS top_browser/);
+  assert.equal(built.params.path, '/pricing');
+  assert.equal(built.params.converted, 'event:sign_up');
+  // An outcome that isn't a plain event name is dropped, never inlined.
+  assert.doesNotMatch(sql.sessionsSummarySql(bq, range, { outcome: "x' OR 1" }).sql, /x' OR 1/);
+});
+
 test('journeys group sessions by source and landing page, counting goal steps', () => {
   const built = sql.journeysSql(bq, range, { steps: ['saw_it', 'clicked'], outcome: 'done', min: 5 });
   assert.deepEqual(built.steps, ['saw_it', 'clicked']);
@@ -132,8 +143,37 @@ test('journeys group sessions by source and landing page, counting goal steps', 
   assert.match(built.sql, /k = 'event:saw_it'\)\) AS step_0/);
   assert.match(built.sql, /k = 'event:done'\)\) AS converted/);
   assert.match(built.sql, /GROUP BY source, medium, landing/);
+  assert.match(built.sql, /APPROX_TOP_COUNT\(IF\(visit_source IS NULL OR visit_source = '\(direct\)', IFNULL\(source, '\(direct\)'\), NULL\), 5\) AS first_sources/);
+  assert.match(built.sql, /APPROX_TOP_COUNT\(CASE[\s\S]*WHEN os = 'Windows' THEN 'Windows'[\s\S]*AS systems,/);
   assert.equal(built.params.min, 5);
+  // A rollup table built before `os` existed: phones vs computers only.
+  const rolled = sql.journeysSql({ ...bq, sessionsTable: 'p.d.sessions' }, range, { outcome: 'done' });
+  assert.doesNotMatch(rolled.sql, /\bos\b =/);
+  assert.match(rolled.sql, /'Phones and tablets', 'Computers'/);
+  const summary = sql.journeysSummarySql(bq, range, { outcome: 'done' });
+  assert.match(summary.sql, /GROUP BY grp, browser/);
+  assert.match(built.sql, /AS browsers_converted/);
+  assert.match(sql.sessionsFromEvents(bq, range), /device\.web_info\.browser AS browser/);
+  assert.match(rolled.sql, /'\(not set\)', 6\) AS browsers/);
+  assert.match(summary.sql, /k = 'event:done'\)\) AS converted/);
+  assert.throws(() => sql.journeysSummarySql(bq, range, { outcome: "x' OR 1" }), /outcome/);
+  assert.match(sql.sessionsFromEvents(bq, range), /device\.operating_system AS os/);
   assert.throws(() => sql.journeysSql(bq, range, { steps: [], outcome: "x' OR 1" }), /outcome/);
   // The leave-out rule reaches journeys through the sessions view.
   assert.match(sql.journeysSql({ ...bq, leaveOut: { countries: ['China'] } }, range, { outcome: 'done' }).sql, /WHERE NOT \(IFNULL\(country/);
+});
+
+test('cohorts drop weeks with no new users and mark the week the data starts in', async () => {
+  const { normalizeCohorts } = await import('../server/engines.mjs');
+  const rows = [
+    { cohort: '2026-08-17', week_offset: 9, users: 1 },
+    { cohort: '2026-10-19', week_offset: 0, users: 47 },
+    { cohort: '2026-10-19', week_offset: 1, users: 1 },
+    { cohort: '2026-10-26', week_offset: 0, users: 194 },
+  ];
+  const out = normalizeCohorts(rows, '2026-10-22');
+  assert.deepEqual(out.map((c) => c.cohort), ['2026-10-19', '2026-10-26']);
+  assert.equal(out[0].partial, true);
+  assert.equal(out[1].partial, false);
+  assert.equal(out[0].cells[1].rate, 1 / 47);
 });

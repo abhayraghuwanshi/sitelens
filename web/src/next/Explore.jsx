@@ -6,7 +6,6 @@ import { Articles } from '../pages/Articles.jsx';
 import { ContentCycles } from '../pages/ContentCycles.jsx';
 import { SearchHub } from '../pages/SearchHub.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
-import { Paths } from '../pages/Paths.jsx';
 import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
 import { Events } from '../pages/Events.jsx';
@@ -28,8 +27,8 @@ export const EXPLORE_TABS = [
   { key: 'campaigns', label: 'Campaigns', mode: 'api', component: Campaigns },
   { key: 'cycles', label: 'Content cycles', mode: 'content', component: ContentCycles, ownPeriod: true },
   { key: 'ai', label: 'AI answers', mode: 'api', component: AiSearch },
+  // Sessions and the paths they take, behind one summary and one page filter.
   { key: 'sessions', label: 'Sessions', mode: 'warehouse', component: Sessions },
-  { key: 'paths', label: 'Paths', mode: 'warehouse', component: Paths },
   { key: 'funnels', label: 'Funnels', mode: 'warehouse', component: Funnels },
   { key: 'retention', label: 'Retention', mode: 'warehouse', component: Retention },
   { key: 'events', label: 'Events', mode: 'warehouse', component: Events },
@@ -79,6 +78,11 @@ export function ExploreFrame({ site, view, params, auth, ranges: lists }) {
   const [saved, setSaved] = usePersistent('range', '28d');
   // Pages (and a page's view) keep their own period, defaulting to 90 days like their suggestions.
   const [pagesRange, setPagesRange] = usePersistent('pagesRange', '90d');
+  // Paths became part of the Sessions summary; its old links (?start=) still land there.
+  if (view === 'paths') {
+    params = new URLSearchParams(params);
+    view = 'sessions';
+  }
   const moved = Object.hasOwn(MOVED, view);
   const tab = EXPLORE_TABS.find((t) => t.key === (moved ? 'pages' : view)) || EXPLORE_TABS[0];
   if (moved && MOVED[view] && !params.get('view')) {
