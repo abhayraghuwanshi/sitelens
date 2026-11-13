@@ -365,7 +365,7 @@ table.data tr.selected td { background: var(--accent-soft); }
 .chart .baseline { stroke: var(--border-strong); }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: var(--text-sm); color: var(--text-2); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
-.legend i { width: 14px; height: 2px; border-radius: 1px; background: var(--series-1); display: inline-block; }
+.legend i { width: 14px; height: 2px; border-radius: var(--radius-bar); background: var(--series-1); display: inline-block; }
 .legend i.dashed { background: repeating-linear-gradient(90deg, var(--series-muted) 0 4px, transparent 4px 7px); }
 .legend i.swatch { width: 10px; height: 10px; border-radius: var(--radius-xs); }
 .tooltip {
@@ -801,7 +801,7 @@ table.data.compact .cell-path { max-width: none; }
 
 .md-editor {
   display: block; width: 100%; min-height: 560px; border: 0; border-radius: 0 0 var(--radius) var(--radius); padding: 14px 16px;
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, monospace); font-size: var(--text-md); line-height: 1.6; resize: vertical;
+  font-family: var(--mono); font-size: var(--text-md); line-height: 1.6; resize: vertical;
   background: var(--surface); color: var(--text);
 }
 .serp { border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; background: var(--surface-2); }
@@ -822,9 +822,9 @@ table.data.compact .cell-path { max-width: none; }
 .suggestion .del, .suggestion .ins { font-size: var(--text-sm); line-height: 1.45; padding: 4px 8px; border-radius: var(--radius-xs); overflow-wrap: anywhere; }
 .suggestion .del { background: color-mix(in srgb, var(--critical) 12%, transparent); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--critical) 60%, transparent); }
 .suggestion .ins { background: color-mix(in srgb, var(--good) 12%, transparent); }
-.suggestion .pre { white-space: pre-wrap; font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: var(--text-sm); }
+.suggestion .pre { white-space: pre-wrap; font-family: var(--mono); font-size: var(--text-sm); }
 .ok-mark { color: var(--good-ink); }
-.diff { font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: var(--text-sm); line-height: 1.55; padding: 8px 0; max-height: 640px; overflow: auto; }
+.diff { font-family: var(--mono); font-size: var(--text-sm); line-height: 1.55; padding: 8px 0; max-height: 640px; overflow: auto; }
 .diff-line { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 14px 0 8px; }
 .diff-line.add { background: color-mix(in srgb, var(--good) 14%, transparent); }
 .diff-line.rm { background: color-mix(in srgb, var(--critical) 14%, transparent); }
@@ -840,7 +840,7 @@ table.data.compact .cell-path { max-width: none; }
 .md-preview ul, .md-preview ol { padding-left: 22px; }
 .md-preview li + li { margin-top: 4px; }
 .md-preview a { color: var(--accent-ink); }
-.md-preview code { font-family: var(--font-mono, ui-monospace, Menlo, monospace); font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-radius: var(--radius-xs); }
+.md-preview code { font-family: var(--mono); font-size: 0.9em; background: var(--surface-2); padding: 1px 5px; border-radius: var(--radius-xs); }
 .md-preview pre { background: var(--surface-2); padding: 12px 14px; border-radius: var(--radius-sm); overflow: auto; }
 .md-preview pre code { background: none; padding: 0; }
 .md-preview blockquote { border-left: 3px solid var(--border-strong, var(--border)); padding: 2px 0 2px 14px; color: var(--text-2); }
@@ -1059,7 +1059,7 @@ table.data.compact .cell-path { max-width: none; }
 .cycle-steps li { position: relative; padding-left: 22px; }
 .cycle-steps li::before { content: ''; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--border-strong); box-sizing: border-box; }
 .cycle-steps li.done::before { background: var(--good-ink); border-color: var(--good-ink); }
-.cycle-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: var(--gap, 16px); }
+.cycle-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: var(--space-16); }
 .cycle-cat .link-btn { white-space: nowrap; }
 .cycle-cat.on { outline: 2px solid var(--accent); outline-offset: -1px; }
 .cycle-funnel { display: flex; flex-wrap: wrap; gap: 4px 10px; margin-bottom: 8px; }

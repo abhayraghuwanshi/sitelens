@@ -93,7 +93,7 @@ function ExtensionCard({ ext, range, onChange }) {
     <Card
       title={
         <span class="row" style={{ gap: '10px', flexWrap: 'nowrap' }}>
-          {ext.icon && <img src={ext.icon} alt="" width="28" height="28" style={{ borderRadius: '6px' }} />}
+          {ext.icon && <img src={ext.icon} alt="" width="28" height="28" style={{ borderRadius: 'var(--radius-sm)' }} />}
           <span>{ext.label}</span>
         </span>
       }
