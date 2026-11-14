@@ -63,15 +63,18 @@ async function signIn(email) {
   return { done, cookie };
 }
 
+const gatewayEnv = { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'csecret', ANTHROPIC_API_KEY: SECRET, GITHUB_TOKEN: SECRET, MASTER_KEY: SECRET, TOOLS_ORIGIN: 'https://tools.example/' };
+
 before(async () => {
   dir = await mkdtemp(join(tmpdir(), 'studio-hosted-'));
   gateway = createGateway({
     dataDir: dir,
     masterKey,
     host: HOST,
+    oldHosts: ['old.example.com'],
     allowedEmails: parseEmails('alice@example.com, Bob@Example.com, bob2@example.com'),
-    env: { GOOGLE_CLIENT_ID: 'cid', GOOGLE_CLIENT_SECRET: 'csecret', ANTHROPIC_API_KEY: SECRET, GITHUB_TOKEN: SECRET, MASTER_KEY: SECRET },
-    fetchImpl: fakeFetch,
+    env: gatewayEnv,
+    fetchImpl: (url, init) => (String(url).startsWith('https://tools.example') ? toolsFetch(url, init) : fakeFetch(url, init)),
     startJobs: false,
   });
   server = createServer((req, res) => gateway.handle(req, res));
@@ -114,10 +117,17 @@ test('only the public host is answered, and health checks need no host', async (
   assert.equal((await call('/healthz', { headers: { host: '10.0.0.1' } })).status, 200);
 });
 
+test('an old host sends people to the same page on the main host, and still answers agents', async () => {
+  const page = await call('/login?next=x', { headers: { host: 'old.example.com' } });
+  assert.equal(page.status, 308);
+  assert.equal(page.headers.location, `https://${HOST}/login?next=x`);
+  assert.equal((await call('/mcp', { method: 'POST', headers: { host: 'old.example.com' }, body: '{}' })).status, 401);
+});
+
 test('without a session: / is the home page, other pages go to sign-in, the API says 401', async () => {
   const home = await call('/');
   assert.equal(home.status, 200);
-  assert.match(home.body, /href="\/login">Enter Studio/);
+  assert.match(home.body, /href="\/login">Open Kauzl/);
   assert.equal((await call('/home')).status, 200);
   assert.equal((await call('/settings')).headers.location, '/login');
   const api = await call('/api/state');
@@ -155,7 +165,7 @@ test('invited users sign in with a secure cookie', async () => {
   assert.equal((await signIn('bob@example.com')).done.headers.location, '/');
   // Signed in, / is the app and the home page's button goes straight in.
   assert.doesNotMatch((await call('/', { cookie })).body, /Did what you shipped/);
-  assert.match((await call('/home', { cookie })).body, /href="\/">Enter Studio/);
+  assert.match((await call('/home', { cookie })).body, /href="\/">Open Kauzl/);
 });
 
 test('cross-site writes are refused', async () => {
@@ -267,7 +277,7 @@ test('MCP over HTTP: a personal token picks the user, tools see only their data,
   const rpc = (body, token = made.token, headers = {}) => call('/mcp', { method: 'POST', body, headers: { authorization: `Bearer ${token}`, ...headers } });
   const init = await rpc({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18' } });
   assert.equal(init.status, 200);
-  assert.equal(JSON.parse(init.body).result.serverInfo.name, 'sitelens-studio');
+  assert.equal(JSON.parse(init.body).result.serverInfo.name, 'kauzl');
   assert.equal((await rpc({ jsonrpc: '2.0', method: 'notifications/initialized' })).status, 202);
 
   const sites = JSON.parse((await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'list_sites', arguments: {} } })).body);
@@ -367,4 +377,139 @@ test('sharing a site: the person sees only that site, read-only, and loses it wh
   const removed = await call(`/api/shares?site=${shared.id}&email=carol@example.com`, { method: 'DELETE', cookie: alice, headers: { origin: ORIGIN, 'x-studio': '1' } });
   assert.deepEqual(JSON.parse(removed.body).people.map((p) => p.email), ['bob@example.com']);
   assert.equal((await call('/api/state', { cookie: carol })).status, 401);
+});
+
+// The free tools' static host, as the gateway sees it.
+const toolsRequests = [];
+async function toolsFetch(url, init) {
+  toolsRequests.push({ url: String(url), method: init?.method });
+  const path = new URL(url).pathname;
+  if (path === '/tools/utm-builder/') return new Response('<h1>UTM</h1>', { headers: { 'content-type': 'text/html; charset=utf-8', etag: '"a1"', 'set-cookie': 'x=1', 'x-vercel-id': 'iad1' } });
+  if (path === '/tools/assets/site.js') return new Response('export {}', { headers: { 'content-type': 'application/javascript' } });
+  if (path === '/tools/old') return new Response(null, { status: 308, headers: { location: 'https://tools.example/tools/new/' } });
+  return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
+}
+
+test('the free tools are served publicly at /tools/ from their static host', async () => {
+  const page = await call('/tools/utm-builder/');
+  assert.equal(page.status, 200);
+  assert.equal(page.body, '<h1>UTM</h1>');
+  assert.equal(toolsRequests.at(-1).url, 'https://tools.example/tools/utm-builder/');
+  assert.match(page.headers['content-security-policy'], /fonts\.googleapis\.com/);
+  assert.match(page.headers['content-security-policy'], /script-src 'self'[^;]*;/);
+  assert.doesNotMatch(page.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
+  assert.equal(page.headers['cache-control'], 'public, max-age=300');
+  assert.equal(page.headers.etag, '"a1"');
+  assert.equal(page.headers['set-cookie'], undefined, 'upstream cookies are dropped');
+  assert.equal(page.headers['x-vercel-id'], undefined);
+
+  const js = await call('/tools/assets/site.js');
+  assert.equal(js.headers['cache-control'], 'public, max-age=3600');
+  assert.equal((await call('/tools')).headers.location, '/tools/');
+  assert.equal((await call('/guides')).headers.location, '/guides/');
+  await call('/guides/what-is-a-utm-code/');
+  assert.equal(toolsRequests.at(-1).url, 'https://tools.example/guides/what-is-a-utm-code/');
+  await call('/sitemap.xml');
+  assert.equal(toolsRequests.at(-1).url, 'https://tools.example/sitemap.xml');
+  assert.equal((await call('/tools/old')).headers.location, '/tools/new/');
+  assert.equal((await call('/tools/missing')).status, 404);
+  assert.equal((await call('/tools/utm-builder/', { method: 'POST', headers: { origin: ORIGIN } })).status, 405);
+  // Only /tools and below: a lookalike path still goes to the app.
+  const before = toolsRequests.length;
+  await call('/toolshed');
+  assert.equal(toolsRequests.length, before);
+});
+
+test('robots.txt keeps crawlers out of the app and points at the tools sitemap', async () => {
+  const r = await call('/robots.txt');
+  assert.equal(r.status, 200);
+  assert.match(r.body, /Disallow: \/api\//);
+  assert.match(r.body, /Sitemap: https:\/\/sitelens\.test\/sitemap\.xml/);
+});
+
+test('home and sign-in pages may load the brand fonts; home links the free tools', async () => {
+  const home = await call('/');
+  assert.match(home.headers['content-security-policy'], /font-src https:\/\/fonts\.gstatic\.com/);
+  assert.doesNotMatch(home.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
+  assert.match(home.body, /href="\/tools\/did-it-work\/"/);
+  assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js">/);
+  assert.doesNotMatch(home.body, /<script>(?!<)/, 'no inline script');
+  assert.match((await call('/login')).headers['content-security-policy'], /fonts\.googleapis\.com/);
+});
+
+test('the public demo: no sign-in, only the sample site, nothing can change', async () => {
+  const start = await call('/demo');
+  assert.equal(start.status, 302);
+  assert.equal(start.headers.location, '/#/site/demo/story');
+  const cookie = String(start.headers['set-cookie']).split(';')[0];
+  assert.equal(cookie, '__Host-kauzl-demo=1');
+  assert.equal((await call('/demo?to=timeline')).headers.location, '/#/site/demo/timeline');
+  assert.equal((await call('/demo?to=../../evil')).headers.location, '/#/site/demo/story');
+
+  // Without the cookie, / is still the home page; with it, the Studio.
+  assert.match((await call('/')).body, /Why an owl/);
+  assert.doesNotMatch((await call('/', { cookie })).body, /Why an owl/);
+  assert.match((await call('/home', { cookie })).body, /Why an owl/);
+
+  const me = JSON.parse((await call('/api/me', { cookie })).body);
+  assert.deepEqual(me, { email: null, hosted: true, viewer: true, demo: true });
+  const state = JSON.parse((await call('/api/state', { cookie })).body);
+  assert.equal(state.demo, true);
+  assert.equal(state.viewer, true);
+  assert.ok(state.sites.length >= 1);
+  assert.ok(state.sites.every((s) => s.demo));
+
+  const write = await call('/api/todos', { method: 'POST', cookie, headers: { origin: ORIGIN, 'x-studio': '1' }, body: { site: 'demo', title: 'x' } });
+  assert.equal(write.status, 403);
+  assert.equal(JSON.parse(write.body).kind, 'demo');
+  assert.equal((await call('/api/auth/start', { cookie })).status, 403);
+  assert.equal((await call('/api/mcp/tokens', { cookie })).status, 403);
+  assert.equal((await call('/api/shares', { cookie })).status, 403);
+
+  const out = await call('/logout', { method: 'POST', cookie, headers: { origin: ORIGIN } });
+  assert.equal(out.headers.location, '/home');
+  assert.ok([out.headers['set-cookie']].flat().some((c) => c.startsWith('__Host-kauzl-demo=;') && /Max-Age=0/.test(c)));
+});
+
+test('a signed-in person going to /demo just opens the sample site in their own Kauzl', async () => {
+  const { cookie } = await signIn('alice@example.com');
+  const r = await call('/demo', { cookie });
+  assert.equal(r.headers.location, '/#/site/demo/story');
+  assert.equal(r.headers['set-cookie'], undefined);
+});
+
+test('the demo can show a real site instead of the sample: view only, and nothing else of the owner’s', async () => {
+  const { cookie: alice } = await signIn('alice@example.com');
+  const write = (path, body, c) => call(path, { method: 'POST', cookie: c, body, headers: { origin: ORIGIN, 'x-studio': '1' } });
+  await write('/api/sites', { host: 'showcase.example' }, alice);
+  await write('/api/sites', { host: 'secret.example' }, alice);
+  const mine = JSON.parse((await call('/api/state', { cookie: alice })).body).sites;
+  const site = mine.find((s) => s.host === 'showcase.example');
+  const secret = mine.find((s) => s.host === 'secret.example');
+  gatewayEnv.DEMO_SITE = `alice@example.com/${site.id}`;
+  try {
+    const start = await call('/demo?to=timeline');
+    assert.equal(start.headers.location, `/#/site/${site.id}/timeline`);
+    const demo = String(start.headers['set-cookie']).split(';')[0];
+
+    const state = JSON.parse((await call('/api/state', { cookie: demo })).body);
+    assert.deepEqual(state.sites.map((s) => s.id), [site.id]);
+    assert.equal(state.sites[0].showcase, true);
+    assert.equal(state.demo, true);
+    assert.ok(!JSON.stringify(state).includes('alice@example.com'), 'the owner stays anonymous');
+
+    // Reads about that site come from the owner's app; anything else is refused.
+    assert.equal((await call(`/api/sites/${site.id}/config`, { cookie: demo })).status, 200);
+    assert.equal((await call(`/api/sites/${secret.id}/config`, { cookie: demo })).status, 403);
+    assert.equal((await call(`/api/todos?site=${secret.id}`, { cookie: demo })).status, 403);
+    assert.equal((await call(`/api/sites/${site.id}/setup`, { cookie: demo })).status, 403);
+    assert.equal((await call(`/api/sites/${site.id}`, { method: 'DELETE', cookie: demo, headers: { origin: ORIGIN, 'x-studio': '1' } })).status, 403);
+    // The owner's account-wide lists stay out of reach.
+    const todos = JSON.parse((await call('/api/todos', { cookie: demo })).body);
+    assert.ok(!JSON.stringify(todos).includes(secret.id));
+  } finally {
+    delete gatewayEnv.DEMO_SITE;
+  }
+  // Unset again: the sample site.
+  assert.equal((await call('/demo')).headers.location, '/#/site/demo/story');
 });

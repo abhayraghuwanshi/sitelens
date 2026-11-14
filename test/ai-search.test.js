@@ -137,6 +137,9 @@ test('without a key the run explains how to add one', async () => {
     assert.ok(demo.referrals.sessions > 0);
     assert.ok(demo.crawlers.totals.assistant > 0);
     assert.equal(demo.answers.sample, true);
+    // The sample counts as run, so the Story doesn't nag for a key on it.
+    const checks = await ai.checks({ id: 'demo', demo: true, label: 'Demo', host: 'example.com' });
+    assert.ok(checks.lastRun > 0);
     ai.stop();
   } finally {
     await rm(dir, { recursive: true, force: true });

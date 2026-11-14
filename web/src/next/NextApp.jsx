@@ -80,7 +80,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (section === 'calendar') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={route.params} /></Page>;
   else if (section === 'site' && view === 'setup' && site.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
-  else if (section === 'site' && view === 'setup') body = <Page title="What Studio measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
+  else if (section === 'site' && view === 'setup') body = <Page title="What Kauzl measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
   else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
@@ -102,9 +102,9 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     <div class="nx">
       <aside class={`nx-side${menu ? ' open' : ''}`}>
         <div class="nx-side-top">
-          <a class="nx-brand" href="#/" aria-label="SiteLens Studio, all sites">
+          <a class="nx-brand" href="#/" aria-label="Kauzl, all sites">
             <Logo size={26} title="" />
-            <span>SiteLens <span class="muted">Studio</span></span>
+            <span>Kauzl</span>
           </a>
           <button type="button" class="nx-icon-btn nx-menu-btn" onClick={() => setMenu(!menu)}
             aria-expanded={menu} aria-controls="nx-side-body" aria-label={menu ? 'Close menu' : 'Open menu'}>
@@ -139,7 +139,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           {!state.viewer && <NavItem href="#/account?tab=mcp" icon="terminal" active={tab === 'mcp'}>MCP</NavItem>}
           {!state.viewer && <NavItem href="#/account" icon="lock" active={tab === 'account'}>Account</NavItem>}
           <div class="nx-foot-row">
-            {state.viewer ? <span class="nx-conn"><Icon name="eye" size={13} /> Viewing shared sites</span> : (
+            {state.demo ? <span class="nx-conn"><Icon name="eye" size={13} /> {sites.some((s) => s.showcase) ? 'Live demo · view only' : 'Demo · sample data'}</span> : state.viewer ? <span class="nx-conn"><Icon name="eye" size={13} /> Viewing shared sites</span> : (
             <span class="nx-conn" title={auth.email || ''}>
               <span class={`nx-dot${auth.connected && !auth.expired ? ' on' : ''}`} aria-hidden="true" />
               {auth.connected ? (auth.expired ? 'Token expired' : 'Google connected') : 'Not connected'}
@@ -148,13 +148,29 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           </div>
           {state.hosted && (
             <form method="post" action="/logout">
-              <button type="submit" class="nx-switch nx-signout">Sign out</button>
+              <button type="submit" class="nx-switch nx-signout">{state.demo ? 'Leave demo' : 'Sign out'}</button>
             </form>
           )}
         </div>
         </div>
       </aside>
-      <main class="nx-main">{body}</main>
+      <main class="nx-main">{state.demo && <DemoBanner site={sites.find((s) => s.showcase)} />}{body}</main>
+    </div>
+  );
+}
+
+// The public demo (kauzl.com/demo, server/hosted.mjs): say what this is and how to get your own.
+// With a showcase site (DEMO_SITE) it's a real site's live numbers; otherwise sample data.
+function DemoBanner({ site }) {
+  return (
+    <div class="nx-demo" role="note">
+      {site
+        ? <p class="m-0"><strong>You’re looking at {site.host || site.label}’s own analytics</strong>, live: its traffic, searches, sitemap pages and AI answers. View only.</p>
+        : <p class="m-0"><strong>You’re looking around the demo.</strong> The numbers are sample data, and nothing here can be changed.</p>}
+      <div class="nx-demo-actions">
+        <a class="btn primary" href="/login">Sign in</a>
+        <a class="btn" href="/home">About Kauzl</a>
+      </div>
     </div>
   );
 }

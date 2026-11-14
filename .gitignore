@@ -3,3 +3,8 @@ web/dist/
 .data/
 .env
 *.log
+tools/dist/
+
+# Brand-naming research: kept local, not for the public repo.
+reports/
+research_notes/

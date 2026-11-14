@@ -411,3 +411,8 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
   table.data.cmp-table td.num::before { content: attr(data-label) " "; color: var(--text-3); }
   table.data tr.cmp-part .cmp-name { padding-left: 20px; }
 }
+
+/* The public demo's banner (NextApp DemoBanner) */
+.nx-demo { display: flex; align-items: center; justify-content: space-between; gap: 12px 20px; flex-wrap: wrap; margin: 16px 24px 0; padding: 12px 16px; border-radius: var(--radius-md); border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--border)); background: color-mix(in srgb, var(--accent) 10%, var(--surface, transparent)); font-size: var(--text-sm); color: var(--text); }
+.nx-demo-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+@media (max-width: 640px) { .nx-demo { margin: 12px 12px 0; } }

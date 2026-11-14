@@ -1,6 +1,6 @@
 # Hosting SiteLens Studio on Fly.io
 
-The hosted version is invite-only and serves `https://sitelens.kazekit.com`. The gateway, `server/hosted.mjs`, signs people in and gives each user their own copy of the app with its own data folder. The desktop app and `npm start` are unchanged.
+The hosted version is invite-only and serves `https://kauzl.com`. The gateway, `server/hosted.mjs`, signs people in and gives each user their own copy of the app with its own data folder. The desktop app and `npm start` are unchanged.
 
 ## How it keeps users apart
 
@@ -19,8 +19,8 @@ The hosted version is invite-only and serves `https://sitelens.kazekit.com`. The
 
 1. **Google OAuth client.** In Google Cloud Console, go to APIs & Services → Credentials → Create OAuth client ID → *Web application*.
    - Authorized redirect URIs:
-     - `https://sitelens.kazekit.com/login/callback` (signing in to Studio)
-     - `https://sitelens.kazekit.com/auth/callback` (connecting GA4 and Search Console inside the app)
+     - `https://kauzl.com/login/callback` (signing in to Studio)
+     - `https://kauzl.com/auth/callback` (connecting GA4 and Search Console inside the app)
    - On the OAuth consent screen, keep **Publishing status: Testing** and add every invited email as a **test user** (up to 100). In Testing mode the sensitive scopes need no Google verification. Refresh tokens expire after 7 days in Testing mode, so users reconnect Google weekly until the app is verified.
    - Enable the Google Analytics Admin, Google Analytics Data, Search Console, BigQuery and Cloud Logging APIs on the project.
 
@@ -42,7 +42,7 @@ The hosted version is invite-only and serves `https://sitelens.kazekit.com`. The
 
 4. **Deploy:** `fly deploy`
 
-5. **Domain.** Run `fly certs add sitelens.kazekit.com`. Then in Cloudflare DNS for kazekit.com, add a `CNAME` record from `sitelens` to `sitelens-studio.fly.dev` with **Proxy status: DNS only** (grey cloud), so Fly can issue the certificate. Check it with `fly certs check sitelens.kazekit.com`.
+5. **Domain.** Run `fly certs add kauzl.com`. Then in Cloudflare DNS for kauzl.com, add a `CNAME` record from `@` to `sitelens-studio.fly.dev` with **Proxy status: DNS only** (grey cloud), so Fly can issue the certificate. Check it with `fly certs check kauzl.com`. Other names in `STUDIO_OLD_HOSTS` (the old sitelens.kazekit.com, www.kauzl.com) send people to the same page on kauzl.com, and keep answering agents at `/mcp`.
 
 ## Optional: Connect Bing and Connect Vercel buttons
 
@@ -50,7 +50,7 @@ Users can paste a Bing API key or a Vercel token without any of this. Registerin
 
 **Bing.** In [Bing Webmaster Tools](https://www.bing.com/webmasters), go to Settings → API Access → **OAuth Client**.
 - Name: `SiteLens Studio`
-- Redirect URI: `https://sitelens.kazekit.com/auth/bing/callback`
+- Redirect URI: `https://kauzl.com/auth/bing/callback`
 
 Copy the client ID and secret, then run:
 ```sh
@@ -59,13 +59,36 @@ fly secrets set --app sitelens-studio BING_CLIENT_ID="…" BING_CLIENT_SECRET="�
 
 **Vercel.** Go to [Integrations Console](https://vercel.com/dashboard/integrations/console) → **Create**.
 - Name `SiteLens Studio`, URL slug `sitelens-studio`
-- Redirect URL: `https://sitelens.kazekit.com/auth/vercel/callback`
+- Redirect URL: `https://kauzl.com/auth/vercel/callback`
 - Scopes: read-only **Projects**, **Deployments**, **User** and **Team**
 
 Copy the client ID (`oac_…`) and secret, then run:
 ```sh
 fly secrets set --app sitelens-studio VERCEL_CLIENT_ID="oac_…" VERCEL_CLIENT_SECRET="…" VERCEL_INTEGRATION_SLUG="sitelens-studio"
 ```
+
+## Optional: the public demo shows a real site
+
+`kauzl.com/demo` lets anyone look around Kauzl without signing in. By default it
+shows the built-in sample site. To show a real one instead (kauzl.com itself, so
+visitors see its live traffic, searches, sitemap pages and AI answers), add the
+site in your own Kauzl, then:
+
+```sh
+fly secrets set DEMO_SITE="you@example.com/<site id>"
+```
+
+The email must be on `ALLOWED_EMAILS`; the site id is in the site's URL
+(`#/site/<id>/story`). Visitors get exactly what someone it was shared with
+gets: the read-only allowlist in `server/sharing.mjs`, and nothing else from
+your account. Unset it (`fly secrets unset DEMO_SITE`) to go back to the sample.
+
+For traffic to show, kauzl.com's public pages carry a Google tag: a Tag
+Manager container (`GTM-…`) or a GA4 ID (`G-…`), in `GOOGLE_TAG_ID` (fly.toml
+`[env]`, for the home page) and in `tools/site.config.json` (for the tools and
+guides, then `npm run tools:deploy`). It loads from `tools/assets/ga.js`, since
+the CSP allows no inline scripts.
+The Studio app itself is never tracked.
 
 ## Day to day
 

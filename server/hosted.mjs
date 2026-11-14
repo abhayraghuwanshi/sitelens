@@ -1,4 +1,4 @@
-// SiteLens Studio, hosted: an invite-only gateway in front of one app per user.
+// Kauzl, hosted: an invite-only gateway in front of one app per user.
 //
 //  - Sign-in is Google; the email must be on ALLOWED_EMAILS. The same consent
 //    connects the user's GA4, Search Console and BigQuery, so it's one step.
@@ -20,7 +20,7 @@
 //    access token (slk_…, made in Account → Claude; only its hash is kept)
 //    picks the user, and the tools run against that user's app and folder.
 //
-// Env: STUDIO_HOST, MASTER_KEY (32 bytes, base64), GOOGLE_CLIENT_ID,
+// Env: STUDIO_HOST (STUDIO_OLD_HOSTS: other names, comma-separated, that redirect to it), MASTER_KEY (32 bytes, base64), GOOGLE_CLIENT_ID,
 // GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), STUDIO_DATA_DIR, PORT.
 
 import { createServer } from 'node:http';
@@ -34,10 +34,18 @@ import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
 import { guardOutgoingFetch } from './net-guard.mjs';
-import { homePage, FAVICON } from './home.mjs';
+import { homePage, FAVICON, FONTS, owl } from './home.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
 
 const COOKIE = '__Host-sitelens';
+// The public demo (kauzl.com/demo): anyone can look around the Studio with
+// the sample site, no sign-in. One shared, read-only app answers them.
+const DEMO_COOKIE = '__Host-kauzl-demo';
+const DEMO_HOURS = 12;
+const DEMO_USER = { id: 'demo', email: 'demo@kauzl.invalid' };
+const DEMO_START = '/#/site/demo/story';
+// /demo?to=<view> opens that part of the sample site (the home page links them).
+const DEMO_VIEWS = new Set(['story', 'timeline', 'todos', 'alerts', 'campaigns', 'ai', 'journeys', 'outcomes', 'funnels', 'pages', 'overview']);
 const SESSION_DAYS = 30;
 // How long a new MCP token lasts; 0 is never (until revoked). The default limits
 // what a token copied out of someone's Claude config is good for.
@@ -68,6 +76,29 @@ const SECURITY_HEADERS = {
   ].join('; '),
 };
 
+// Public pages (the home page, sign-in, and the free tools from tools/ in this
+// repo, which live on their own static host and are shown at /tools/ so links
+// they earn count for this domain) use the brand's Google Fonts; still no
+// inline JS.
+const PUBLIC_CSP = [
+  "default-src 'self'",
+  // Google Tag Manager / Analytics on the public pages only (tools/assets/ga.js).
+  "script-src 'self' https://www.googletagmanager.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src https://fonts.gstatic.com",
+  "img-src 'self' data: blob: https:",
+  "connect-src 'self' https://*.google-analytics.com https://*.analytics.google.com https://www.googletagmanager.com",
+  "frame-ancestors 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+].join('; ');
+const TOOLS_PASS_HEADERS = ['content-type', 'etag', 'last-modified'];
+const STATIC_PREFIX = /^\/(tools|guides)(\/|$)/;
+
+export function robotsTxt(origin, { tools = false } = {}) {
+  return `User-agent: *\nDisallow: /api/\nDisallow: /login\nDisallow: /mcp\n${tools ? `\nSitemap: ${origin}/sitemap.xml\n` : ''}`;
+}
+
 export function parseMasterKey(value) {
   const key = Buffer.from(String(value || ''), 'base64');
   if (key.length !== 32) throw new Error('MASTER_KEY must be 32 random bytes, base64 (openssl rand -base64 32).');
@@ -97,6 +128,7 @@ export function createGateway({
   dataDir,
   masterKey,
   host,
+  oldHosts = [],
   allowedEmails,
   port = 8080,
   env = process.env,
@@ -139,10 +171,58 @@ export function createGateway({
     let app = apps.get(user.id);
     if (!app) {
       app = createUserApp(user);
-      if (startJobs) for (const job of ['extensions', 'github', 'vitals', 'alerts', 'mentions', 'firebase', 'posts', 'bing', 'aiSearch', 'contentCycles', 'history']) app[job]?.start?.();
+      if (startJobs) for (const job of ['extensions', 'github', 'vitals', 'alerts', 'mentions', 'firebase', 'posts', 'bing', 'aiSearch', 'contentCycles', 'redditCycles', 'history']) app[job]?.start?.();
       apps.set(user.id, app);
     }
     return app;
+  }
+
+  // The demo's app: only the sample site, no background jobs, never written to.
+  let demoApp = null;
+  const demoAppFor = () => (demoApp ||= createUserApp(DEMO_USER));
+  const DEMO_ONLY = { error: 'This is the demo, so nothing can be changed. Sign in to use Kauzl on your own sites.', kind: 'demo' };
+  const DEMO_CLEAR = `${DEMO_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+
+  // The showcase: one real site shown in the demo instead of the sample
+  // (DEMO_SITE = "owner@email/siteId", e.g. kauzl.com in the owner's Kauzl).
+  // Visitors see it exactly as someone it was shared with would: the same
+  // view-only allowlist (sharing.mjs), and nothing else from that account.
+  function showcase() {
+    const [showcaseEmail, showcaseSite] = String(env.DEMO_SITE || '').split('/').map((x) => x.trim());
+    if (!showcaseSite || !allowedEmails.has(cleanEmail(showcaseEmail))) return null;
+    const owner = db.prepare('SELECT id, email FROM users WHERE email = ?').get(cleanEmail(showcaseEmail));
+    return owner ? { owner, site: showcaseSite } : null;
+  }
+  async function showcaseSiteState(show) {
+    const theirs = await (await selfFetch(appFor(show.owner).handle, `${origin}/api/state`)).json().catch(() => ({ sites: [] }));
+    const site = (theirs.sites || []).find((x) => x.id === show.site && !x.demo);
+    return site ? { ...site, shared: { by: 'Kauzl' }, showcase: true } : null;
+  }
+  const demoStart = async (to) => {
+    const show = showcase();
+    const id = show && (await showcaseSiteState(show)) ? show.site : 'demo';
+    return `/#/site/${id}/${DEMO_VIEWS.has(to) ? to : 'story'}`;
+  };
+
+  async function demoRoutes(req, res, url) {
+    if (url.pathname === '/api/me') return jsonOut(res, 200, { email: null, hosted: true, viewer: true, demo: true });
+    const show = showcase();
+    const target = show && siteRequest(req.method, url);
+    // The showcase site's reads go to its owner's app, as for a viewer.
+    if (target && target.site === show.site) return forwardShared(req, res, url, target, show.owner);
+    if (target) return jsonOut(res, 403, DEMO_ONLY);
+    const read = req.method === 'GET' || req.method === 'HEAD';
+    // Nothing that changes data, signs in to other services, or belongs to an account.
+    const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|mcp|bing\/auth|extensions|shares)(\/|$)/.test(url.pathname);
+    if (!read || reaching) return jsonOut(res, 403, DEMO_ONLY);
+    if (url.pathname === '/api/state') {
+      const state = await (await selfFetch(demoAppFor().handle, `${origin}/api/state`)).json();
+      const real = show && (await showcaseSiteState(show));
+      // The real site when there is one; the sample site otherwise.
+      state.sites = real ? [real] : (state.sites || []).filter((s) => s.demo);
+      return jsonOut(res, 200, { ...state, viewer: true, demo: true });
+    }
+    return demoAppFor().handle(req, res);
   }
 
   function sessionUser(req) {
@@ -290,7 +370,7 @@ export function createGateway({
     const user = tokenUser(req);
     if (!user) {
       failed(req);
-      return json(401, { error: 'A valid SiteLens access token is required: Account → Claude Code & Claude Desktop.' }, { 'WWW-Authenticate': 'Bearer realm="sitelens"' });
+      return json(401, { error: 'A valid Kauzl access token is required: Account → Claude Code & Claude Desktop.' }, { 'WWW-Authenticate': 'Bearer realm="sitelens"' });
     }
     let body;
     try {
@@ -415,13 +495,47 @@ export function createGateway({
     return true;
   }
 
+  // Public, no session: the free tools, fetched from their static host.
+  const toolsOrigin = String(env.TOOLS_ORIGIN || '').replace(/\/$/, '');
+  async function proxyTools(req, res, url) {
+    if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+    if (url.pathname === '/tools' || url.pathname === '/guides') return res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
+    let upstream;
+    try {
+      upstream = await fetchImpl(`${toolsOrigin}${url.pathname}${url.search}`, { method: req.method, redirect: 'manual' });
+    } catch {
+      return res.writeHead(502, { 'Content-Type': 'text/plain' }).end('The tools are unavailable right now.');
+    }
+    const headers = { 'Content-Security-Policy': PUBLIC_CSP };
+    for (const h of TOOLS_PASS_HEADERS) { const v = upstream.headers.get(h); if (v) headers[h] = v; }
+    const loc = upstream.headers.get('location');
+    if (loc) headers.Location = loc.startsWith(toolsOrigin) ? loc.slice(toolsOrigin.length) || '/' : loc;
+    // Pages change with each deploy; scripts and styles aren't hashed, so keep it short.
+    if (upstream.ok) headers['Cache-Control'] = /text\/html/.test(headers['content-type'] || '') ? 'public, max-age=300' : 'public, max-age=3600';
+    const body = req.method === 'HEAD' ? null : Buffer.from(await upstream.arrayBuffer());
+    return res.writeHead(upstream.status, headers).end(body);
+  }
+
   async function handle(req, res) {
     const url = new URL(req.url, origin);
     if (url.pathname === '/healthz') return res.writeHead(200, { 'Content-Type': 'text/plain' }).end('ok');
 
-    const reqHost = String(req.headers.host || '').replace(/:\d+$/, '');
-    if (reqHost !== host) return res.writeHead(421, { 'Content-Type': 'text/plain' }).end('Misdirected request');
+    const reqHost = String(req.headers.host || '').replace(/:\d+$/, '').toLowerCase();
+    if (reqHost !== host) {
+      if (!oldHosts.includes(reqHost)) return res.writeHead(421, { 'Content-Type': 'text/plain' }).end('Misdirected request');
+      // An old or extra name (the pre-rename host, www): agents set up with it
+      // keep working, since a token, not a cookie, picks the user; people are
+      // sent to the same page on the main host.
+      if (url.pathname === '/mcp') return handleMcp(req, res);
+      return res.writeHead(308, { Location: `${origin}${url.pathname}${url.search}` }).end();
+    }
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
+
+    if (url.pathname === '/robots.txt') {
+      return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(robotsTxt(origin, { tools: Boolean(toolsOrigin) }));
+    }
+    // The free tools, the guides, and the sitemap for all of kauzl.com come from the static host.
+    if (toolsOrigin && (STATIC_PREFIX.test(url.pathname) || url.pathname === '/sitemap.xml')) return proxyTools(req, res, url);
 
     // Agents, not browsers: a token instead of a session (checked inside).
     if (url.pathname === '/mcp') return handleMcp(req, res);
@@ -433,7 +547,7 @@ export function createGateway({
 
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(loginPage(url.searchParams.get('error')));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error')));
     }
     if (url.pathname === '/login/google') {
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
@@ -475,17 +589,31 @@ export function createGateway({
         return redirectLogin(res, err.message);
       }
     }
+    if (url.pathname === '/demo') {
+      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      // Signed-in people already have the sample site in their own Kauzl.
+      if (!sessionUser(req)) res.setHeader('Set-Cookie', `${DEMO_COOKIE}=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DEMO_HOURS * 3600}`);
+      const to = url.searchParams.get('to');
+      // Visitors get the showcase site when one is set; signed-in people their own sample.
+      const location = sessionUser(req) ? (DEMO_VIEWS.has(to) ? `/#/site/demo/${to}` : DEMO_START) : await demoStart(to);
+      return res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }).end();
+    }
     if (url.pathname === '/logout' && req.method === 'POST') {
+      // Leaving the demo goes back to the home page; signing out, to sign-in.
+      const leavingDemo = !sessionUser(req) && cookies(req)[DEMO_COOKIE] === '1';
       endSession(req, res);
-      return res.writeHead(303, { Location: '/login' }).end();
+      res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie'), DEMO_CLEAR].flat().filter(Boolean));
+      return res.writeHead(303, { Location: leavingDemo ? '/home' : '/login' }).end();
     }
 
     const user = sessionUser(req);
-    // The public home page: at /home for everyone, at / for visitors without a session.
-    if (url.pathname === '/home' || (!user && url.pathname === '/')) {
+    const demo = !user && cookies(req)[DEMO_COOKIE] === '1';
+    // The public home page: at /home for everyone, at / for visitors without a session or the demo.
+    if (url.pathname === '/home' || (!user && !demo && url.pathname === '/')) {
       if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' }).end(homePage({ signedIn: Boolean(user) }));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID }));
     }
+    if (demo) return demoRoutes(req, res, url);
     if (!user) {
       if (url.pathname.startsWith('/api/')) {
         return res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Sign in to continue.', kind: 'login' }));
@@ -550,26 +678,38 @@ const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', 
 function loginPage(error) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · SiteLens Studio</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
+<title>Sign in · Kauzl</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="${FONTS}">
 <style>
-  :root { color-scheme: light dark; --bg: #f7f7f8; --card: #fff; --text: #17171c; --muted: #62626e; --line: #e3e3e8; --accent: #3b5bdb; --err: #c92a2a; }
-  @media (prefers-color-scheme: dark) { :root { --bg: #111114; --card: #1b1b20; --text: #ececf1; --muted: #9a9aa6; --line: #2c2c34; --accent: #748ffc; --err: #ff8787; } }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, sans-serif; padding: 16px; box-sizing: border-box; }
-  main { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 32px; max-width: 360px; width: 100%; }
-  h1 { font-size: 20px; margin: 0 0 4px; }
+  :root { color-scheme: dark; --ink: #121522; --ink-2: #1C2135; --line: #2A3048; --text: #F6F7F9; --muted: #C9CDD8; --amber: #F5A524; --err: #FF8A80; }
+  * { box-sizing: border-box; }
+  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; padding: 16px; position: relative; }
+  body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
+  main { position: relative; background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; padding: 64px 32px 28px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 30px 70px rgb(0 0 0 / .45); }
+  main > svg.owl { position: absolute; top: -46px; left: 50%; transform: translateX(-50%); filter: drop-shadow(0 10px 18px rgb(0 0 0 / .4)); }
+  svg.owl .eyes { transform-box: fill-box; transform-origin: center; animation: blink 7s infinite; }
+  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
+  @media (prefers-reduced-motion: reduce) { svg.owl .eyes { animation: none; } }
+  h1 { font: 800 30px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; margin: 0 0 10px; }
   p { color: var(--muted); margin: 0 0 24px; }
-  a.btn { display: block; text-align: center; background: var(--accent); color: #fff; text-decoration: none; padding: 10px 16px; border-radius: 8px; font-weight: 600; }
-  .err { color: var(--err); margin: 0 0 16px; }
-  .alt { display: block; margin-top: 12px; text-align: center; color: var(--accent); font-size: 14px; }
-  .home { display: block; margin-top: 16px; text-align: center; color: var(--muted); font-size: 14px; }
+  a.btn { display: flex; align-items: center; justify-content: center; min-height: 46px; background: var(--amber); color: var(--ink); text-decoration: none; padding: 10px 16px; border-radius: 11px; font-weight: 600; }
+  a.btn:hover { filter: brightness(1.06); }
+  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  .err { color: var(--err); background: rgb(255 138 128 / .1); border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; }
+  .alt { display: block; margin-top: 14px; color: var(--amber); font-size: 14px; }
+  .home { display: block; margin-top: 18px; color: var(--muted); font-size: 14px; text-decoration: none; }
+  .home:hover { color: var(--text); }
 </style></head>
 <body><main>
-  <h1>SiteLens Studio</h1>
+  ${owl(84, { variant: 'paper' })}
+  <h1>kauzl</h1>
   <p>Invite only. Sign in with the Google account you were invited with.</p>
   ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
   <a class="btn" href="/login/google">Sign in with Google</a>
   <a class="alt" href="/login/google?viewer=1">Someone shared a site with you? Sign in to view it</a>
-  <a class="home" href="/home">← What is SiteLens?</a>
+  <a class="alt" href="/demo">No invite yet? Look around the demo</a>
+  <a class="home" href="/home">← What is Kauzl?</a>
 </main></body></html>`;
 }
 
@@ -583,6 +723,7 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     dataDir: resolve(process.env.STUDIO_DATA_DIR || '/data'),
     masterKey: parseMasterKey(process.env.MASTER_KEY),
     host: process.env.STUDIO_HOST,
+    oldHosts: String(process.env.STUDIO_OLD_HOSTS || '').split(',').map((h) => h.trim().toLowerCase()).filter(Boolean),
     allowedEmails: parseEmails(process.env.ALLOWED_EMAILS),
     port,
   });
@@ -590,5 +731,5 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   createServer((req, res) => gateway.handle(req, res).catch((err) => {
     console.error(err);
     if (!res.headersSent) res.writeHead(500, { 'Content-Type': 'text/plain' }).end('Unexpected server error.');
-  })).listen(port, '0.0.0.0', () => console.log(`SiteLens Studio (hosted) → https://${process.env.STUDIO_HOST} on :${port}`));
+  })).listen(port, '0.0.0.0', () => console.log(`Kauzl (hosted) → https://${process.env.STUDIO_HOST} on :${port}`));
 }

@@ -348,7 +348,7 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
   async function askOpenRouter(key, model, prompt) {
     const res = await fetchImpl(`${OPENROUTER}/chat/completions`, {
       method: 'POST',
-      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'SiteLens Studio' },
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'X-Title': 'Kauzl' },
       body: JSON.stringify({
         model,
         messages: [{ role: 'system', content: SYSTEM }, { role: 'user', content: prompt }],
@@ -524,7 +524,12 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     const cfg = await config();
     const terms = await termsFor(site, cfg.products);
     const topicOf = (prompt) => topics.find((q) => q.prompt === prompt);
-    if (site.demo) return { prompts, custom: false, from, keySource: cfg.source, running: null, results: demoChecks(site, prompts, now()).map((r) => ({ ...r, ...topicOf(r.prompt) })), terms, sample: true };
+    if (site.demo) {
+      const results = demoChecks(site, prompts, now()).map((r) => ({ ...r, ...topicOf(r.prompt) }));
+      // The sample has been "run" (its latest answers), so the Story doesn't ask for a key.
+      const lastRun = Math.max(0, ...results.map((r) => r.latest.ts)) || null;
+      return { prompts, custom: false, from, keySource: cfg.source, running: null, results, lastRun, terms, sample: true };
+    }
     const d = open();
     const rows = d.prepare('SELECT * FROM checks WHERE site_id = ? ORDER BY ts DESC LIMIT 3000').all(site.id).map((r) => ({ ...r, engine: r.engine || 'claude' }));
     const all = await engines(cfg);
