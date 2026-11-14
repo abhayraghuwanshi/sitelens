@@ -70,7 +70,7 @@ export function Mentions({ range }) {
         ) : (
           <div class="pad-16">
             <Empty title="No mentions in this range">
-              Studio searches for {d.terms.slice(0, 4).map((t) => `“${t.term}”`).join(', ')}{d.terms.length > 4 ? ` and ${d.terms.length - 4} more` : ''}.
+              Kauzl searches for {d.terms.slice(0, 4).map((t) => `“${t.term}”`).join(', ')}{d.terms.length > 4 ? ` and ${d.terms.length - 4} more` : ''}.
               Add keywords in <a href="#/settings?i=mentions">Settings → Mentions</a>.
             </Empty>
           </div>

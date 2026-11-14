@@ -150,7 +150,7 @@ export function ProductStages({ form, set, setup, inSite = false }) {
           onHostingGuess={(provider) => !form.hosting?.provider && set({ hosting: { provider } })} />
       </Stage>
 
-      <Stage icon="rocket" title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel give Studio a deploy feed; other hosts are recorded for context." done={hostingState(form.hosting)}>
+      <Stage icon="rocket" title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel give Kauzl a deploy feed; other hosts are recorded for context." done={hostingState(form.hosting)}>
         <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} onChange={(hosting) => set({ hosting })} />
       </Stage>
 
@@ -319,7 +319,7 @@ function Hosting({ hosting, setup, siteId, onChange }) {
           <label class="field" style={{ maxWidth: '360px' }}><span class="field-label">Plan or note <small>optional</small></span>
             <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : ''} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
           </label>
-          <p class="note m-0">{chosen.label} has no deploy feed Studio can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
+          <p class="note m-0">{chosen.label} has no deploy feed Kauzl can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
         </>
       )}
     </div>

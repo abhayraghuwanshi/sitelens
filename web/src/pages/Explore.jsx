@@ -144,7 +144,7 @@ function downloadCsv(result) {
   };
   const lines = [result.columns.map((c) => esc(c.name)).join(','), ...result.rows.map((r) => result.columns.map((c) => esc(r[c.name])).join(','))];
   const url = URL.createObjectURL(new Blob([lines.join('\n')], { type: 'text/csv' }));
-  const a = Object.assign(document.createElement('a'), { href: url, download: 'sitelens-query.csv' });
+  const a = Object.assign(document.createElement('a'), { href: url, download: 'kauzl-query.csv' });
   a.click();
   URL.revokeObjectURL(url);
 }

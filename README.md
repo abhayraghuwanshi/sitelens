@@ -1,10 +1,10 @@
-# SiteLens Studio
+# Kauzl
 
-The full-width companion to the [SiteLens extension](../site-analytics-extension). The extension shows aggregated GA4 numbers for the page you are looking at. Studio adds what only the **GA4 BigQuery export** can answer: real session paths, funnels with any steps, weekly retention cohorts, breakdowns by any event parameter, a session explorer and a guarded SQL console. It does this across all your sites at once.
+The full-width companion to the [SiteLens extension](../site-analytics-extension). The extension shows aggregated GA4 numbers for the page you are looking at. Kauzl (formerly SiteLens Studio) adds what only the **GA4 BigQuery export** can answer: real session paths, funnels with any steps, weekly retention cohorts, breakdowns by any event parameter, a session explorer and a guarded SQL console. It does this across all your sites at once.
 
-It runs locally (`127.0.0.1`), stores everything in `.data/`, and talks directly to Google. There is no SiteLens server.
+It runs locally (`127.0.0.1`), stores everything in `.data/`, and talks directly to Google. There is no Kauzl server.
 
-![SiteLens Studio trailer](docs/trailer.gif)
+![Kauzl trailer](docs/trailer.gif)
 
 <sub>A one-minute tour, using sample figures from the built-in demo site. The interactive version is [`docs/trailer.html`](docs/trailer.html): open it in a browser for play/pause and scene controls. To re-render the GIF after editing it, run `npm run trailer` (needs Chrome and ffmpeg). [`docs/trailer.mp4`](docs/trailer.mp4) is a 1080p version with sound, recorded from the real app on the demo site: `npm run trailer:video` rebuilds it from `scripts/trailer-video/film.html`, with a soundtrack synthesized by `scripts/trailer-music.mjs`.</sub>
 

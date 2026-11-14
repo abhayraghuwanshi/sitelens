@@ -132,7 +132,7 @@ function NeedsYou({ site }) {
     .slice(0, 4)
     .map((a) => ({ key: a.id, title: a.title, detail: a.detail, href: a.link }));
   if (ai.data && !ai.data.lastRun && ai.data.prompts?.length) {
-    items.push({ key: 'ai', title: 'AI answer checks have never run.', detail: `${ai.data.prompts.length} questions are set up${ai.data.keySource ? '' : ' but no Anthropic key is set'}, so Studio can’t say whether assistants name you.`, href: `#/site/${site.id}/ai` });
+    items.push({ key: 'ai', title: 'AI answer checks have never run.', detail: `${ai.data.prompts.length} questions are set up${ai.data.keySource ? '' : ' but no Anthropic key is set'}, so Kauzl can’t say whether assistants name you.`, href: `#/site/${site.id}/ai` });
   }
   if (!items.length) return null;
   return (

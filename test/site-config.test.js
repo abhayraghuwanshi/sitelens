@@ -69,7 +69,7 @@ test('parseSiteConfig: syntax errors, wrong site, duplicates and unknown keys', 
   assert.match(parseSiteConfig('goals: [1').errors[0], /line 1/);
   assert.deepEqual(parseSiteConfig('site: other.test', { host: 'shop.test' }).errors, ['This file is for other.test, not shop.test.']);
   assert.deepEqual(parseSiteConfig('').errors, ['The file must be a YAML map, starting with version: 1.']);
-  assert.deepEqual(parseSiteConfig('version: 2').errors, ['version 2 isn’t supported; this Studio reads version: 1.']);
+  assert.deepEqual(parseSiteConfig('version: 2').errors, ['version 2 isn’t supported; this version of Kauzl reads version: 1.']);
   assert.match(parseSiteConfig('goals: [{ event: a }, { event: a }]').errors[0], /goals\[1\] \(a\) is listed twice/);
   assert.match(parseSiteConfig('a: 1\na: 2').errors[0], /unique/);
   const { config, warnings } = parseSiteConfig('goal: []\ngoals: [{ event: a, alrt: true }]');

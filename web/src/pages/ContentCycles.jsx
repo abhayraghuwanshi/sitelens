@@ -1,8 +1,9 @@
 import { useMemo, useState } from 'preact/hooks';
 import { formatNumber, formatPercent, formatDecimal } from '@shared/format.js';
 import { api, qs } from '../api.js';
-import { useAsync } from '../hooks.js';
+import { useAsync, withParam } from '../hooks.js';
 import { Card, KpiStrip, Loading, ErrorState, Empty, Segmented } from '../components/ui.jsx';
+import { RedditCycles } from './RedditCycles.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
 
 // Content cycles (server/content-cycles.mjs): every N days (14 by default) each
@@ -28,7 +29,28 @@ const num = (v) => (v ? formatNumber(v) : <span class="muted">0</span>);
 const pageHref = (site, path) => `#/site/${site.id}/pages?article=${encodeURIComponent(path)}`;
 const shortDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 
-export function ContentCycles({ site }) {
+// Two kinds of cycle: articles judged on search and AI, and Reddit posts
+// planned by Claude and judged on the readers they bring (?kind=reddit).
+export function ContentCycles({ site, params }) {
+  const kind = params?.get('kind') === 'reddit' ? 'reddit' : 'articles';
+  const pick = (key) => { location.hash = withParam('kind', key === 'reddit' ? 'reddit' : '', withParam('post', '', withParam('view', ''))); };
+  const inner = Boolean(params?.get('post') || params?.get('view'));
+  return (
+    <>
+      {!inner && (
+        <div class="meta-line items-center">
+          <Segmented label="Kind of cycle" value={kind} onChange={pick} options={[
+            { key: 'articles', label: 'Articles', title: 'Your articles in Google, Bing and AI answers' },
+            { key: 'reddit', label: 'Reddit', title: 'Reddit posts researched by Claude and measured by the readers they bring' },
+          ]} />
+        </div>
+      )}
+      {kind === 'reddit' ? <RedditCycles site={site} params={params} /> : <ArticleCycles site={site} />}
+    </>
+  );
+}
+
+function ArticleCycles({ site }) {
   const [cycle, setCycle] = useState('');
   const data = useAsync(() => api.get(`/sites/${site.id}/content-cycles${qs({ cycle })}`), [site.id, cycle]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
@@ -49,7 +71,7 @@ export function ContentCycles({ site }) {
 // Before the first numbers: what the cycle is doing and on which dates it fills in.
 function Waiting({ c }) {
   const steps = [
-    { on: c.start, label: 'Cycle started', text: 'Studio counts every article from this day.' },
+    { on: c.start, label: 'Cycle started', text: 'Kauzl counts every article from this day.' },
     { on: c.firstDataOn, label: 'First numbers', text: `Google and Bing report each day about two days late, so ${shortDate(c.start)} shows up here on ${shortDate(c.firstDataOn)}. After that, one more day arrives each morning.` },
     { on: c.end, label: 'Cycle ends', text: `The last day counted. Cycle ${c.n + 1} starts the next day.` },
     { on: c.verdictsOn, label: 'Verdicts', text: 'Once the last day has arrived, each article is judged: grow, improve, keep or cut.' },
@@ -86,7 +108,7 @@ function StartCycles({ site, d, onSaved }) {
   return (
     <Card title="Test your articles in cycles" sub="Publish many, keep what search and AI pick up, cut the rest">
       <div>
-        <p>Every cycle Studio measures each article over that exact window. It counts Google and Bing clicks separately and checks whether AI assistants cite the article or send readers. It also counts how many readers stayed (convinced) and how many went on to download or sign up (acted).</p>
+        <p>Every cycle Kauzl measures each article over that exact window. It counts Google and Bing clicks separately and checks whether AI assistants cite the article or send readers. It also counts how many readers stayed (convinced) and how many went on to download or sign up (acted).</p>
         <p>When a cycle ends, each article gets a verdict against its previous cycle. <b>Grow</b> means write more like it, <b>improve</b> means it's shown but loses the click, and <b>cut</b> means nothing found it two cycles running. Articles are compared within their category (your search topics, else the URL section), so a niche guide isn't judged against your biggest post.</p>
         {(d.needs.search || d.needs.ga4) && <p class="note">{d.needs.search ? 'No Search Console property is linked, so Google numbers will be missing. ' : ''}{d.needs.ga4 ? 'No GA4 property is linked, so visits and conversions will be missing.' : ''}</p>}
       </div>

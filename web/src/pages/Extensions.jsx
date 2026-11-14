@@ -38,7 +38,7 @@ export function Extensions({ range, params, onChange }) {
     <>
       {extensions.length === 0 && (
         <Empty title="Track a Chrome extension">
-          Studio reads the public Web Store listing once a day (users, rating, version) and keeps the history — the store itself shows no history.
+          Kauzl reads the public Web Store listing once a day (users, rating, version) and keeps the history — the store itself shows no history.
           For installs and uninstalls, import the CSV from the developer dashboard.
         </Empty>
       )}
@@ -146,7 +146,7 @@ function ExtensionCard({ ext, range, onChange }) {
             <LineChart labels={labels} series={[{ label: 'Users', values: usersSeries }]} format={(v, axis) => formatNumber(v, { compact: axis })} height={180} area={false} {...marks} />
           </div>
         ) : (
-          <p class="note">The user history fills in as Studio takes one snapshot a day while it’s running. The Web Store only ever shows today’s number.</p>
+          <p class="note">The user history fills in as Kauzl takes one snapshot a day while it’s running. The Web Store only ever shows today’s number.</p>
         )}
 
         {importNames.length > 0 && (

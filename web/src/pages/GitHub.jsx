@@ -59,7 +59,7 @@ function SyncBar({ sync, onSynced }) {
   }
   return (
     <div class="meta-line items-center">
-      <span><Icon name="github" size={13} /> {sync.login || sync.data.login ? `@${sync.login || sync.data.login}` : 'GitHub token'} · syncs hourly while Studio runs</span>
+      <span><Icon name="github" size={13} /> {sync.login || sync.data.login ? `@${sync.login || sync.data.login}` : 'GitHub token'} · syncs hourly while Kauzl runs</span>
       <span>{sync.running || busy ? 'Syncing…' : lastSync ? `last sync ${formatRelative(lastSync)}` : 'not synced yet'}</span>
       {sync.rateRemaining !== null && <span>{formatNumber(sync.rateRemaining)} API calls left this hour</span>}
       {(error || sync.lastError) && <span class="text-bad">{error || sync.lastError}</span>}

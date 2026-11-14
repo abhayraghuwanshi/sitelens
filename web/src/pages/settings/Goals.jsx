@@ -40,13 +40,13 @@ export function GoalsEditor({ goals, onChange, siteId, hasStore, hasRepos }) {
       {fileGoals > 0 && (
         <p class="note m-0">
           <b>The site’s repo file sets {fileGoals} goal{fileGoals === 1 ? '' : 's'}</b>, and those are the ones measured; the goals here aren’t used while it does.{' '}
-          <a href={`#/site/${siteId}/setup`}>Edit them below, under What Studio measures</a>
+          <a href={`#/site/${siteId}/setup`}>Edit them below, under What Kauzl measures</a>
         </p>
       )}
       {!goals.length && (
         <div class="goal-auto">
           <p class="note m-0">
-            <b>No goals set.</b> Studio is guessing from your event names
+            <b>No goals set.</b> Kauzl is guessing from your event names
             {suggested.length ? <>: {suggested.map((g) => `${g.label} (${g.role})`).join(', ')}.</> : ', and found nothing that looks like a goal yet.'}
           </p>
           {suggested.length > 0 && <button class="btn" type="button" onClick={() => onChange(suggested.map((g) => ({ ...g, match: g.match || '' })))}>Start from these</button>}

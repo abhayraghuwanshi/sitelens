@@ -256,7 +256,7 @@ test('posts service: one post’s traffic, landing pages and referrers', async (
     assert.deepEqual(d.landing.map((r) => [r.label, r.sessions]), [['/', 30], ['/pricing', 10]]);
     assert.deepEqual(d.sources.map((r) => r.label), ['reddit.com', 'out.reddit.com']);
     assert.deepEqual([d.window.sessions, d.window.engaged, d.window.newUsers, d.window.keyEvents], [40, 20, 34, 3]);
-    await assert.rejects(posts.detail('nope'), /isn’t in Studio/);
+    await assert.rejects(posts.detail('nope'), /isn’t in Kauzl/);
     posts.stop();
 
     // Google refusing: the calendar's stored sources still draw the trend, and the page says to sign in.

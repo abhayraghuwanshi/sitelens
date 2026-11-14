@@ -26,7 +26,7 @@ export function AnthropicSettings() {
   }
 
   return (
-    <Card title="Claude" sub="Powers answer checks in each site’s AI search view: Claude answers your questions with live web search, and Studio records whether it names and cites you.">
+    <Card title="Claude" sub="Powers answer checks in each site’s AI search view: Claude answers your questions with live web search, and Kauzl records whether it names and cites you.">
       <div class="stack">
         <div class="row small">
           <span class={`dot${s.source ? ' on' : ''}`} />

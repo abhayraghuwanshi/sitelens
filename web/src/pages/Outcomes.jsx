@@ -63,7 +63,7 @@ function OutcomeView({ product, range }) {
     <>
       <SummaryLine summary={{ text: d.headline, status: worst }} />
       <div class="meta-line items-center">
-        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
+        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Kauzl is guessing from event names and linked sources.'}</span>
         <span class="spacer" />
         <a class="btn" href={editGoals}><Icon name="target" size={13} /> {fromFile ? 'View config' : d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
         <button class="btn ghost" type="button" disabled={data.loading} onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
@@ -226,7 +226,7 @@ function GoalsCard({ goals, editHref }) {
   const list = goals.list;
   const revenue = list.some((g) => g.revenue > 0);
   return (
-    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Sites & products' : 'Guessed by Studio until you set your own'}
+    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Sites & products' : 'Guessed by Kauzl until you set your own'}
       actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.from === 'file' ? 'Edit in Setup' : goals.custom ? 'Edit' : 'Set goals'}</a>}>
       {list.length ? (
         <div class="table-wrap">

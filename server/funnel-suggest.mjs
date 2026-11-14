@@ -251,7 +251,7 @@ export function createFunnelSuggest({ store, engines, getToken, vercel = null, f
   // Merged event → files across the site's repos, and what was read.
   async function codeFor(site) {
     const token = await getToken();
-    if (!token) return { events: new Map(), repos: [], note: 'Add a GitHub token in Settings → GitHub so Studio can also read your site’s code.' };
+    if (!token) return { events: new Map(), repos: [], note: 'Add a GitHub token in Settings → GitHub so Kauzl can also read your site’s code.' };
     let repos;
     try {
       repos = await siteRepos({ store, site, token, vercel, fetchImpl });

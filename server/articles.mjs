@@ -17,7 +17,7 @@ import { sourceFamily } from './journey.mjs';
 import { githubGet, siteRepos, tarEntries } from './funnel-suggest.mjs';
 import { createCache } from './cache.mjs';
 
-const USER_AGENT = 'Mozilla/5.0 (compatible; SiteLensStudio/0.2; +local analytics dashboard)';
+const USER_AGENT = 'Mozilla/5.0 (compatible; Kauzl/0.2; +local analytics dashboard)';
 const SITEMAP_TTL = 6 * 60 * 60_000;
 const PAGE_TTL = 24 * 60 * 60_000;
 const TRAFFIC_TTL = 5 * 60_000;

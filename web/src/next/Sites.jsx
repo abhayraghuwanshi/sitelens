@@ -40,7 +40,7 @@ export function Sites({ sites, auth, viewer }) {
 function GetStarted({ auth }) {
   const google = auth?.connected && !auth.expired;
   const steps = [
-    { done: google, title: 'Connect Google', text: 'Lets Studio read your Analytics, Search Console and BigQuery.', href: '#/account?i=google', action: 'Connect' },
+    { done: google, title: 'Connect Google', text: 'Lets Kauzl read your Analytics, Search Console and BigQuery.', href: '#/account?i=google', action: 'Connect' },
     { done: false, title: 'Add your site', text: 'Pick its GA4 property and Search Console property. BigQuery is found for you.', href: ADD_SITE, action: 'Add a site', primary: google },
     { done: false, title: 'Connect the rest (optional)', text: 'Bing, Vercel, GitHub, Firebase and more, each with one click where it can be.', href: '#/account', action: 'Integrations' },
   ];

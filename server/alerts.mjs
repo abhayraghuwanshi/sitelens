@@ -161,7 +161,7 @@ const pct = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${Math.round(v * 1
 const num = (v) => (Number.isInteger(v) ? v.toLocaleString('en-US') : Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }));
 
 export function digestText(digest) {
-  const lines = [`SiteLens digest · ${digest.day}`];
+  const lines = [`Kauzl digest · ${digest.day}`];
   for (const s of digest.sites) {
     if (s.error) lines.push(`• ${s.label}: ${s.error}`);
     else lines.push(`• ${s.label}: ${num(s.sessions)} sessions (${pct(s.sessionsChange)} vs 7d), ${num(s.users)} users${s.clicks !== undefined ? `, ${num(s.clicks)} search clicks (${s.clicksDay})` : ''}`);
@@ -189,11 +189,11 @@ export function alertNotice(fresh) {
     const label = a.subject?.label || '';
     // "New Tab by Cooldesk: users down 3 (-6%)" → title the label, subtitle the rest.
     const what = label && a.title.startsWith(`${label}: `) ? a.title.slice(label.length + 2) : a.title;
-    return { title: label && what !== a.title ? label : 'SiteLens alert', subtitle: clip(what, 90), body: a.detail || '' };
+    return { title: label && what !== a.title ? label : 'Kauzl alert', subtitle: clip(what, 90), body: a.detail || '' };
   }
   const lines = fresh.slice(0, 3).map((a) => `• ${clip(a.title, 70)}`);
   if (fresh.length > 3) lines.push(`and ${fresh.length - 3} more in Alerts`);
-  return { title: 'SiteLens', subtitle: `${fresh.length} new alerts`, body: lines.join('\n') };
+  return { title: 'Kauzl', subtitle: `${fresh.length} new alerts`, body: lines.join('\n') };
 }
 
 export function digestNotice(digest) {
@@ -207,7 +207,7 @@ export function digestNotice(digest) {
   if (lines.length > 3) shown.push(`and ${lines.length - 3} more`);
   const alerts = digest.alerts.length;
   return {
-    title: 'SiteLens daily digest',
+    title: 'Kauzl daily digest',
     subtitle: `${dayName(digest.day)}${alerts ? ` · ${alerts} alert${alerts === 1 ? '' : 's'}` : ''}`,
     body: shown.join('\n') || 'No traffic to report.',
   };
@@ -232,7 +232,7 @@ export async function postWebhook(url, text, fetchImpl = fetch) {
     const res = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, content: text.slice(0, 1900), username: 'SiteLens Studio' }),
+      body: JSON.stringify({ text, content: text.slice(0, 1900), username: 'Kauzl' }),
       signal: AbortSignal.timeout(10_000),
     });
     return res.ok ? { ok: true } : { ok: false, error: `Webhook answered ${res.status}.` };
@@ -687,9 +687,9 @@ export function createAlerts({
     },
     async test() {
       const cfg = await settings();
-      const text = 'Test notification from SiteLens Studio — alerts will arrive like this.';
+      const text = 'Test notification from Kauzl — alerts will arrive like this.';
       return {
-        desktop: cfg.desktop ? await deliver.desktop('SiteLens Studio', 'Alerts arrive like this: what it’s about, what happened, then the detail.', { subtitle: 'Test notification' }) : { ok: false, error: 'Desktop notifications are off.' },
+        desktop: cfg.desktop ? await deliver.desktop('Kauzl', 'Alerts arrive like this: what it’s about, what happened, then the detail.', { subtitle: 'Test notification' }) : { ok: false, error: 'Desktop notifications are off.' },
         webhook: cfg.webhookUrl ? await deliver.webhook(cfg.webhookUrl, text) : { ok: false, error: 'No webhook URL set.' },
       };
     },

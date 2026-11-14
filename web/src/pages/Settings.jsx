@@ -253,10 +253,10 @@ function GitHubSettings({ state, sources, onChange }) {
         </KeyForm>
         <p class="note">
           {canConnect
-            ? <>Connect asks GitHub which repos Studio may see; change them any time with Choose repos. Studio reads traffic and stars, and only writes when you open a pull request from the article editor.</>
+            ? <>Connect asks GitHub which repos Kauzl may see; change them any time with Choose repos. Kauzl reads traffic and stars, and only writes when you open a pull request from the article editor.</>
             : <>Create a <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noreferrer">fine-grained token</a> with
           repository access to your repos and <b>Administration: read</b> (traffic needs it) plus <b>Metadata: read</b> — or a classic token with <code>repo</code>.
-          It's stored in <code>.data/studio.json</code> (owner-only), or set <code>GITHUB_TOKEN</code> in <code>.env</code>. Studio syncs hourly into <code>.data/github.db</code>.</>}
+          It's stored in <code>.data/studio.json</code> (owner-only), or set <code>GITHUB_TOKEN</code> in <code>.env</code>. Kauzl syncs hourly into <code>.data/github.db</code>.</>}
         </p>
         {!state.hosted && <details class="advanced">
         <summary>Advanced: import older history</summary>
@@ -266,7 +266,7 @@ function GitHubSettings({ state, sources, onChange }) {
             (r) => `Imported ${Object.entries(r.imported).map(([t, n]) => `${n} ${t}`).join(', ')}.`);
         }}>
           <p class="note m-0">
-            GitHub only serves the last 14 days of traffic. If you ran ghstats before, copy its history in once — Studio keeps no link to that file afterwards.
+            GitHub only serves the last 14 days of traffic. If you ran ghstats before, copy its history in once — Kauzl keeps no link to that file afterwards.
           </p>
           <div class="row">
             <input style={{ flex: '1', minWidth: '260px' }} placeholder="/path/to/ghstats/data/ghstats.db" value={importPath} onInput={(e) => setImportPath(e.currentTarget.value)} aria-label="ghstats database to import" />
@@ -328,7 +328,7 @@ function ConnectCard({ auth, onChange }) {
             ) : (
               <p class="note">
                 Disabled. Create an OAuth client (type <b>Web application</b>, redirect URI <code>http://127.0.0.1:4318/auth/callback</code>) in Google Cloud,
-                then start Studio with <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code>. Sign-in stores a refresh token locally so you stay connected.
+                then start Kauzl with <code>GOOGLE_CLIENT_ID</code> and <code>GOOGLE_CLIENT_SECRET</code>. Sign-in stores a refresh token locally so you stay connected.
               </p>
             )}
           </div>
@@ -354,8 +354,8 @@ function ConnectCard({ auth, onChange }) {
 // and BigQuery first, then what the product runs on (domains, hosting, repos…).
 // What the export search found, in words, and what to do if it found nothing.
 function BqExportStatus({ propertyId, live, result }) {
-  if (!live) return <p class="note">Connect Google above and Studio finds the export for you.</p>;
-  if (!propertyId) return <p class="note">Pick the GA4 property above and Studio finds its BigQuery export for you.</p>;
+  if (!live) return <p class="note">Connect Google above and Kauzl finds the export for you.</p>;
+  if (!propertyId) return <p class="note">Pick the GA4 property above and Kauzl finds its BigQuery export for you.</p>;
   if (result.loading) return <p class="note">Looking for this property’s BigQuery export…</p>;
   const found = result.data;
   if (found?.found) {

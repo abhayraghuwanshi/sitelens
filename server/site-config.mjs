@@ -70,7 +70,7 @@ function count(value, path) {
 
 function unknownKeys(obj, allowed, path, warnings) {
   for (const key of Object.keys(obj)) {
-    if (!allowed.includes(key)) warnings.push(`${path}${key}: not a setting Studio knows, so it’s ignored. Expected one of ${allowed.join(', ')}.`);
+    if (!allowed.includes(key)) warnings.push(`${path}${key}: not a setting Kauzl knows, so it’s ignored. Expected one of ${allowed.join(', ')}.`);
   }
 }
 
@@ -342,7 +342,7 @@ export function parseSiteConfig(text, { host = '' } = {}) {
     }
   };
   attempt(() => {
-    if (raw.version !== undefined && Number(raw.version) !== 1) throw new ValidationError(`version ${raw.version} isn’t supported; this Studio reads version: 1.`);
+    if (raw.version !== undefined && Number(raw.version) !== 1) throw new ValidationError(`version ${raw.version} isn’t supported; this version of Kauzl reads version: 1.`);
   });
   attempt(() => {
     if (raw.site === undefined) return;
@@ -467,8 +467,8 @@ export function draftYaml({ host, kind = '', goals = [], funnels = [], guessed =
     if (targets) targets.flow = true;
   }
   const head = [
-    `# What SiteLens Studio measures for ${host}. Spec: docs/sitelens-yml.md in sitelens-studio.`,
-    guessed ? '# Studio guessed these from the event names the site sends: check them against the code.' : '# Taken from the goals and funnels set up in Studio.',
+    `# What Kauzl measures for ${host}. Spec: docs/sitelens-yml.md in sitelens-studio.`,
+    guessed ? '# Kauzl guessed these from the event names the site sends: check them against the code.' : '# Taken from the goals and funnels set up in Kauzl.',
   ];
   if (!kind) head.push(`# Set kind to one of: ${Object.keys(KINDS).join(', ')}.`);
   return `${head.join('\n')}\n${doc.toString({ lineWidth: 0 })}`;
@@ -627,7 +627,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
         notes.push(`Couldn’t list the site’s repos: ${err.message}`);
         return [];
       }) : [];
-      if (!token) notes.push('Add a GitHub token in Settings → GitHub so Studio can read .sitelens.yml from the site’s repo.');
+      if (!token) notes.push('Add a GitHub token in Settings → GitHub so Kauzl can read .sitelens.yml from the site’s repo.');
       else if (!names.length) notes.push('No repo is linked to this site, so there’s no .sitelens.yml to read. Pick its repo in Settings → Products, or put the file in .data/config/.');
       search: for (const repo of names) {
         for (const path of [`.sitelens/${host}.yml`, '.sitelens.yml']) {
@@ -707,7 +707,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
         status: 409, kind: 'github-write', hint: 'The GitHub token in Settings → GitHub needs Contents and Pull requests set to “Read and write” for this repo.',
       });
     }
-    if (res.status === 409) throw new EngineError('The file changed on GitHub since Studio read it. Reload and make the change again.', { status: 409, kind: 'conflict' });
+    if (res.status === 409) throw new EngineError('The file changed on GitHub since Kauzl read it. Reload and make the change again.', { status: 409, kind: 'conflict' });
     throw new EngineError(`GitHub ${res.status}: ${detail.message || 'request failed'}`, { status: 502, kind: 'github' });
   }
 
@@ -740,9 +740,9 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
     const pr = await gh('POST', `/repos/${to.repo}/pulls`, token, {
       title, head: branch, base,
       body: [
-        `What SiteLens Studio measures for ${cleanHost(site.host)}: this changes the \`${key}\` part of \`${to.path}\`. Studio applies it once it's on ${base}.`,
+        `What Kauzl measures for ${cleanHost(site.host)}: this changes the \`${key}\` part of \`${to.path}\`. Kauzl applies it once it's on ${base}.`,
         'Spec: docs/sitelens-yml.md in sitelens-studio.',
-        '_Opened from SiteLens Studio → Setup._',
+        '_Opened from Kauzl → Setup._',
       ].join('\n\n'),
     });
     return { url: pr.html_url, number: pr.number, branch };

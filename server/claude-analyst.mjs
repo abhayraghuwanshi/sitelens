@@ -21,7 +21,7 @@ const READ_TOOLS = TOOLS.filter((t) => !t.write);
 
 const SAVE_TOOL = {
   name: 'save_comment',
-  description: 'Save your analysis as a comment in SiteLens Studio. Call it exactly once, when you are done. It appears as a Claude marker on the day you give, on every trend chart and in the Calendar.',
+  description: 'Save your analysis as a comment in Kauzl. Call it exactly once, when you are done. It appears as a Claude marker on the day you give, on every trend chart and in the Calendar.',
   strict: true,
   input_schema: {
     type: 'object',
@@ -35,7 +35,7 @@ const SAVE_TOOL = {
   },
 };
 
-const SYSTEM = `You are the analyst inside SiteLens Studio, a local analytics dashboard. The owner asked you to look at one of their sites and leave a comment in the app.
+const SYSTEM = `You are the analyst inside Kauzl, a local analytics dashboard. The owner asked you to look at one of their sites and leave a comment in the app.
 
 Use the tools to read the data. Start from daily_metrics for the range, use events to find what happened (releases, deploys, posts, mentions, notes), and day_story or breakdown to explain the days that moved. Call list_comments first so you don't repeat an earlier comment. Use schema and query only when the other tools can't answer.
 

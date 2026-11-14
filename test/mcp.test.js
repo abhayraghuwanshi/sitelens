@@ -32,7 +32,7 @@ test('initialize, tools/list and unknown methods', async () => {
   const mcp = createMcp({ dataDir: '/nowhere' });
   const init = await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } });
   assert.equal(init.result.protocolVersion, '2025-03-26');
-  assert.equal(init.result.serverInfo.name, 'sitelens-studio');
+  assert.equal(init.result.serverInfo.name, 'kauzl');
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '1999-01-01' } })).result.protocolVersion, '2025-06-18');
   assert.equal(await mcp.handle({ jsonrpc: '2.0', method: 'notifications/initialized' }), null);
   const list = await mcp.handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' });

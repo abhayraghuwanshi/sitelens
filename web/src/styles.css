@@ -1059,6 +1059,7 @@ table.data.compact .cell-path { max-width: none; }
 .cycle-steps li { position: relative; padding-left: 22px; }
 .cycle-steps li::before { content: ''; position: absolute; left: 4px; top: 6px; width: 8px; height: 8px; border-radius: 50%; border: 2px solid var(--border-strong); box-sizing: border-box; }
 .cycle-steps li.done::before { background: var(--good-ink); border-color: var(--good-ink); }
+.break-any { overflow-wrap: anywhere; }
 .cycle-cats { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 440px), 1fr)); gap: var(--space-16); }
 .cycle-cat .link-btn { white-space: nowrap; }
 .cycle-cat.on { outline: 2px solid var(--accent); outline-offset: -1px; }

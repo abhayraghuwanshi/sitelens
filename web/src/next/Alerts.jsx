@@ -297,7 +297,7 @@ export function AlertSettings() {
 
       <section class="card card-plain">
         <h2 class="nx-h2">Where alerts go</h2>
-        <p class="note">Every alert lands in Studio. You can also send it to these:</p>
+        <p class="note">Every alert lands in Kauzl. You can also send it to these:</p>
         <label class="alert-toggle">
           <input type="checkbox" checked={form.desktop} onChange={(e) => set({ desktop: e.currentTarget.checked })} />
           <span><b>macOS notifications</b><span class="muted small">From the desktop app, while it’s running.</span></span>

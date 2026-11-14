@@ -30,7 +30,7 @@ export function OpenRouterSettings() {
   }
 
   return (
-    <Card title="OpenRouter" sub="One key for answer checks in ChatGPT, Gemini, Perplexity and Grok. Each answers with its own web search, and Studio records whether it names and cites you.">
+    <Card title="OpenRouter" sub="One key for answer checks in ChatGPT, Gemini, Perplexity and Grok. Each answers with its own web search, and Kauzl records whether it names and cites you.">
       <div class="stack">
         <div class="row small">
           <span class={`dot${s.openrouter ? ' on' : ''}`} />

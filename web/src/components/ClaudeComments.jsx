@@ -178,7 +178,7 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
         ) : (
           <p class="note m-0">
             To analyze here, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (each run costs roughly $0.10–0.40).
-            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the SiteLens MCP server.
+            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the Kauzl MCP server.
           </p>
         ))}
       </div>

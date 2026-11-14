@@ -18,8 +18,8 @@ const SECTIONS = {
 
 const FROM = {
   file: { chip: 'good', text: 'In repo file' },
-  studio: { chip: '', text: 'Set in Studio' },
-  auto: { chip: '', text: 'Studio’s guess' },
+  studio: { chip: '', text: 'Set in Kauzl' },
+  auto: { chip: '', text: 'Kauzl’s guess' },
 };
 
 export function Setup({ site, connections = true }) {
@@ -32,7 +32,7 @@ export function Setup({ site, connections = true }) {
   return (
     <>
       {connections && <Connections site={site} target={target} />}
-      <Card title="What Studio measures" sub="Goals, funnels, search and alerts"
+      <Card title="What Kauzl measures" sub="Goals, funnels, search and alerts"
         actions={!site.demo && <button class="btn ghost" type="button" disabled={data.loading} onClick={() => setFresh(fresh + 1)}><Icon name="refresh" size={13} /> Reload</button>}>
         <div class="stack gap-10">
           <p class="note m-0"><FileLine site={site} file={file} target={target} /></p>
@@ -74,8 +74,8 @@ function FileLine({ site, file, target }) {
   if (site.demo) return 'The demo site reads a built-in file, so nothing here can be changed.';
   if (file.found) return <>Parts marked <b>In repo file</b> come from <SourceLink source={file.source} /> and change by pull request. The rest is set here.</>;
   return target.type === 'repo'
-    ? <>All set here in Studio. Any part can move into <code>{target.repo}</code> as <code>{target.path}</code>, so it changes with the code.</>
-    : 'All set here in Studio.';
+    ? <>All set here in Kauzl. Any part can move into <code>{target.repo}</code> as <code>{target.path}</code>, so it changes with the code.</>
+    : 'All set here in Kauzl.';
 }
 
 function Section({ site, section, target, onSaved }) {
@@ -149,7 +149,7 @@ function Section({ site, section, target, onSaved }) {
       {editing !== null && (
         <div class="stack gap-8">
           <p class="note m-0">
-            {inFile ? 'The rest of the file stays as it is.' : 'A start from what Studio uses today. Once it’s in the file, the file wins over Studio’s settings.'}
+            {inFile ? 'The rest of the file stays as it is.' : 'A start from what Kauzl uses today. Once it’s in the file, the file wins over Kauzl’s settings.'}
             {' '}Format: <code>docs/sitelens-yml.md</code>.
           </p>
           <textarea rows={Math.min(24, Math.max(5, editing.split('\n').length + 1))} spellcheck={false} value={editing}

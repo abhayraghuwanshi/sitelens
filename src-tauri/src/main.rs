@@ -1,4 +1,4 @@
-// SiteLens Studio desktop shell: runs the Node server as a sidecar (bundled
+// Kauzl desktop shell: runs the Node server as a sidecar (bundled
 // Node + the server code from resources/app), shows its page in a window and
 // keeps syncing from the menu bar after the window is closed.
 //
@@ -147,7 +147,7 @@ fn show_main(app: &AppHandle) {
     }
     let opener = app.clone();
     let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-        .title("SiteLens Studio")
+        .title("Kauzl")
         .inner_size(1360.0, 900.0)
         .min_inner_size(720.0, 480.0)
         .initialization_script(LINK_SCRIPT)
@@ -175,7 +175,7 @@ fn show_main(app: &AppHandle) {
         let at = log.map(|p| p.display().to_string()).unwrap_or_default();
         let _ = window.eval(&format!(
             "document.querySelector('p').textContent = {:?}",
-            format!("SiteLens Studio’s server didn’t start. Its log is at {at}")
+            format!("Kauzl’s server didn’t start. Its log is at {at}")
         ));
     });
 }
@@ -192,13 +192,13 @@ fn main() {
                 append_log(&log_path(handle), &format!("[start failed] {err}"));
             }
 
-            let open = MenuItem::with_id(app, "open", "Open SiteLens Studio", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open Kauzl", true, None::<&str>)?;
             let browser = MenuItem::with_id(app, "browser", "Open in browser", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit SiteLens Studio", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Kauzl", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &browser, &PredefinedMenuItem::separator(app)?, &quit])?;
             TrayIconBuilder::with_id("tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("SiteLens Studio")
+                .tooltip("Kauzl")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -222,7 +222,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build SiteLens Studio")
+        .expect("failed to build Kauzl")
         .run(|app, event| match event {
             // Dock icon clicked with the window hidden.
             #[cfg(target_os = "macos")]

@@ -600,7 +600,7 @@ export function rollupSql(bq, range) {
     sql: `CREATE OR REPLACE TABLE ${ident(target.project, target.dataset, target.table)}
 PARTITION BY session_date
 CLUSTER BY user_id
-OPTIONS (description = 'SiteLens Studio sessions rollup ${range.startDate} → ${range.endDate}')
+OPTIONS (description = 'Kauzl sessions rollup ${range.startDate} → ${range.endDate}')
 AS
 ${sessionsFromEvents(bq, range)}`,
     params: baseParams(bq),

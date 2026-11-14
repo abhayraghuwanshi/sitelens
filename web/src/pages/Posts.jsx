@@ -132,7 +132,7 @@ function PostList({ range }) {
         ) : (
           <div class="pad-16">
             <Empty title={d.accounts.length ? 'No posts in this range' : 'Add your accounts'}>
-              {d.accounts.length ? 'Try a longer range, or sync now.' : 'Name your usernames above and Studio pulls in everything you’ve posted.'}
+              {d.accounts.length ? 'Try a longer range, or sync now.' : 'Name your usernames above and Kauzl pulls in everything you’ve posted.'}
             </Empty>
           </div>
         )}
@@ -210,7 +210,7 @@ function Accounts({ data, open, onSaved }) {
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
           {error && <span class="small text-bad">{error}</span>}
         </div>
-        <p class="note m-0">No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
+        <p class="note m-0">No login needed: Kauzl reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
       </form>
     </details>
   );
@@ -377,7 +377,7 @@ function PostDetail({ id }) {
       {!d.site ? (
         <Card>
           <Empty title="No site to measure against">
-            {d.product ? `${d.product.label} has no GA4 property linked, so there’s no traffic to show.` : 'Pick the product this post was about (above) and Studio shows what it brought to that product’s site.'}
+            {d.product ? `${d.product.label} has no GA4 property linked, so there’s no traffic to show.` : 'Pick the product this post was about (above) and Kauzl shows what it brought to that product’s site.'}
           </Empty>
         </Card>
       ) : (
@@ -385,7 +385,7 @@ function PostDetail({ id }) {
           {d.authError ? (
             <div class="state error" role="alert">
               <h3>Google sign-in expired</h3>
-              <p class="small m-0">Studio can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
+              <p class="small m-0">Kauzl can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
               <a class="btn primary" href="#/settings?i=google">Sign in to Google again</a>
             </div>
           ) : d.error && <p class="note m-0"><b>Google Analytics:</b> {d.error}</p>}

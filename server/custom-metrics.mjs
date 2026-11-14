@@ -219,7 +219,7 @@ export function createCustomMetrics({ store, siteConfig = null, env = process.en
       throw new EngineError(`No ${secret.label} yet.`, {
         status: 409,
         kind: 'needs-metric-token',
-        hint: `Add it in Settings → Custom metrics, or set ${secret.env} in .env and restart Studio.`,
+        hint: `Add it in Settings → Custom metrics, or set ${secret.env} in .env and restart Kauzl.`,
       });
     }
     return value;

@@ -48,7 +48,7 @@ export function Bing({ site, range }) {
       ]} />
       <p class="note">
         {b.siteUrl} · Bing reported up to {b.range.lastReported || '—'}, so this range ends there.
-        {b.range.historyFrom && ` Studio has kept daily history since ${b.range.historyFrom}.`}
+        {b.range.historyFrom && ` Kauzl has kept daily history since ${b.range.historyFrom}.`}
         {' '}<button class="btn ghost" type="button" onClick={() => data.reload({ fresh: true })} disabled={data.loading}><Icon name="refresh" size={12} /> Refresh</button>
       </p>
 

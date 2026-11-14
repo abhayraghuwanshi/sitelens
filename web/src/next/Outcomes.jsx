@@ -244,7 +244,7 @@ function Goals({ d, site, onRefresh, refreshing }) {
     <details class="card card-plain nx-goals">
       <summary>
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
-          <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Studio until you set your own'}</span></span>
+          <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Kauzl until you set your own'}</span></span>
         <span class="nx-action-row">
           <a class="btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
           <button class="btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>

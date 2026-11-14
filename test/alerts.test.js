@@ -131,7 +131,7 @@ test('daily run alerts on a traffic spike once, and delivers to desktop + webhoo
   assert.equal(first.digest.sites[0].clicks, 30);
   assert.match(first.digest.text, /Shop: 400 sessions/);
   assert.deepEqual(notify.sent.map((s) => s.via), ['desktop', 'desktop', 'webhook']);
-  assert.match(notify.sent.at(-1).text, /spiked[\s\S]*SiteLens digest/);
+  assert.match(notify.sent.at(-1).text, /spiked[\s\S]*Kauzl digest/);
 
   const second = await alerts.run({ daily: true });
   assert.equal(second.fired.length, 0, 'same alert key must not fire twice');
@@ -284,7 +284,7 @@ test('desktop notices: title, subtitle and detail, several items one per line', 
   assert.equal(many.subtitle, '5 new alerts');
   assert.deepEqual(many.body.split('\n'), ['• A', '• B', '• C', 'and 2 more in Alerts']);
   const d = digestNotice({ day: '2026-11-07', sites: [{ label: 'cooldesk', sessions: 28, sessionsChange: 0.75 }, { label: 'infraplan', error: 'x' }], extensions: [{ label: 'New Tab', users: 50 }], alerts: [{}] });
-  assert.deepEqual(d, { title: 'SiteLens daily digest', subtitle: 'Saturday 7 Nov · 1 alert', body: 'cooldesk: 28 visits (+75%)\ninfraplan: couldn’t read\nNew Tab: 50 users' });
+  assert.deepEqual(d, { title: 'Kauzl daily digest', subtitle: 'Saturday 7 Nov · 1 alert', body: 'cooldesk: 28 visits (+75%)\ninfraplan: couldn’t read\nNew Tab: 50 users' });
 });
 
 test('tagSites files alerts under a site directly or through its product', () => {

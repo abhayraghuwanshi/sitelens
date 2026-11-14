@@ -1,4 +1,4 @@
-// SiteLens Studio server: JSON API + the built web app, bound to 127.0.0.1.
+// Kauzl server: JSON API + the built web app, bound to 127.0.0.1.
 
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
@@ -45,6 +45,7 @@ import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
 import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
+import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
 import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
 import { createAnalyst, analystRoutes } from './claude-analyst.mjs';
@@ -169,6 +170,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   // Hosted, the analyst's calls to this app stay in-process: over the network
   // they would reach the gateway, which knows no session for them.
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
+  // Reddit posts planned by Claude, posted by you, measured in Reddit and GA4.
+  const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
@@ -208,6 +211,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
     ...articleRoutes({ articles, siteOr404 }),
     ...contentCycleRoutes({ cycles: contentCycles, siteOr404 }),
+    ...redditCycleRoutes({ cycles: redditCycles, siteOr404 }),
     ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
     ...storyRoutes({ story, siteOr404 }),
@@ -596,7 +600,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, contentCycles, calendar, history, customMetrics };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, contentCycles, redditCycles, calendar, history, customMetrics };
 }
 
 // Calls handle() as if over HTTP and returns a fetch Response.
@@ -722,9 +726,10 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   app.bing.start();
   app.aiSearch.start();
   app.contentCycles.start();
+  app.redditCycles.start();
   app.history.start();
   createServer((req, res) => app.handle(req, res)).listen(port, '127.0.0.1', () => {
-    console.log(`\n  SiteLens Studio  →  http://127.0.0.1:${port}\n`);
+    console.log(`\n  Kauzl  →  http://127.0.0.1:${port}\n`);
     if (!app.auth.oauthAvailable) console.log('  Google sign-in disabled (no GOOGLE_CLIENT_ID); paste-a-token works.\n');
   });
 }

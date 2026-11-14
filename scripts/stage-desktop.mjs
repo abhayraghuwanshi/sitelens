@@ -68,4 +68,4 @@ if (!(await exists(join(ROOT, 'web/dist/index.html')))) run('npx', ['vite', 'bui
 await stageApp();
 await stageNode();
 const pkg = JSON.parse(await readFile(join(ROOT, 'package.json'), 'utf8'));
-console.log(`Staged SiteLens Studio ${pkg.version || ''} for the desktop app.`);
+console.log(`Staged Kauzl ${pkg.version || ''} for the desktop app.`);

@@ -58,7 +58,7 @@ export function normalizeTodo(input = {}) {
   if (title.length > TITLE_MAX) throw new ValidationError(`Keep the to-do under ${TITLE_MAX} characters; put the rest in the details.`);
   if (detail.length > DETAIL_MAX) throw new ValidationError(`Keep the details under ${DETAIL_MAX} characters.`);
   if (site && !SITE.test(site)) throw new ValidationError('That isn’t a site id.');
-  if (link && !/^(#\/|https:\/\/)/.test(link)) throw new ValidationError('A link must be a page in Studio (#/…) or an https:// address.');
+  if (link && !/^(#\/|https:\/\/)/.test(link)) throw new ValidationError('A link must be a page in Kauzl (#/…) or an https:// address.');
   if (from && !FROM.test(from)) throw new ValidationError('That isn’t a suggestion key.');
   const subject = input.subject && SUBJECTS.includes(input.subject.kind) && typeof input.subject.key === 'string' && input.subject.key.length <= 300
     ? { kind: input.subject.kind, key: input.subject.key } : null;

@@ -96,7 +96,7 @@ export function createGitHubSync({ dbPath, getToken, fetchImpl = fetch, log = co
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'sitelens-studio',
+        'User-Agent': 'kauzl',
       },
       signal: AbortSignal.timeout(30_000),
     });

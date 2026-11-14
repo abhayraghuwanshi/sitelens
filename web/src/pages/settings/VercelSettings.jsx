@@ -71,7 +71,7 @@ export function VercelSettings() {
         </form>
         </KeyForm>
         <p class="note">
-          {canConnect && <>Connect picks the account or team that owns your projects; Studio only reads them. </>}
+          {canConnect && <>Connect picks the account or team that owns your projects; Kauzl only reads them. </>}
           {!canConnect && <>Create a token at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a> scoped
           to the team that owns your projects. It's stored in <code>.data/studio.json</code> (owner-only), or set <code>VERCEL_TOKEN</code> (and
           optionally <code>VERCEL_TEAM_ID</code>) in <code>.env</code>. Leave the team empty to use your default team.</>}

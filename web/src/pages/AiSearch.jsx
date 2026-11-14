@@ -254,7 +254,7 @@ function AnswerChecks({ site, initial, onDone }) {
       actions={actions}>
       {noKey && (
         <Empty title="Add an API key to run answer checks">
-          Each assistant answers your questions with live web search; Studio records whether it names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
+          Each assistant answers your questions with live web search; Kauzl records whether it names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
           Claude uses an Anthropic key; ChatGPT, Gemini, Perplexity and Grok share one OpenRouter key.
           <div class="row mt-10 gap-8">
             <a class="btn primary" href="#/settings?i=openrouter">Add an OpenRouter key</a>

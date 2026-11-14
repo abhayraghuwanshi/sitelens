@@ -84,7 +84,7 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
       throw new EngineError('No Vercel token yet.', {
         status: 409,
         kind: 'needs-vercel',
-        hint: 'Create a token at vercel.com/account/settings/tokens, then add it in Settings → Vercel, or set VERCEL_TOKEN in .env and restart Studio.',
+        hint: 'Create a token at vercel.com/account/settings/tokens, then add it in Settings → Vercel, or set VERCEL_TOKEN in .env and restart Kauzl.',
       });
     }
     if (!cfg.teamId && !cfg.oauth) {

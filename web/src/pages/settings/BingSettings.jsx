@@ -61,7 +61,7 @@ export function BingSettings() {
 
         {s.source && s.matches.length > 0 && (
           <table class="data">
-            <thead><tr><th>Studio site</th><th>Bing site</th></tr></thead>
+            <thead><tr><th>Kauzl site</th><th>Bing site</th></tr></thead>
             <tbody>
               {s.matches.map((m) => (
                 <tr key={m.siteId}>
@@ -82,10 +82,10 @@ export function BingSettings() {
         <p class="note m-0">
           {canConnect
             ? <>Your sites need to be in <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a> first: there, “Import from Google Search Console” adds them all in one click.
-                Studio only reads; sites are matched to yours by domain.</>
+                Kauzl only reads; sites are matched to yours by domain.</>
             : <>In <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a>: add your site (importing from Google Search Console is one click),
                 then Settings (gear) → API access → API key → Generate. The key is stored in <code>.data/studio.json</code>, or set <code>BING_WEBMASTER_KEY</code> in <code>.env</code>.
-                Sites are matched to Studio sites by domain.</>}
+                Sites are matched to Kauzl sites by domain.</>}
         </p>
       </div>
     </Card>

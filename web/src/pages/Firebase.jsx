@@ -30,7 +30,7 @@ export function Firebase({ range, params }) {
     return (
       <div class="state">
         <h3>This site isn’t on Firebase App Hosting</h3>
-        <p>Studio reads server-side traffic from Firebase only for sites linked to an App Hosting backend.</p>
+        <p>Kauzl reads server-side traffic from Firebase only for sites linked to an App Hosting backend.</p>
         <a class="btn" href="#/settings?i=firebase">Link it</a> <a class="btn ghost" href="#/firebase">All Firebase sites</a>
       </div>
     );
@@ -68,7 +68,7 @@ function Setup({ onLinked }) {
     <div class="state">
       <h3>Connect Firebase App Hosting</h3>
       <p>
-        Studio reads your backend's request logs from Cloud Logging, so it sees every page load, including AI crawlers, search bots
+        Kauzl reads your backend's request logs from Cloud Logging, so it sees every page load, including AI crawlers, search bots
         and visitors who block GA4, plus errors, latency and deploys. It looks through your Google Cloud projects for the backend that serves each site.
       </p>
       <div class="row">
@@ -85,7 +85,7 @@ function Setup({ onLinked }) {
       )}
       {result && !result.linked.length && (
         <p class="hint">
-          No backend in {result.scanned.join(', ') || 'your projects'} served a Studio site in the last 3 days.
+          No backend in {result.scanned.join(', ') || 'your projects'} served a Kauzl site in the last 3 days.
           {result.services.length > 0 && <> Seen: {result.services.map((s) => `${s.project}/${s.service} (${s.hosts.join(', ') || 'no host'})`).join(' · ')}.</>}
           {result.errors.length > 0 && <> Skipped: {result.errors.map((e) => `${e.project}: ${e.error}`).join(' · ')}</>}
         </p>
@@ -157,7 +157,7 @@ function SiteTraffic({ link, range, onSynced }) {
           series={VISITOR_SERIES.map((s) => ({ label: s.label, color: s.color, values: d.series[s.key] }))}
           format={(v, axis) => formatNumber(v, { compact: axis })} />
         {d.dataStart > d.range.start && (
-          <p class="note">Cloud Logging keeps 30 days, so history starts {d.dataStart}. Studio keeps its own copy from here on, so longer ranges fill in over time.</p>
+          <p class="note">Cloud Logging keeps 30 days, so history starts {d.dataStart}. Kauzl keeps its own copy from here on, so longer ranges fill in over time.</p>
         )}
       </Card>
 

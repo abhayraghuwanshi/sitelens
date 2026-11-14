@@ -113,7 +113,7 @@ export function FirebaseSettings({ auth }) {
         )}
 
         <p class="note">
-          App Hosting runs each backend as a Cloud Run service with the same name, so Studio reads its request log with read-only log access, never
+          App Hosting runs each backend as a Cloud Run service with the same name, so Kauzl reads its request log with read-only log access, never
           the App Hosting API (that needs full project access). Logs are synced into <code>.data/firebase.db</code> every 30 minutes; IP addresses are
           hashed with a daily salt and never stored.
         </p>

@@ -32,7 +32,7 @@ import { createCache } from './cache.mjs';
 import { UTM_SOURCES } from '../shared/utm.js';
 
 const DAY = 86_400_000;
-const USER_AGENT = 'node:sitelens-studio:0.2 (local analytics dashboard)';
+const USER_AGENT = 'node:kauzl:0.2 (local analytics dashboard)';
 const WINDOW_DAYS = 3;
 
 export const PLATFORMS = {
@@ -656,7 +656,7 @@ export function createPosts({ dbPath, store, mentions, auth, history = null, cac
   // engagement of the visits in its window (its utm_campaign when tagged).
   async function detail(id) {
     const r = open().prepare('SELECT * FROM posts WHERE id = ?').get(id);
-    if (!r) throw new ValidationError('That post isn’t in Studio any more.');
+    if (!r) throw new ValidationError('That post isn’t in Kauzl any more.');
     const saved = await store.get();
     const products = saved.products || [];
     const sites = await store.sites();
@@ -774,9 +774,16 @@ export function createPosts({ dbPath, store, mentions, auth, history = null, cac
     });
   }
 
+  // Your synced posts on one platform since a time, newest first (Reddit cycles match drafts against these).
+  function recent({ platform = '', since = 0 } = {}) {
+    return open().prepare('SELECT * FROM posts WHERE hidden = 0 AND platform = ? AND created_at >= ? ORDER BY created_at DESC').all(platform, since)
+      .map((r) => ({ id: r.id, title: r.title || '', text: r.text || '', permalink: r.permalink || '', link: r.link || '', community: r.community || '', points: r.points, comments: r.comments, createdAt: r.created_at }));
+  }
+
   return {
     sync,
     overview,
+    recent,
     detail,
     annotations,
     saveAccounts,

@@ -26,7 +26,7 @@ export function Health({ sites, params }) {
   const [range, setRange] = useState(params.get('range') || '7d');
   const summary = useAsync(() => api.get('/vitals'), [sites.length]);
 
-  if (!monitored.length) return <Empty title="No sites to monitor">Add a site with a host in Settings and Studio starts checking it every 5 minutes.</Empty>;
+  if (!monitored.length) return <Empty title="No sites to monitor">Add a site with a host in Settings and Kauzl starts checking it every 5 minutes.</Empty>;
 
   const healthOf = new Map((summary.data?.sites || []).map((h) => [h.id, h]));
   return (

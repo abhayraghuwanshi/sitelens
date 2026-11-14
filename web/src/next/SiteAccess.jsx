@@ -5,7 +5,7 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 
 // The hosted Studio (fly.toml's STUDIO_HOST), where sharing lives.
-const HOSTED = 'https://sitelens.kazekit.com';
+const HOSTED = 'https://kauzl.com';
 
 export function SiteAccess({ site, hosted }) {
   if (!hosted) return <DesktopNote site={site} />;
@@ -20,13 +20,13 @@ function DesktopNote({ site }) {
       <div>
         <h3 class="nx-fn-title">People with access</h3>
         <p class="muted small m-0">
-          This desktop app runs on your computer, so only you can open it. To let others view {site.label} (view only, just this site), share it from the hosted Studio:
+          This desktop app runs on your computer, so only you can open it. To let others view {site.label} (view only, just this site), share it from the hosted Kauzl:
           add the site there, then add people by email on its Edit page.
         </p>
       </div>
       <div class="nx-access-add">
-        <input type="email" placeholder="name@example.com" disabled aria-label="Email address (hosted Studio only)" />
-        <a class="btn primary" href={`${HOSTED}/login`} target="_blank" rel="noreferrer"><Icon name="plus" size={13} /> Share from the hosted Studio</a>
+        <input type="email" placeholder="name@example.com" disabled aria-label="Email address (hosted Kauzl only)" />
+        <a class="btn primary" href={`${HOSTED}/login`} target="_blank" rel="noreferrer"><Icon name="plus" size={13} /> Share from the hosted Kauzl</a>
       </div>
     </section>
   );

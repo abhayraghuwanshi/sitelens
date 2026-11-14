@@ -161,7 +161,7 @@ function TodoDetails({ id, site }) {
   if (d.error) return <ErrorState error={d.error} onRetry={d.reload} />;
   if (!d.data) return <Loading height={80} />;
   const { todo, context: c } = d.data;
-  const ask = `Work on SiteLens to-do ${todo.id}: read it with get_todo, and post what you found, changed and expect with report_todo.`;
+  const ask = `Work on Kauzl to-do ${todo.id}: read it with get_todo, and post what you found, changed and expect with report_todo.`;
   return (
     <div class="todo-details">
       {c && <TodoData c={c} />}

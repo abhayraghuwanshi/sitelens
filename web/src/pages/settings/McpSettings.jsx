@@ -3,7 +3,7 @@ import { api } from '../../api.js';
 import { useAsync } from '../../hooks.js';
 import { Card, Loading, ErrorState } from '../../components/ui.jsx';
 
-// Single-quote for zsh/bash, so paths with spaces ("SiteLens Studio.app") survive.
+// Single-quote for zsh/bash, so paths with spaces ("Kauzl.app") survive.
 const sh = (s) => `'${String(s).replace(/'/g, `'\\''`)}'`;
 
 function claudeCodeCommand({ command, args, env }) {
@@ -91,7 +91,7 @@ function HostedMcp() {
   const desktop = JSON.stringify({ mcpServers: { sitelens: { command: 'npx', args: ['-y', 'mcp-remote@0.15.2', url, '--header', header] } } }, null, 2);
 
   return (
-    <Card title="Claude Code & Claude Desktop" sub="Lets Claude read your Studio numbers over MCP and leave its analysis as comments on your charts and to-dos. It can’t change anything else, and it only ever sees your own data.">
+    <Card title="Claude Code & Claude Desktop" sub="Lets Claude read your Kauzl numbers over MCP and leave its analysis as comments on your charts and to-dos. It can’t change anything else, and it only ever sees your own data.">
       <div class="stack">
         <form class="row" onSubmit={create}>
           <input style={{ flex: '1', minWidth: '220px', maxWidth: '320px' }} placeholder="Name, e.g. MacBook Claude Code" value={label}
@@ -133,8 +133,8 @@ function HostedMcp() {
           </table>
         )}
         <p class="note m-0">
-          One token per computer or agent, so you can revoke one without the others. Studio keeps only a fingerprint of each token, never the token itself.
-          Anyone with a token can read your Studio data, so treat it like a password. When one expires, Claude gets “access token required”: make a new one and run its command again.
+          One token per computer or agent, so you can revoke one without the others. Kauzl keeps only a fingerprint of each token, never the token itself.
+          Anyone with a token can read your Kauzl data, so treat it like a password. When one expires, Claude gets “access token required”: make a new one and run its command again.
         </p>
       </div>
     </Card>
@@ -150,7 +150,7 @@ function LocalMcp() {
   const desktop = clients.claudeDesktop;
 
   return (
-    <Card title="Claude Code & Claude Desktop" actions={<button class="btn ghost" type="button" onClick={setup.reload}>Check again</button>} sub="Lets local agents read Studio’s numbers over MCP and leave their analysis as comments on your charts. They can’t change anything else. Your agent starts the server itself when it needs it, so there’s nothing to keep running here.">
+    <Card title="Claude Code & Claude Desktop" actions={<button class="btn ghost" type="button" onClick={setup.reload}>Check again</button>} sub="Lets local agents read Kauzl’s numbers over MCP and leave their analysis as comments on your charts. They can’t change anything else. Your agent starts the server itself when it needs it, so there’s nothing to keep running here.">
       <div class="stack">
         <ClientStatus status={code} name="Claude Code" />
         {code?.state !== 'connected' && (
@@ -173,7 +173,7 @@ function LocalMcp() {
         )}
         <p class="note m-0">
           The analytics tools (<code>daily_metrics</code>, <code>breakdown</code>, <code>day_story</code>, <code>events</code>) ask this app, so keep
-          Studio open while you use them. <code>schema</code> and <code>query</code> read the local databases directly and work without it.
+          Kauzl open while you use them. <code>schema</code> and <code>query</code> read the local databases directly and work without it.
           Tokens and settings in <code>studio.json</code> are never exposed. These paths point at this install; if you move the app, copy the command again.
         </p>
       </div>

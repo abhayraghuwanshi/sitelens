@@ -70,7 +70,7 @@ function AlertsFeed() {
         <Card title="Feed" sub={lastRun ? `Last check ${formatRelative(lastRun.at)}${lastRun.daily ? ' · full' : ' · GitHub & Web Store'}` : 'Not checked yet'} actions={runNow}>
           {alerts.length === 0 ? (
             <p class="note m-0">
-              No alerts yet. Studio checks GitHub and Web Store snapshots every hour, and GA4 and Search Console once a day after {hourLabel(settings.digestHour)}.
+              No alerts yet. Kauzl checks GitHub and Web Store snapshots every hour, and GA4 and Search Console once a day after {hourLabel(settings.digestHour)}.
             </p>
           ) : (
             <div class="insights">

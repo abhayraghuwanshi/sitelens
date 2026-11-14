@@ -174,7 +174,7 @@ function MetricEditor({ initial, sites, connectors, onDone }) {
             <textarea rows={8} spellcheck={false} value={form.sql} onInput={(e) => set({ sql: e.currentTarget.value })} />
             <small>
               SELECT only. <code>{'{{start}}'}</code> / <code>{'{{end}}'}</code> are YYYY-MM-DD dates (end is exclusive);
-              use <code>{'{{start_ms}}'}</code> / <code>{'{{end_ms}}'}</code> or <code>_s</code> for epoch timestamps. Studio asks for the range and the
+              use <code>{'{{start_ms}}'}</code> / <code>{'{{end_ms}}'}</code> or <code>_s</code> for epoch timestamps. Kauzl asks for the range and the
               period before it, so keep the WHERE on those placeholders.
             </small>
           </label>

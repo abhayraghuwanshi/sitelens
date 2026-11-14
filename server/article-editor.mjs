@@ -110,7 +110,7 @@ const SUGGEST_SCHEMA = {
   required: ['summary', 'title', 'description', 'edits', 'sections'],
 };
 
-const SYSTEM = `You are the search editor inside SiteLens Studio. The owner of a website wants one of their published articles to earn more organic search traffic. You get the article's markdown, its live title and meta description, and the Search Console queries it already shows up for, with clicks, impressions, CTR and average position.
+const SYSTEM = `You are the search editor inside Kauzl. The owner of a website wants one of their published articles to earn more organic search traffic. You get the article's markdown, its live title and meta description, and the Search Console queries it already shows up for, with clicks, impressions, CTR and average position.
 
 Work from that data:
 - Queries with many impressions at positions 4-20 are the best chances: make sure the article clearly answers them, in a heading or a sentence that uses the reader's words.
@@ -480,7 +480,7 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
         `**Changed:** ${[...changes].map(([f, c]) => `\`${f}\` (${c.what.join(', ')})`).join('; ')}`,
         skipped.length ? `**Not changed:** the ${skipped.join(' and ')} — couldn’t find where it is set.` : '',
         why,
-        '_Opened from SiteLens Studio._',
+        '_Opened from Kauzl._',
       ].filter(Boolean).join('\n\n'),
     });
     let note = null;
