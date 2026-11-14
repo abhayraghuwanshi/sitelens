@@ -15,8 +15,12 @@ import { dirname } from 'node:path';
 import { EngineError } from './engines.mjs';
 import { historyRange } from './github.mjs';
 import { createCache } from './cache.mjs';
+import { refreshBing } from './connect.mjs';
 
 const BASE = 'https://ssl.bing.com/webmaster/api.svc/json';
+// OAuth calls go where Bing's OAuth docs send them, with a Bearer header.
+const OAUTH_BASE = 'https://www.bing.com/webmaster/api.svc/json';
+const OAUTH = Symbol('bing-oauth');
 const DAY = 86_400_000;
 const HOUR = 3_600_000;
 
@@ -100,21 +104,38 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return db;
   }
 
+  // A pasted API key, or (key === OAUTH) the account connected with "Connect Bing".
   async function config() {
     const s = await store.get();
     const saved = s.sources?.bingApiKey || '';
-    return { key: saved || env.BING_WEBMASTER_KEY || '', source: saved ? 'settings' : env.BING_WEBMASTER_KEY ? 'env' : '', siteMap: s.bing?.siteMap || {} };
+    const oauth = Boolean(s.sources?.bingOAuth?.refreshToken);
+    return {
+      key: saved || (oauth ? OAUTH : '') || env.BING_WEBMASTER_KEY || '',
+      source: saved ? 'settings' : oauth ? 'oauth' : env.BING_WEBMASTER_KEY ? 'env' : '',
+      siteMap: s.bing?.siteMap || {},
+    };
+  }
+
+  let refreshing = null;
+  async function bearer() {
+    const o = (await store.get()).sources?.bingOAuth;
+    if (o?.accessToken && o.expiresAt - 60_000 > now()) return o.accessToken;
+    refreshing ||= refreshBing({ store, env, fetchImpl, now }).finally(() => {
+      refreshing = null;
+    });
+    return refreshing;
   }
 
   async function call(method, params = {}, { key, body } = {}) {
     const apiKey = key ?? (await config()).key;
-    if (!apiKey) throw new EngineError('Bing Webmaster Tools isn’t connected.', { status: 409, kind: 'needs-bing', hint: 'Add an API key in Settings → Integrations → Bing.' });
-    const url = new URL(`${BASE}/${method}`);
-    url.searchParams.set('apikey', apiKey);
+    if (!apiKey) throw new EngineError('Bing Webmaster Tools isn’t connected.', { status: 409, kind: 'needs-bing', hint: 'Connect Bing (or add an API key) in Settings → Integrations → Bing.' });
+    const oauth = apiKey === OAUTH;
+    const url = new URL(`${oauth ? OAUTH_BASE : BASE}/${method}`);
+    if (!oauth) url.searchParams.set('apikey', apiKey);
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
     const res = await fetchImpl(url, {
       method: body ? 'POST' : 'GET',
-      headers: body ? { 'Content-Type': 'application/json; charset=utf-8' } : {},
+      headers: { ...(body ? { 'Content-Type': 'application/json; charset=utf-8' } : {}), ...(oauth ? { Authorization: `Bearer ${await bearer()}` } : {}) },
       body: body ? JSON.stringify(body) : undefined,
       signal: AbortSignal.timeout(30_000),
     });
@@ -248,6 +269,16 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     }
   }
 
+  // Every page's clicks, impressions and position between two dates (inclusive),
+  // for windows that aren't one of the range keys; null when Bing isn't set up.
+  async function pageStats(site, from, to) {
+    if (site.demo || !(await config()).key) return null;
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) return null;
+    const rows = await cache.wrap(`pages:${siteUrl}`, HOUR, false, () => call('GetPageStats', { siteUrl }));
+    return aggregateQueries(rows || [], from, to, 5000).map(({ query, ...p }) => ({ page: query, ...p }));
+  }
+
   async function submit(site, urls) {
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
@@ -268,6 +299,50 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return { submitted: list.length, quota: quota ? { daily: quota.DailyQuota ?? null, monthly: quota.MonthlyQuota ?? null } : null };
   }
 
+  // Keyword research: Bing's weekly search volume for any keywords (ones you
+  // don't rank for too), and the searches related to each. Not tied to a site,
+  // but needs the API key. market is Bing's country + language, e.g. us/en-US.
+  async function keywords(list, { country = 'us', language = 'en-US' } = {}) {
+    const words = [...new Set((list || []).map((k) => String(k).trim().toLowerCase()).filter((k) => k.length >= 2 && k.length <= 80))].slice(0, 10);
+    if (!words.length) throw new EngineError('Give at least one keyword.', { kind: 'validation' });
+    const end = isoDay(now());
+    const start = isoDay(now() - 90 * DAY);
+    return Promise.all(words.map(async (q) => {
+      const [stats, related] = await Promise.all([
+        cache.wrap(`kw:${country}:${language}:${q}`, 12 * HOUR, false, () => call('GetKeywordStats', { q, country, language })),
+        cache.wrap(`rel:${country}:${language}:${q}`, 12 * HOUR, false, () => call('GetRelatedKeywords', { q, country, language, startDate: start, endDate: end })).catch(() => []),
+      ]);
+      const weeks = (stats || []).map((r) => ({ week: bingDay(r.Date), impressions: Number(r.Impressions) || 0, broad: Number(r.BroadImpressions) || 0 }))
+        .filter((w) => w.week).sort((a, b) => (a.week < b.week ? -1 : 1));
+      const recent = weeks.slice(-4).reduce((a, w) => a + w.impressions, 0);
+      const before = weeks.slice(-8, -4).reduce((a, w) => a + w.impressions, 0);
+      return {
+        keyword: q, weeks, last4Weeks: recent, previous4Weeks: before,
+        related: (related || []).map((r) => ({ keyword: r.Query, impressions: Number(r.Impressions) || 0, broad: Number(r.BroadImpressions) || 0 }))
+          .sort((a, b) => b.impressions - a.impressions).slice(0, 15),
+      };
+    }));
+  }
+
+  // What Bing knows about one URL on the site: when it found and last crawled
+  // it, and the HTTP status it got. Bing answers an error for URLs it hasn't seen.
+  async function urlInfo(site, url) {
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    try {
+      const r = await cache.wrap(`url:${url}`, HOUR, false, () => call('GetUrlInfo', { siteUrl, url }));
+      if (!r) return { known: false };
+      return {
+        known: true, httpStatus: r.HttpStatus ?? null,
+        discovered: r.DiscoveryDate ? bingDay(r.DiscoveryDate) : null, lastCrawled: r.LastCrawledDate ? bingDay(r.LastCrawledDate) : null,
+        size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null,
+      };
+    } catch (err) {
+      if (err.kind === 'needs-bing') throw err;
+      return { known: false, note: err.message };
+    }
+  }
+
   async function saveKey(value) {
     const key = String(value ?? '').trim();
     if (key) {
@@ -278,6 +353,8 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
       s.sources = { ...(s.sources || {}) };
       if (key) s.sources.bingApiKey = key;
       else delete s.sources.bingApiKey;
+      // Removing (or replacing with a key) also disconnects "Connect Bing".
+      delete s.sources.bingOAuth;
     });
     cache.clear();
     lastError = '';
@@ -322,7 +399,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, overview, summary, submit, syncAll,
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));

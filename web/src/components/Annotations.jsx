@@ -55,10 +55,10 @@ export function AnnotationBar({ annotations, scope, scopeLabel = 'this chart', o
   }
 
   return (
-    <div class="stack" style={{ gap: '6px', marginTop: '8px' }}>
-      <div class="row" style={{ gap: '6px' }}>
+    <div class="stack gap-6 mt-8">
+      <div class="row gap-6">
         {annotations.map((a) => (
-          <span class="chip" key={a.id} title={a.kind === 'claude' ? `${a.date} · Claude\n\n${a.body || ''}` : `${a.date} · ${a.source}`} style={{ gap: '6px' }}>
+          <span class="chip gap-6" key={a.id} title={a.kind === 'claude' ? `${a.date} · Claude\n\n${a.body || ''}` : `${a.date} · ${a.source}`}>
             <i aria-hidden="true" style={{ width: '7px', height: '7px', borderRadius: '50%', background: kindColor(a.kind), display: 'inline-block' }} />
             <span class="muted">{formatDate(a.date.replaceAll('-', ''))}</span>
             {a.url ? <a href={a.url} target="_blank" rel="noreferrer">{a.label}</a> : a.label}
@@ -75,7 +75,7 @@ export function AnnotationBar({ annotations, scope, scopeLabel = 'this chart', o
         )}
       </div>
       {open && (
-        <form class="row" style={{ gap: '6px' }} onSubmit={save}>
+        <form class="row gap-6" onSubmit={save}>
           <label class="sr-only" for="annotation-date">Date</label>
           <input id="annotation-date" type="date" value={date} required onInput={(e) => setDate(e.currentTarget.value)}
             style={{ font: 'inherit', padding: '5px 8px', border: '1px solid var(--border)', borderRadius: 'var(--radius-sm)', background: 'var(--surface)', color: 'var(--text)' }} />
@@ -83,7 +83,7 @@ export function AnnotationBar({ annotations, scope, scopeLabel = 'this chart', o
           <input id="annotation-label" type="text" maxLength={140} placeholder="Posted on Reddit, changed pricing…" value={label}
             onInput={(e) => setLabel(e.currentTarget.value)} style={{ flex: '1', minWidth: '200px' }} />
           {scope && (
-            <label class="small muted row" style={{ gap: '4px' }}>
+            <label class="small muted row gap-4">
               <input type="checkbox" checked={onlyHere} onChange={(e) => setOnlyHere(e.currentTarget.checked)} /> Only {scopeLabel}
             </label>
           )}
@@ -91,7 +91,7 @@ export function AnnotationBar({ annotations, scope, scopeLabel = 'this chart', o
           <button class="btn ghost" type="button" onClick={() => setOpen(false)}>Cancel</button>
         </form>
       )}
-      {error && <p class="small" style={{ margin: 0, color: 'var(--critical-ink)' }}>{error}</p>}
+      {error && <p class="small m-0 text-bad">{error}</p>}
     </div>
   );
 }

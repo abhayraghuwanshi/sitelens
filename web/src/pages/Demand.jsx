@@ -47,7 +47,7 @@ export function Demand({ site, range }) {
       <div class="kpis">
         {d.groups.map((g) => (
           <div class="kpi" key={g.name} title={g.pattern ? `Matches /${g.pattern}/i` : 'Queries no group matched'}>
-            <div class="label"><i style={{ width: '10px', height: '10px', borderRadius: '3px', background: colors[g.name], display: 'inline-block' }} /> {g.name}</div>
+            <div class="label"><i style={{ width: '10px', height: '10px', borderRadius: 'var(--radius-xs)', background: colors[g.name], display: 'inline-block' }} /> {g.name}</div>
             <div class="value">{formatNumber(g.impressions)}</div>
             <div class="meta">
               <Delta current={g.impressions} previous={g.previous.impressions} />
@@ -88,7 +88,7 @@ export function Demand({ site, range }) {
 
 function MoversTable({ rows, colors, kind }) {
   if (!rows.length) {
-    return <p class="muted small" style={{ padding: '8px 16px' }}>{{ newQueries: 'No new queries with 5+ impressions this period.', rising: 'Nothing rose by 5+ impressions.', falling: 'Nothing fell by 5+ impressions.' }[kind]}</p>;
+    return <p class="muted small inset">{{ newQueries: 'No new queries with 5+ impressions this period.', rising: 'Nothing rose by 5+ impressions.', falling: 'Nothing fell by 5+ impressions.' }[kind]}</p>;
   }
   return (
     <div class="table-wrap result-scroll">
@@ -98,8 +98,8 @@ function MoversTable({ rows, colors, kind }) {
           {rows.map((q) => (
             <tr key={q.query}>
               <td class="cell-path">{q.query}</td>
-              <td class="small" style={{ whiteSpace: 'nowrap' }}>
-                <i style={{ width: '8px', height: '8px', borderRadius: '2px', background: colors[q.group], display: 'inline-block', marginRight: '6px' }} />{q.group}
+              <td class="small nowrap">
+                <i style={{ width: '8px', height: '8px', borderRadius: 'var(--radius-bar)', background: colors[q.group], display: 'inline-block', marginRight: '6px' }} />{q.group}
               </td>
               <td class="num">{formatNumber(q.impressions)}</td>
               <td class="num">{q.prevImpressions ? formatNumber(q.prevImpressions) : <span class="muted">new</span>}</td>
@@ -117,17 +117,17 @@ function MoversTable({ rows, colors, kind }) {
 function FileGroups({ site, groups, colors }) {
   return (
     <Card title="Query groups" sub="From the site’s repo file">
-      <div class="stack" style={{ gap: '8px' }}>
+      <div class="stack gap-8">
         {groups.map((g) => (
           <div key={g.name} class="row" style={{ flexWrap: 'nowrap', alignItems: 'baseline' }}>
-            <i style={{ width: '10px', height: '10px', borderRadius: '3px', background: colors[g.name], flex: 'none' }} />
+            <i style={{ width: '10px', height: '10px', borderRadius: 'var(--radius-xs)', background: colors[g.name], flex: 'none' }} />
             <b class="small" style={{ flex: 'none' }}>{g.name}</b>
             <code class="small" style={{ overflowWrap: 'anywhere', minWidth: 0 }}>{g.pattern}</code>
           </div>
         ))}
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           First matching group wins. They’re made from your brand, topics and competitors.{' '}
-          <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+          <a href={`#/site/${site.id}/setup`}>Change them in the site’s settings</a>
         </p>
       </div>
     </Card>
@@ -177,14 +177,14 @@ function GroupEditor({ site, groups, queries, isDefault, colors, onSaved }) {
   return (
     <Card title="Query groups" sub={isDefault ? 'Suggested from the hostname — edit and save' : 'First matching group wins'}
       actions={<button class="btn primary" type="button" disabled={saving || site.demo} onClick={save}>{saving ? 'Saving…' : 'Save'}</button>}>
-      <div class="stack" style={{ gap: '10px' }}>
+      <div class="stack gap-10">
         {draft.map((g, i) => {
           const c = preview.counts[i];
           const invalid = preview.compiled[i] === 'invalid';
           return (
-            <div key={i} class="stack" style={{ gap: '4px' }}>
+            <div key={i} class="stack gap-4">
               <div class="row" style={{ flexWrap: 'nowrap' }}>
-                <i style={{ width: '10px', height: '10px', borderRadius: '3px', background: colors[g.name] || `var(--series-${(i % 8) + 1})`, flex: 'none' }} />
+                <i style={{ width: '10px', height: '10px', borderRadius: 'var(--radius-xs)', background: colors[g.name] || `var(--series-${(i % 8) + 1})`, flex: 'none' }} />
                 <input type="text" value={g.name} placeholder="Name" style={{ width: '110px' }} aria-label={`Group ${i + 1} name`} onInput={(e) => update(i, { name: e.currentTarget.value })} />
                 <input type="text" value={g.pattern} placeholder="regex, e.g. raycast|alfred" class="mono" style={{ flex: '1', minWidth: '0' }}
                   aria-label={`Group ${i + 1} pattern`} aria-invalid={invalid} onInput={(e) => update(i, { pattern: e.currentTarget.value })} />
@@ -201,7 +201,7 @@ function GroupEditor({ site, groups, queries, isDefault, colors, onSaved }) {
             <Icon name="plus" size={13} /> Add group
           </button>
         </div>
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           Patterns are case-insensitive regular expressions matched against each search query. Typical setup: <b>Brand</b> for your name and its typos,
           <b> Category</b> for what people search when they don’t know you yet (e.g. <code>raycast.*alternative</code>), <b>Competitors</b> for rival names.
           {site.demo && ' Saving is off for the demo site.'}
@@ -223,10 +223,10 @@ function TrendsCard({ groups, queries, range }) {
   const url = (list) => `https://trends.google.com/trends/explore?${new URLSearchParams({ date, q: list.join(',') })}`;
   return (
     <Card title="Google Trends" sub="Market-wide interest, not just your site">
-      <div class="stack" style={{ gap: '8px' }}>
+      <div class="stack gap-8">
         {terms.length ? (
           <>
-            <a class="btn" href={url(terms)} target="_blank" rel="noreferrer" style={{ alignSelf: 'flex-start' }}>
+            <a class="btn self-start" href={url(terms)} target="_blank" rel="noreferrer">
               <Icon name="external" size={13} /> Compare top queries in Trends
             </a>
             <div class="row small">
@@ -234,7 +234,7 @@ function TrendsCard({ groups, queries, range }) {
             </div>
           </>
         ) : <p class="muted small">Define a group with matching queries to get Trends links.</p>}
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           Trends only charts terms with real search volume — a small brand name usually shows “not enough data”, while category terms work well.
           Google’s Trends API is still invite-only alpha; if you get access, it can feed this chart directly.
         </p>

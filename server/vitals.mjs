@@ -212,7 +212,7 @@ export function createVitals({ dbPath, store, env = process.env, getToken = asyn
     try {
       const res = await fetchImpl(`https://${host}/`, {
         redirect: 'follow',
-        headers: { 'User-Agent': 'SiteLens-Studio-uptime/1.0' },
+        headers: { 'User-Agent': 'Kauzl-uptime/1.0' },
         signal: AbortSignal.timeout(timeoutMs),
       });
       // Read (and drop) the body so the latency covers the whole document.
@@ -275,7 +275,7 @@ export function createVitals({ dbPath, store, env = process.env, getToken = asyn
   async function cruxBigQuery(host, { force = false } = {}) {
     if (!bigquery) return { skipped: true };
     const project = await billingProject();
-    if (!project) return saveCrux(host, now(), null, 'CrUX history comes from BigQuery’s public CrUX dataset on your Google sign-in. Set up BigQuery on a site in Settings so Studio has a project to run the query in.', 'bigquery');
+    if (!project) return saveCrux(host, now(), null, 'CrUX history comes from BigQuery’s public CrUX dataset on your Google sign-in. Set up BigQuery on a site in Settings so Kauzl has a project to run the query in.', 'bigquery');
     const previous = open().prepare('SELECT at, error, source FROM crux WHERE host = ?').get(host);
     if (!force && previous?.source === 'bigquery' && previous.at > now() - CRUX_BQ_EVERY && !previous.error?.startsWith('BigQuery:')) {
       return { skipped: true, cached: true };
@@ -510,7 +510,7 @@ function googleError(status, json, auth) {
   const message = json?.error?.message || `HTTP ${status}`;
   if (status === 429) {
     if (auth === 'key') return `Quota exceeded: ${message}`;
-    if (auth === 'oauth') return 'PageSpeed quota for your Google Cloud project is used up for now; Studio retries on the next daily run.';
+    if (auth === 'oauth') return 'PageSpeed quota for your Google Cloud project is used up for now; Kauzl retries on the next daily run.';
     return 'Google’s shared PageSpeed quota is used up. Sign in with Google (Settings) so PageSpeed runs on your own project’s quota.';
   }
   if (status === 403 && /has not been used|disabled/i.test(message)) {

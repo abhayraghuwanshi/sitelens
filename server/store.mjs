@@ -1,9 +1,11 @@
 // Local-first persistence: one JSON file under .data/ (or STUDIO_DATA_DIR),
 // written atomically with owner-only permissions because it holds tokens.
+// Hosted, each user's file is sealed with AES-256-GCM under a key only the
+// server holds, so a copy of the disk alone gives no one their tokens.
 
 import { readFile, writeFile, rename, mkdir, chmod } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, randomBytes, createCipheriv, createDecipheriv } from 'node:crypto';
 import { normalizeGroups } from './search-demand.mjs';
 
 export const DEMO_SITE = Object.freeze({
@@ -20,7 +22,7 @@ export const DEMO_SITE = Object.freeze({
 
 const EMPTY = { auth: null, sites: [], showDemo: true, extensions: [], sources: {} };
 
-export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data')) {
+export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'), { key = null } = {}) {
   const file = join(dir, 'studio.json');
   let state = null;
   let writing = Promise.resolve();
@@ -28,7 +30,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
   async function load() {
     if (state) return state;
     try {
-      state = { ...EMPTY, ...JSON.parse(await readFile(file, 'utf8')) };
+      state = { ...EMPTY, ...JSON.parse(open(await readFile(file, 'utf8'), key)) };
       if (moveSiteRepos(state)) await save();
     } catch (err) {
       if (err.code !== 'ENOENT') throw err;
@@ -38,7 +40,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
   }
 
   async function save() {
-    const snapshot = JSON.stringify(state, null, 2);
+    const snapshot = seal(JSON.stringify(state, null, 2), key);
     writing = writing.then(async () => {
       await mkdir(dir, { recursive: true, mode: 0o700 });
       const tmp = `${file}.${process.pid}.tmp`;
@@ -74,6 +76,7 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
         const index = s.sites.findIndex((x) => x.id === site.id);
         // Settings edits don't send query groups; keep the saved ones.
         if (index >= 0 && site.searchGroups === undefined && s.sites[index].searchGroups) site.searchGroups = s.sites[index].searchGroups;
+        if (index >= 0 && site.leaveOut === undefined && s.sites[index].leaveOut) site.leaveOut = s.sites[index].leaveOut;
         if (index >= 0) s.sites[index] = site;
         else s.sites.push(site);
       });
@@ -86,6 +89,28 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
       });
     },
   };
+}
+
+// { sealed: 1, iv, tag, data }, all base64. Without a key the file stays plain JSON.
+function seal(text, key) {
+  if (!key) return text;
+  const iv = randomBytes(12);
+  const cipher = createCipheriv('aes-256-gcm', key, iv);
+  const data = Buffer.concat([cipher.update(text, 'utf8'), cipher.final()]);
+  return JSON.stringify({ sealed: 1, iv: iv.toString('base64'), tag: cipher.getAuthTag().toString('base64'), data: data.toString('base64') });
+}
+
+function open(text, key) {
+  const parsed = JSON.parse(text);
+  if (!parsed.sealed) {
+    // A sealed store never reads a plain file: that would be a planted one.
+    if (key) throw new Error('studio.json is not sealed but this store expects it to be.');
+    return text;
+  }
+  if (!key) throw new Error('studio.json is sealed; this store has no key to open it.');
+  const decipher = createDecipheriv('aes-256-gcm', key, Buffer.from(parsed.iv, 'base64'));
+  decipher.setAuthTag(Buffer.from(parsed.tag, 'base64'));
+  return Buffer.concat([decipher.update(Buffer.from(parsed.data, 'base64')), decipher.final()]).toString('utf8');
 }
 
 const HOST_RE = /^[a-z0-9.-]+$/i;
@@ -142,7 +167,21 @@ export function normalizeSite(input = {}) {
     searchSite: text(input.searchSite, 300),
     bq,
     ...(Array.isArray(input.searchGroups) ? { searchGroups: normalizeGroups(input.searchGroups) } : {}),
+    ...(input.leaveOut ? { leaveOut: normalizeLeaveOut(input.leaveOut) } : {}),
   };
+}
+
+// Visits a site leaves out of its BigQuery views: from these countries, and
+// (by default) only when GA4 didn't count the visit as engaged, so real
+// readers there still count. Country names are GA4's, e.g. "Singapore".
+const COUNTRY_RE = /^[\p{L}][\p{L} .()’-]{1,59}$/u;
+
+export function normalizeLeaveOut(input = {}) {
+  const countries = [...new Set((Array.isArray(input.countries) ? input.countries : []).map((c) => text(c, 60)).filter(Boolean))];
+  const bad = countries.find((c) => !COUNTRY_RE.test(c));
+  if (bad) throw new ValidationError(`“${bad}” doesn’t look like a country name.`);
+  if (countries.length > 20) throw new ValidationError('Leave out up to 20 countries.');
+  return { countries, unengagedOnly: input.unengagedOnly !== false };
 }
 
 // Repos picked on a site briefly lived on the site; they belong to the site's

@@ -2,7 +2,7 @@ import { api, qs } from '../../api.js';
 import { useAsync } from '../../hooks.js';
 import { Icon } from '../../components/icons.jsx';
 
-// Settings → Products → Goals: what a product counts as progress (steps) and
+// Settings → Sites & products → Goals: what a product counts as progress (steps) and
 // as a result (outcomes). Empty means Studio guesses from the site's event names.
 const TYPES = [
   { key: 'event', label: 'Site event', needs: 'site' },
@@ -36,17 +36,17 @@ export function GoalsEditor({ goals, onChange, siteId, hasStore, hasRepos }) {
   const fileGoals = config.data?.config?.goals?.length || 0;
 
   return (
-    <div class="stack" style={{ gap: '10px' }}>
+    <div class="stack gap-10">
       {fileGoals > 0 && (
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           <b>The site’s repo file sets {fileGoals} goal{fileGoals === 1 ? '' : 's'}</b>, and those are the ones measured; the goals here aren’t used while it does.{' '}
-          <a href={`#/site/${siteId}/setup`}>Edit them in Setup</a>
+          <a href={`#/site/${siteId}/setup`}>Edit them below, under What Kauzl measures</a>
         </p>
       )}
       {!goals.length && (
         <div class="goal-auto">
-          <p class="note" style={{ margin: 0 }}>
-            <b>No goals set.</b> Studio is guessing from your event names
+          <p class="note m-0">
+            <b>No goals set.</b> Kauzl is guessing from your event names
             {suggested.length ? <>: {suggested.map((g) => `${g.label} (${g.role})`).join(', ')}.</> : ', and found nothing that looks like a goal yet.'}
           </p>
           {suggested.length > 0 && <button class="btn" type="button" onClick={() => onChange(suggested.map((g) => ({ ...g, match: g.match || '' })))}>Start from these</button>}
@@ -109,7 +109,7 @@ export function GoalsEditor({ goals, onChange, siteId, hasStore, hasRepos }) {
           ))}
         </div>
       )}
-      <p class="note" style={{ margin: 0 }}>
+      <p class="note m-0">
         <b>Step</b>: progress towards a result, drawn as a funnel stage. <b>Outcome</b>: the result itself, added into the Outcomes total.
         A value turns counts into money; events that carry a GA4 <span class="mono">value</span> (like <span class="mono">purchase</span>) use it instead.
       </p>

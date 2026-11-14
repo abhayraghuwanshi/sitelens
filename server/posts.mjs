@@ -23,7 +23,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { ValidationError } from './store.mjs';
 import { historyRange } from './github.mjs';
@@ -32,7 +32,7 @@ import { createCache } from './cache.mjs';
 import { UTM_SOURCES } from '../shared/utm.js';
 
 const DAY = 86_400_000;
-const USER_AGENT = 'node:sitelens-studio:0.2 (local analytics dashboard)';
+const USER_AGENT = 'node:kauzl:0.2 (local analytics dashboard)';
 const WINDOW_DAYS = 3;
 
 export const PLATFORMS = {
@@ -60,7 +60,7 @@ CREATE INDEX IF NOT EXISTS posts_created ON posts (created_at);
 `;
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
-const strip = (s) => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#39;|&#x27;/g, '\'').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
+const strip = (s) => String(s || '').replace(/<!\[CDATA\[|\]\]>/g, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&').replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n))).replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16))).replace(/&#39;|&#x27;/g, '\'').replace(/&quot;/g, '"').replace(/\s+/g, ' ').trim();
 const cleanHandle = (h) => {
   const raw = String(h || '').trim();
   // A Mastodon profile URL names the instance too: https://host/@me → me@host.
@@ -268,6 +268,27 @@ export function platformOf(url) {
   return host ? 'other' : '';
 }
 
+// One key per post whatever URL form it's given in, so a post added by hand and
+// the same post synced later are recognised as one: Reddit by its comments id
+// (old./new./redd.it alike), HN by item id, anything else by host + path.
+export function postKey(url) {
+  let u;
+  try {
+    u = new URL(url);
+  } catch {
+    return '';
+  }
+  const host = u.hostname.toLowerCase().replace(/^(www|old|new|np|m)\./, '');
+  const path = u.pathname.replace(/\/+$/, '');
+  if (host === 'reddit.com') {
+    const id = (path.match(/\/comments\/([a-z0-9]+)/i) || [])[1];
+    if (id) return `reddit:${id.toLowerCase()}`;
+  }
+  if (host === 'redd.it' && /^\/[a-z0-9]+$/i.test(path)) return `reddit:${path.slice(1).toLowerCase()}`;
+  if (host === 'news.ycombinator.com' && u.searchParams.get('id')) return `hn:${u.searchParams.get('id')}`;
+  return `${host}${path}`;
+}
+
 export function utmCampaign(...urls) {
   for (const u of urls) {
     try {
@@ -337,12 +358,13 @@ export function normalizeAccounts(input = []) {
 
 /* ---------- service ---------- */
 
-export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, now = Date.now, log = console }) {
+export function createPosts({ dbPath, store, mentions, auth, history = null, cacheDb = null, fetchImpl = fetch, now = Date.now, log = console }) {
   let db = null;
   let timers = [];
   let syncing = null;
   const status = { lastSync: 0, errors: {} };
-  const cache = createCache();
+  // GA4 reports: kept on disk and shown stale while a fresh one loads.
+  const cache = createCache({ db: cacheDb, name: 'posts', staleFor: cacheDb ? 24 * 3_600_000 : 0 });
 
   function open() {
     if (db) return db;
@@ -365,6 +387,19 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
       throw err;
     }
     return as === 'text' ? res.text() : res.json();
+  }
+
+  // Reddit's app share links (/r/<sub>/s/<code>) say nothing about the post;
+  // they redirect to its real permalink. Best effort: the link as given otherwise.
+  async function canonical(url) {
+    if (!/(^|\.)reddit\.com\/r\/[^/]+\/s\/\w+/i.test(url.replace(/^https?:\/\//, ''))) return url;
+    try {
+      const res = await fetchImpl(url, { redirect: 'manual', headers: { 'User-Agent': USER_AGENT }, signal: AbortSignal.timeout(10_000) });
+      const to = res.headers.get('location');
+      return to && /\/comments\//.test(to) ? new URL(to, url).href.replace(/\?.*$/, '') : url;
+    } catch {
+      return url;
+    }
   }
 
   const fetchers = {
@@ -418,12 +453,22 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
     const t = now();
     const upsert = open().prepare(`INSERT INTO posts (id, platform, handle, title, text, permalink, link, community, points, comments, created_at, manual, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?)
-      ON CONFLICT(id) DO UPDATE SET title = excluded.title, points = COALESCE(excluded.points, posts.points), comments = COALESCE(excluded.comments, posts.comments), updated_at = excluded.updated_at`);
+      ON CONFLICT(id) DO UPDATE SET title = excluded.title, text = excluded.text, points = COALESCE(excluded.points, posts.points), comments = COALESCE(excluded.comments, posts.comments), updated_at = excluded.updated_at`);
+    // A post you added by hand that now arrives from sync: keep the synced row,
+    // carry over the product you gave it, drop the hand-made copy.
+    const manual = new Map(open().prepare('SELECT id, permalink, product FROM posts WHERE manual = 1').all().map((r) => [postKey(r.permalink), r]));
     let added = 0;
     for (const p of items) {
       if (!Number.isFinite(p.createdAt)) continue;
-      if (!open().prepare('SELECT 1 FROM posts WHERE id = ?').get(p.id)) added += 1;
+      const exists = open().prepare('SELECT 1 FROM posts WHERE id = ?').get(p.id);
+      const copy = manual.get(postKey(p.permalink));
+      if (!exists && !copy) added += 1;
       upsert.run(p.id, p.platform, p.handle, p.title, p.text, p.permalink, p.link, p.community, p.points, p.comments, p.createdAt, t);
+      if (copy) {
+        open().prepare('DELETE FROM posts WHERE id = ?').run(copy.id);
+        if (copy.product) open().prepare('UPDATE posts SET product = COALESCE(product, ?) WHERE id = ?').run(copy.product, p.id);
+        manual.delete(postKey(p.permalink));
+      }
     }
     return added;
   }
@@ -469,10 +514,22 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ValidationError('Pick the date it was posted.');
     const title = String(input.title || '').trim().slice(0, 200) || url;
     const num = (v) => (v === '' || v === undefined || v === null ? null : Math.max(0, Math.round(Number(v)) || 0));
-    const id = `manual:${platform}:${url.replace(/[?#].*$/, '').replace(/\/$/, '')}`;
+    // Added from one site's calendar: file it under that site's product so it shows there.
+    const site = String(input.site || '');
+    const product = String(input.product || '') || (site && ((await store.get()).products || []).find((p) => p.siteId === site)?.id) || '';
+    const permalink = await canonical(url);
+    const key = postKey(permalink);
+    // Already synced: bring it back if hidden and file it, rather than add a copy.
+    const synced = open().prepare('SELECT id, permalink FROM posts WHERE manual = 0 AND platform = ?').all(platform).find((r) => postKey(r.permalink) === key);
+    if (synced) {
+      open().prepare('UPDATE posts SET hidden = 0, product = COALESCE(?, product) WHERE id = ?').run(product || null, synced.id);
+      cache.clear();
+      return { id: synced.id, platform, existing: true };
+    }
+    const id = `manual:${key}`;
     open().prepare(`INSERT OR REPLACE INTO posts (id, platform, handle, title, text, permalink, link, community, points, comments, created_at, product, manual, updated_at)
       VALUES (?, ?, '', ?, '', ?, ?, '', ?, ?, ?, ?, 1, ?)`)
-      .run(id, platform, title, url, String(input.link || '').trim(), num(input.points), num(input.comments), Date.parse(`${date}T12:00:00Z`), String(input.product || '') || null, now());
+      .run(id, platform, title, permalink, String(input.link || '').trim(), num(input.points), num(input.comments), Date.parse(`${date}T12:00:00Z`), product || null, now());
     cache.clear();
     return { id, platform };
   }
@@ -493,7 +550,8 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
 
   // GA4 sessions per day per source family (+ per utm_campaign) for one site.
   async function siteDaily(site, start, end) {
-    return cache.wrap(`ga:${site.id}:${start}:${end}`, 15 * 60_000, false, async () => {
+    // The report's rows are what's cached (plain, so they keep on disk); the maps are built from them.
+    const rows = await cache.wrap(`ga:${site.id}:${start}:${end}`, 15 * 60_000, false, async () => {
       const report = await runReport({
         token: await auth.token(),
         propertyId: site.propertyId,
@@ -505,23 +563,24 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
           limit: 10000,
         },
       });
-      const byFamily = new Map();
-      const campaigns = new Map();
-      const sources = new Map();
-      for (const r of report.rows) {
-        const day = `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}`;
-        const key = `${day}|${sourceFamily(r.sessionSource)}`;
-        const n = Number(r.sessions) || 0;
-        byFamily.set(key, (byFamily.get(key) || 0) + n);
-        const c = String(r.sessionCampaignName || '').toLowerCase();
-        // GA4 fills the campaign with labels like (organic) or (ai-assistant) when there's no utm tag.
-        if (c && !/^\(.*\)$/.test(c)) {
-          campaigns.set(c, (campaigns.get(c) || 0) + n);
-          sources.set(c, new Set([...(sources.get(c) || []), sourceFamily(r.sessionSource)]));
-        }
-      }
-      return { byFamily, campaigns, sources };
+      return report.rows.map((r) => ({ date: r.date, sessionSource: r.sessionSource, sessionCampaignName: r.sessionCampaignName, sessions: r.sessions }));
     });
+    const byFamily = new Map();
+    const campaigns = new Map();
+    const sources = new Map();
+    for (const r of rows) {
+      const day = `${r.date.slice(0, 4)}-${r.date.slice(4, 6)}-${r.date.slice(6, 8)}`;
+      const key = `${day}|${sourceFamily(r.sessionSource)}`;
+      const n = Number(r.sessions) || 0;
+      byFamily.set(key, (byFamily.get(key) || 0) + n);
+      const c = String(r.sessionCampaignName || '').toLowerCase();
+      // GA4 fills the campaign with labels like (organic) or (ai-assistant) when there's no utm tag.
+      if (c && !/^\(.*\)$/.test(c)) {
+        campaigns.set(c, (campaigns.get(c) || 0) + n);
+        sources.set(c, new Set([...(sources.get(c) || []), sourceFamily(r.sessionSource)]));
+      }
+    }
+    return { byFamily, campaigns, sources };
   }
 
   async function overview({ rangeKey = '90d', product = '', platform = '' } = {}) {
@@ -592,6 +651,104 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
     };
   }
 
+  // One post and what it did on your site: the platform's daily referrer sessions
+  // around it against the two weeks before, and the pages, sources and
+  // engagement of the visits in its window (its utm_campaign when tagged).
+  async function detail(id) {
+    const r = open().prepare('SELECT * FROM posts WHERE id = ?').get(id);
+    if (!r) throw new ValidationError('That post isn’t in Kauzl any more.');
+    const saved = await store.get();
+    const products = saved.products || [];
+    const sites = await store.sites();
+    const toPost = (x) => ({ id: x.id, platform: x.platform, handle: x.handle, title: x.title, text: x.text, permalink: x.permalink, link: x.link, community: x.community, points: x.points, comments: x.comments, createdAt: x.created_at, manual: Boolean(x.manual), hidden: Boolean(x.hidden), assigned: Boolean(x.product), product: x.product || '' });
+    const post = toPost(r);
+    post.product = matchProduct(post, products, sites);
+    const product = products.find((p) => p.id === post.product);
+    const site = product && sites.find((s) => s.id === product.siteId && !s.demo && s.propertyId);
+    const family = PLATFORMS[post.platform]?.family || '';
+    const campaign = utmCampaign(post.link, post.permalink);
+    const out = {
+      post,
+      platform: { key: post.platform, label: PLATFORMS[post.platform]?.label || post.platform, family },
+      product: product ? { id: product.id, label: product.label } : null,
+      site: site ? { id: site.id, label: site.label } : null,
+      products: products.map((p) => ({ id: p.id, label: p.label })),
+      campaign,
+      windowDays: WINDOW_DAYS,
+      sessions: null, attribution: '', usual: null, series: [], landing: [], sources: [], window: null, error: '',
+    };
+    if (!site) return out;
+
+    const day = isoDay(post.createdAt);
+    const today = isoDay(now());
+    const start = isoDay(post.createdAt - 14 * DAY);
+    const end = [isoDay(post.createdAt + 7 * DAY), today].sort()[0];
+    const windowEnd = [isoDay(post.createdAt + (WINDOW_DAYS - 1) * DAY), today].sort()[0];
+    let daily;
+    try {
+      daily = await siteDaily(site, start, end);
+    } catch (err) {
+      out.error = err.message;
+      out.authError = err.kind === 'auth';
+      // Google unreachable: the calendar's stored sessions by source per day
+      // still give the trend; campaigns, pages and engagement need Google.
+      try {
+        const rows = history ? await history.breakdown(site, 'source', start, end) : [];
+        if (!rows.length) return out;
+        const byFamily = new Map();
+        for (const r of rows) byFamily.set(`${r.date}|${sourceFamily(r.key)}`, (byFamily.get(`${r.date}|${sourceFamily(r.key)}`) || 0) + (Number(r.value) || 0));
+        daily = { byFamily, campaigns: null };
+        out.stored = true;
+      } catch {
+        return out;
+      }
+    }
+    // Split with this platform's other posts for the product, as the list does.
+    const near = open().prepare('SELECT * FROM posts WHERE hidden = 0 AND platform = ? AND created_at >= ? AND created_at < ?')
+      .all(post.platform, post.createdAt - WINDOW_DAYS * DAY, post.createdAt + WINDOW_DAYS * DAY).map(toPost)
+      .map((p) => ({ ...p, product: matchProduct(p, products, sites) })).filter((p) => p.product === post.product && p.id !== post.id);
+    const mine = attribute([post, ...near], daily)[0];
+    out.sessions = mine.sessions;
+    out.attribution = mine.attribution;
+    for (let t = Date.parse(`${start}T00:00:00Z`); isoDay(t) <= end; t += DAY) {
+      const d = isoDay(t);
+      out.series.push({ date: d, sessions: family ? daily.byFamily.get(`${d}|${family}`) || 0 : 0 });
+    }
+    const before = out.series.filter((p) => p.date < day).map((p) => p.sessions).sort((a, b) => a - b);
+    out.usual = before.length ? before[Math.floor(before.length / 2)] : null;
+    if (out.stored) return out;
+    try {
+      const report = await cache.wrap(`land:${site.id}:${day}:${windowEnd}`, 15 * 60_000, false, async () => (await runReport({
+        token: await auth.token(),
+        propertyId: site.propertyId,
+        body: {
+          dateRanges: [{ startDate: day, endDate: windowEnd }],
+          dimensions: [{ name: 'sessionSource' }, { name: 'sessionCampaignName' }, { name: 'landingPage' }],
+          metrics: [{ name: 'sessions' }, { name: 'engagedSessions' }, { name: 'newUsers' }, { name: 'keyEvents' }],
+          dimensionFilter: hostFilter(site.host, { includeSubdomains: site.includeSubdomains }),
+          limit: 10000,
+        },
+      })).rows);
+      const rows = report.filter((x) => (campaign ? String(x.sessionCampaignName || '').toLowerCase() === campaign.toLowerCase() : family && sourceFamily(x.sessionSource) === family));
+      const group = (key) => [...rows.reduce((m, x) => {
+        const g = m.get(x[key]) || { label: x[key] || '(not set)', sessions: 0, engaged: 0, newUsers: 0, keyEvents: 0 };
+        g.sessions += Number(x.sessions) || 0;
+        g.engaged += Number(x.engagedSessions) || 0;
+        g.newUsers += Number(x.newUsers) || 0;
+        g.keyEvents += Number(x.keyEvents) || 0;
+        return m.set(x[key], g);
+      }, new Map()).values()].sort((a, b) => b.sessions - a.sessions);
+      out.landing = group('landingPage').slice(0, 15);
+      out.sources = group('sessionSource').slice(0, 8);
+      const total = (k) => out.sources.reduce((a, g) => a + g[k], 0);
+      out.window = { start: day, end: windowEnd, sessions: total('sessions'), engaged: total('engaged'), newUsers: total('newUsers'), keyEvents: total('keyEvents') };
+    } catch (err) {
+      out.error = err.message;
+      out.authError = err.kind === 'auth';
+    }
+    return out;
+  }
+
   // Your posts as chart markers, under the product they belong to.
   async function annotations({ from, to, scopes }) {
     const saved = await store.get();
@@ -617,9 +774,17 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
     });
   }
 
+  // Your synced posts on one platform since a time, newest first (Reddit cycles match drafts against these).
+  function recent({ platform = '', since = 0 } = {}) {
+    return open().prepare('SELECT * FROM posts WHERE hidden = 0 AND platform = ? AND created_at >= ? ORDER BY created_at DESC').all(platform, since)
+      .map((r) => ({ id: r.id, title: r.title || '', text: r.text || '', permalink: r.permalink || '', link: r.link || '', community: r.community || '', points: r.points, comments: r.comments, createdAt: r.created_at }));
+  }
+
   return {
     sync,
     overview,
+    recent,
+    detail,
     annotations,
     saveAccounts,
     addManual,
@@ -644,6 +809,7 @@ export function createPosts({ dbPath, store, mentions, auth, fetchImpl = fetch, 
 export function postRoutes({ posts }) {
   return [
     ['GET', /^\/api\/posts$/, async ({ query }) => posts.overview({ rangeKey: query.get('range') || '90d', product: query.get('product') || '', platform: query.get('platform') || '' })],
+    ['GET', /^\/api\/posts\/item$/, async ({ query }) => posts.detail(query.get('id') || '')],
     ['POST', /^\/api\/posts\/sync$/, async () => posts.sync()],
     ['POST', /^\/api\/posts\/accounts$/, async ({ body }) => posts.saveAccounts(body.accounts || [])],
     ['POST', /^\/api\/posts\/manual$/, async ({ body }) => posts.addManual(body)],

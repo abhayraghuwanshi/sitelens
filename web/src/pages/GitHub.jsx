@@ -58,11 +58,11 @@ function SyncBar({ sync, onSynced }) {
     }
   }
   return (
-    <div class="meta-line" style={{ alignItems: 'center' }}>
-      <span><Icon name="github" size={13} /> {sync.login || sync.data.login ? `@${sync.login || sync.data.login}` : 'GitHub token'} · syncs hourly while Studio runs</span>
+    <div class="meta-line items-center">
+      <span><Icon name="github" size={13} /> {sync.login || sync.data.login ? `@${sync.login || sync.data.login}` : 'GitHub token'} · syncs hourly while Kauzl runs</span>
       <span>{sync.running || busy ? 'Syncing…' : lastSync ? `last sync ${formatRelative(lastSync)}` : 'not synced yet'}</span>
       {sync.rateRemaining !== null && <span>{formatNumber(sync.rateRemaining)} API calls left this hour</span>}
-      {(error || sync.lastError) && <span style={{ color: 'var(--critical-ink)' }}>{error || sync.lastError}</span>}
+      {(error || sync.lastError) && <span class="text-bad">{error || sync.lastError}</span>}
       <button class="btn ghost" type="button" disabled={busy || sync.running} onClick={run}><Icon name="refresh" size={13} /> Sync now</button>
     </div>
   );
@@ -101,9 +101,9 @@ function GitHubOverview({ range, site }) {
           <span>
             {scope.repos.length
               ? `Repos for ${scope.host || 'this site'}: picked in its settings, linked in a product, or with it as their homepage`
-              : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites, or set a repo’s homepage to the site.`}
+              : `No GitHub repo is linked to ${scope.host || 'this site'}. Pick its repos in Settings → Sites & products, or set a repo’s homepage to the site.`}
           </span>
-          {scope.note && <span style={{ color: 'var(--critical-ink)' }}>{scope.note}</span>}
+          {scope.note && <span class="text-bad">{scope.note}</span>}
           <a href={`#/settings?tab=sites&edit=${scope.siteId}`}>Pick repos</a>
           <a href="#/github">Show all repos</a>
         </div>
@@ -171,7 +171,7 @@ function GitHubOverview({ range, site }) {
               ))}
             </tbody>
           </table>
-          {!rows.length && <p class="muted" style={{ padding: '8px 16px' }}>No repos with activity in this range. Tick “Show quiet repos” to list everything.</p>}
+          {!rows.length && <p class="muted inset">No repos with activity in this range. Tick “Show quiet repos” to list everything.</p>}
         </div>
       </Card>
     </>
@@ -231,7 +231,7 @@ function RepoDetail({ name, range, site }) {
             <BarList rows={platformRows} label={(r) => PLATFORM_LABEL[r.key]} value={(r) => r.n} format={formatNumber}
               extra={(r) => `${Math.round((r.n / platformTotal) * 100)}%`} />
           ) : <p class="muted small">This repo has no release assets.</p>}
-          {platformRows.length > 0 && <p class="note" style={{ marginTop: '8px' }}>Guessed from asset file names. Signature files are not counted.</p>}
+          {platformRows.length > 0 && <p class="note mt-8">Guessed from asset file names. Signature files are not counted.</p>}
         </Card>
       </div>
       {releases.length > 0 && (

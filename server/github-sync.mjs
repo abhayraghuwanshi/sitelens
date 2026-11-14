@@ -96,7 +96,7 @@ export function createGitHubSync({ dbPath, getToken, fetchImpl = fetch, log = co
         Authorization: `Bearer ${token}`,
         Accept: 'application/vnd.github+json',
         'X-GitHub-Api-Version': '2022-11-28',
-        'User-Agent': 'sitelens-studio',
+        'User-Agent': 'kauzl',
       },
       signal: AbortSignal.timeout(30_000),
     });
@@ -231,6 +231,10 @@ export function createGitHubSync({ dbPath, getToken, fetchImpl = fetch, log = co
   return {
     dbPath,
     status: () => ({ ...state, running: Boolean(running) }),
+    // A new token: the last error was about the old one (or none at all).
+    reset() {
+      state.lastError = '';
+    },
     hasDb: () => existsSync(dbPath),
     // One sync at a time; concurrent callers share it.
     sync() {

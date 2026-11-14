@@ -24,7 +24,7 @@ const LABELS = {
   stars: 'GitHub stars spike',
   issues: 'New GitHub issues',
   mentions: 'New mentions (HN, Reddit, Product Hunt)',
-  goals: 'Goals marked to alert, per site in Setup',
+  goals: 'Goals marked to alert, per site in each site’s settings',
 };
 
 export function AlertsSettings() {
@@ -75,7 +75,7 @@ export function AlertsSettings() {
           <input style={{ flex: '1', minWidth: '260px' }} placeholder="https://hooks.slack.com/services/… or https://discord.com/api/webhooks/…" value={form.webhookUrl}
             onInput={(e) => set({ webhookUrl: e.currentTarget.value })} aria-label="Webhook URL" />
         </div>
-        <p class="note" style={{ margin: 0 }}>
+        <p class="note m-0">
           The webhook gets <code>{'{ text, content }'}</code> JSON, which works for both Slack incoming webhooks and Discord. A metric alerts when it moves past
           the change threshold against its previous 7-day average, the bigger side has the minimum volume, and its z-score on the last 28 days passes the limit. Each alert fires once.
         </p>
@@ -87,7 +87,7 @@ export function AlertsSettings() {
                 <td><b>{LABELS[key] || key}</b></td>
                 <td><input type="checkbox" checked={rule.enabled} onChange={(e) => setRule(key, 'enabled', e.currentTarget.checked)} aria-label={`${LABELS[key]} enabled`} /></td>
                 <td>
-                  <div class="row" style={{ gap: '12px' }}>
+                  <div class="row gap-12">
                     {Object.keys(rule).filter((f) => f !== 'enabled').map((field) => {
                       const meta = FIELDS[field] || { label: field, unit: '' };
                       const scale = meta.scale || 1;
@@ -113,7 +113,7 @@ export function AlertsSettings() {
             {busy === 'test' ? 'Sending…' : 'Send test notification'}</button>
           <a class="btn" href="#/alerts">Open alerts</a>
         </div>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </form>
     </Card>
   );

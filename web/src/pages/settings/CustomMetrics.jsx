@@ -27,12 +27,12 @@ export function CustomMetricsSettings({ sites, params }) {
   if (status.error) return <ErrorState error={status.error} onRetry={status.reload} />;
   if (!status.data) return <Loading height={320} />;
   const { connectors, metrics } = status.data;
-  const fromLink = params.get('edit') && metrics.find((m) => m.id === params.get('edit'));
+  const fromLink = params.get('edit') && metrics.find((m) => m.id === params.get('edit') && m.from !== 'file');
   const current = editing || (fromLink && editing !== false ? fromLink : null);
   const siteLabel = (id) => real.find((s) => s.id === id)?.label || id;
 
   return (
-    <div class="stack" style={{ gap: '16px' }}>
+    <div class="stack gap-16">
       {connectors.map((c) => <SecretCard key={c.type} connector={c} onChange={status.reload} />)}
 
       {current ? (
@@ -46,19 +46,24 @@ export function CustomMetricsSettings({ sites, params }) {
               <tbody>
                 {metrics.map((m) => (
                   <tr key={m.id}>
-                    <td><b>{m.label}</b><div class="muted small">{siteLabel(m.siteId)}</div></td>
+                    <td><b>{m.label}</b><div class="muted small">{siteLabel(m.siteId)}{m.from === 'file' && ' · from .sitelens.yml'}</div></td>
                     <td class="small">{connectors.find((c) => c.type === m.source.type)?.label || m.source.type}</td>
                     <td class="small muted">{SUMMARIES.find((s) => s.key === m.summary)?.label}</td>
-                    <td class="num" style={{ whiteSpace: 'nowrap' }}>
-                      <button class="btn ghost" type="button" onClick={() => setEditing(m)}>Edit</button>
-                      <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/metrics/${m.id}`); status.reload(); }}>Remove</button>
+                    <td class="num nowrap">
+                      {/* A file's metric changes in the site's repo, not here. */}
+                      {m.from === 'file' ? <span class="muted small">Edit in the repo</span> : (
+                        <>
+                          <button class="btn ghost" type="button" onClick={() => setEditing(m)}>Edit</button>
+                          <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/metrics/${m.id}`); status.reload(); }}>Remove</button>
+                        </>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           ) : (
-            <p class="muted" style={{ padding: '8px 16px' }}>{real.length ? 'No custom metrics yet.' : 'Add a site first; each metric belongs to one site.'}</p>
+            <p class="muted inset">{real.length ? 'No custom metrics yet.' : 'Add a site first; each metric belongs to one site.'}</p>
           )}
         </Card>
       )}
@@ -98,13 +103,13 @@ function SecretCard({ connector: c, onChange }) {
           {c.secret.source === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save('')}>Remove</button>}
         </form>
         {c.type === 'd1' && (
-          <p class="note" style={{ margin: 0 }}>
+          <p class="note m-0">
             Create a token at <a href="https://dash.cloudflare.com/profile/api-tokens" target="_blank" rel="noreferrer">dash.cloudflare.com/profile/api-tokens</a> with
             {' '}<b>Account → D1 → Read</b> for the account that holds the database. It’s stored in <code>.data/studio.json</code> (owner-only), or
             set <code>{c.secret.env}</code> in <code>.env</code>.
           </p>
         )}
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       </div>
     </Card>
   );
@@ -169,7 +174,7 @@ function MetricEditor({ initial, sites, connectors, onDone }) {
             <textarea rows={8} spellcheck={false} value={form.sql} onInput={(e) => set({ sql: e.currentTarget.value })} />
             <small>
               SELECT only. <code>{'{{start}}'}</code> / <code>{'{{end}}'}</code> are YYYY-MM-DD dates (end is exclusive);
-              use <code>{'{{start_ms}}'}</code> / <code>{'{{end_ms}}'}</code> or <code>_s</code> for epoch timestamps. Studio asks for the range and the
+              use <code>{'{{start_ms}}'}</code> / <code>{'{{end_ms}}'}</code> or <code>_s</code> for epoch timestamps. Kauzl asks for the range and the
               period before it, so keep the WHERE on those placeholders.
             </small>
           </label>

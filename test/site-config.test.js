@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection } from '../server/site-config.mjs';
 import { readFile } from 'node:fs/promises';
+import { openCacheDb } from '../server/cache.mjs';
 
 const FULL = `
 version: 1
@@ -68,7 +69,7 @@ test('parseSiteConfig: syntax errors, wrong site, duplicates and unknown keys', 
   assert.match(parseSiteConfig('goals: [1').errors[0], /line 1/);
   assert.deepEqual(parseSiteConfig('site: other.test', { host: 'shop.test' }).errors, ['This file is for other.test, not shop.test.']);
   assert.deepEqual(parseSiteConfig('').errors, ['The file must be a YAML map, starting with version: 1.']);
-  assert.deepEqual(parseSiteConfig('version: 2').errors, ['version 2 isn’t supported; this Studio reads version: 1.']);
+  assert.deepEqual(parseSiteConfig('version: 2').errors, ['version 2 isn’t supported; this version of Kauzl reads version: 1.']);
   assert.match(parseSiteConfig('goals: [{ event: a }, { event: a }]').errors[0], /goals\[1\] \(a\) is listed twice/);
   assert.match(parseSiteConfig('a: 1\na: 2').errors[0], /unique/);
   const { config, warnings } = parseSiteConfig('goal: []\ngoals: [{ event: a, alrt: true }]');
@@ -439,4 +440,48 @@ test('saveSection starts a file in the site’s repo, or locally when it has non
   assert.match(await readFile(saved.path, 'utf8'), /traffic/);
   assert.equal((await local.applied(site)).alerts.traffic.pct, 0.3);
   await assert.rejects(local.saveSection({ ...site, demo: true }, 'alerts', ''), /demo/);
+});
+
+test('metrics: a D1 source and a read-only query, or an error saying what’s wrong', () => {
+  const db = '0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0';
+  const ok = parseSiteConfig(`version: 1
+metrics:
+  - label: Active installs
+    summary: average
+    d1: &db { account: ${'A'.repeat(32)}, database: ${db} }
+    sql: SELECT date AS day, count(*) AS value FROM pings WHERE date >= {{start}} GROUP BY 1
+  - label: New installs
+    d1: *db
+    sql: SELECT date AS day, sum(first_run) AS value FROM pings GROUP BY 1
+`);
+  assert.deepEqual(ok.errors, []);
+  assert.equal(ok.config.metrics.length, 2);
+  assert.deepEqual(ok.config.metrics[1].source, { type: 'd1', accountId: 'a'.repeat(32), databaseId: db });
+  assert.equal(ok.config.metrics[0].summary, 'average');
+  assert.equal(ok.config.metrics[1].summary, 'sum');
+
+  const bad = parseSiteConfig(`version: 1
+metrics:
+  - { label: A, d1: { account: nope, database: ${db} }, sql: SELECT 1 AS day, 1 AS value }
+  - { label: B, d1: { account: ${'a'.repeat(32)}, database: ${db} }, sql: DELETE FROM pings }
+  - { label: C, sql: SELECT 1 AS day, 1 AS value }
+  - { label: D, summary: median, d1: { account: ${'a'.repeat(32)}, database: ${db} }, sql: SELECT 1 AS day, 1 AS value }
+`);
+  assert.equal(bad.config, null);
+  assert.match(bad.errors[0], /metrics\[0\]\.d1\.account/);
+  assert.match(bad.errors[1], /metrics\[1\]\.sql: Only SELECT/);
+  assert.match(bad.errors[2], /metrics\[2\] \(C\) needs exactly one source/);
+  assert.match(bad.errors[3], /metrics\[3\]\.summary/);
+});
+
+test('a copy cached on disk by an older Studio is parsed again, so new keys apply after a deploy', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const cacheDb = openCacheDb(join(dir, 'cache.db'));
+  const text = `metrics:\n  - { label: Pings, d1: { account: ${'a'.repeat(32)}, database: 0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0 }, sql: 'SELECT 1 AS day, 1 AS value' }\n`;
+  // What an older Studio cached: the file plus a parse that didn't know metrics.
+  cacheDb.set(`site-config:${site.id}:${site.host}`, Date.now() - 60 * 60_000, JSON.stringify({ found: true, source: { type: 'local' }, text, config: { version: 1 }, errors: [], warnings: ['metrics: not a setting Studio knows'], notes: [] }));
+  const cfg = createSiteConfig({ dir, cacheDb, fetchImpl: async () => { throw new Error('offline'); } });
+  const got = await cfg.get(site);
+  assert.equal(got.config.metrics[0].label, 'Pings');
+  assert.deepEqual(got.warnings, []);
 });

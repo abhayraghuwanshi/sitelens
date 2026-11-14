@@ -36,8 +36,11 @@ function isoDay(ms) {
 }
 
 // UTC days, matching ghstats' 'YYYY-MM-DDT00:00:00Z' dates. Ends today.
+// `yesterday` is the one whole day before today (Story's daily check); it isn't
+// offered as a range anywhere else.
 export function historyRange(rangeKey = '28d', now = Date.now()) {
-  const option = HISTORY_RANGES.find((r) => r.key === rangeKey) || HISTORY_RANGES[1];
+  const option = rangeKey === 'yesterday' ? { key: 'yesterday', days: 1 } : HISTORY_RANGES.find((r) => r.key === rangeKey) || HISTORY_RANGES[1];
+  if (option.key === 'yesterday') now -= DAY;
   const end = isoDay(now);
   const start = isoDay(now - (option.days - 1) * DAY);
   const days = Array.from({ length: option.days }, (_, i) => isoDay(Date.parse(`${start}T00:00:00Z`) + i * DAY));

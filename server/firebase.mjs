@@ -102,7 +102,7 @@ const BOTS = [
   ['Pinterest', 'social', /Pinterest/i],
   ['redditbot', 'social', /redditbot/i],
   ['Embedly', 'social', /Embedly/i],
-  ['SiteLens uptime', 'monitor', /SiteLens-Studio-uptime/i],
+  ['Kauzl uptime', 'monitor', /Kauzl-uptime|SiteLens-Studio-uptime/i],
   ['Lighthouse', 'monitor', /Chrome-Lighthouse|Google-PageSpeed|PTST\//i],
   ['UptimeRobot', 'monitor', /UptimeRobot/i],
   ['Pingdom', 'monitor', /Pingdom/i],
@@ -239,6 +239,7 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
   let db = null;
   let timers = [];
   let running = null;
+  let lastAutoLink = 0;
 
   function open() {
     if (db) return db;
@@ -281,7 +282,7 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
     if (res.ok) return data;
     const message = data.error?.message || `Cloud Logging returned ${res.status}.`;
     if (res.status === 401 || /insufficient.*scope|ACCESS_TOKEN_SCOPE_INSUFFICIENT/i.test(message + JSON.stringify(data.error?.details || ''))) {
-      throw new EngineError('Studio can’t read Cloud logs with this Google sign-in yet.', {
+      throw new EngineError('Kauzl can’t read Cloud logs with this Google sign-in yet.', {
         status: 401,
         kind: 'needs-logging-scope',
         hint: 'Settings → Google → Sign out, then sign in again and allow “View log data for your Google Cloud projects”.',
@@ -461,6 +462,14 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
 
   async function sync() {
     running ||= (async () => {
+      // Sites not linked yet get linked on their own when a backend serves
+      // their host, so nobody has to press Find. At most every 6 hours.
+      const sites = (await store.sites()).filter((s) => !s.demo && s.host);
+      const before = (await config()).links;
+      if (sites.some((s) => !before[s.id]) && now() - lastAutoLink > 6 * HOUR) {
+        lastAutoLink = now();
+        await autoLink().catch(() => {});
+      }
       const { links } = await config();
       const results = [];
       if (!Object.keys(links).length) return results;

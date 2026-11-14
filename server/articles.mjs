@@ -10,14 +10,14 @@
 // Nothing is stored; sitemap and page reads are cached for hours, traffic for minutes.
 
 import { gunzipSync } from 'node:zlib';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { getRange, hostFilter } from '../shared/sitelens/reports.js';
 import { querySearchAnalytics, searchRange, hostPageFilter } from '../shared/sitelens/gsc.js';
 import { sourceFamily } from './journey.mjs';
 import { githubGet, siteRepos, tarEntries } from './funnel-suggest.mjs';
 import { createCache } from './cache.mjs';
 
-const USER_AGENT = 'Mozilla/5.0 (compatible; SiteLensStudio/0.2; +local analytics dashboard)';
+const USER_AGENT = 'Mozilla/5.0 (compatible; Kauzl/0.2; +local analytics dashboard)';
 const SITEMAP_TTL = 6 * 60 * 60_000;
 const PAGE_TTL = 24 * 60 * 60_000;
 const TRAFFIC_TTL = 5 * 60_000;
@@ -29,7 +29,7 @@ const MAX_TARBALL = 60_000_000;
 
 /* ---------- which URLs and files are articles (pure) ---------- */
 
-const ARTICLE_SECTION = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(blog|posts?|articles?|news|guides?|tutorials?|docs?|documentation|learn|insights|stories|writing|notes|changelog|resources|help|kb|knowledge-base|case-studies)\/[^/]+/i;
+const ARTICLE_SECTION = /^\/(?:[a-z]{2}(?:-[a-z]{2})?\/)?(blog|posts?|articles?|news|guides?|tutorials?|docs?|documentation|learn|insights|stories|writing|notes|changelog|resources|help|kb|knowledge-base|case-studies|templates?|alternatives?|compare|comparisons?|vs|use-cases|examples)\/[^/]+/i;
 const DATED_PATH = /\/(19|20)\d{2}\/\d{2}\//;
 const LISTING = /\/(page|tags?|categor(y|ies)|authors?|archives?|feed)(\/|$)/i;
 
@@ -167,6 +167,11 @@ export function matchFile(entry, paths) {
 
 /* ---------- joining it all (pure) ---------- */
 
+// Source families (journey.mjs sourceFamily) that are AI assistants sending
+// readers, however GA4 names them ("gemini", "chatgpt.com", "ChatGPT"…).
+const AI_SOURCE = /chatgpt|openai|perplexity|claude|gemini|bard|copilot|you\.com|phind|deepseek|meta\.ai|grok|mistral|poe\.com/i;
+export const AI_FAMILIES = { has: (label) => AI_SOURCE.test(String(label || '')) };
+
 // rows: one per article with traffic, search and code attached.
 export function buildArticles({ sitemap = [], pages = new Map(), views = new Map(), landings = new Map(), search = new Map(), files = [], all = false }) {
   const byPath = new Map();
@@ -207,13 +212,14 @@ export function buildArticles({ sitemap = [], pages = new Map(), views = new Map
       engagementRate: v.engagementRate || 0,
       avgDuration: v.avgDuration || 0,
       sessions: l.sessions,
+      aiSessions: [...l.sources].reduce((a, [label, n]) => a + (AI_FAMILIES.has(label) ? n : 0), 0),
       sources: [...l.sources].map(([label, sessions]) => ({ label, sessions })).sort((a, b) => b.sessions - a.sessions).slice(0, 4),
       search: s && { clicks: s.clicks, impressions: s.impressions, position: s.position, queries: s.queries.slice(0, 3) },
     });
   }
   for (const f of orphans.filter((o) => contentRepos.has(o.repo || ''))) {
     rows.push({ path: '', url: '', title: f.title, description: '', published: f.published, lastmod: '', inSitemap: false, file: f,
-      views: 0, users: 0, engagementRate: 0, avgDuration: 0, sessions: 0, sources: [], search: null });
+      views: 0, users: 0, engagementRate: 0, avgDuration: 0, sessions: 0, aiSessions: 0, sources: [], search: null });
   }
   return rows.sort((a, b) => b.sessions - a.sessions || b.views - a.views || String(b.published || b.lastmod).localeCompare(String(a.published || a.lastmod)));
 }
@@ -235,10 +241,25 @@ export function articleTotals(rows, { siteSessions = 0, searchLinked = false, co
 
 /* ---------- service ---------- */
 
-export function createArticles({ auth, store, getToken, vercel = null, fetchImpl = fetch, now = Date.now }) {
+export function createArticles({ auth, store, getToken, vercel = null, cacheDb = null, fetchImpl = fetch, now = Date.now }) {
   const cache = createCache();
-  const pageCache = new Map(); // url → { at, value }
-  const codeCache = new Map(); // repo → { at, pushedAt, entries }
+  // A repo's scan, per push: downloading a big repo takes a minute, so it's kept on disk.
+  const scans = createCache({ db: cacheDb, name: 'repo-scan', staleFor: cacheDb ? 60 * 86_400_000 : 0 });
+  // Each page's title and description, read from the live page: kept on disk
+  // too, so a restart doesn't mean reading every page again.
+  const pageMemo = new Map(); // host+path → { at, value }
+  const pageCache = {
+    get(key) {
+      if (pageMemo.has(key)) return pageMemo.get(key);
+      const row = cacheDb?.get(`page:${key}`);
+      if (row) pageMemo.set(key, row);
+      return row || undefined;
+    },
+    set(key, entry) {
+      pageMemo.set(key, entry);
+      cacheDb?.set(`page:${key}`, entry.at, JSON.stringify(entry.value));
+    },
+  };
 
   async function fetchText(url, { timeout = 10_000 } = {}) {
     const res = await fetchImpl(url, { headers: { 'User-Agent': USER_AGENT, Accept: '*/*' }, redirect: 'follow', signal: AbortSignal.timeout(timeout) });
@@ -283,7 +304,19 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
   }
 
   // Head metadata for article pages, a few at a time, cached for a day.
-  async function readPages(site, paths) {
+  // Titles of pages already read, by path (no fetching).
+  function titles(site, paths) {
+    const out = new Map();
+    for (const path of paths) {
+      const hit = pageCache.get(`${site.host}${path}`);
+      if (hit?.value?.title) out.set(path, hit.value.title);
+    }
+    return out;
+  }
+
+  // With `wait: false`, answers from pages already read and reads the rest in
+  // the background, for views that can show a path until its title arrives.
+  async function readPages(site, paths, { wait = true } = {}) {
     const out = new Map();
     const todo = [];
     for (const path of paths) {
@@ -292,7 +325,7 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
       else todo.push(path);
     }
     const queue = todo.slice(0, MAX_PAGE_READS);
-    await Promise.all(Array.from({ length: 8 }, async () => {
+    const reading = Promise.all(Array.from({ length: 8 }, async () => {
       while (queue.length) {
         const path = queue.shift();
         try {
@@ -302,6 +335,7 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
         } catch { /* a page that won't load just keeps its path as the title */ }
       }
     }));
+    if (wait) await reading;
     return out;
   }
 
@@ -320,15 +354,12 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
     const failed = [];
     for (const repo of repos) {
       try {
-        const hit = codeCache.get(repo.name);
-        let entries;
-        if (hit && (repo.pushedAt ? hit.pushedAt === repo.pushedAt : now() - hit.at < CODE_TTL)) entries = hit.entries;
-        else {
+        // Keyed by the last push, so a scan is only redone after one.
+        const entries = await scans.wrap(`${repo.name}@${repo.pushedAt || ''}`, repo.pushedAt ? 30 * 86_400_000 : CODE_TTL, false, async () => {
           const res = await githubGet(fetchImpl, `/repos/${repo.name}/tarball`, token);
           if (Number(res.headers.get('content-length')) > MAX_TARBALL) throw new Error('too large to scan');
-          entries = scanContent(Buffer.from(await res.arrayBuffer()));
-          codeCache.set(repo.name, { at: now(), pushedAt: repo.pushedAt, entries });
-        }
+          return scanContent(Buffer.from(await res.arrayBuffer()));
+        });
         read.push({ name: repo.name, files: entries.length });
         const branch = repo.branch || 'HEAD';
         for (const e of entries) files.push({ ...e, repo: repo.name, branch, href: `https://github.com/${repo.name}/blob/${branch}/${e.file}` });
@@ -403,7 +434,9 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
     return out;
   }
 
-  async function list(site, rangeKey = '28d', { all = false, fresh = false } = {}) {
+  // waitForTitles / waitForCode false: answer without what isn't read yet
+  // (titles show as paths, files as missing) and read it in the background.
+  async function list(site, rangeKey = '28d', { all = false, fresh = false, waitForTitles = true, waitForCode = true } = {}) {
     if (site.demo) return demoArticles(rangeKey, all);
     if (!site.host) return { range: rangeKey, rows: [], totals: articleTotals([]), notes: { sitemap: 'This site has no address yet. Add one in Settings.' }, sitemaps: [], repos: [] };
     if (fresh) {
@@ -413,7 +446,12 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
     const settle = (p) => p.then((value) => ({ value }), (err) => ({ error: err.message || String(err) }));
     const [sitemap, code, ga4, search] = await Promise.all([
       settle(readSitemap(site)),
-      settle(cache.wrap(`code:${site.id}`, CODE_TTL, fresh, () => readCode(site))),
+      waitForCode
+        ? settle(cache.wrap(`code:${site.id}`, CODE_TTL, fresh, () => readCode(site)))
+        : Promise.race([
+          settle(cache.wrap(`code:${site.id}`, CODE_TTL, fresh, () => readCode(site))),
+          new Promise((resolve) => setTimeout(resolve, 3000, { value: { files: [], repos: [], read: false, note: 'Still reading the site’s repos; source files show on the next load.' } })),
+        ]),
       site.propertyId ? settle(cache.wrap(`ga4:${site.id}:${rangeKey}`, TRAFFIC_TTL, fresh, () => readGa4(site, rangeKey))) : null,
       site.searchSite ? settle(cache.wrap(`gsc:${site.id}:${rangeKey}`, TRAFFIC_TTL, fresh, () => readSearch(site, rangeKey))) : null,
     ]);
@@ -422,7 +460,7 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
     const files = code.value?.files || [];
     const views = ga4?.value?.views || new Map();
     const candidates = buildArticles({ sitemap: urls, views, files, all });
-    const pages = await readPages(site, candidates.filter((r) => r.path && !r.file?.title).map((r) => r.path));
+    const pages = await readPages(site, candidates.filter((r) => r.path && !r.file?.title).map((r) => r.path), { wait: waitForTitles });
     const rows = buildArticles({
       sitemap: urls, pages, views, files, all,
       landings: ga4?.value?.landings, search: search?.value,
@@ -457,7 +495,7 @@ export function createArticles({ auth, store, getToken, vercel = null, fetchImpl
     return { ...row, meta };
   }
 
-  return { list, find, readPage: (site, path) => readPages(site, [normPath(path)]).then((m) => m.get(normPath(path)) || null) };
+  return { list, find, titles, readPage: (site, path) => readPages(site, [normPath(path)]).then((m) => m.get(normPath(path)) || null) };
 }
 
 /* ---------- demo ---------- */
@@ -470,6 +508,7 @@ function demoArticles(rangeKey, all) {
     file: file ? { file, repo: 'demo/site', slug: path.split('/').pop(), title, published, href: '' } : null,
     views: n(sessions * 1.4), users: n(sessions * 0.9), engagementRate: 0.55, avgDuration: 95,
     sessions: n(sessions), sources: sources.map(([label, s]) => ({ label, sessions: n(s) })),
+    aiSessions: n(sources.reduce((a, [label, s]) => a + (AI_FAMILIES.has(label) ? s : 0), 0)),
     search: search && { clicks: n(search[0]), impressions: n(search[1]), position: search[2], queries: search[3] || [] },
   });
   const rows = [

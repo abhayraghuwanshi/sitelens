@@ -18,11 +18,11 @@ const SECTIONS = {
 
 const FROM = {
   file: { chip: 'good', text: 'In repo file' },
-  studio: { chip: '', text: 'Set in Studio' },
-  auto: { chip: '', text: 'Studio’s guess' },
+  studio: { chip: '', text: 'Set in Kauzl' },
+  auto: { chip: '', text: 'Kauzl’s guess' },
 };
 
-export function Setup({ site }) {
+export function Setup({ site, connections = true }) {
   const [fresh, setFresh] = useState(0);
   const data = useAsync(() => api.get(`/sites/${site.id}/setup${qs({ fresh: fresh ? 1 : undefined })}`), [site.id, fresh]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
@@ -31,11 +31,11 @@ export function Setup({ site }) {
 
   return (
     <>
-      <Connections site={site} target={target} />
-      <Card title="What Studio measures" sub="Goals, funnels, search and alerts"
+      {connections && <Connections site={site} target={target} />}
+      <Card title="What Kauzl measures" sub="Goals, funnels, search and alerts"
         actions={!site.demo && <button class="btn ghost" type="button" disabled={data.loading} onClick={() => setFresh(fresh + 1)}><Icon name="refresh" size={13} /> Reload</button>}>
-        <div class="stack" style={{ gap: '10px' }}>
-          <p class="note" style={{ margin: 0 }}><FileLine site={site} file={file} target={target} /></p>
+        <div class="stack gap-10">
+          <p class="note m-0"><FileLine site={site} file={file} target={target} /></p>
           {file.errors?.length > 0 && <Messages list={['The file has errors, so none of it applies until they’re fixed:', ...file.errors]} tone="bad" />}
           {file.warnings?.length > 0 && <Messages list={file.warnings} />}
           {sections.map((s) => <Section key={s.key} site={site} section={s} target={target} onSaved={() => setFresh(fresh + 1)} />)}
@@ -74,8 +74,8 @@ function FileLine({ site, file, target }) {
   if (site.demo) return 'The demo site reads a built-in file, so nothing here can be changed.';
   if (file.found) return <>Parts marked <b>In repo file</b> come from <SourceLink source={file.source} /> and change by pull request. The rest is set here.</>;
   return target.type === 'repo'
-    ? <>All set here in Studio. Any part can move into <code>{target.repo}</code> as <code>{target.path}</code>, so it changes with the code.</>
-    : 'All set here in Studio.';
+    ? <>All set here in Kauzl. Any part can move into <code>{target.repo}</code> as <code>{target.path}</code>, so it changes with the code.</>
+    : 'All set here in Kauzl.';
 }
 
 function Section({ site, section, target, onSaved }) {
@@ -122,13 +122,13 @@ function Section({ site, section, target, onSaved }) {
 
   return (
     <div class="suggestion">
-      <div class="suggestion-head" style={{ flexWrap: 'wrap' }}>
+      <div class="suggestion-head wrap">
         <div style={{ minWidth: 0 }}>
           <b>{meta.label}</b> <span class={`chip ${from.chip}`}>{from.text}</span>
           <div class="muted small">{meta.why}</div>
         </div>
         {!site.demo && editing === null && (
-          <div class="row" style={{ gap: '6px' }}>
+          <div class="row gap-6">
             {inFile
               ? <button class="btn" type="button" onClick={() => setEditing(section.yaml)}>Edit</button>
               : <>
@@ -147,14 +147,14 @@ function Section({ site, section, target, onSaved }) {
         </ul>
       )}
       {editing !== null && (
-        <div class="stack" style={{ gap: '8px' }}>
-          <p class="note" style={{ margin: 0 }}>
-            {inFile ? 'The rest of the file stays as it is.' : 'A start from what Studio uses today. Once it’s in the file, the file wins over Studio’s settings.'}
+        <div class="stack gap-8">
+          <p class="note m-0">
+            {inFile ? 'The rest of the file stays as it is.' : 'A start from what Kauzl uses today. Once it’s in the file, the file wins over Kauzl’s settings.'}
             {' '}Format: <code>docs/sitelens-yml.md</code>.
           </p>
           <textarea rows={Math.min(24, Math.max(5, editing.split('\n').length + 1))} spellcheck={false} value={editing}
             onInput={(e) => setEditing(e.currentTarget.value)} aria-label={`${meta.label} in .sitelens.yml`} />
-          <div class="row" style={{ gap: '8px' }}>
+          <div class="row gap-8">
             <button class="btn primary" type="button" disabled={busy} onClick={save}>
               {busy ? 'Saving…' : toRepo ? 'Open pull request' : 'Save'}
             </button>
@@ -162,7 +162,7 @@ function Section({ site, section, target, onSaved }) {
           </div>
         </div>
       )}
-      {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
     </div>
   );
 }

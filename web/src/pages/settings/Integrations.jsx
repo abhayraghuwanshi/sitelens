@@ -4,7 +4,7 @@ import { Loading, ErrorState } from '../../components/ui.jsx';
 import { Icon } from '../../components/icons.jsx';
 
 const has = (scopes, s) => (scopes || []).some((x) => x.endsWith(s) || x.endsWith('cloud-platform'));
-const via = (source, what) => (source === 'env' ? `${what} from .env` : `${what} saved`);
+const via = (source, what) => (source === 'oauth' ? 'Connected' : source === 'env' ? `${what} from .env` : `${what} saved`);
 
 // What the one Google sign-in unlocks, scope by scope.
 export const GOOGLE_CAPS = [
@@ -25,7 +25,7 @@ const GROUPS = [
         desc: 'Repo traffic, stars, clones and release downloads, synced hourly.',
         status: ({ github: g }) => (g.source
           ? { on: !g.lastError, text: g.lastError || `${g.repos} repos · ${via(g.source, 'token')}`, warn: Boolean(g.lastError) }
-          : { on: false, text: 'Needs a personal access token' }),
+          : { on: false, text: 'Not connected' }),
       },
       {
         key: 'firebase', name: 'Firebase App Hosting', icon: 'flame', panel: 'firebase',
@@ -33,7 +33,7 @@ const GROUPS = [
         status: ({ firebase: f, google }) => (!has(google.scopes, 'logging.read')
           ? { on: false, text: 'Google sign-in needs Cloud logs access', warn: google.connected }
           : f.errors.length ? { on: false, text: f.errors[0], warn: true }
-            : f.links ? { on: true, text: `${f.links} ${f.links === 1 ? 'site' : 'sites'} linked` } : { on: false, text: 'No backend linked yet' }),
+            : f.links ? { on: true, text: `${f.links} ${f.links === 1 ? 'site' : 'sites'} linked` } : { on: true, text: 'Logs connected · no App Hosting site found yet' }),
       },
       {
         key: 'vercel', name: 'Vercel', icon: 'triangle', panel: 'vercel',
@@ -47,7 +47,7 @@ const GROUPS = [
         desc: 'Daily numbers from your own databases, like daily pings from Cloudflare D1, charted on Overview.',
         status: ({ customMetrics: m }) => (m.count
           ? { on: true, text: `${m.count} ${m.count === 1 ? 'metric' : 'metrics'}${m.sources.length ? ` · ${m.sources.join(', ')}` : ''}` }
-          : { on: false, text: m.sources.length ? 'Token saved · no metrics yet' : 'Needs a source and a query' }),
+          : m.sources.length ? { on: true, text: `${m.sources.join(', ')} connected · add a metric to chart it` } : { on: false, text: 'Needs a source and a query' }),
       },
       {
         key: 'bing', name: 'Bing Webmaster Tools', icon: 'search', panel: 'bing',
@@ -58,6 +58,13 @@ const GROUPS = [
         key: 'anthropic', name: 'Claude (AI answer checks)', icon: 'sparkles', panel: 'anthropic',
         desc: 'Asks Claude with web search the questions your customers ask, and tracks whether answers name and cite you.',
         status: ({ anthropic: a }) => (a?.source ? { on: true, text: `${via(a.source, 'API key')}${a.weekly ? ' · weekly' : ''}` } : { on: false, text: 'Needs an API key' }),
+      },
+      {
+        key: 'openrouter', name: 'OpenRouter (ChatGPT, Gemini, Perplexity, Grok)', icon: 'sparkles', panel: 'openrouter',
+        desc: 'One key to ask the same questions in ChatGPT, Gemini, Perplexity and Grok, each with its own web search.',
+        status: ({ openrouter: o }) => (o?.source
+          ? { on: true, text: `${via(o.source, 'API key')} · ${o.on.join(', ') || 'no assistants on'}` }
+          : { on: false, text: 'Needs an API key' }),
       },
       {
         key: 'cws', name: 'Chrome Web Store', icon: 'puzzle', href: '#/extensions',
@@ -90,9 +97,9 @@ const GROUPS = [
     title: 'Agents',
     items: [
       {
-        key: 'mcp', name: 'Claude Code & Claude Desktop', icon: 'terminal', panel: 'mcp',
+        key: 'mcp', name: 'Claude Code & Claude Desktop (MCP)', icon: 'terminal', panel: 'mcp',
         desc: 'Ask your agent about traffic, search and launches, and have it leave comments on your charts.',
-        status: () => ({ on: false, text: 'Set up once per agent · no key needed' }),
+        status: ({ hosted }) => ({ on: false, text: hosted ? 'Set up once per agent with an access token' : 'Set up once per agent · no key needed' }),
       },
     ],
   },
@@ -107,7 +114,7 @@ const GROUPS = [
           : google.connected ? { on: true, text: 'Runs on your Google sign-in' } : { on: false, text: 'Needs Google sign-in' }),
       },
       {
-        key: 'notify', name: 'Slack / Discord & desktop', icon: 'bell', href: '#/settings?tab=alerts',
+        key: 'notify', name: 'Slack / Discord & desktop', icon: 'bell', href: '#/alerts?view=settings',
         desc: 'Where alerts and the daily digest go.',
         status: ({ notifications: n }) => (!n.enabled ? { on: false, text: 'Alerts are paused' }
           : { on: n.webhook || n.desktop, text: [n.webhook && 'Webhook', n.desktop && 'macOS notifications'].filter(Boolean).join(' · ') || 'No destination yet' }),
@@ -125,7 +132,7 @@ export function IntegrationGrid({ onOpen }) {
   const missing = g.connected ? GOOGLE_CAPS.filter((c) => !has(g.scopes, c.scope)) : [];
 
   return (
-    <div class="stack" style={{ gap: '24px' }}>
+    <div class="stack gap-22">
       <section class="integration wide">
         <span class="integration-icon"><Icon name="users" size={18} /></span>
         <div class="integration-body">
@@ -138,7 +145,7 @@ export function IntegrationGrid({ onOpen }) {
           </div>
           <p>One sign-in covers GA4, Search Console, BigQuery, PageSpeed and Firebase logs.</p>
           {g.connected && (
-            <div class="row" style={{ gap: '6px' }}>
+            <div class="row gap-6">
               {GOOGLE_CAPS.map((c) => (
                 <span key={c.label} class={`chip${has(g.scopes, c.scope) ? ' good' : ''}`}>{has(g.scopes, c.scope) ? '✓' : '✗'} {c.label}</span>
               ))}

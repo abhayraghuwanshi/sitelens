@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { buildStory, causeFor } from '../server/story.mjs';
+import { buildStory, causeFor, createStory } from '../server/story.mjs';
+import { historyRange } from '../server/github.mjs';
+import { metricRange } from '../server/custom-metrics.mjs';
+import { warehouseRange } from '../server/sql.mjs';
 
 const day = (date, weekday, sessions, baseline) => ({ date, weekday, sessions, baseline, clicks: 0 });
 
@@ -79,4 +82,27 @@ test('notable days: far off a usual weekday, with what shipped that day or the d
   assert.equal(story.days[0].text, '2 Oct: 60 visits, 5× a usual Friday (12).');
   assert.deepEqual(story.days[0].events.map((e) => e.label), ['Your Reddit post: Launch']);
   assert.equal(story.shipped, 2);
+});
+
+test('yesterday is one day, set against the same weekday a week before', async () => {
+  const calls = [];
+  const metrics = (q) => ({ totals: { sessions: q.from === '2026-11-07' ? 28 : 14 }, days: [{ date: q.from, weekday: 'Saturday', sessions: 28, baseline: 16 }] });
+  const calendar = {
+    metrics: async (q) => (calls.push(['metrics', q]), metrics(q)),
+    events: async () => ({ events: [] }),
+    breakdown: async (q) => (calls.push(['breakdown', q]), { rows: [] }),
+  };
+  const s = await createStory({ calendar, today: () => '2026-11-08' }).get({ id: 'a' }, 'yesterday');
+  assert.deepEqual(s.range, { key: 'yesterday', from: '2026-11-07', to: '2026-11-07', previous: { from: '2026-10-31', to: '2026-10-31' } });
+  assert.equal(s.headline, 'Visits were up 100% on the Saturday before: 28, against 14.');
+  assert.ok(calls.filter(([k]) => k === 'breakdown').every(([, q]) => q.back === 7));
+});
+
+test('the yesterday window is the one day before today in every source', () => {
+  const now = Date.parse('2026-11-08T15:00:00Z');
+  assert.deepEqual([historyRange('yesterday', now).start, historyRange('yesterday', now).end], ['2026-11-07', '2026-11-07']);
+  const m = metricRange('yesterday', now);
+  assert.deepEqual([m.key, m.start, m.end, m.prevStart], ['yesterday', '2026-11-07', '2026-11-07', '2026-11-06']);
+  const w = warehouseRange('yesterday', { now: new Date(2026, 10, 8, 15) });
+  assert.deepEqual([w.days, w.startDate, w.endDate], [1, '2026-11-07', '2026-11-07']);
 });

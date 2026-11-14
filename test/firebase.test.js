@@ -72,7 +72,8 @@ test('classifyAgent separates AI crawlers, assistants, search and humans', () =>
   assert.deepEqual(classifyAgent('Mozilla/5.0 (compatible; GPTBot/1.2)'), { bot: 'GPTBot', kind: 'ai-crawler' });
   assert.deepEqual(classifyAgent('Mozilla/5.0 ChatGPT-User/1.0; +https://openai.com/bot'), { bot: 'ChatGPT-User', kind: 'ai-assistant' });
   assert.deepEqual(classifyAgent('Mozilla/5.0 (compatible; Googlebot/2.1)'), { bot: 'Googlebot', kind: 'search' });
-  assert.deepEqual(classifyAgent('SiteLens-Studio-uptime/1.0'), { bot: 'SiteLens uptime', kind: 'monitor' });
+  assert.deepEqual(classifyAgent('Kauzl-uptime/1.0'), { bot: 'Kauzl uptime', kind: 'monitor' });
+  assert.deepEqual(classifyAgent('SiteLens-Studio-uptime/1.0'), { bot: 'Kauzl uptime', kind: 'monitor' });
   assert.equal(classifyAgent('python-requests/2.31').kind, 'automation');
   assert.equal(classifyAgent('').kind, 'automation');
   assert.deepEqual(classifyAgent(CHROME), { bot: '', kind: 'human' });
@@ -117,6 +118,17 @@ test('autoLink finds the backend serving the site host and syncs it', async () =
     assert.equal((await store.get()).firebase.links.desk.service, 'cooldesk-ui');
   } finally {
     await firebase.sync().catch(() => {});
+    firebase.stop();
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('a sync links an unlinked site on its own, without pressing Find', async () => {
+  const { dir, firebase, store } = await setup();
+  try {
+    await firebase.sync();
+    assert.equal((await store.get()).firebase.links.desk.service, 'cooldesk-ui');
+  } finally {
     firebase.stop();
     await rm(dir, { recursive: true, force: true });
   }

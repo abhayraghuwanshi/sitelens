@@ -23,13 +23,23 @@ export function Firebase({ range, params }) {
   if (!status.data) return <><Loading height={92} /><Loading height={300} /></>;
   const { links } = status.data;
   if (!links.length) return <Setup onLinked={status.reload} />;
-  const siteId = params.get('site') || links[0].siteId;
-  const link = links.find((l) => l.siteId === siteId) || links[0];
+  // From a site (?site=), only that site; a site that isn't on Firebase says so.
+  const scoped = params.get('site') || '';
+  const link = scoped ? links.find((l) => l.siteId === scoped) : links[0];
+  if (!link) {
+    return (
+      <div class="state">
+        <h3>This site isn’t on Firebase App Hosting</h3>
+        <p>Kauzl reads server-side traffic from Firebase only for sites linked to an App Hosting backend.</p>
+        <a class="btn" href="#/settings?i=firebase">Link it</a> <a class="btn ghost" href="#/firebase">All Firebase sites</a>
+      </div>
+    );
+  }
 
   return (
     <>
-      {links.length > 1 && (
-        <div class="health-sites" role="group" aria-label="Site" style={{ marginBottom: '16px' }}>
+      {!scoped && links.length > 1 && (
+        <div class="health-sites mb-16" role="group" aria-label="Site">
           {links.map((l) => (
             <button key={l.siteId} type="button" class={`btn${l.siteId === link.siteId ? ' primary' : ''}`} aria-pressed={l.siteId === link.siteId}
               onClick={() => navigate(`/firebase${qs({ site: l.siteId })}`)}>{l.label}</button>
@@ -58,7 +68,7 @@ function Setup({ onLinked }) {
     <div class="state">
       <h3>Connect Firebase App Hosting</h3>
       <p>
-        Studio reads your backend's request logs from Cloud Logging, so it sees every page load, including AI crawlers, search bots
+        Kauzl reads your backend's request logs from Cloud Logging, so it sees every page load, including AI crawlers, search bots
         and visitors who block GA4, plus errors, latency and deploys. It looks through your Google Cloud projects for the backend that serves each site.
       </p>
       <div class="row">
@@ -68,14 +78,14 @@ function Setup({ onLinked }) {
         <a class="btn ghost" href="#/settings?i=firebase">Link by hand</a>
       </div>
       {error && (
-        <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>
+        <p class="small text-bad m-0">
           {error.message} {error.hint && <span class="muted">{error.hint}</span>}
           {error.kind === 'needs-logging-scope' && <> <a href="#/settings?i=google">Sign in again</a></>}
         </p>
       )}
       {result && !result.linked.length && (
         <p class="hint">
-          No backend in {result.scanned.join(', ') || 'your projects'} served a Studio site in the last 3 days.
+          No backend in {result.scanned.join(', ') || 'your projects'} served a Kauzl site in the last 3 days.
           {result.services.length > 0 && <> Seen: {result.services.map((s) => `${s.project}/${s.service} (${s.hosts.join(', ') || 'no host'})`).join(' · ')}.</>}
           {result.errors.length > 0 && <> Skipped: {result.errors.map((e) => `${e.project}: ${e.error}`).join(' · ')}</>}
         </p>
@@ -102,7 +112,7 @@ function SiteTraffic({ link, range, onSynced }) {
   }
 
   const header = (
-    <div class="meta-line" style={{ alignItems: 'center' }}>
+    <div class="meta-line items-center">
       <span><Icon name="flame" size={13} /> <span class="mono">{link.project}</span> · backend <b>{link.service}</b></span>
       <span>{link.lastSync ? `Synced ${formatRelative(link.lastSync)}` : 'Not synced yet'}</span>
       <a href={`https://console.firebase.google.com/project/${link.project}/apphosting`} target="_blank" rel="noreferrer">Firebase console <Icon name="external" size={11} /></a>
@@ -122,7 +132,7 @@ function SiteTraffic({ link, range, onSynced }) {
     return (
       <>
         {header}
-        {syncError && <p class="small" style={{ color: 'var(--critical-ink)' }}>{syncError}</p>}
+        {syncError && <p class="small text-bad">{syncError}</p>}
         <Empty title="No requests synced yet">The first sync pulls the last 30 days of logs and takes a minute. Press <b>Sync now</b> if it hasn't started.</Empty>
       </>
     );
@@ -131,7 +141,7 @@ function SiteTraffic({ link, range, onSynced }) {
   return (
     <>
       {header}
-      {syncError && <p class="small" style={{ color: 'var(--critical-ink)', margin: 0 }}>{syncError}</p>}
+      {syncError && <p class="small text-bad m-0">{syncError}</p>}
       <KpiStrip items={[
         { label: 'Human page loads', value: formatNumber(t.human), meta: `${formatNumber(Math.round(t.visitorDays / Math.max(1, d.series.visitors.filter((v) => v !== null).length)))} visitors a day` },
         { label: 'Bot share', value: t.botShare === null ? '—' : formatPercent(t.botShare, 0), meta: 'of page loads' },
@@ -147,7 +157,7 @@ function SiteTraffic({ link, range, onSynced }) {
           series={VISITOR_SERIES.map((s) => ({ label: s.label, color: s.color, values: d.series[s.key] }))}
           format={(v, axis) => formatNumber(v, { compact: axis })} />
         {d.dataStart > d.range.start && (
-          <p class="note">Cloud Logging keeps 30 days, so history starts {d.dataStart}. Studio keeps its own copy from here on, so longer ranges fill in over time.</p>
+          <p class="note">Cloud Logging keeps 30 days, so history starts {d.dataStart}. Kauzl keeps its own copy from here on, so longer ranges fill in over time.</p>
         )}
       </Card>
 
@@ -269,7 +279,7 @@ export function ServerTrafficCard({ site, range }) {
   return (
     <Card title="Server-side visitors" sub={`Firebase request log · ${historyKey(range)} · humans and bots GA4 never sees`}
       actions={<a class="small" href={`#/firebase${qs({ site: site.id })}`}>Open Firebase →</a>}>
-      <div class="grid cols-2" style={{ gap: '16px', marginBottom: 0 }}>
+      <div class="grid cols-2 gap-16 mb-0">
         <div>
           <KpiStrip items={[
             { label: 'Human page loads', value: formatNumber(t.human) },
@@ -281,7 +291,7 @@ export function ServerTrafficCard({ site, range }) {
             format={(v, axis) => formatNumber(v, { compact: axis })} />
         </div>
         <div>
-          <div class="small muted" style={{ marginBottom: '8px' }}>AI crawlers and assistants</div>
+          <div class="small muted mb-8">AI crawlers and assistants</div>
           {s.bots.length
             ? <BarList rows={s.bots} value={(r) => r.hits} label={(r) => r.bot} format={formatNumber} extra={(r) => r.label} />
             : <p class="muted small">No AI bots fetched a page in this range.</p>}

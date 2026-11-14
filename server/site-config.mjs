@@ -20,11 +20,14 @@ import YAML from 'yaml';
 import { normalizeGoals, GOAL_SOURCES } from './products.mjs';
 import { ValidationError } from './store.mjs';
 import { EngineError } from './engines.mjs';
+import { createCache } from './cache.mjs';
+import { CONNECTORS, SUMMARIES, checkSelect } from './custom-metrics.mjs';
 
 const API = 'https://api.github.com';
 const DEMO_FILE = fileURLToPath(new URL('./demo-sitelens.yml', import.meta.url));
 const TTL = 10 * 60_000;
 const MAX_FUNNELS = 10;
+const MAX_METRICS = 12;
 const EVENT_RE = /^[A-Za-z][\w]{0,39}$/;
 
 // What kind of thing the site is. It tells an agent (and a reader) which goals
@@ -44,7 +47,7 @@ export const KINDS = {
 const SITE_RULES = { traffic: 'GA4 sessions & users', search: 'Search Console clicks' };
 export const GOAL_ALERT_DEFAULTS = Object.freeze({ when: 'drop', pct: 0.5, min: 5 });
 
-const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search'];
+const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search', 'metrics'];
 const GOAL_KEYS = ['label', 'event', 'page', 'source', 'role', 'value', 'alert'];
 
 /* ---------- parsing (pure) ---------- */
@@ -67,7 +70,7 @@ function count(value, path) {
 
 function unknownKeys(obj, allowed, path, warnings) {
   for (const key of Object.keys(obj)) {
-    if (!allowed.includes(key)) warnings.push(`${path}${key}: not a setting Studio knows, so it’s ignored. Expected one of ${allowed.join(', ')}.`);
+    if (!allowed.includes(key)) warnings.push(`${path}${key}: not a setting Kauzl knows, so it’s ignored. Expected one of ${allowed.join(', ')}.`);
   }
 }
 
@@ -166,6 +169,39 @@ function parseAlerts(input, warnings) {
     };
   }
   return out;
+}
+
+// Custom metrics: daily numbers from the site's own database, charted next to
+// GA4. The source's ids live here (they aren't secrets); its token stays in
+// Settings or .env. Each connector's fields go under its type, like
+// `d1: { account: …, database: … }`.
+function parseMetric(m, i, warnings) {
+  const path = `metrics[${i}]`;
+  if (!isMap(m)) throw new ValidationError(`${path} must be a metric like { label: Daily pings, d1: { account, database }, sql: SELECT … }.`);
+  const types = Object.keys(CONNECTORS).filter((t) => m[t] !== undefined);
+  unknownKeys(m, ['label', 'unit', 'summary', 'sql', ...Object.keys(CONNECTORS)], `${path}.`, warnings);
+  const label = String(m.label ?? '').trim().slice(0, 80);
+  if (!label) throw new ValidationError(`${path} needs a label.`);
+  if (types.length !== 1) throw new ValidationError(`${path} (${label}) needs exactly one source: ${Object.keys(CONNECTORS).join(', ')}.`);
+  const type = types[0];
+  const connector = CONNECTORS[type];
+  const given = m[type];
+  if (!isMap(given)) throw new ValidationError(`${path}.${type} must be a map like { ${connector.fields.map((f) => f.yaml).join(', ')} }.`);
+  unknownKeys(given, connector.fields.map((f) => f.yaml), `${path}.${type}.`, warnings);
+  const source = { type };
+  for (const f of connector.fields) {
+    const value = String(given[f.yaml] ?? '').trim().toLowerCase();
+    if (!f.pattern.test(value)) throw new ValidationError(`${path}.${type}.${f.yaml}: ${f.hint}`);
+    source[f.key] = value;
+  }
+  if (m.summary !== undefined && !SUMMARIES.includes(m.summary)) throw new ValidationError(`${path}.summary must be ${SUMMARIES.join(', ')}.`);
+  let sql;
+  try {
+    sql = checkSelect(String(m.sql ?? '').trim().slice(0, 8000));
+  } catch (err) {
+    throw new ValidationError(`${path}.sql: ${err.message}`);
+  }
+  return { label, unit: String(m.unit ?? '').trim().slice(0, 24), summary: m.summary || 'sum', source, sql };
 }
 
 // What the site wants to be found for. One block feeds Demand's query groups,
@@ -306,7 +342,7 @@ export function parseSiteConfig(text, { host = '' } = {}) {
     }
   };
   attempt(() => {
-    if (raw.version !== undefined && Number(raw.version) !== 1) throw new ValidationError(`version ${raw.version} isn’t supported; this Studio reads version: 1.`);
+    if (raw.version !== undefined && Number(raw.version) !== 1) throw new ValidationError(`version ${raw.version} isn’t supported; this version of Kauzl reads version: 1.`);
   });
   attempt(() => {
     if (raw.site === undefined) return;
@@ -348,6 +384,18 @@ export function parseSiteConfig(text, { host = '' } = {}) {
   if (raw.search !== undefined) attempt(() => {
     config.search = parseSearch(raw.search, warnings);
   });
+  if (raw.metrics !== undefined) {
+    if (!Array.isArray(raw.metrics)) errors.push('metrics must be a list.');
+    else if (raw.metrics.length > MAX_METRICS) errors.push(`Up to ${MAX_METRICS} metrics.`);
+    else {
+      config.metrics = [];
+      raw.metrics.forEach((m, i) => attempt(() => {
+        const metric = parseMetric(m, i, warnings);
+        if (config.metrics.some((x) => x.label.toLowerCase() === metric.label.toLowerCase())) throw new ValidationError(`metrics[${i}]: another metric is already called “${metric.label}”.`);
+        config.metrics.push(metric);
+      }));
+    }
+  }
   return errors.length ? { config: null, errors, warnings } : { config, errors, warnings };
 }
 
@@ -419,8 +467,8 @@ export function draftYaml({ host, kind = '', goals = [], funnels = [], guessed =
     if (targets) targets.flow = true;
   }
   const head = [
-    `# What SiteLens Studio measures for ${host}. Spec: docs/sitelens-yml.md in sitelens-studio.`,
-    guessed ? '# Studio guessed these from the event names the site sends: check them against the code.' : '# Taken from the goals and funnels set up in Studio.',
+    `# What Kauzl measures for ${host}. Spec: docs/sitelens-yml.md in sitelens-studio.`,
+    guessed ? '# Kauzl guessed these from the event names the site sends: check them against the code.' : '# Taken from the goals and funnels set up in Kauzl.',
   ];
   if (!kind) head.push(`# Set kind to one of: ${Object.keys(KINDS).join(', ')}.`);
   return `${head.join('\n')}\n${doc.toString({ lineWidth: 0 })}`;
@@ -534,8 +582,11 @@ function declaredHost(text) {
   }
 }
 
-export function createSiteConfig({ dir, repos = async () => [], getToken = async () => '', fetchImpl = fetch, now = Date.now }) {
-  const cache = new Map(); // site id → { at, host, value }
+export function createSiteConfig({ dir, repos = async () => [], getToken = async () => '', cacheDb = null, fetchImpl = fetch, now = Date.now }) {
+  // Keyed `<site id>:<host>`. Kept on disk and shown stale while GitHub is asked
+  // again, so pages that only need the config don't wait on it.
+  const cache = createCache({ db: cacheDb, name: 'site-config', staleFor: cacheDb ? 7 * 86_400_000 : 0, now });
+  const lastGood = new Map(); // site id → { host, value }
 
   async function readLocal(host) {
     for (const ext of ['yml', 'yaml']) {
@@ -576,7 +627,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
         notes.push(`Couldn’t list the site’s repos: ${err.message}`);
         return [];
       }) : [];
-      if (!token) notes.push('Add a GitHub token in Settings → GitHub so Studio can read .sitelens.yml from the site’s repo.');
+      if (!token) notes.push('Add a GitHub token in Settings → GitHub so Kauzl can read .sitelens.yml from the site’s repo.');
       else if (!names.length) notes.push('No repo is linked to this site, so there’s no .sitelens.yml to read. Pick its repo in Settings → Products, or put the file in .data/config/.');
       search: for (const repo of names) {
         for (const path of [`.sitelens/${host}.yml`, '.sitelens.yml']) {
@@ -605,25 +656,31 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       if (!found && names.length && !failed) notes.push(`Looked for .sitelens/${host}.yml and .sitelens.yml on the default branch of ${names.join(', ')}; none there. A file that isn’t pushed yet can’t be read.`);
     }
     if (!found) return { found: false, failed, source: null, config: null, errors: [], warnings: [], notes, checkedAt: now() };
-    return { found: true, source: found.source, text: found.text, ...parseSiteConfig(found.text, { host }), notes, checkedAt: now() };
+    return { found: true, source: found.source, text: found.text, notes, checkedAt: now() };
   }
+
+  // The cache keeps the file's text, and each read parses it: a parse cached on
+  // disk would outlive a deploy that teaches Studio a new key.
+  const parsed = (value, host) => (value.found ? { ...value, ...parseSiteConfig(value.text, { host }) } : value);
 
   async function get(site, { fresh = false } = {}) {
     const host = cleanHost(site.host);
-    const hit = cache.get(site.id);
-    if (!fresh && hit && hit.host === host && now() - hit.at < TTL) return hit.value;
-    let value;
-    try {
-      value = await load(site);
-    } catch (err) {
-      value = { found: false, failed: true, source: null, config: null, errors: [], warnings: [], notes: [`Couldn’t read the config: ${err.message}`], checkedAt: now() };
-    }
-    // Keep using the last good file when GitHub or the disk hiccups, so goals
-    // and their alerts don't fall back to guesses during an outage.
-    if (value.failed && !value.found && hit?.host === host && hit.value.config) {
-      value = { ...hit.value, notes: [...hit.value.notes.filter((n) => !n.startsWith('Couldn’t re-read')), `Couldn’t re-read it, so the last good copy is used: ${value.notes.join(' ')}`] };
-    }
-    cache.set(site.id, { at: now(), host, value });
+    const value = await cache.wrap(`${site.id}:${host}`, TTL, fresh, async () => {
+      let value;
+      try {
+        value = await load(site);
+      } catch (err) {
+        value = { found: false, failed: true, source: null, config: null, errors: [], warnings: [], notes: [`Couldn’t read the config: ${err.message}`], checkedAt: now() };
+      }
+      // Keep using the last good file when GitHub or the disk hiccups, so goals
+      // and their alerts don't fall back to guesses during an outage.
+      const hit = lastGood.get(site.id);
+      if (value.failed && !value.found && hit?.host === host) {
+        value = { ...hit.value, notes: [...hit.value.notes.filter((n) => !n.startsWith('Couldn’t re-read')), `Couldn’t re-read it, so the last good copy is used: ${value.notes.join(' ')}`] };
+      }
+      return value;
+    }).then((v) => parsed(v, host));
+    if (value.config) lastGood.set(site.id, { host, value });
     return value;
   }
 
@@ -650,7 +707,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
         status: 409, kind: 'github-write', hint: 'The GitHub token in Settings → GitHub needs Contents and Pull requests set to “Read and write” for this repo.',
       });
     }
-    if (res.status === 409) throw new EngineError('The file changed on GitHub since Studio read it. Reload and make the change again.', { status: 409, kind: 'conflict' });
+    if (res.status === 409) throw new EngineError('The file changed on GitHub since Kauzl read it. Reload and make the change again.', { status: 409, kind: 'conflict' });
     throw new EngineError(`GitHub ${res.status}: ${detail.message || 'request failed'}`, { status: 502, kind: 'github' });
   }
 
@@ -683,9 +740,9 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
     const pr = await gh('POST', `/repos/${to.repo}/pulls`, token, {
       title, head: branch, base,
       body: [
-        `What SiteLens Studio measures for ${cleanHost(site.host)}: this changes the \`${key}\` part of \`${to.path}\`. Studio applies it once it's on ${base}.`,
+        `What Kauzl measures for ${cleanHost(site.host)}: this changes the \`${key}\` part of \`${to.path}\`. Kauzl applies it once it's on ${base}.`,
         'Spec: docs/sitelens-yml.md in sitelens-studio.',
-        '_Opened from SiteLens Studio → Setup._',
+        '_Opened from Kauzl → Setup._',
       ].join('\n\n'),
     });
     return { url: pr.html_url, number: pr.number, branch };
@@ -708,7 +765,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       if (to.type === 'local') {
         await mkdir(dir, { recursive: true });
         await writeFile(to.path, text.endsWith('\n') ? text : `${text}\n`);
-        cache.delete(site.id);
+        cache.clear(`${site.id}:`);
         return { saved: 'local', path: to.path };
       }
       return { saved: 'pr', repo: to.repo, path: to.path, ...(await openPr(site, to, text, key)) };
@@ -720,11 +777,12 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       await mkdir(dir, { recursive: true });
       const path = join(dir, `${host}.yml`);
       await writeFile(path, text.endsWith('\n') ? text : `${text}\n`);
-      cache.delete(site.id);
+      cache.clear(`${site.id}:`);
       return get(site);
     },
     forget(siteId) {
-      cache.delete(siteId);
+      cache.clear(`${siteId}:`);
+      lastGood.delete(siteId);
     },
   };
 }

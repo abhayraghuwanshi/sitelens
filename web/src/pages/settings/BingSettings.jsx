@@ -5,6 +5,8 @@ import { Card } from '../../components/ui.jsx';
 
 export function BingSettings() {
   const status = useAsync(() => api.get('/bing/status'), []);
+  const connect = useAsync(() => api.get('/connect').catch(() => ({})), []);
+  const canConnect = Boolean(connect.data?.bing);
   const [key, setKey] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -37,21 +39,29 @@ export function BingSettings() {
         <div class="row small">
           <span class={`dot${s.source ? ' on' : ''}`} />
           {s.source
-            ? <>API key from {s.source === 'env' ? <code>BING_WEBMASTER_KEY</code> : 'Settings'} · {s.sites.length} site{s.sites.length === 1 ? '' : 's'}
-                {s.error && <span style={{ color: 'var(--critical-ink)' }}> · {s.error}</span>}</>
+            ? <>{s.source === 'oauth' ? 'Connected to Bing' : <>API key from {s.source === 'env' ? <code>BING_WEBMASTER_KEY</code> : 'Settings'}</>} · {s.sites.length} site{s.sites.length === 1 ? '' : 's'}
+                {s.error && <span class="text-bad"> · {s.error}</span>}</>
             : 'Not connected'}
         </div>
-        <form class="row" onSubmit={save}>
-          <input type="password" autocomplete="off" style={{ flex: '1', minWidth: '240px', maxWidth: '420px' }} placeholder="Bing Webmaster API key" value={key}
-            onInput={(e) => setKey(e.currentTarget.value)} aria-label="Bing Webmaster API key" />
-          <button class="btn primary" type="submit" disabled={busy || !key.trim()}>{busy ? 'Checking…' : 'Save'}</button>
-          {s.source === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save(null, '')}>Remove</button>}
-        </form>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {canConnect && (
+          <div class="row">
+            <a class="btn primary" href="/auth/bing">{s.source === 'oauth' ? 'Connect again' : 'Connect Bing'}</a>
+            {s.source === 'oauth' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save(null, '')}>Disconnect</button>}
+          </div>
+        )}
+        <KeyForm open={!canConnect}>
+          <form class="row" onSubmit={save}>
+            <input type="password" autocomplete="off" style={{ flex: '1', minWidth: '240px', maxWidth: '420px' }} placeholder="Bing Webmaster API key" value={key}
+              onInput={(e) => setKey(e.currentTarget.value)} aria-label="Bing Webmaster API key" />
+            <button class="btn primary" type="submit" disabled={busy || !key.trim()}>{busy ? 'Checking…' : 'Save'}</button>
+            {s.source === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={() => save(null, '')}>Remove</button>}
+          </form>
+        </KeyForm>
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
 
         {s.source && s.matches.length > 0 && (
           <table class="data">
-            <thead><tr><th>Studio site</th><th>Bing site</th></tr></thead>
+            <thead><tr><th>Kauzl site</th><th>Bing site</th></tr></thead>
             <tbody>
               {s.matches.map((m) => (
                 <tr key={m.siteId}>
@@ -69,12 +79,26 @@ export function BingSettings() {
           </table>
         )}
 
-        <p class="note" style={{ margin: 0 }}>
-          In <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a>: add your site (importing from Google Search Console is one click),
-          then Settings (gear) → API access → API key → Generate. The key is stored in <code>.data/studio.json</code>, or set <code>BING_WEBMASTER_KEY</code> in <code>.env</code>.
-          Sites are matched to Studio sites by domain.
+        <p class="note m-0">
+          {canConnect
+            ? <>Your sites need to be in <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a> first: there, “Import from Google Search Console” adds them all in one click.
+                Kauzl only reads; sites are matched to yours by domain.</>
+            : <>In <a href="https://www.bing.com/webmasters" target="_blank" rel="noreferrer">Bing Webmaster Tools</a>: add your site (importing from Google Search Console is one click),
+                then Settings (gear) → API access → API key → Generate. The key is stored in <code>.data/studio.json</code>, or set <code>BING_WEBMASTER_KEY</code> in <code>.env</code>.
+                Sites are matched to Kauzl sites by domain.</>}
         </p>
       </div>
     </Card>
+  );
+}
+
+// The paste-a-key form, folded away when a Connect button does the job.
+export function KeyForm({ open, children }) {
+  if (open) return children;
+  return (
+    <details class="key-form">
+      <summary>Or paste a key instead</summary>
+      {children}
+    </details>
   );
 }

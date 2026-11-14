@@ -1,13 +1,22 @@
 import { useState } from 'preact/hooks';
-import { formatNumber, formatRelative } from '@shared/format.js';
+import { formatNumber, formatRelative, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { taggedLink, slug } from '../../../shared/utm.js';
 import { Card, KpiStrip, Loading, ErrorState, Empty } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { LineChart } from '../charts/LineChart.jsx';
 
-// Your own posts across platforms, with the traffic each one likely brought.
-export function Posts({ range }) {
+// Where a post opens inside Studio (ids carry ':' and '/', so they're encoded).
+export const postHref = (id) => `#/posts/${encodeURIComponent(id)}`;
+
+// Your own posts across platforms, with the traffic each one likely brought;
+// #/posts/<id> opens one post.
+export function Posts({ range, id }) {
+  return id ? <PostDetail key={id} id={decodeURIComponent(id)} /> : <PostList range={range} />;
+}
+
+function PostList({ range }) {
   const [product, setProduct] = useState('');
   const [platform, setPlatform] = useState('');
   const data = useAsync(() => api.get(`/posts${qs({ range, product, platform })}`), [range, product, platform]);
@@ -33,20 +42,20 @@ export function Posts({ range }) {
 
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span><Icon name="users" size={13} /> {d.accounts.length} account{d.accounts.length === 1 ? '' : 's'}</span>
         <span>{d.lastSync ? `synced ${formatRelative(d.lastSync)}` : 'not synced yet'} · every 6 hours</span>
         <button class="btn ghost" type="button" disabled={sync.busy || d.syncing || !d.accounts.length} onClick={syncNow}>
           <Icon name="refresh" size={13} /> {sync.busy || d.syncing ? 'Syncing…' : 'Sync now'}
         </button>
-        {sync.msg && <span class="small" style={{ color: sync.msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{sync.msg.text}</span>}
+        {sync.msg && <span class={`small ${sync.msg.ok ? 'text-good' : 'text-bad'}`}>{sync.msg.text}</span>}
       </div>
 
       <Accounts data={d} open={!d.accounts.length} onSaved={data.reload} />
       <AddByUrl products={d.products} onAdded={data.reload} />
       <LinkBuilder data={d} />
 
-      {Object.entries(d.errors).filter(([k]) => k.startsWith('ga4:')).map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}><b>Traffic for {d.products.find((p) => `ga4:${p.id}` === k)?.label || k}:</b> {v}</p>)}
+      {Object.entries(d.errors).filter(([k]) => k.startsWith('ga4:')).map(([k, v]) => <p class="note m-0" key={k}><b>Traffic for {d.products.find((p) => `ga4:${p.id}` === k)?.label || k}:</b> {v}</p>)}
 
       <KpiStrip items={[
         { label: 'Posts', value: formatNumber(d.totals.posts), meta: 'in range' },
@@ -94,9 +103,10 @@ export function Posts({ range }) {
             <tbody>
               {d.items.map((p) => (
                 <tr key={p.id}>
-                  <td class="small muted mono" style={{ whiteSpace: 'nowrap' }}>{new Date(p.createdAt).toISOString().slice(0, 10)}</td>
+                  <td class="small muted mono nowrap">{new Date(p.createdAt).toISOString().slice(0, 10)}</td>
                   <td>
-                    <a href={p.permalink} target="_blank" rel="noreferrer">{p.title}</a>
+                    <a href={postHref(p.id)}>{p.title}</a>
+                    {' '}<a href={p.permalink} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a>
                     <div class="small muted">{label(p.platform)}{p.community ? ` · ${p.community}` : ''}{p.manual ? ' · added by hand' : ''}</div>
                   </td>
                   <td class="num">{p.points === null ? '—' : formatNumber(p.points)}</td>
@@ -120,9 +130,9 @@ export function Posts({ range }) {
             </tbody>
           </table>
         ) : (
-          <div style={{ padding: '16px' }}>
+          <div class="pad-16">
             <Empty title={d.accounts.length ? 'No posts in this range' : 'Add your accounts'}>
-              {d.accounts.length ? 'Try a longer range, or sync now.' : 'Name your usernames above and Studio pulls in everything you’ve posted.'}
+              {d.accounts.length ? 'Try a longer range, or sync now.' : 'Name your usernames above and Kauzl pulls in everything you’ve posted.'}
             </Empty>
           </div>
         )}
@@ -181,7 +191,7 @@ function Accounts({ data, open, onSaved }) {
         <span class="sub">{data.accounts.map((a) => `${labelOf(a.platform)} · ${a.handle}`).join(', ') || 'none yet'}</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <form class="card-body stack" onSubmit={save} style={{ gap: '8px' }}>
+      <form class="card-body stack gap-8" onSubmit={save}>
         {rows.map((r, i) => {
           const p = fetchable.find((x) => x.key === r.platform);
           return (
@@ -195,12 +205,12 @@ function Accounts({ data, open, onSaved }) {
             </div>
           );
         })}
-        <div class="row" style={{ marginTop: '4px' }}>
+        <div class="row mt-4">
           <button class="btn" type="button" onClick={() => setRows([...rows, { platform: 'hn', handle: '' }])}><Icon name="plus" size={13} /> Add account</button>
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
-          {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+          {error && <span class="small text-bad">{error}</span>}
         </div>
-        <p class="note" style={{ margin: 0 }}>No login needed: Studio reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
+        <p class="note m-0">No login needed: Kauzl reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
       </form>
     </details>
   );
@@ -229,7 +239,7 @@ function AddByUrl({ products, onAdded }) {
         <span class="sub">LinkedIn, X, Indie Hackers, a blog: anything without an API</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <form class="card-body stack" onSubmit={add} style={{ gap: '12px' }}>
+      <form class="card-body stack gap-12" onSubmit={add}>
         <div class="post-form">
           <label class="field">Post URL<input required type="url" value={form.url} placeholder="https://www.linkedin.com/posts/…" onInput={(e) => set({ url: e.currentTarget.value })} /></label>
           <label class="field">Posted on<input type="date" value={form.date} onInput={(e) => set({ date: e.currentTarget.value })} /></label>
@@ -245,7 +255,7 @@ function AddByUrl({ products, onAdded }) {
         </div>
         <div class="row">
           <button class="btn primary" type="submit"><Icon name="plus" size={13} /> Add post</button>
-          {error && <span class="small" style={{ color: 'var(--critical-ink)' }}>{error}</span>}
+          {error && <span class="small text-bad">{error}</span>}
         </div>
       </form>
     </details>
@@ -281,7 +291,7 @@ function LinkBuilder({ data }) {
         <span class="sub">Share this instead of the bare URL, and the sessions it brings are counted exactly</span>
         <Icon name="chevron" size={14} class="chev" />
       </summary>
-      <div class="card-body stack" style={{ gap: '12px' }}>
+      <div class="card-body stack gap-12">
         <div class="post-form">
           <label class="field">Page
             <input type="url" list="link-builder-sites" value={form.url} placeholder="https://your-site.com/blog/post" onInput={(e) => set({ url: e.currentTarget.value })} />
@@ -297,12 +307,12 @@ function LinkBuilder({ data }) {
           <label class="field"><span class="field-label">Variant <small>optional</small></span><input value={form.content} placeholder="r-sideproject" onInput={(e) => set({ content: e.currentTarget.value })} /></label>
         </div>
         {link ? (
-          <div class="row" style={{ flexWrap: 'wrap' }}>
+          <div class="row wrap">
             <code class="mono small" style={{ wordBreak: 'break-all', flex: '1 1 320px' }}>{link}</code>
             <button class="btn primary" type="button" onClick={copy}>{copied ? 'Copied' : 'Copy link'}</button>
           </div>
         ) : (
-          <p class="small muted" style={{ margin: 0 }}>{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
+          <p class="small muted m-0">{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
         )}
       </div>
     </details>
@@ -332,3 +342,110 @@ function Campaigns({ data }) {
     </Card>
   );
 }
+
+// One post: what it brought to your site, which pages those visits landed on,
+// and whether they stayed. The post itself is a link out; the analysis stays here.
+function PostDetail({ id }) {
+  const data = useAsync(() => api.get(`/posts/item${qs({ id })}`), [id]);
+  if (data.error) return <><a class="btn ghost" href="#/posts"><Icon name="chevron" size={13} class="flip" /> All posts</a><ErrorState error={data.error} onRetry={data.reload} /></>;
+  if (!data.data) return <><Loading height={120} /><Loading height={300} /></>;
+  const d = data.data;
+  const p = d.post;
+  const day = new Date(p.createdAt).toISOString().slice(0, 10);
+  const w = d.window;
+  const assign = async (product) => { await api.post('/posts/product', { id: p.id, product }); data.reload(); };
+
+  return (
+    <>
+      <div class="post-head">
+        <a class="btn ghost" href="#/posts"><Icon name="chevron" size={13} class="flip" /> All posts</a>
+        <h2>{p.title}</h2>
+        <div class="meta-line items-center">
+          <span>{d.platform.label}{p.community ? ` · ${p.community}` : ''}</span>
+          <span>{longDate(day)}</span>
+          {p.manual && <span>added by hand</span>}
+          <label class="row gap-6">Product
+            <select value={p.product} onChange={(e) => assign(e.currentTarget.value)}>
+              <option value="">—</option>
+              {d.products.map((x) => <option key={x.id} value={x.id}>{x.label}</option>)}
+            </select>
+          </label>
+          <a class="btn" href={p.permalink} target="_blank" rel="noreferrer"><Icon name="external" size={13} /> Open on {d.platform.label}</a>
+        </div>
+      </div>
+
+      {!d.site ? (
+        <Card>
+          <Empty title="No site to measure against">
+            {d.product ? `${d.product.label} has no GA4 property linked, so there’s no traffic to show.` : 'Pick the product this post was about (above) and Kauzl shows what it brought to that product’s site.'}
+          </Empty>
+        </Card>
+      ) : (
+        <>
+          {d.authError ? (
+            <div class="state error" role="alert">
+              <h3>Google sign-in expired</h3>
+              <p class="small m-0">Kauzl can’t ask Google Analytics what this post brought. {d.stored ? 'The chart below is from the calendar’s stored copy; pages, referrers and engagement need a fresh sign-in.' : 'Sign in again to see it.'}</p>
+              <a class="btn primary" href="#/settings?i=google">Sign in to Google again</a>
+            </div>
+          ) : d.error && <p class="note m-0"><b>Google Analytics:</b> {d.error}</p>}
+          {Date.now() - p.createdAt < 86_400_000 && (
+            <p class="note m-0">Posted {formatRelative(p.createdAt)}. Google Analytics takes a few hours to report visits, so today’s numbers are still filling in.</p>
+          )}
+          <KpiStrip items={[
+            { label: 'Sessions brought', value: d.sessions === null ? '—' : `${d.attribution === 'timing' ? '~' : ''}${formatNumber(d.sessions)}`,
+              meta: d.attribution === 'utm' ? `exact: utm_campaign=${d.campaign}` : `${d.platform.label} referrals, ${d.windowDays} days`,
+              help: d.attribution === 'utm' ? 'Sessions tagged with this post’s utm_campaign.' : 'This platform’s referrer sessions on the post day and the two after, split with your other posts from it in that window.' },
+            { label: `Usual from ${d.platform.label}`, value: d.usual === null ? '—' : `${formatNumber(d.usual)}/day`, meta: 'median, 2 weeks before' },
+            { label: 'Engaged', value: w?.sessions ? `${Math.round((w.engaged / w.sessions) * 100)}%` : '—', meta: w?.sessions ? `${formatNumber(w.engaged)} of ${formatNumber(w.sessions)} sessions` : '' },
+            { label: 'New users', value: w ? formatNumber(w.newUsers) : '—' },
+            { label: 'Key events', value: w ? formatNumber(w.keyEvents) : '—' },
+            { label: 'Upvotes · comments', value: `${p.points === null ? '—' : formatNumber(p.points)} · ${p.comments === null ? '—' : formatNumber(p.comments)}`,
+              meta: p.points !== null ? '' : p.manual ? 'added by hand: none recorded' : p.platform === 'reddit' ? 'add a Reddit app in Settings → Mentions' : '' },
+          ]} />
+
+          {d.series.length > 1 && (
+            <Card title={`Visits from ${d.platform.label}`} sub="Each day, two weeks before the post to a week after">
+              <LineChart height={220} series={[{ label: d.platform.label, values: d.series.map((x) => x.sessions) }]}
+                labels={d.series.map((x) => formatDate(x.date.replaceAll('-', '')))} dates={d.series.map((x) => x.date)}
+                annotations={[{ id: p.id, date: day, label: p.title, kind: 'post' }]} format={formatNumber} tooltipTitle="Sessions" />
+            </Card>
+          )}
+
+          <div class="grid cols-2">
+            <Card title="Where they landed" sub={w ? `${shortDate(w.start)}–${shortDate(w.end)}` : ''} flush>
+              {d.landing.length ? (
+                <table class="data">
+                  <thead><tr><th>Page</th><th class="num">Sessions</th><th class="num">Engaged</th><th class="num">Key events</th></tr></thead>
+                  <tbody>{d.landing.map((r) => (
+                    <tr key={r.label}>
+                      <td class="cell-path" title={r.label}><code>{r.label}</code></td>
+                      <td class="num">{formatNumber(r.sessions)}</td>
+                      <td class="num muted">{r.sessions ? `${Math.round((r.engaged / r.sessions) * 100)}%` : '—'}</td>
+                      <td class="num">{formatNumber(r.keyEvents)}</td>
+                    </tr>
+                  ))}</tbody>
+                </table>
+              ) : <div class="pad-16"><Empty title={d.error ? 'Needs Google' : 'No visits yet'}>{d.error ? 'Landing pages come straight from Google Analytics.' : w ? 'Nothing from this post reached the site in its window.' : 'Traffic shows here once Google Analytics reports the post day.'}</Empty></div>}
+            </Card>
+            <Card title="Referrers" sub={d.attribution === 'utm' ? 'Sources carrying the campaign' : `${d.platform.label} domains`} flush>
+              {d.sources.length ? (
+                <table class="data">
+                  <thead><tr><th>Source</th><th class="num">Sessions</th><th class="num">New users</th></tr></thead>
+                  <tbody>{d.sources.map((r) => (
+                    <tr key={r.label}><td>{r.label}</td><td class="num">{formatNumber(r.sessions)}</td><td class="num">{formatNumber(r.newUsers)}</td></tr>
+                  ))}</tbody>
+                </table>
+              ) : <div class="pad-16"><Empty title={d.error ? 'Needs Google' : 'No referrers yet'} /></div>}
+            </Card>
+          </div>
+          {d.attribution === 'timing' && <p class="note">Sessions marked ~ are inferred from timing: visits from {d.platform.label} around the post. Share a tagged link (My posts → Make a tagged link) for exact numbers.</p>}
+        </>
+      )}
+      {p.text && <Card title="Post"><p class="post-text">{p.text.slice(0, 1200)}{p.text.length > 1200 ? '…' : ''}</p></Card>}
+    </>
+  );
+}
+
+const longDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+const shortDate = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'UTC' });

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'preact/hooks';
-import { onPending } from './api.js';
+import { onPending, onRefreshed } from './api.js';
 
 // Hash routes: #/ · #/settings · #/site/<id>/<view>?k=v
 export function parseHash(hash = location.hash) {
@@ -32,7 +32,8 @@ export function withParam(key, value, hash = location.hash) {
   return `${path || '/'}${text ? `?${text}` : ''}`;
 }
 
-// Loads `fn` whenever `deps` change; stale responses are dropped.
+// Loads `fn` whenever `deps` change; stale responses are dropped. When the
+// server has fresher numbers than it first answered with, loads again quietly.
 export function useAsync(fn, deps) {
   const [state, setState] = useState({ loading: true, data: null, error: null });
   const seq = useRef(0);
@@ -49,6 +50,13 @@ export function useAsync(fn, deps) {
   useEffect(() => {
     run();
   }, [run]);
+  useEffect(() => onRefreshed(() => {
+    const id = ++seq.current;
+    // Keep what's shown (and any error) if the quiet load fails.
+    Promise.resolve()
+      .then(() => fn())
+      .then((data) => id === seq.current && setState({ loading: false, data, error: null }), () => {});
+  }), [run]);
   return { ...state, reload: run };
 }
 
@@ -96,9 +104,20 @@ export function useElementWidth() {
   const [width, setWidth] = useState(0);
   useEffect(() => {
     if (!ref.current) return undefined;
-    const observer = new ResizeObserver(([entry]) => setWidth(Math.floor(entry.contentRect.width)));
+    // Re-render on the next frame, not inside the observer: a redraw that
+    // changes the page height (a scrollbar appearing) would otherwise resize
+    // the element again in the same frame ("ResizeObserver loop completed").
+    let frame = 0;
+    const observer = new ResizeObserver(([entry]) => {
+      const next = Math.floor(entry.contentRect.width);
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => setWidth((prev) => (prev === next ? prev : next)));
+    });
     observer.observe(ref.current);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(frame);
+      observer.disconnect();
+    };
   }, []);
   return [ref, width];
 }

@@ -13,7 +13,7 @@ export const STAGES = [
     tabs: [
       { section: 'github', label: 'GitHub', siteParam: true },
       { section: 'vercel', label: 'Vercel', siteParam: true },
-      { section: 'firebase', label: 'Firebase' },
+      { section: 'firebase', label: 'Firebase', siteParam: true },
       { section: 'posts', label: 'My posts' },
       { view: 'articles', label: 'My articles' },
       { section: 'health', label: 'Site health', siteParam: true },
@@ -43,54 +43,23 @@ export const STAGES = [
   {
     key: 'payoff', step: 5, label: 'Pay off', icon: 'target', question: 'Did it work, and did they come back?',
     tabs: [
-      { section: 'outcomes', label: 'Outcomes' },
-      { section: 'extensions', label: 'Extensions' },
+      { section: 'outcomes', label: 'Outcomes', siteParam: true },
+      { section: 'extensions', label: 'Extensions', siteParam: true },
     ],
   },
 ];
 
-// The power tools on the GA4 BigQuery export: questions the journey doesn't
-// ask for you. Their own area, so the stages stay a story; stage pages still
-// link to the ones that fit them.
-export const EXPLORE = {
-  key: 'explore', label: 'Explore', icon: 'database', question: 'Ask the raw events anything',
-  tabs: [
-    { view: 'funnels', label: 'Funnels', icon: 'funnel', about: 'Any steps, pages or events, in order, and where people drop off between them.' },
-    { view: 'paths', label: 'Paths', icon: 'flow', about: 'The real routes through the site, page by page, with where each one ends.' },
-    { view: 'retention', label: 'Retention', icon: 'cohort', about: 'Weekly cohorts of new visitors, and how many come back each week after.' },
-    { view: 'sessions', label: 'Sessions', icon: 'layers', about: 'Single visits that saw a page or fired an event, with everything they did.' },
-    { view: 'events', label: 'Events', icon: 'bolt', about: 'Every event the site sends, with all its parameters and their values.' },
-    { view: 'sql', label: 'SQL console', icon: 'terminal', about: 'Your own SELECT on the export. Dry-run first and capped, so it can’t run up a bill.' },
-  ],
-};
-
-export const tabId = (tab) => tab.view || tab.section;
-
-// Health picks among sites with a host, so only pass one it can show; GitHub,
-// Vercel and Products use it to show just that site's repos, project or product.
+// ?site= scopes a workspace page to one site: just its repos, Vercel project,
+// Firebase traffic, health, outcomes or extensions, never the rest of the
+// account. Only a site with a host can have any of those.
 export function tabHref(tab, site) {
   if (tab.view) return `#/site/${site.id}/${tab.view}`;
   return tab.siteParam && site?.host ? `#/${tab.section}?site=${site.id}` : `#/${tab.section}`;
 }
 
-// A numbered stage opens its summary page (pages/Stage.jsx), whose cards lead
-// to its tabs, and Explore opens its list of tools; Overview is its own page.
+// A stage opens its first report in Explore.
 export function stageHref(stage, site) {
-  return stage.step || stage === EXPLORE ? `#/site/${site.id}/${stage.key}` : tabHref(stage.tabs[0], site);
+  return tabHref(stage.tabs[0], site);
 }
 
-// Which stage and tab the current route belongs to (none for Settings, Alerts, SQL…).
-// A stage's summary page has the stage and no tab.
-export function locate(section, viewKey) {
-  for (const stage of [...STAGES, EXPLORE]) {
-    if ((stage.step || stage === EXPLORE) && section === 'site' && viewKey === stage.key) return { stage, tab: null };
-    const tab = stage.tabs.find((t) => (section === 'site' ? t.view === viewKey : t.section === section));
-    if (tab) return { stage, tab };
-  }
-  return { stage: null, tab: null };
-}
 
-export function nextStage(stage) {
-  const i = STAGES.indexOf(stage);
-  return i >= 0 ? STAGES[i + 1] || null : null;
-}

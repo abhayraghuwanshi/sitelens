@@ -26,7 +26,7 @@ export function AnthropicSettings() {
   }
 
   return (
-    <Card title="Claude" sub="Powers answer checks in each site’s AI search view: Claude answers your questions with live web search, and Studio records whether it names and cites you.">
+    <Card title="Claude" sub="Powers answer checks in each site’s AI search view: Claude answers your questions with live web search, and Kauzl records whether it names and cites you.">
       <div class="stack">
         <div class="row small">
           <span class={`dot${s.source ? ' on' : ''}`} />
@@ -42,8 +42,8 @@ export function AnthropicSettings() {
           <input type="checkbox" checked={Boolean(s.weekly)} disabled={busy} onChange={(e) => save({ weekly: e.currentTarget.checked }, e.currentTarget.checked ? 'Weekly checks on.' : 'Weekly checks off.')} />
           Re-run every site’s saved questions once a week
         </label>
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
-        <p class="note" style={{ margin: 0 }}>
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
+        <p class="note m-0">
           Create a key at <a href="https://console.anthropic.com/settings/keys" target="_blank" rel="noreferrer">console.anthropic.com → API keys</a>.
           Prefer <code>ANTHROPIC_API_KEY=…</code> in <code>.env</code> (restart the server after); a key pasted here is stored in <code>.data/studio.json</code>.
           Each question costs roughly $0.05–0.20 per run (tokens plus $10 per 1,000 web searches). Checks only run when you press Run, or weekly if turned on.

@@ -15,6 +15,7 @@ const FILTERS = [
   { key: 'google', label: 'Not in Google', test: (r) => r.path && !r.search?.impressions, needs: 'notInGoogle' },
   { key: 'sitemap', label: 'Not in sitemap', test: (r) => r.file && !r.inSitemap },
   { key: 'source', label: 'No source file', test: (r) => r.inSitemap && !r.file, needs: 'noSource' },
+  { key: 'trial', label: 'On trial', test: (r) => r.trial && !r.trial.decision, needs: 'trials' },
 ];
 
 const SORTS = {
@@ -25,9 +26,9 @@ const SORTS = {
   published: (r) => r.published || r.lastmod || '',
 };
 
-export function Articles({ site, range, params }) {
+export function Articles({ site, range, params, onClose }) {
   const open = params?.get('article') || '';
-  if (open) return <ArticleEditor site={site} range={range} path={open} onClose={() => navigate(withParam('article', ''))} />;
+  if (open) return <ArticleEditor site={site} range={range} path={open} onClose={onClose || (() => navigate(withParam('article', '')))} />;
   return <ArticleList site={site} range={range} />;
 }
 
@@ -37,6 +38,7 @@ function ArticleList({ site, range }) {
   const all = scope === 'pages';
   const url = (fresh) => `/sites/${site.id}/articles${qs({ range, all: all ? 1 : '', fresh: fresh ? 1 : '' })}`;
   const data = useAsync(() => api.get(url(false)), [site.id, range, all]);
+  const trials = useAsync(() => api.get(`/sites/${site.id}/articles/trials`).catch(() => ({ trials: [] })), [site.id]);
   const [filter, setFilter] = useState('all');
   const [query, setQuery] = useState('');
   const [sort, setSort] = useState({ key: 'sessions', desc: true });
@@ -57,7 +59,9 @@ function ArticleList({ site, range }) {
     const test = FILTERS.find((f) => f.key === filter)?.test;
     const q = query.trim().toLowerCase();
     const value = SORTS[sort.key];
+    const onTrial = new Map((trials.data?.trials || []).map((t) => [t.path, t]));
     return d.rows
+      .map((r) => (r.path && onTrial.has(r.path) ? { ...r, trial: onTrial.get(r.path) } : r))
       .filter((r) => (!test || test(r)) && (!q || `${r.title} ${r.path} ${r.file?.file || ''}`.toLowerCase().includes(q)))
       .sort((a, b) => {
         const x = value(a);
@@ -65,14 +69,15 @@ function ArticleList({ site, range }) {
         const c = typeof x === 'string' ? x.localeCompare(y) : x - y;
         return sort.desc ? -c : c;
       });
-  }, [d, filter, query, sort]);
+  }, [d, trials.data, filter, query, sort]);
 
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!d) return <><Loading height={40} /><Loading height={92} /><Loading height={360} /></>;
 
   const t = d.totals;
   const notes = Object.entries(d.notes).filter(([, v]) => v);
-  const filters = FILTERS.filter((f) => !f.needs || t[f.needs] !== null);
+  const openTrials = (trials.data?.trials || []).filter((x) => !x.decision).length;
+  const filters = FILTERS.filter((f) => (f.needs === 'trials' ? openTrials > 0 : !f.needs || t[f.needs] !== null));
   const head = (key, label) => (
     <th class="num" aria-sort={sort.key === key ? (sort.desc ? 'descending' : 'ascending') : 'none'}>
       <button type="button" onClick={() => setSort({ key, desc: sort.key === key ? !sort.desc : true })}>
@@ -83,7 +88,7 @@ function ArticleList({ site, range }) {
 
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span><Icon name="globe" size={13} /> {d.sitemaps.length ? `${formatNumber(d.sitemapUrls)} URLs from ${d.sitemaps.length} sitemap${d.sitemaps.length === 1 ? '' : 's'}` : 'no sitemap'}</span>
         <span><Icon name="github" size={13} /> {d.repos.length ? d.repos.map((r) => `${r.name} (${r.files} file${r.files === 1 ? '' : 's'})`).join(', ') : 'no repo'}</span>
         <Segmented label="Which pages" value={scope} onChange={setScope} options={[
@@ -95,7 +100,7 @@ function ArticleList({ site, range }) {
         </button>
       </div>
 
-      {notes.map(([k, v]) => <p class="note" key={k} style={{ margin: 0 }}><b>{{ sitemap: 'Sitemap', code: 'GitHub', ga4: 'GA4', search: 'Search Console' }[k]}:</b> {v}</p>)}
+      {notes.map(([k, v]) => <p class="note m-0" key={k}><b>{{ sitemap: 'Sitemap', code: 'GitHub', ga4: 'GA4', search: 'Search Console' }[k]}:</b> {v}</p>)}
 
       <KpiStrip items={[
         { label: all ? 'Pages' : 'Articles', value: formatNumber(t.articles), meta: `${formatNumber(t.withTraffic)} with traffic` },
@@ -133,7 +138,7 @@ function ArticleList({ site, range }) {
             </table>
           </div>
         ) : (
-          <div style={{ padding: '16px' }}>
+          <div class="pad-16">
             <Empty title={d.rows.length ? 'Nothing matches' : 'No articles found'}>
               {d.rows.length ? 'Try another filter.' : all ? 'No sitemap URLs or content files were found.' : 'Nothing under /blog, /docs, /posts and the like. Switch to All pages to see every sitemap URL.'}
             </Empty>
@@ -159,6 +164,7 @@ function Row({ r, site }) {
             : <span><Icon name="github" size={11} /> {r.file.file.split('/').pop()}</span>)}
           {r.file && !r.inSitemap && <span class="chip accent">not in sitemap</span>}
           {!r.path && <span class="chip">no URL with traffic</span>}
+          {r.trial && <TrialChip t={r.trial} />}
         </div>
       </td>
       <td class="num">{r.sessions ? formatNumber(r.sessions) : <span class="muted">—</span>}</td>
@@ -167,7 +173,13 @@ function Row({ r, site }) {
       <td class="num">{r.search ? formatNumber(r.search.clicks) : <span class="muted">—</span>}</td>
       <td class="num" title={r.search ? `Avg. position ${formatDecimal(r.search.position)}` : ''}>{r.search ? formatNumber(r.search.impressions) : <span class="muted">—</span>}</td>
       <td class="small">{q ? <span title={`${formatNumber(q.clicks)} clicks · ${formatNumber(q.impressions)} impressions · position ${formatDecimal(q.position)}`}>{q.query}</span> : <span class="muted">—</span>}</td>
-      <td class="small muted mono" style={{ whiteSpace: 'nowrap' }} title={r.published ? 'Published' : r.lastmod ? 'Sitemap lastmod' : ''}>{r.published || r.lastmod || '—'}</td>
+      <td class="small muted mono nowrap" title={r.published ? 'Published' : r.lastmod ? 'Sitemap lastmod' : ''}>{r.published || r.lastmod || '—'}</td>
     </tr>
   );
+}
+
+function TrialChip({ t }) {
+  if (t.decision) return <span class={`chip${t.decision === 'remove' ? ' bad' : ''}`} title={`Trial from ${t.start}, decided ${t.decidedAt}`}>{t.decision === 'remove' ? 'to remove' : 'kept after trial'}</span>;
+  if (t.due) return <span class="chip accent" title="Open the article for the verdict">trial over · decide</span>;
+  return <span class="chip" title={`Verdict on ${t.ends}`}>on trial · day {t.elapsed}/{t.days}</span>;
 }

@@ -26,6 +26,10 @@ test('isArticlePath: sections and dated paths, not listings', () => {
   assert.equal(isArticlePath('/blog/ga4-vs-plausible'), true);
   assert.equal(isArticlePath('/en/docs/setup'), true);
   assert.equal(isArticlePath('/2025/04/hello'), true);
+  // Search landing pages: templates, alternatives, comparisons.
+  assert.equal(isArticlePath('/templates/gta-6-stream-overlay'), true);
+  assert.equal(isArticlePath('/alternatives/plausible'), true);
+  assert.equal(isArticlePath('/templates'), false);
   assert.equal(isArticlePath('/blog'), false);
   assert.equal(isArticlePath('/blog/tag/seo'), false);
   assert.equal(isArticlePath('/blog/page/2'), false);

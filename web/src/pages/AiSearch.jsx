@@ -49,13 +49,13 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
   if (error) {
     return (
       <Card title="AI referral sessions">
-        <p class="small" style={{ margin: 0, color: 'var(--critical-ink)' }}>{error.message}</p>
+        <p class="small m-0 text-bad">{error.message}</p>
         {error.hint && <p class="note">{error.hint}</p>}
       </Card>
     );
   }
   if (!r) {
-    return <Card title="AI referral sessions"><p class="muted small">Link a GA4 property to this site in Settings → Sites to see sessions from AI assistants.</p></Card>;
+    return <Card title="AI referral sessions"><p class="muted small">Link a GA4 property to this site in Settings → Sites & products to see sessions from AI assistants.</p></Card>;
   }
   const labels = dates.map(dayLabel);
   const top = r.assistants.slice(0, 5);
@@ -77,7 +77,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
           <LineChart labels={labels} series={series} height={220} area={view === 'share'}
             format={view === 'share' ? (v) => `${formatNumber(v, { compact: true })}%` : (v, axis) => formatNumber(v, { compact: axis })} />
         ) : <p class="muted small">No sessions from AI assistants in this range yet.</p>}
-        <p class="note" style={{ marginBottom: 0 }}>Google AI Overviews clicks count as Google organic in GA4 and Search Console, so they can’t be split out.</p>
+        <p class="note mb-0">Google AI Overviews clicks count as Google organic in GA4 and Search Console, so they can’t be split out.</p>
       </Card>
 
       <div class="grid cols-2">
@@ -98,7 +98,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
                 </tbody>
               </table>
             </div>
-          ) : <p class="muted small" style={{ padding: '8px 16px' }}>Nothing yet.</p>}
+          ) : <p class="muted small inset">Nothing yet.</p>}
         </Card>
         <Card title="Landing pages from AI" flush>
           {r.landing.length ? (
@@ -117,7 +117,7 @@ function Referrals({ r, error, dates, onRefresh, busy }) {
                 </tbody>
               </table>
             </div>
-          ) : <p class="muted small" style={{ padding: '8px 16px' }}>Nothing yet.</p>}
+          ) : <p class="muted small inset">Nothing yet.</p>}
         </Card>
       </div>
     </>
@@ -129,7 +129,7 @@ function Crawlers({ c, site }) {
     if (site.demo) return null;
     return (
       <Card title="AI bots on your server">
-        <p class="muted small" style={{ margin: 0 }}>
+        <p class="muted small m-0">
           GA4 can’t see bots. Link this site’s hosting logs to see which AI assistants and crawlers read your pages:{' '}
           <a href="#/settings?i=firebase">Firebase App Hosting</a>.
         </p>
@@ -179,7 +179,7 @@ function Crawlers({ c, site }) {
               </tbody>
             </table>
           </div>
-        ) : <p class="muted small" style={{ padding: '8px 16px' }}>No pages read by AI bots in this range.</p>}
+        ) : <p class="muted small inset">No pages read by AI bots in this range.</p>}
       </Card>
     </div>
   );
@@ -231,6 +231,13 @@ function AnswerChecks({ site, initial, onDone }) {
   }
 
   const noKey = !a.keySource && !a.sample;
+  // Older responses (and the demo) only have Claude.
+  const engines = a.engines?.length ? a.engines : [{ key: 'claude', label: 'Claude', model: a.model }];
+  const by = (q, key) => q.byEngine?.[key] || (key === 'claude' ? { latest: q.latest, history: q.history, mentionRate: q.mentionRate } : { latest: null });
+  const asked = engines.map((e) => {
+    const latest = a.results.map((q) => by(q, e.key).latest).filter((l) => l && !l.error);
+    return { ...e, asked: latest.length, named: latest.filter((l) => l.mentioned).length, cited: latest.filter((l) => l.cited).length };
+  });
   const fromFile = a.from === 'file';
   const actions = site.demo ? null : (
     <>
@@ -242,15 +249,33 @@ function AnswerChecks({ site, initial, onDone }) {
   );
 
   return (
-    <Card title="Answer checks" sub={a.sample ? 'Sample results' : a.lastRun ? `Asked Claude with web search · last run ${formatRelative(a.lastRun)}` : 'Ask an AI your customers’ questions and see if it names you'} actions={actions}>
+    <Card title="Answer checks"
+      sub={a.sample ? 'Sample results' : a.lastRun ? `Asked ${engines.map((e) => e.label).join(', ')} with web search · last run ${formatRelative(a.lastRun)}` : 'Ask AI assistants your customers’ questions and see if they name you'}
+      actions={actions}>
       {noKey && (
-        <Empty title="Add an Anthropic API key to run answer checks">
-          Claude answers each question with live web search; Studio records whether the answer names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
-          <div style={{ marginTop: '10px' }}><a class="btn primary" href="#/settings?i=anthropic">Open Claude settings</a></div>
+        <Empty title="Add an API key to run answer checks">
+          Each assistant answers your questions with live web search; Kauzl records whether it names {a.terms[0] || 'your product'}, cites your site, and who else it cites.
+          Claude uses an Anthropic key; ChatGPT, Gemini, Perplexity and Grok share one OpenRouter key.
+          <div class="row mt-10 gap-8">
+            <a class="btn primary" href="#/settings?i=openrouter">Add an OpenRouter key</a>
+            <a class="btn" href="#/settings?i=anthropic">Add an Anthropic key</a>
+          </div>
         </Empty>
       )}
+      {!noKey && !a.sample && (
+        <div class="ai-engines" aria-label="Named by each assistant (latest answer per question)">
+          {asked.map((e) => (
+            <div key={e.key} class="ai-engine" title={e.model || ''}>
+              <span class="small muted">{e.label}</span>
+              <b>{e.asked ? `${e.named}/${e.asked}` : '—'}</b>
+              <span class="small muted">{e.asked ? `named · cited ${e.cited}` : 'not asked yet'}</span>
+            </div>
+          ))}
+          {!(a.engines || []).some((e) => e.via === 'openrouter') && <a class="ai-engine add" href="#/settings?i=openrouter"><b>+</b><span class="small">Add ChatGPT, Gemini, Perplexity</span></a>}
+        </div>
+      )}
       {editing && (
-        <form class="stack" onSubmit={save} style={{ gap: '8px', marginBottom: '12px' }}>
+        <form class="stack gap-8 mb-12" onSubmit={save}>
           <textarea rows={Math.max(4, a.prompts.length + 1)} value={draft} onInput={(e) => setDraft(e.currentTarget.value)} aria-label="Questions, one per line" />
           <div class="row">
             <button class="btn primary" type="submit">Save questions</button>
@@ -258,10 +283,10 @@ function AnswerChecks({ site, initial, onDone }) {
           </div>
         </form>
       )}
-      {msg && <p class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {msg && <p class={`small ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
       {fromFile ? (
         <p class="note">
-          These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in Setup</a>
+          These questions and your brand names come from the site’s repo file. <a href={`#/site/${site.id}/setup`}>Change them in the site’s settings</a>
         </p>
       ) : a.from === 'auto' && !site.demo && (
         <p class="note">
@@ -271,32 +296,52 @@ function AnswerChecks({ site, initial, onDone }) {
       )}
 
       <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Question</th><th>Named</th><th>Cited</th><th>Also cited</th><th class="num">Hit rate</th><th>History</th></tr></thead>
+        <table class="data ai-checks">
+          <thead>
+            <tr>
+              <th>Question</th>
+              {engines.map((e) => <th key={e.key} title={e.model || ''}>{e.label}</th>)}
+              <th class="num" title="Assistants that named you in their latest answer">Named by</th>
+              <th class="num" title="Share of every answer, across assistants and runs, that named you">Hit rate</th>
+            </tr>
+          </thead>
           <tbody>
             {a.results.map((q) => {
-              const l = q.latest;
-              const others = l && !l.error ? l.domains.filter((d) => !d.own).slice(0, 3) : [];
+              const any = engines.some((e) => by(q, e.key).latest?.answer);
+              const askedBy = q.askedBy ?? (q.latest && !q.latest.error ? 1 : 0);
+              const namedBy = q.namedBy ?? (q.latest?.mentioned ? 1 : 0);
+              const rate = q.hitRate ?? q.mentionRate;
               return [
-                <tr key={q.prompt} onClick={() => l?.answer && setOpen(open === q.prompt ? '' : q.prompt)} style={l?.answer ? { cursor: 'pointer' } : undefined}>
+                <tr key={q.prompt} onClick={() => any && setOpen(open === q.prompt ? '' : q.prompt)} style={any ? { cursor: 'pointer' } : undefined}>
                   <td>{q.prompt}{q.topic && <div class="small muted">{q.topic}{q.page ? <> · <code>{q.page}</code></> : ''}</div>}</td>
-                  {!l ? <td colSpan={3} class="small muted">Not asked yet</td>
-                    : l.error ? <td colSpan={3} class="small" style={{ color: 'var(--critical-ink)' }}>{l.error}</td>
-                      : <>
-                        <td><Mark on={l.mentioned} /></td>
-                        <td>{l.cited ? <span class="chip good">#{l.rank}</span> : l.inResults ? <span class="chip" title="Found in search results but not cited">seen</span> : <Mark on={false} />}</td>
-                        <td class="small muted">{others.map((d) => d.domain).join(', ') || '—'}</td>
-                      </>}
-                  <td class="num">{q.mentionRate === null ? '—' : formatPercent(q.mentionRate, 0)}</td>
-                  <td><History items={q.history} /></td>
+                  {engines.map((e) => <td key={e.key}><Verdict l={by(q, e.key).latest} /></td>)}
+                  <td class="num">{askedBy ? <span class={namedBy ? 'good' : 'muted'}>{namedBy} of {askedBy}</span> : '—'}</td>
+                  <td class="num">{rate === null || rate === undefined ? '—' : formatPercent(rate, 0)}</td>
                 </tr>,
-                open === q.prompt && l?.answer && (
-                  <tr key={`${q.prompt}:answer`}>
-                    <td colSpan={6}>
-                      <div class="small" style={{ whiteSpace: 'pre-wrap', maxHeight: '320px', overflow: 'auto', color: 'var(--text-2)' }}>{l.answer}</div>
-                      {l.domains.length > 0 && <div class="row" style={{ marginTop: '8px', gap: '4px', flexWrap: 'wrap' }}>
-                        {l.domains.map((d) => <span key={d.domain} class={`chip${d.own ? ' accent' : ''}`}>{d.domain} · {d.citations}</span>)}
-                      </div>}
+                open === q.prompt && (
+                  <tr key={`${q.prompt}:answers`}>
+                    <td colSpan={engines.length + 3}>
+                      <div class="ai-answers">
+                        {engines.map((e) => {
+                          const l = by(q, e.key).latest;
+                          if (!l) return null;
+                          return (
+                            <div key={e.key} class="ai-answer">
+                              <div class="ai-answer-head"><b>{e.label}</b><span class="small muted">{l.model || e.model || ''}</span><Verdict l={l} /></div>
+                              {l.error ? <p class="small text-bad m-0">{l.error}</p> : (
+                                <>
+                                  <div class="small ai-answer-text">{l.answer}</div>
+                                  {l.domains?.length > 0 && (
+                                    <div class="row gap-4 wrap">
+                                      {l.domains.map((d) => <span key={d.domain} class={`chip${d.own ? ' accent' : ''}`}>{d.domain} · {d.citations}</span>)}
+                                    </div>
+                                  )}
+                                </>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </td>
                   </tr>
                 ),
@@ -305,9 +350,9 @@ function AnswerChecks({ site, initial, onDone }) {
           </tbody>
         </table>
       </div>
-      <p class="note" style={{ marginBottom: 0 }}>
-        Each check asks {a.model || 'Claude'} with web search, as a neutral assistant that doesn’t know whose site it is. “Named” matches {a.terms.slice(0, 4).map((t) => `“${t}”`).join(', ')}.
-        Answers vary run to run, so the hit rate across runs matters more than one result. A run costs roughly $0.05–0.20 per question in API credits.
+      <p class="note mb-0">
+        Each assistant answers with its own web search, as a neutral assistant that doesn’t know whose site it is. “Named” matches {a.terms.slice(0, 4).map((t) => `“${t}”`).join(', ')}; <span class="chip good">#2</span> means it cited your site, second among the sites it cited; “seen” means your site was in its search results but not cited.
+        Answers vary run to run, so the hit rate matters more than one result. Per question, Claude costs roughly $0.05–0.20 and each OpenRouter assistant $0.01–0.05.
         {!site.demo && <> <WeeklyToggle on={a.weekly} onChange={(weekly) => api.post('/ai-search/settings', { weekly }).then(() => setA({ ...a, weekly }))} /></>}
       </p>
     </Card>
@@ -322,20 +367,12 @@ function WeeklyToggle({ on, onChange }) {
   );
 }
 
-function Mark({ on }) {
-  return on
-    ? <span class="chip good" aria-label="yes">Yes</span>
-    : <span class="small muted" aria-label="no">No</span>;
-}
-
-function History({ items }) {
-  if (!items.length) return <span class="small muted">—</span>;
-  return (
-    <span style={{ display: 'inline-flex', gap: '3px' }} aria-label={`${items.filter((h) => h.mentioned).length} of ${items.length} runs named you`}>
-      {items.map((h) => (
-        <span key={h.ts} title={`${new Date(h.ts).toLocaleDateString()}: ${h.cited ? `cited #${h.rank}` : h.mentioned ? 'named' : 'not named'}`}
-          style={{ width: '8px', height: '8px', borderRadius: '50%', background: h.cited ? 'var(--good)' : h.mentioned ? 'var(--series-1)' : 'var(--border)' }} />
-      ))}
-    </span>
-  );
+// One assistant's latest answer to one question.
+function Verdict({ l }) {
+  if (!l) return <span class="small muted">—</span>;
+  if (l.error) return <span class="small text-bad" title={l.error}>error</span>;
+  if (l.cited) return <span class="chip good" title={l.mentioned ? 'Named you and cited your site' : 'Cited your site'}>{l.mentioned ? 'Named · ' : ''}#{l.rank}</span>;
+  if (l.mentioned) return <span class="chip good">Named</span>;
+  if (l.inResults) return <span class="chip" title="Your site was in its search results but not named or cited">seen</span>;
+  return <span class="small muted">No</span>;
 }

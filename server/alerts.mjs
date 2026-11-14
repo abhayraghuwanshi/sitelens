@@ -9,7 +9,7 @@
 
 import { execFile } from 'node:child_process';
 import { DatabaseSync } from 'node:sqlite';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { ValidationError } from './store.mjs';
 
@@ -161,7 +161,7 @@ const pct = (v) => (Number.isFinite(v) ? `${v >= 0 ? '+' : ''}${Math.round(v * 1
 const num = (v) => (Number.isInteger(v) ? v.toLocaleString('en-US') : Number(v).toLocaleString('en-US', { maximumFractionDigits: 1 }));
 
 export function digestText(digest) {
-  const lines = [`SiteLens digest · ${digest.day}`];
+  const lines = [`Kauzl digest · ${digest.day}`];
   for (const s of digest.sites) {
     if (s.error) lines.push(`• ${s.label}: ${s.error}`);
     else lines.push(`• ${s.label}: ${num(s.sessions)} sessions (${pct(s.sessionsChange)} vs 7d), ${num(s.users)} users${s.clicks !== undefined ? `, ${num(s.clicks)} search clicks (${s.clicksDay})` : ''}`);
@@ -175,14 +175,53 @@ export function digestText(digest) {
   return lines.join('\n');
 }
 
+/* ---------- Desktop notifications ---------- */
+
+// What a desktop notification says, in macOS's three parts: the title names
+// what it's about, the subtitle what happened, the body the detail. Several
+// items go one per line, never run together on one.
+const clip = (text, n) => (text.length > n ? `${text.slice(0, n - 1).trimEnd()}…` : text);
+const dayName = (day) => new Date(`${day}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+export function alertNotice(fresh) {
+  if (fresh.length === 1) {
+    const [a] = fresh;
+    const label = a.subject?.label || '';
+    // "New Tab by Cooldesk: users down 3 (-6%)" → title the label, subtitle the rest.
+    const what = label && a.title.startsWith(`${label}: `) ? a.title.slice(label.length + 2) : a.title;
+    return { title: label && what !== a.title ? label : 'Kauzl alert', subtitle: clip(what, 90), body: a.detail || '' };
+  }
+  const lines = fresh.slice(0, 3).map((a) => `• ${clip(a.title, 70)}`);
+  if (fresh.length > 3) lines.push(`and ${fresh.length - 3} more in Alerts`);
+  return { title: 'Kauzl', subtitle: `${fresh.length} new alerts`, body: lines.join('\n') };
+}
+
+export function digestNotice(digest) {
+  const lines = [];
+  for (const s of digest.sites) {
+    if (s.error) lines.push(`${s.label}: couldn’t read`);
+    else lines.push(`${s.label}: ${num(s.sessions)} visits${Number.isFinite(s.sessionsChange) ? ` (${pct(s.sessionsChange)})` : ''}`);
+  }
+  for (const e of digest.extensions) if (e.users !== null) lines.push(`${e.label}: ${num(e.users)} users`);
+  const shown = lines.slice(0, 3);
+  if (lines.length > 3) shown.push(`and ${lines.length - 3} more`);
+  const alerts = digest.alerts.length;
+  return {
+    title: 'Kauzl daily digest',
+    subtitle: `${dayName(digest.day)}${alerts ? ` · ${alerts} alert${alerts === 1 ? '' : 's'}` : ''}`,
+    body: shown.join('\n') || 'No traffic to report.',
+  };
+}
+
 /* ---------- Delivery ---------- */
 
 // argv keeps the text out of the AppleScript source, so nothing needs escaping.
-export function desktopNotify(title, body, { exec = execFile, platform = process.platform } = {}) {
+// macOS shows the title and subtitle on one line each and about two lines of body.
+export function desktopNotify(title, body, { subtitle = '', exec = execFile, platform = process.platform } = {}) {
   if (platform !== 'darwin') return Promise.resolve({ ok: false, error: 'Desktop notifications need macOS.' });
-  const script = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv)\nend run';
+  const script = 'on run argv\ndisplay notification (item 2 of argv) with title (item 1 of argv) subtitle (item 3 of argv)\nend run';
   return new Promise((resolve) => {
-    exec('osascript', ['-e', script, String(title).slice(0, 120), String(body).slice(0, 400)], { timeout: 10_000 }, (err) =>
+    exec('osascript', ['-e', script, String(title).slice(0, 120), String(body).slice(0, 400), String(subtitle).slice(0, 120)], { timeout: 10_000 }, (err) =>
       resolve(err ? { ok: false, error: err.message } : { ok: true }));
   });
 }
@@ -193,7 +232,7 @@ export async function postWebhook(url, text, fetchImpl = fetch) {
     const res = await fetchImpl(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ text, content: text.slice(0, 1900), username: 'SiteLens Studio' }),
+      body: JSON.stringify({ text, content: text.slice(0, 1900), username: 'Kauzl' }),
       signal: AbortSignal.timeout(10_000),
     });
     return res.ok ? { ok: true } : { ok: false, error: `Webhook answered ${res.status}.` };
@@ -220,7 +259,7 @@ export function createAlerts({
   log = console,
 }) {
   const deliver = notify || {
-    desktop: (title, body) => desktopNotify(title, body),
+    desktop: (title, body, opts) => desktopNotify(title, body, opts),
     webhook: (url, text) => postWebhook(url, text, fetchImpl),
   };
   let running = null;
@@ -571,13 +610,13 @@ export function createAlerts({
     const result = {};
     const parts = [];
     if (fresh.length) {
-      const title = fresh.length === 1 ? 'SiteLens alert' : `SiteLens: ${fresh.length} new alerts`;
-      const body = fresh.length === 1 ? `${fresh[0].title}. ${fresh[0].detail}` : fresh.map((a) => a.title).join(' · ');
-      if (cfg.desktop) result.desktop = await deliver.desktop(title, body);
+      const n = alertNotice(fresh);
+      if (cfg.desktop) result.desktop = await deliver.desktop(n.title, n.body, { subtitle: n.subtitle });
       parts.push(fresh.map((a) => `⚠️ ${a.title} — ${a.detail}`).join('\n'));
     }
     if (digest) {
-      if (cfg.desktop) result.digestDesktop = await deliver.desktop(`SiteLens digest · ${digest.day}`, digest.text.split('\n').slice(1, 4).join(' · '));
+      const n = digestNotice(digest);
+      if (cfg.desktop) result.digestDesktop = await deliver.desktop(n.title, n.body, { subtitle: n.subtitle });
       parts.push(digest.text);
     }
     if (cfg.webhookUrl && parts.length) result.webhook = await deliver.webhook(cfg.webhookUrl, parts.join('\n\n'));
@@ -605,12 +644,14 @@ export function createAlerts({
       });
       return cfg;
     },
-    async feed({ limit = 200 } = {}) {
+    // `site`: only alerts about that site, its product's repos or its extensions.
+    async feed({ limit = 200, site = '' } = {}) {
       const s = await store.get();
-      const alerts = (s.alerts || []).slice(0, limit);
+      const all = tagSites(s.alerts || [], s.products || []);
+      const mine = site ? all.filter((a) => a.site === site) : all;
       return {
-        alerts,
-        unread: (s.alerts || []).filter((a) => !a.read).length,
+        alerts: mine.slice(0, limit),
+        unread: mine.filter((a) => !a.read).length,
         digest: s.alertDigests?.[0] || null,
         digests: (s.alertDigests || []).map(({ day, at }) => ({ day, at })),
         lastRun: s.alertState?.lastRun || null,
@@ -618,15 +659,25 @@ export function createAlerts({
         labels: RULE_LABELS,
       };
     },
+    // Unread count overall and per site, for the sidebar.
     async unread() {
-      return ((await store.get()).alerts || []).filter((a) => !a.read).length;
+      const s = await store.get();
+      const bySite = {};
+      let unread = 0;
+      for (const a of tagSites(s.alerts || [], s.products || [])) {
+        if (a.read) continue;
+        unread++;
+        if (a.site) bySite[a.site] = (bySite[a.site] || 0) + 1;
+      }
+      return { unread, bySite };
     },
-    async markRead({ ids = null, all = false } = {}) {
+    async markRead({ ids = null, all = false, site = '' } = {}) {
       const set = new Set(ids || []);
       let changed = 0;
       await store.update((s) => {
+        const sites = new Map(tagSites(s.alerts || [], s.products || []).map((a) => [a.id, a.site]));
         for (const a of s.alerts || []) {
-          if (!a.read && (all || set.has(a.id))) {
+          if (!a.read && ((all && (!site || sites.get(a.id) === site)) || set.has(a.id))) {
             a.read = true;
             changed++;
           }
@@ -636,9 +687,9 @@ export function createAlerts({
     },
     async test() {
       const cfg = await settings();
-      const text = 'Test notification from SiteLens Studio — alerts will arrive like this.';
+      const text = 'Test notification from Kauzl — alerts will arrive like this.';
       return {
-        desktop: cfg.desktop ? await deliver.desktop('SiteLens Studio', text) : { ok: false, error: 'Desktop notifications are off.' },
+        desktop: cfg.desktop ? await deliver.desktop('Kauzl', 'Alerts arrive like this: what it’s about, what happened, then the detail.', { subtitle: 'Test notification' }) : { ok: false, error: 'Desktop notifications are off.' },
         webhook: cfg.webhookUrl ? await deliver.webhook(cfg.webhookUrl, text) : { ok: false, error: 'No webhook URL set.' },
       };
     },
@@ -661,15 +712,31 @@ function change(series) {
   return avg ? (series.at(-1) - avg) / avg : null;
 }
 
+// Which site an alert belongs to: its own site, or the site of the product that
+// lists the repo or extension. Mentions and unlinked repos stay workspace-wide ('').
+export function tagSites(alerts, products) {
+  const owner = new Map();
+  for (const p of products) {
+    if (!p.siteId) continue;
+    for (const r of p.repos || []) owner.set(`repo:${r.toLowerCase()}`, p.siteId);
+    for (const e of p.extensionIds || []) owner.set(`extension:${e}`, p.siteId);
+  }
+  return alerts.map((a) => {
+    const sub = a.subject || {};
+    const site = sub.type === 'site' ? sub.id : owner.get(`${sub.type}:${sub.type === 'repo' ? String(sub.id).toLowerCase() : sub.id}`) || '';
+    return { ...a, site };
+  });
+}
+
 function alert(t, fields) {
   return { id: `${t.toString(36)}-${Math.random().toString(36).slice(2, 8)}`, at: t, read: false, ...fields };
 }
 
 export function alertRoutes(alerts) {
   return [
-    ['GET', /^\/api\/alerts$/, async ({ query }) => alerts.feed({ limit: Number(query.get('limit')) || 200 })],
-    ['GET', /^\/api\/alerts\/unread$/, async () => ({ unread: await alerts.unread() })],
-    ['POST', /^\/api\/alerts\/read$/, async ({ body }) => alerts.markRead({ ids: Array.isArray(body.ids) ? body.ids.map(String) : null, all: Boolean(body.all) })],
+    ['GET', /^\/api\/alerts$/, async ({ query }) => alerts.feed({ limit: Number(query.get('limit')) || 200, site: query.get('site') || '' })],
+    ['GET', /^\/api\/alerts\/unread$/, async () => alerts.unread()],
+    ['POST', /^\/api\/alerts\/read$/, async ({ body }) => alerts.markRead({ ids: Array.isArray(body.ids) ? body.ids.map(String) : null, all: Boolean(body.all), site: String(body.site || '') })],
     ['GET', /^\/api\/alerts\/settings$/, async () => alerts.settings()],
     ['POST', /^\/api\/alerts\/settings$/, async ({ body }) => alerts.saveSettings(body)],
     ['POST', /^\/api\/alerts\/run$/, async ({ body }) => alerts.run({ daily: body.daily !== false, digest: Boolean(body.digest) })],

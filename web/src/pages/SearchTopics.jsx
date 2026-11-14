@@ -28,10 +28,10 @@ export function SearchTopics({ site, range }) {
   if (!topics.length) {
     return (
       <Card title="Topics" sub="What the site wants to be found for">
-        <p class="note" style={{ margin: 0 }}>
-          Add topics in Setup (each with the page that should rank and the queries it should win), and this shows how each one does,
+        <p class="note m-0">
+          Add topics in the site’s settings (each with the page that should rank and the queries it should win), and this shows how each one does,
           which page Google really ranks, and which targets it never shows.{' '}
-          <a href={setup}>Add topics in Setup</a>
+          <a href={setup}>Add topics</a>
         </p>
       </Card>
     );
@@ -83,7 +83,7 @@ export function SearchTopics({ site, range }) {
       </div>
       <p class="note" style={{ margin: '8px 16px 12px' }}>
         Queries go to the first topic that matches, after Brand, the same as on Demand. “About +N clicks” uses a generic CTR-by-position curve: a way to rank the work, not a forecast.{' '}
-        <a href={setup}>Change topics in Setup</a>
+        <a href={setup}>Change topics</a>
       </p>
     </Card>
   );
@@ -91,7 +91,7 @@ export function SearchTopics({ site, range }) {
 
 function TopicDetail({ t }) {
   return (
-    <div class="stack" style={{ gap: '10px' }}>
+    <div class="stack gap-10">
       {t.targets.length > 0 && (
         <table class="data">
           <thead><tr><th>Target query</th><th>Where</th><th class="num">Pos.</th><th class="num">Impr.</th><th class="num">Clicks</th><th>Page Google ranks</th></tr></thead>
@@ -105,7 +105,7 @@ function TopicDetail({ t }) {
                 <td class="num">{x.clicks == null ? '—' : formatNumber(x.clicks)}</td>
                 <td class="small">
                   {x.page ? <code>{x.page}</code> : <span class="muted">—</span>}
-                  {x.wrongPage && <span style={{ color: 'var(--critical-ink)' }}> · not {t.page}</span>}
+                  {x.wrongPage && <span class="text-bad"> · not {t.page}</span>}
                   {x.potential > 0 && <span class="muted"> · top 3 ≈ +{formatNumber(x.potential)}</span>}
                 </td>
               </tr>

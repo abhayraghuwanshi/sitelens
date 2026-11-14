@@ -4,6 +4,9 @@
 // came from. New storage kinds are new entries in CONNECTORS, not new screens.
 //
 // Connectors:
+// Metrics come from Settings (stored in studio.json) or from a site's
+// .sitelens.yml `metrics:` (read-only here; edit the file).
+//
 //  - d1: Cloudflare D1 over REST, POST /accounts/{account}/d1/database/{db}/query
 //    with { sql, params }. Token: Settings, else CLOUDFLARE_API_TOKEN in .env.
 //
@@ -12,7 +15,7 @@
 // epoch milliseconds, {{start_s}} / {{end_s}} epoch seconds. One query covers
 // the range and the period before it, so the delta costs nothing extra.
 
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
 
@@ -21,7 +24,7 @@ const TTL = 15 * 60_000;
 const MAX_ROWS = 20_000;
 const TOP_DIMENSIONS = 5;
 const RANGE_DAYS = { today: 1, '7d': 7, '28d': 28, '90d': 90, '1y': 365 };
-const SUMMARIES = ['sum', 'average', 'latest'];
+export const SUMMARIES = ['sum', 'average', 'latest'];
 
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const text = (v, max = 200) => String(v ?? '').trim().slice(0, max);
@@ -31,8 +34,8 @@ export const CONNECTORS = {
     label: 'Cloudflare D1',
     secret: { key: 'cloudflareToken', env: 'CLOUDFLARE_API_TOKEN', label: 'Cloudflare API token' },
     fields: [
-      { key: 'accountId', label: 'Account ID', pattern: /^[a-f0-9]{32}$/, hint: '32 hex characters, on the right of the Cloudflare dashboard’s Workers & Pages page.' },
-      { key: 'databaseId', label: 'Database ID', pattern: /^[a-f0-9-]{36}$/, hint: 'A UUID: Storage & Databases → D1 → your database, or `database_id` in wrangler.toml.' },
+      { key: 'accountId', yaml: 'account', label: 'Account ID', pattern: /^[a-f0-9]{32}$/, hint: '32 hex characters, on the right of the Cloudflare dashboard’s Workers & Pages page.' },
+      { key: 'databaseId', yaml: 'database', label: 'Database ID', pattern: /^[a-f0-9-]{36}$/, hint: 'A UUID: Storage & Databases → D1 → your database, or `database_id` in wrangler.toml.' },
     ],
     async run({ source, sql, params, secret, fetchImpl }) {
       const url = `https://api.cloudflare.com/client/v4/accounts/${source.accountId}/d1/database/${source.databaseId}/query`;
@@ -65,9 +68,13 @@ export const CONNECTORS = {
 
 // ---------- window, placeholders and SQL guard ----------
 
-// UTC days ending today; `week` is Monday through today. The previous window
-// has the same length and ends the day before.
+// UTC days ending today; `week` is Monday through today, `yesterday` the one day
+// before today. The previous window has the same length and ends the day before.
 export function metricRange(rangeKey = '28d', now = Date.now()) {
+  if (rangeKey === 'yesterday') {
+    const r = metricRange('today', now - DAY);
+    return { ...r, key: 'yesterday' };
+  }
   const today = Date.parse(`${isoDay(now)}T00:00:00Z`);
   const days = rangeKey === 'week' ? ((new Date(today).getUTCDay() + 6) % 7) + 1 : RANGE_DAYS[rangeKey] || 28;
   const start = today - (days - 1) * DAY;
@@ -201,7 +208,7 @@ export function normalizeMetric(input = {}, siteIds = []) {
 
 // ---------- service ----------
 
-export function createCustomMetrics({ store, env = process.env, fetchImpl = fetch, now = () => Date.now() }) {
+export function createCustomMetrics({ store, siteConfig = null, env = process.env, fetchImpl = fetch, now = () => Date.now() }) {
   const cache = createCache();
 
   async function secretFor(type) {
@@ -212,16 +219,35 @@ export function createCustomMetrics({ store, env = process.env, fetchImpl = fetc
       throw new EngineError(`No ${secret.label} yet.`, {
         status: 409,
         kind: 'needs-metric-token',
-        hint: `Add it in Settings → Custom metrics, or set ${secret.env} in .env and restart Studio.`,
+        hint: `Add it in Settings → Custom metrics, or set ${secret.env} in .env and restart Kauzl.`,
       });
     }
     return value;
   }
 
+  // A file's metric keeps the same id while its label does, so links to it hold.
+  const fileId = (siteId, label) => createHash('sha1').update(`${siteId}\n${label.toLowerCase()}`).digest('hex').slice(0, 8);
+
+  async function fromFiles(sites) {
+    if (!siteConfig) return [];
+    const per = await Promise.all(sites.filter((x) => !x.demo).map(async (site) => {
+      const config = await siteConfig.applied(site);
+      return (config?.metrics || []).map((m) => ({ ...m, id: fileId(site.id, m.label), siteId: site.id, from: 'file' }));
+    }));
+    return per.flat();
+  }
+
   async function list() {
     const s = await store.get();
-    const siteIds = new Set((await store.sites()).map((x) => x.id));
-    return (s.metrics || []).filter((m) => siteIds.has(m.siteId));
+    const sites = await store.sites();
+    const siteIds = new Set(sites.map((x) => x.id));
+    return [...(s.metrics || []).filter((m) => siteIds.has(m.siteId)), ...(await fromFiles(sites))];
+  }
+
+  async function readOnly(id) {
+    if ((await list()).some((m) => m.id === id && m.from === 'file')) {
+      throw new EngineError('This metric comes from the site’s .sitelens.yml; change it there.', { status: 409, kind: 'validation' });
+    }
   }
 
   async function status() {
@@ -252,6 +278,7 @@ export function createCustomMetrics({ store, env = process.env, fetchImpl = fetc
 
   async function save(input) {
     const metric = normalizeMetric(input, (await store.sites()).map((x) => x.id));
+    await readOnly(metric.id);
     await store.update((s) => {
       s.metrics = [...(s.metrics || [])];
       const i = s.metrics.findIndex((m) => m.id === metric.id);
@@ -263,6 +290,7 @@ export function createCustomMetrics({ store, env = process.env, fetchImpl = fetc
   }
 
   async function remove(id) {
+    await readOnly(id);
     await store.update((s) => {
       s.metrics = (s.metrics || []).filter((m) => m.id !== id);
     });
@@ -297,7 +325,7 @@ export function createCustomMetrics({ store, env = process.env, fetchImpl = fetc
     const metrics = (await list()).filter((m) => m.siteId === siteId);
     return {
       metrics: await Promise.all(metrics.map(async (m) => {
-        const def = { id: m.id, label: m.label, unit: m.unit, summary: m.summary, source: m.source.type };
+        const def = { id: m.id, label: m.label, unit: m.unit, summary: m.summary, source: m.source.type, ...(m.from ? { from: m.from } : {}) };
         try {
           return { ...def, ...(await run(m, rangeKey, opts)) };
         } catch (err) {

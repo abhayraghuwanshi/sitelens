@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.2.0",
   "type": "module",
-  "description": "SiteLens Studio — GA4, Search Console and GA4 BigQuery export analytics in a local web dashboard.",
+  "description": "Kauzl — did what you shipped work? GA4, Search Console, GitHub and AI answers on one timeline, in a local web dashboard.",
   "engines": {
     "node": ">=22"
   },
@@ -12,16 +12,24 @@
     "build": "vite build",
     "start": "vite build && node --no-warnings=ExperimentalWarning server/index.mjs",
     "serve": "node --no-warnings=ExperimentalWarning server/index.mjs",
+    "hosted": "node --no-warnings=ExperimentalWarning server/hosted.mjs",
     "test": "node --no-warnings=ExperimentalWarning --test",
     "sync": "node scripts/sync-shared.mjs",
     "check-sql": "node scripts/check-sql.mjs",
+    "check-styles": "node scripts/check-styles.mjs",
+    "leads": "node scripts/reddit-leads.mjs",
+    "post": "node scripts/post.mjs",
     "screenshot": "node scripts/screenshot.mjs",
     "trailer": "node scripts/record-trailer.mjs",
     "trailer:video": "node scripts/record-video.mjs",
     "desktop:stage": "vite build && node scripts/stage-desktop.mjs",
     "desktop:build": "npm run desktop:stage && tauri build",
-    "desktop:dev": "npm run desktop:stage && tauri dev",
-    "mcp": "node --no-warnings=ExperimentalWarning server/mcp.mjs"
+    "desktop:dev": "node scripts/desktop-live.mjs",
+    "mcp": "node --no-warnings=ExperimentalWarning server/mcp.mjs",
+    "desktop:preview": "npm run desktop:stage && tauri dev",
+    "tools:build": "node tools/build.mjs",
+    "tools:dev": "node tools/build.mjs && npx --yes serve tools/dist",
+    "tools:deploy": "node tools/build.mjs && vercel deploy tools/dist --prod --yes --project kauzl-tools"
   },
   "devDependencies": {
     "@preact/preset-vite": "^2.10.6",
@@ -32,6 +40,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^1.3.0",
     "@fontsource-variable/inter": "^5.3.0",
+    "undici": "^8.9.0",
     "yaml": "^2.9.1"
   }
 }

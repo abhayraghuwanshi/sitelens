@@ -188,6 +188,41 @@ re-check stay in Settings.
 `page` and `targets` aren't shown yet. They're for the upcoming topic view on the
 Google page (wrong page ranking, missing pages, target queries that drop).
 
+### `metrics` (up to 12)
+
+Custom metrics: daily numbers from the site's own database (installs, pings,
+signups, revenue), charted on the site's Overview next to GA4. They show up in
+Settings → Custom metrics marked "from .sitelens.yml", read-only there.
+
+- `label`: shown in Studio, unique in the file.
+- `unit`: optional, like `installs`.
+- `summary`: `sum` (the default) for counts, `average` for daily actives,
+  `latest` for running totals.
+- The source, one of:
+  - `d1: { account, database }`: Cloudflare D1. `account` is the 32-character
+    account ID (`wrangler whoami`), `database` the `database_id` in wrangler.toml.
+- `sql`: one SELECT returning `day` and `value` columns, and optionally
+  `dimension` (the top 5 are charted). `{{start}}` / `{{end}}` are bound to
+  `'YYYY-MM-DD'` days (end exclusive), `{{start_ms}}` / `{{end_ms}}` and
+  `{{start_s}}` / `{{end_s}}` to epoch milliseconds and seconds.
+
+The source's token is a credential, so it stays out of the file: Settings → Custom
+metrics, or `CLOUDFLARE_API_TOKEN` in Studio's `.env` (Account → D1 → Read).
+A YAML anchor saves repeating the source:
+
+```yaml
+metrics:
+  - label: Daily active installs
+    summary: average
+    d1: &db { account: 0123456789abcdef0123456789abcdef, database: 0f1e2d3c-4b5a-6978-8796-a5b4c3d2e1f0 }
+    sql: |
+      SELECT date AS day, count(*) AS value FROM pings
+      WHERE date >= {{start}} AND date < {{end}} GROUP BY 1
+  - label: New installs
+    d1: *db
+    sql: SELECT date AS day, sum(first_run) AS value FROM pings WHERE date >= {{start}} AND date < {{end}} GROUP BY 1
+```
+
 ## Checking a file
 
 - In Studio: the site's Setup page shows errors, warnings, and which events

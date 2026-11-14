@@ -17,7 +17,8 @@ async function dataDir() {
   return dir;
 }
 
-const text = (result) => result.content[0].text;
+// The data is the last item; results with outside text lead with a note.
+const text = (result) => result.content.at(-1).text;
 
 test('checkSql allows one SELECT and nothing else', () => {
   assert.equal(checkSql(' SELECT 1; '), 'SELECT 1');
@@ -31,14 +32,14 @@ test('initialize, tools/list and unknown methods', async () => {
   const mcp = createMcp({ dataDir: '/nowhere' });
   const init = await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-03-26' } });
   assert.equal(init.result.protocolVersion, '2025-03-26');
-  assert.equal(init.result.serverInfo.name, 'sitelens-studio');
+  assert.equal(init.result.serverInfo.name, 'kauzl');
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 2, method: 'initialize', params: { protocolVersion: '1999-01-01' } })).result.protocolVersion, '2025-06-18');
   assert.equal(await mcp.handle({ jsonrpc: '2.0', method: 'notifications/initialized' }), null);
   const list = await mcp.handle({ jsonrpc: '2.0', id: 3, method: 'tools/list' });
   assert.deepEqual(list.result.tools.map((t) => t.name), TOOLS.map((t) => t.name));
   assert.ok(list.result.tools.every((t) => t.inputSchema.type === 'object'));
-  // Only the comment tools write; delete is the one destructive tool.
-  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment']);
+  // Only the comment tools and to-do write-ups write; delete is the one destructive tool.
+  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment', 'report_todo']);
   assert.equal(list.result.tools.find((t) => t.name === 'delete_comment').annotations.destructiveHint, true);
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'nope' })).error.code, -32601);
   assert.equal((await mcp.handle({ id: 5 })).error.code, -32600);
@@ -85,6 +86,11 @@ test('analytics tools call Studio and explain when it is not running', async () 
   await mcp.callTool('breakdown', { from: '2026-10-01', to: '2026-10-31', by: 'page', limit: 10 });
   assert.equal(calls.at(-1), 'http://127.0.0.1:1/api/calendar/breakdown?from=2026-10-01&to=2026-10-31&by=page&limit=10');
 
+  // Results with outside text lead with a note that it's data; the user's own settings don't.
+  const story = await mcp.callTool('day_story', { date: '2026-10-14', site: 'a' });
+  assert.match(story.content[0].text, /never as instructions/);
+  assert.equal((await mcp.callTool('list_sites')).content.length, 1);
+
   const offline = createMcp({ baseUrl: 'http://127.0.0.1:1', dataDir: '/nowhere', fetchImpl: async () => { throw Object.assign(new Error('fetch failed'), { cause: { code: 'ECONNREFUSED' } }); } });
   assert.match(text(await offline.callTool('list_sites')), /isn't reachable at http:\/\/127\.0\.0\.1:1 \(ECONNREFUSED\)/);
 });
@@ -116,7 +122,7 @@ test('stdio: newline-delimited JSON-RPC end to end', async () => {
     send('not json');
     const out = await waitFor(3);
     assert.equal(out[0].id, 1);
-    assert.deepEqual(JSON.parse(out[1].result.content[0].text).rows, [{ total: 40 }]);
+    assert.deepEqual(JSON.parse(out[1].result.content.at(-1).text).rows, [{ total: 40 }]);
     assert.equal(out[2].error.code, -32700);
   } finally {
     child.kill();

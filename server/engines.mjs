@@ -22,9 +22,13 @@ export class EngineError extends Error {
 const API_TTL = 5 * 60_000;
 const LIVE_TTL = 40_000;
 const WAREHOUSE_TTL = 60 * 60_000;
+// Past its TTL, a result still shows (up to this age) while a fresh one loads.
+const STALE_FOR = 24 * 60 * 60_000;
 
-export function createEngines({ auth, bigquery }) {
-  const cache = createCache();
+export function createEngines({ auth, bigquery, cacheDb = null }) {
+  const cache = createCache({ db: cacheDb, name: 'engines', staleFor: cacheDb ? STALE_FOR : 0 });
+  // Real-time numbers are never shown stale.
+  const liveCache = createCache();
 
   function apiArgs(site, token, rangeKey) {
     if (!site.propertyId) throw new EngineError('Link a GA4 property to this site to see API reports.', { kind: 'needs-property' });
@@ -60,7 +64,7 @@ export function createEngines({ auth, bigquery }) {
   }
 
   async function live(site) {
-    return cache.wrap(`live:${site.id}`, LIVE_TTL, false, async () => {
+    return liveCache.wrap(`live:${site.id}`, LIVE_TTL, false, async () => {
       if (site.demo) return demoLive('Home', site.host);
       const token = await auth.token();
       return fetchRealtime({ token, propertyId: site.propertyId, streamName: site.streamName });
@@ -121,7 +125,8 @@ export function createEngines({ auth, bigquery }) {
         kind: 'needs-warehouse',
       });
     }
-    return site.bq;
+    // The site's leave-out rule travels with its BigQuery settings into every query.
+    return site.leaveOut ? { ...site.bq, leaveOut: site.leaveOut } : site.bq;
   }
 
   // Resolves which export tables cover the range. Listing tables is free metadata;
@@ -246,7 +251,10 @@ export function createEngines({ auth, bigquery }) {
       result = await run(site, sql.cohortsSql(requireBq(site), range), flags);
       rows = result.rows.map((r) => ({ ...r, cohort: String(r.cohort) }));
     }
-    return { ...meta(site, range, [result]), cohorts: normalizeCohorts(rows) };
+    // The export can start after the range does: say from when, and mark the
+    // week the data starts in as partial.
+    const first = range.firstDay ? `${range.firstDay.slice(0, 4)}-${range.firstDay.slice(4, 6)}-${range.firstDay.slice(6, 8)}` : '';
+    return { ...meta(site, range, [result]), dataFrom: first, cohorts: normalizeCohorts(rows, first) };
   }
 
   async function sessions(site, rangeKey, options, flags) {
@@ -273,7 +281,35 @@ export function createEngines({ auth, bigquery }) {
         country: r.country || '',
         source: r.source || '',
         medium: r.medium || '',
+        visitSource: r.visit_source || '',
+        system: r.system || '',
+        browser: r.browser && r.browser !== '(not set)' ? r.browser : '',
+        returning: Boolean(r.returning),
       })),
+    };
+  }
+
+  // The totals and top lists behind the sessions list (same filters).
+  async function sessionsSummary(site, rangeKey, options, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), summary: null };
+    const result = await run(site, sql.sessionsSummarySql(requireBq(site), range, options), flags);
+    const r = result.rows[0] || {};
+    const top = (list) => (list || []).filter((f) => f && f.value != null).map((f) => ({ name: String(f.value), n: Number(f.count) || 0 }));
+    const num = (v) => Number(v) || 0;
+    const lists = {};
+    for (const k of ['landing', 'exit', 'source', 'system', 'browser', 'country']) {
+      const conv = Object.fromEntries(top(r[`conv_${k}`]).map((x) => [x.name, x.n]));
+      lists[k] = top(r[`top_${k}`]).map((x) => ({ ...x, converted: conv[x.name] || 0 }));
+    }
+    return {
+      ...meta(site, range, [result]),
+      summary: {
+        sessions: num(r.sessions), people: num(r.people), returning: num(r.returning),
+        onePage: num(r.one_page), quick: num(r.quick), medianSec: Math.round(num(r.median_us) / 1e6),
+        converted: num(r.converted), convertedReturning: num(r.converted_returning),
+        ...lists,
+      },
     };
   }
 
@@ -282,6 +318,51 @@ export function createEngines({ auth, bigquery }) {
     if (site.demo) return { ...meta(site, range), events: demo.demoEventsCatalog(range).map(eventRow) };
     const result = await run(site, sql.eventsCatalogSql(requireBq(site), range), flags);
     return { ...meta(site, range, [result]), events: result.rows.map(eventRow) };
+  }
+
+  // Journeys by source × landing page; step counts come back as a map.
+  async function journeys(site, rangeKey, goals, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), journeys: [], systems: [] };
+    const bq = requireBq(site);
+    const built = sql.journeysSql(bq, range, goals);
+    const [result, summary] = await Promise.all([run(site, built, flags), run(site, sql.journeysSummarySql(bq, range, goals), flags)]);
+    const top = (list) => Object.fromEntries((list || []).filter((f) => f && f.value != null).map((f) => [String(f.value), Number(f.count) || 0]));
+    return {
+      ...meta(site, range, [result, summary]),
+      // Every visit in the period, by system × browser (not only the listed journeys).
+      systems: summary.rows.map((r) => ({
+        name: r.grp, browser: r.browser, sessions: Number(r.sessions) || 0, engaged: Number(r.engaged) || 0,
+        converted: Number(r.converted) || 0, noReferrer: Number(r.no_referrer) || 0,
+      })),
+      journeys: result.rows.map((r) => ({
+        source: r.source, medium: r.medium, landing: r.landing,
+        sessions: Number(r.sessions) || 0, engaged: Number(r.engaged) || 0, converted: Number(r.converted) || 0,
+        steps: Object.fromEntries(built.steps.map((name, i) => [name, Number(r[`step_${i}`]) || 0])),
+        systems: top(r.systems),
+        systemsConverted: top(r.systems_converted),
+        browsers: top(r.browsers),
+        browsersConverted: top(r.browsers_converted),
+        firstSources: (r.first_sources || []).filter((f) => f && f.value != null).map((f) => ({ source: String(f.value), n: Number(f.count) || 0 })),
+      })),
+    };
+  }
+
+  // How many sessions the leave-out rule removes from the BigQuery views.
+  async function leftOut(site, rangeKey, flags) {
+    const range = await eventsRange(site, rangeKey);
+    if (site.demo || !site.leaveOut?.countries?.length) return { ...meta(site, range), rule: site.leaveOut || null, total: 0, leftOut: 0 };
+    const result = await run(site, sql.leftOutSql(requireBq(site), range), flags);
+    const row = result.rows[0] || {};
+    return { ...meta(site, range, [result]), rule: site.leaveOut, total: Number(row.total) || 0, leftOut: Number(row.left_out) || 0 };
+  }
+
+  // Sessions that reached a step but didn't convert, by device and system.
+  async function leavers(site, rangeKey, goals, flags) {
+    const range = await eventsRange(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), groups: [] };
+    const result = await run(site, sql.leaversSql(requireBq(site), range, goals), flags);
+    return { ...meta(site, range, [result]), groups: leaverGroups(result.rows) };
   }
 
   async function eventDetail(site, rangeKey, name, flags) {
@@ -364,7 +445,11 @@ export function createEngines({ auth, bigquery }) {
     funnel,
     funnelDiscovery,
     cohorts,
+    leavers,
+    leftOut,
+    journeys,
     sessions,
+    sessionsSummary,
     events,
     eventDetail,
     breakdown,
@@ -387,7 +472,21 @@ function normalizeExits(rows) {
   return rows.map((r) => ({ page: r.page, views: Number(r.views) || 0, exits: Number(r.exits) || 0 }));
 }
 
-function normalizeCohorts(rows) {
+// Rows from leaversSql → one entry per group, biggest first, steps as a map.
+export function leaverGroups(rows) {
+  const groups = new Map();
+  for (const r of rows) {
+    const g = groups.get(r.grp) || { group: r.grp, left: 0, quick: 0, converted: 0, steps: {} };
+    if (r.step) g.steps[r.step] = Number(r.n) || 0;
+    else Object.assign(g, { left: Number(r.n) || 0, quick: Number(r.quick) || 0, converted: Number(r.converted) || 0 });
+    groups.set(r.grp, g);
+  }
+  return [...groups.values()].filter((g) => g.left || g.converted).sort((a, b) => b.left - a.left);
+}
+
+// Cohorts by week of first visit. A cohort with no new users in range (people
+// first seen before the data starts, coming back now) is dropped: it has no base.
+export function normalizeCohorts(rows, dataFrom = '') {
   const map = new Map();
   for (const r of rows) {
     const cohort = String(r.cohort).slice(0, 10);
@@ -398,10 +497,12 @@ function normalizeCohorts(rows) {
     map.set(cohort, entry);
   }
   return [...map.values()]
+    .filter((c) => c.size > 0)
     .sort((a, b) => a.cohort.localeCompare(b.cohort))
     .map((c) => ({
       cohort: c.cohort,
       size: c.size,
+      partial: Boolean(dataFrom) && c.cohort < dataFrom,
       cells: Array.from({ length: c.cells.length }, (_, i) => ({
         offset: i,
         users: c.cells[i] || 0,

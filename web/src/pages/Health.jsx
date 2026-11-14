@@ -19,19 +19,21 @@ const stamp = (at) => new Date(at).toLocaleString(undefined, { month: 'short', d
 
 export function Health({ sites, params }) {
   const monitored = sites.filter((s) => s.host);
-  const siteId = params.get('site') || monitored.find((s) => !s.demo)?.id || monitored[0]?.id || '';
+  // From a site (?site=), only that site, with no row of other sites.
+  const scoped = params.get('site') || '';
+  const siteId = scoped || monitored.find((s) => !s.demo)?.id || monitored[0]?.id || '';
   const site = monitored.find((s) => s.id === siteId);
   const [range, setRange] = useState(params.get('range') || '7d');
   const summary = useAsync(() => api.get('/vitals'), [sites.length]);
 
-  if (!monitored.length) return <Empty title="No sites to monitor">Add a site with a host in Settings and Studio starts checking it every 5 minutes.</Empty>;
+  if (!monitored.length) return <Empty title="No sites to monitor">Add a site with a host in Settings and Kauzl starts checking it every 5 minutes.</Empty>;
 
   const healthOf = new Map((summary.data?.sites || []).map((h) => [h.id, h]));
   return (
     <>
       <div class="row" style={{ justifyContent: 'space-between', marginBottom: '16px' }}>
         <div class="health-sites" role="group" aria-label="Site">
-          {monitored.map((s) => (
+          {(scoped ? monitored.filter((s) => s.id === scoped) : monitored).map((s) => (
             <button key={s.id} type="button" class={`btn${s.id === siteId ? ' primary' : ''}`} aria-pressed={s.id === siteId}
               onClick={() => navigate(`/health${qs({ site: s.id, range })}`)}>
               <span class={`dot ${statusClass(healthOf.get(s.id)?.uptime?.last)}`} aria-hidden="true" /> {s.label}
@@ -70,7 +72,7 @@ function SiteHealth({ site, range }) {
   const last = [...buckets].reverse().find((b) => b.checks);
 
   return (
-    <div class="stack" style={{ gap: '16px' }}>
+    <div class="stack gap-16">
       <KpiStrip items={[
         { label: `Uptime · ${d.range.key}`, value: formatPct(uptime.pct), meta: `${uptime.checks} checks${uptime.down ? ` · ${uptime.down} failed` : ''}` },
         { label: 'Avg response', value: uptime.avgMs === null ? '—' : `${uptime.avgMs}ms`, meta: uptime.p95Ms === null ? '' : `p95 ${uptime.p95Ms}ms` },
@@ -88,7 +90,7 @@ function SiteHealth({ site, range }) {
               ))}
             </div>
             <div class="uptime-axis"><span>{stamp(d.range.from)}</span><span>now</span></div>
-            <div style={{ marginTop: '16px' }}>
+            <div class="mt-16">
               <LineChart height={180} labels={buckets.map((b) => labelOf(b.at))}
                 series={[{ label: 'Response time', values: buckets.map((b) => (b.avgMs === null ? NaN : b.avgMs)) }]} area={false}
                 format={(v) => `${Math.round(v)}ms`} tooltipTitle={(i) => stamp(buckets[i].at)} />
@@ -101,14 +103,14 @@ function SiteHealth({ site, range }) {
         actions={!d.demo && <button class="btn" type="button" disabled={run.busy || d.running} onClick={runNow}>
           <Icon name="refresh" size={13} /> {run.busy || d.running ? 'Running PageSpeed…' : 'Run PageSpeed now'}</button>}>
         <div class="stack">
-          {run.msg && <p class="small" style={{ margin: 0, color: run.msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}><Linked text={run.msg.text} /></p>}
+          {run.msg && <p class={`small m-0 ${run.msg.ok ? 'text-good' : 'text-bad'}`}><Linked text={run.msg.text} /></p>}
           <div class="vitals-grid">
             {['lcp', 'inp', 'cls'].map((m) => (
               <VitalTrend key={m} metric={m} headline={vitals[m]} series={crux?.series || []} monthly={crux?.source === 'bigquery'} />
             ))}
           </div>
           {!crux?.series?.length && (
-            <p class="note" style={{ margin: 0 }}>
+            <p class="note m-0">
               {crux?.error ? <Linked text={crux.error} /> : 'No CrUX history yet — it’s fetched with each PageSpeed run.'}
             </p>
           )}
@@ -134,8 +136,8 @@ function SiteHealth({ site, range }) {
                       <td class="num">{formatMetric('fcp', r.fcp)}</td>
                     </>
                   ) : <td colSpan={5} class="small" style={{ color: r?.error ? 'var(--critical-ink)' : undefined }}>{r?.error ? <Linked text={r.error} /> : <span class="muted">Not run yet</span>}</td>}
-                  <td class="small muted" style={{ whiteSpace: 'nowrap' }}>{r ? stamp(r.at) : ''}
-                    {r?.lastError && <div style={{ color: 'var(--critical-ink)' }} title={r.lastError.message}>Last run failed {formatAgo(r.lastError.at)}</div>}</td>
+                  <td class="small muted nowrap">{r ? stamp(r.at) : ''}
+                    {r?.lastError && <div class="text-bad" title={r.lastError.message}>Last run failed {formatAgo(r.lastError.at)}</div>}</td>
                 </tr>
               );
             })}
@@ -161,7 +163,7 @@ function SiteHealth({ site, range }) {
                   <td class="small">{stamp(i.start)}</td>
                   <td class="small">{i.resolvedAt ? duration(i.resolvedAt - i.start) : 'ongoing'}</td>
                   <td class="small">{i.error}</td>
-                  <td class="small">{i.resolvedAt ? <span class="chip good">resolved</span> : <span class="chip" style={{ color: 'var(--critical-ink)' }}>down</span>}</td>
+                  <td class="small">{i.resolvedAt ? <span class="chip good">resolved</span> : <span class="chip text-bad">down</span>}</td>
                 </tr>
               ))}
             </tbody>

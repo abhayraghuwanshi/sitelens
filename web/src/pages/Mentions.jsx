@@ -39,13 +39,13 @@ export function Mentions({ range }) {
 
   return (
     <>
-      <div class="meta-line" style={{ alignItems: 'center' }}>
+      <div class="meta-line items-center">
         <span><Icon name="search" size={13} /> {d.terms.length} search term{d.terms.length === 1 ? '' : 's'}</span>
         <span>{d.lastSync ? `synced ${formatRelative(d.lastSync)}` : 'not synced yet'} · every 30 minutes</span>
         <button class="btn ghost" type="button" disabled={sync.busy || d.syncing} onClick={syncNow}>
           <Icon name="refresh" size={13} /> {sync.busy || d.syncing ? 'Syncing…' : 'Sync now'}
         </button>
-        {sync.msg && <span class="small" style={{ color: sync.msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{sync.msg.text}</span>}
+        {sync.msg && <span class={`small ${sync.msg.ok ? 'text-good' : 'text-bad'}`}>{sync.msg.text}</span>}
       </div>
 
       <SourceStatus sources={d.sources} />
@@ -68,9 +68,9 @@ export function Mentions({ range }) {
             {d.items.map((m) => <MentionRow key={m.id} m={m} />)}
           </ul>
         ) : (
-          <div style={{ padding: '16px' }}>
+          <div class="pad-16">
             <Empty title="No mentions in this range">
-              Studio searches for {d.terms.slice(0, 4).map((t) => `“${t.term}”`).join(', ')}{d.terms.length > 4 ? ` and ${d.terms.length - 4} more` : ''}.
+              Kauzl searches for {d.terms.slice(0, 4).map((t) => `“${t.term}”`).join(', ')}{d.terms.length > 4 ? ` and ${d.terms.length - 4} more` : ''}.
               Add keywords in <a href="#/settings?i=mentions">Settings → Mentions</a>.
             </Empty>
           </div>
@@ -87,7 +87,7 @@ function MentionRow({ m }) {
         <div style={{ minWidth: 0 }}>
           <a href={m.permalink} target="_blank" rel="noreferrer" style={{ fontWeight: 600 }}>{m.title || '(untitled)'}</a>
           {m.text && <div class="muted small" style={{ marginTop: '2px', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: '2', WebkitBoxOrient: 'vertical' }}>{m.text}</div>}
-          <div class="small muted" style={{ marginTop: '4px' }}>
+          <div class="small muted mt-4">
             <span class="chip">{sourceLabel(m.source)}</span>{' '}
             {m.community && <>{m.community} · </>}
             {m.author && <>{m.author} · </>}
@@ -116,7 +116,7 @@ function SourceStatus({ sources }) {
   else if (!sources.ph.slugs.length) notes.push({ text: 'Product Hunt has a token but no launch to watch: add your post’s slug in Settings → Mentions.' });
   if (!notes.length) return null;
   return (
-    <div class="stack" style={{ marginBottom: '12px' }}>
+    <div class="stack mb-12">
       {notes.map((n) => (
         <p key={n.text} class="note small" style={{ margin: 0, color: n.bad ? 'var(--critical-ink)' : undefined }}>
           {n.text} <a href="#/settings?i=mentions">Open settings</a>

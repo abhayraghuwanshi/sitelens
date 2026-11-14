@@ -79,9 +79,31 @@ export function Pages({ site, range, params }) {
               ))}
             </tbody>
           </table>
-          {!rows.length && <p class="muted" style={{ padding: '8px 16px' }}>No pages match “{filter}”.</p>}
+          {!rows.length && <p class="muted inset">No pages match “{filter}”.</p>}
         </div>
       </Card>
+    </>
+  );
+}
+
+// One page's views, users and sessions per day, for the page's own view.
+export function PageTrend({ site, range, path }) {
+  const trend = useAsync(() => api.get(`/sites/${site.id}/page-trend${qs({ range, path })}`), [site.id, range, path]);
+  const [metric, setMetric] = useState('screenPageViews');
+  const label = { screenPageViews: 'Views', activeUsers: 'Users', sessions: 'Sessions' }[metric];
+  if (trend.error) return <ErrorState error={trend.error} />;
+  if (!trend.data) return <Loading height={200} />;
+  return (
+    <>
+      <div class="row gap-6">
+        {['screenPageViews', 'activeUsers', 'sessions'].map((m) => (
+          <button key={m} type="button" class={`btn${m === metric ? ' primary' : ''}`} onClick={() => setMetric(m)}>
+            {{ screenPageViews: 'Views', activeUsers: 'Users', sessions: 'Sessions' }[m]}
+          </button>
+        ))}
+      </div>
+      <LineChart labels={trend.data.map((t) => t.label || formatDate(t.date))} series={[{ label, values: trend.data.map((t) => t[metric]) }]}
+        format={(v, axis) => formatNumber(v, { compact: axis })} height={200} />
     </>
   );
 }

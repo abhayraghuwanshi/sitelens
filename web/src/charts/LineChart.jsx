@@ -127,7 +127,7 @@ export function LineChart({ series, labels, height = 240, format = String, area 
         </div>
       )}
       {series.length > 1 && (
-        <div class="legend" style={{ marginTop: '6px' }}>
+        <div class="legend mt-6">
           {series.map((s, k) => (
             <span key={k}>
               <i class={dashed(s, k) ? 'dashed' : ''} style={dashed(s, k) ? undefined : { background: colorOf(s, k) }} />

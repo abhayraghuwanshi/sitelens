@@ -1,3 +1,4 @@
+import { useState } from 'preact/hooks';
 import { formatNumber, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, navigate, withParam, usePersistent } from '../hooks.js';
@@ -5,6 +6,7 @@ import { Card, KpiStrip, Loading, ErrorState, Segmented, Empty } from '../compon
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { Icon } from '../components/icons.jsx';
 import { LineChart, kindColor } from '../charts/LineChart.jsx';
+import { postHref } from './Posts.jsx';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const METRICS = [
@@ -39,7 +41,7 @@ export function Calendar({ sites, params }) {
   return (
     <>
       <div class="toolbar">
-        <div class="row" style={{ gap: '4px' }}>
+        <div class="row gap-4">
           <button class="btn icon-btn" type="button" aria-label="Previous month" onClick={() => goMonth(-1)}>
             <Icon name="chevron" size={14} class="flip" />
           </button>
@@ -81,14 +83,15 @@ export function Calendar({ sites, params }) {
       ]} />
 
       <div class="grid cols-2-1">
-        <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush>
-          <MonthGrid m={m} metric={useMetric} selected={selected} />
-          <Legend />
-        </Card>
-        <div class="stack" style={{ gap: '16px', minWidth: 0 }}>
-          <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} />
+        {/* Claude sits under the month so the two columns end at about the same height. */}
+        <div class="stack cal-left" style={{ gap: '16px', minWidth: 0 }}>
+          <Card title="Month" sub={useMetric === 'clicks' ? 'Search clicks vs a typical same weekday' : 'Sessions vs a typical same weekday'} flush class="cal-month">
+            <MonthGrid m={m} metric={useMetric} selected={selected} />
+            <Legend />
+          </Card>
           <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
         </div>
+        <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} onChange={data.reload} />
       </div>
     </>
   );
@@ -183,12 +186,19 @@ function Legend() {
   );
 }
 
-function DayStory({ date, site, today }) {
+function DayStory({ date, site, today, onChange }) {
   const data = useAsync(() => api.get(`/calendar/day${qs({ date, site })}`), [date, site]);
   if (data.error) return <Card title={formatLong(date)}><ErrorState error={data.error} onRetry={data.reload} /></Card>;
   if (!data.data) return <Card title={formatLong(date)}><Loading height={420} /></Card>;
   const d = data.data;
   const detailed = d.sites.filter((s) => s.sources.length || s.pages.length || s.search?.queries?.length);
+
+  // The numbers in words; events and alerts get their own list below, so their lines are left out here.
+  const lines = d.lines.filter((l) => l.kind !== 'event' && l.kind !== 'alert');
+  const happened = [
+    ...d.events.map((e) => ({ ...e, when: 'that day' })),
+    ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' })),
+  ].filter((e) => e.kind !== 'claude');
 
   return (
     <Card title={formatLong(date)} sub={d.partial ? 'so far' : date === addDay(today, -1) ? 'yesterday' : ''} class="cal-story">
@@ -199,9 +209,9 @@ function DayStory({ date, site, today }) {
             labels={d.trend.map((p) => formatDate(p.date.replaceAll('-', '')))} dates={d.trend.map((p) => p.date)}
             annotations={[...d.eventsBefore, ...d.events]} format={formatNumber} tooltipTitle="Sessions" />
         )}
-        {d.lines.length > 0 && (
+        {lines.length > 0 && (
           <ul class="cal-lines">
-            {d.lines.map((l, i) => (
+            {lines.map((l, i) => (
               <li key={i}>
                 <Icon name={LINE_ICONS[l.kind] || 'chart'} size={14} />
                 <span>{l.href ? <a href={l.href}>{l.text}</a> : l.text}</span>
@@ -210,46 +220,66 @@ function DayStory({ date, site, today }) {
           </ul>
         )}
 
-        {detailed.map((s) => (
-          <div key={s.id} class="stack" style={{ gap: '10px' }}>
-            {d.sites.length > 1 && <h3 class="cal-sub"><a href={`#/site/${s.id}/overview`}>{s.label}</a></h3>}
-            {s.sources.length > 0 && <ShiftTable title="Sources" rows={[...s.sources.filter((r) => r.value > 0).slice(0, 4), ...s.losers]} />}
-            {s.pages.length > 0 && <ShiftTable title="Landing pages" rows={s.pages.filter((r) => r.value > 0).slice(0, 4)} mono />}
-            {s.search?.queries?.length > 0 && (
-              <table class="data compact">
-                <thead><tr><th>Top queries</th><th class="num">Clicks</th></tr></thead>
-                <tbody>{s.search.queries.map((q) => <tr key={q.query}><td>{q.query}</td><td class="num">{formatNumber(q.clicks)}</td></tr>)}</tbody>
-              </table>
-            )}
-          </div>
-        ))}
-
-        {(d.events.length > 0 || d.eventsBefore.length > 0) && (
-          <div class="stack" style={{ gap: '6px' }}>
-            <h3 class="cal-sub">Events</h3>
-            {[...d.events.map((e) => ({ ...e, when: '' })), ...d.eventsBefore.map((e) => ({ ...e, when: 'day before' }))].filter((e) => e.kind !== 'claude').map((e) => (
-              <div key={e.id} class="row small" style={{ gap: '8px', flexWrap: 'nowrap' }}>
-                <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
-                <span style={{ minWidth: 0 }}>{e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}</span>
-                {e.when && <span class="muted" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>{e.when}</span>}
+        {detailed.map((s) => {
+          const sources = [...s.sources.filter((r) => r.value > 0).slice(0, 4), ...s.losers].filter((r) => r.value > 0 || Math.abs(r.gain) >= 0.5);
+          const pages = s.pages.filter((r) => r.value > 0).slice(0, 4);
+          const queries = (s.search?.queries || []).filter((q) => q.clicks > 0);
+          if (!sources.length && !pages.length && !queries.length) return null;
+          return (
+            <div key={s.id} class="cal-moved">
+              {d.sites.length > 1 && <h3 class="cal-sub"><a href={`#/site/${s.id}/overview`}>{s.label}</a></h3>}
+              <div class="cal-moved-cols">
+                <MovedList title="Sources" rows={sources} />
+                <MovedList title="Landing pages" rows={pages} mono />
+                {queries.length > 0 && (
+                  <div>
+                    <span class="nx-label-sm">Searches</span>
+                    <ul class="cal-moved-list">
+                      {queries.map((q) => <li key={q.query}><span>{q.query}</span><b>{formatNumber(q.clicks)} clicks</b></li>)}
+                    </ul>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        )}
+            </div>
+          );
+        })}
 
-        {d.alerts.length > 0 && (
-          <div class="insights">
-            {d.alerts.map((a) => (
-              <div key={a.id} class={`insight ${a.direction === 'up' ? 'good' : 'bad'}`}>
-                <span class="mark" />
-                <div>
-                  <a class="title" href={a.link} {...(a.link?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{a.title}</a>
-                  <div class="detail">{a.detail}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        <div class="cal-happened">
+          <span class="nx-label-sm">What happened</span>
+          {happened.length || d.alerts.length ? (
+            <ul class="cal-happened-list">
+              {d.alerts.map((a) => (
+                <li key={a.id}>
+                  <Icon name="bell" size={13} />
+                  <a href={a.link} class={a.direction === 'up' ? 'good' : 'bad'} {...(a.link?.startsWith('http') ? { target: '_blank', rel: 'noreferrer' } : {})}>{a.title}</a>
+                  <span class="muted">alert</span>
+                </li>
+              ))}
+              {happened.map((e) => (
+                <li key={e.id}>
+                  <i class="dot" style={{ background: kindColor(e.kind) }} aria-hidden="true" />
+                  <span class="cal-happened-label">
+                    {/* Your posts open their analysis here; other events link out. */}
+                    {e.source === 'posts' ? (
+                      <>
+                        <a href={postHref(e.id.slice('post:'.length))}>{e.label}</a>
+                        {e.url && <>{' '}<a href={e.url} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a></>}
+                      </>
+                    ) : e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}
+                  </span>
+                  <span class="muted">{e.when}</span>
+                  {e.id.startsWith('post:manual:') && e.when === 'that day' && (
+                    <button class="btn ghost" type="button" title="Remove link" aria-label="Remove link"
+                      onClick={async () => { await api.post('/posts/hide', { id: e.id.slice('post:'.length) }); data.reload(); onChange?.(); }}>
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          ) : <p class="small muted">Nothing shipped, posted or alerted that day or the day before.</p>}
+          <AddLink date={date} site={site} onAdded={() => { data.reload(); onChange?.(); }} />
+        </div>
 
         {d.sessions === null && !d.lines.length && !d.events.length && (
           <Empty title="Nothing recorded">Link a GA4 property or Search Console to a site to see its days here.</Empty>
@@ -259,22 +289,70 @@ function DayStory({ date, site, today }) {
   );
 }
 
-function ShiftTable({ title, rows, mono = false }) {
+// Sources or landing pages that day: sessions, and the change on a usual same weekday.
+function MovedList({ title, rows, mono = false }) {
   if (!rows.length) return null;
   return (
-    <table class="data compact">
-      <thead><tr><th>{title}</th><th class="num">Sessions</th><th class="num">Usual</th><th class="num">Change</th></tr></thead>
-      <tbody>
-        {rows.map((r) => (
-          <tr key={r.label}>
-            <td class="cell-path" title={r.label}>{mono ? <code>{r.label}</code> : r.label}</td>
-            <td class="num">{formatNumber(r.value)}</td>
-            <td class="num muted">{formatNumber(r.expected)}</td>
-            <td class={`num delta ${r.gain >= 1 ? 'up' : r.gain <= -1 ? 'down' : 'flat'}`}>{r.gain >= 0 ? '+' : '−'}{formatNumber(Math.abs(r.gain))}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div>
+      <span class="nx-label-sm">{title}</span>
+      <ul class="cal-moved-list">
+        {rows.map((r) => {
+          const gain = Math.round(r.gain);
+          return (
+            <li key={r.label} title={`${formatNumber(r.value)} sessions, usually ${formatNumber(r.expected)}`}>
+              <span>{mono ? <code>{r.label}</code> : r.label}</span>
+              <b>{formatNumber(r.value)} <span class={`delta ${gain > 0 ? 'up' : gain < 0 ? 'down' : 'flat'}`}>{gain ? `${gain > 0 ? '+' : '−'}${formatNumber(Math.abs(gain))}` : 'same'}</span></b>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
+// A post you made that day (Reddit, LinkedIn, X, a blog…), saved as a manual post
+// so it shows here, on Posts, and in that platform's traffic attribution.
+function AddLink({ date, site, onAdded }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  if (!open) {
+    return (
+      <button class="link-btn cal-add-open" type="button" onClick={() => setOpen(true)}>
+        <Icon name="plus" size={13} /> Add a post link
+      </button>
+    );
+  }
+  async function add(e) {
+    e.preventDefault();
+    setBusy(true);
+    setError('');
+    try {
+      await api.post('/posts/manual', { url, title, date, site: site === 'all' ? '' : site });
+      setUrl('');
+      setTitle('');
+      setOpen(false);
+      onAdded();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <form class="cal-add stack" onSubmit={add}>
+      <h3 class="cal-sub">Add a post link</h3>
+      <label class="field">Post URL<input required autoFocus type="url" value={url} placeholder="https://www.reddit.com/r/…" onInput={(e) => setUrl(e.currentTarget.value)} /></label>
+      <label class="field"><span class="field-label">Title <small>optional</small></span><input value={title} placeholder="What it was about" onInput={(e) => setTitle(e.currentTarget.value)} /></label>
+      <div class="row gap-8">
+        <button class="btn primary" type="submit" disabled={busy}><Icon name="plus" size={13} /> Add to {dayLabel(date)}</button>
+        <button class="btn ghost" type="button" onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
+        {error && <span class="small text-bad">{error}</span>}
+      </div>
+    </form>
   );
 }
 

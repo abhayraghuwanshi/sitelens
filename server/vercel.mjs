@@ -16,7 +16,7 @@
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
 import { historyRange } from './github.mjs';
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 
 const API = 'https://api.vercel.com';
@@ -28,8 +28,9 @@ const PROJECT_ID = /^prj_[A-Za-z0-9]{6,64}$/;
 const isoDay = (ms) => new Date(ms).toISOString().slice(0, 10);
 const bareHost = (h) => String(h || '').trim().toLowerCase().replace(/^https?:\/\//, '').replace(/[/:].*$/, '').replace(/^www\./, '');
 
-export function createVercel({ store, env = process.env, fetchImpl = fetch, now = () => Date.now() }) {
-  const cache = createCache();
+export function createVercel({ store, env = process.env, cacheDb = null, fetchImpl = fetch, now = () => Date.now() }) {
+  // Kept on disk and shown stale while Vercel is asked again, so deploy marks don't hold up a page.
+  const cache = createCache({ db: cacheDb, name: 'vercel', staleFor: cacheDb ? DAY : 0, now });
   let lastError = '';
   let who = null;
 
@@ -37,8 +38,10 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
     const s = await store.get();
     return {
       token: s.sources?.vercelToken || env.VERCEL_TOKEN || '',
-      tokenSource: s.sources?.vercelToken ? 'settings' : env.VERCEL_TOKEN ? 'env' : '',
+      tokenSource: s.sources?.vercelToken ? (s.vercel?.via === 'oauth' ? 'oauth' : 'settings') : env.VERCEL_TOKEN ? 'env' : '',
       teamId: s.vercel?.teamId || env.VERCEL_TEAM_ID || '',
+      // A token from "Connect Vercel" already belongs to one account or team.
+      oauth: s.vercel?.via === 'oauth' && Boolean(s.sources?.vercelToken),
       projectMap: s.vercel?.projectMap || {},
     };
   }
@@ -81,10 +84,10 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
       throw new EngineError('No Vercel token yet.', {
         status: 409,
         kind: 'needs-vercel',
-        hint: 'Create a token at vercel.com/account/settings/tokens, then add it in Settings → Vercel, or set VERCEL_TOKEN in .env and restart Studio.',
+        hint: 'Create a token at vercel.com/account/settings/tokens, then add it in Settings → Vercel, or set VERCEL_TOKEN in .env and restart Kauzl.',
       });
     }
-    if (!cfg.teamId) {
+    if (!cfg.teamId && !cfg.oauth) {
       const user = await cache.wrap(`user:${cfg.token.slice(-6)}`, 60 * 60_000, false, () => verify(cfg.token));
       cfg.teamId = user.defaultTeamId || '';
     }
@@ -112,6 +115,7 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
       if (value) s.sources.vercelToken = value;
       else if (!team) delete s.sources.vercelToken;
       s.vercel = { ...(s.vercel || {}), teamId: team };
+      delete s.vercel.via;
     });
     cache.clear();
     lastError = '';
@@ -290,7 +294,13 @@ export function createVercel({ store, env = process.env, fetchImpl = fetch, now 
     return lists.flat();
   }
 
-  return { status, verify, saveToken, projects, matches, repoFor, setMatch, deployments, analytics, compare, annotations };
+  const reset = () => {
+    cache.clear();
+    lastError = '';
+    who = null;
+  };
+
+  return { status, verify, saveToken, reset, projects, matches, repoFor, setMatch, deployments, analytics, compare, annotations };
 }
 
 // Project fields Studio shows. The API also returns env vars — never pass those on.

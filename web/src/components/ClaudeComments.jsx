@@ -127,7 +127,7 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
     <Card title={title} sub={date ? 'Comments on this day' : 'Comments in this range'} class="claude-card">
       <div class="stack">
         {single && hasKey && (
-          <form class="row" style={{ gap: '6px' }} onSubmit={analyze}>
+          <form class="row gap-6" onSubmit={analyze}>
             <label class="sr-only" for={inputId}>Question for Claude (optional)</label>
             <input id={inputId} type="text" maxLength={500} value={question} disabled={busy} style={{ flex: '1', minWidth: '200px' }}
               placeholder={date ? 'Why did this day move? (optional)' : 'Anything specific? e.g. why did signups drop (optional)'}
@@ -137,8 +137,8 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
             </button>
           </form>
         )}
-        {busy && <p class="note" style={{ margin: 0 }}>Claude is reading your numbers through the same tools Claude Code uses. This usually takes 20–60 seconds.</p>}
-        {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+        {busy && <p class="note m-0">Claude is reading your numbers through the same tools Claude Code uses. This usually takes 20–60 seconds.</p>}
+        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
 
         {list.map((c) => (
           <article key={c.id} class="claude-comment">
@@ -156,14 +156,14 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
         ))}
 
         {comments.data && !list.length && (
-          <p class="muted small" style={{ margin: 0 }}>
+          <p class="muted small m-0">
             No comments from Claude {date ? 'on this day' : 'in this range'} yet.
             {!single && hasKey && ' Pick one site to analyze it here.'}
           </p>
         )}
         {status.data && !hasKey && mcp.data && (codeConnected ? (
-          <div class="stack" style={{ gap: '6px' }}>
-            <p class="small" style={{ margin: 0 }}>Claude Code is connected. Ask it in any session and its comment shows up here:</p>
+          <div class="stack gap-6">
+            <p class="small m-0">Claude Code is connected. Ask it in any session and its comment shows up here:</p>
             <div class="snippet">
               <div class="snippet-head">
                 <span>Claude Code</span>
@@ -171,14 +171,14 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
               </div>
               <pre style={{ whiteSpace: 'pre-wrap' }}>{ask}</pre>
             </div>
-            <p class="muted small" style={{ margin: 0 }}>
+            <p class="muted small m-0">
               To analyze with a button here instead, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (roughly $0.10–0.40 a run).
             </p>
           </div>
         ) : (
-          <p class="note" style={{ margin: 0 }}>
+          <p class="note m-0">
             To analyze here, add an Anthropic API key in <a href="#/settings?i=anthropic">Settings → Claude</a> (each run costs roughly $0.10–0.40).
-            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the SiteLens MCP server.
+            Or <a href="#/settings?i=mcp">connect Claude Code</a>; it can leave comments here through the Kauzl MCP server.
           </p>
         ))}
       </div>

@@ -217,7 +217,45 @@ export function createBigQuery({ getToken, fetchImpl = fetch }) {
     });
     const payload = await res.json().catch(() => ({}));
     if (!res.ok) throw new BigQueryError(payload.error?.message || `HTTP ${res.status}`, { status: res.status });
-    return (payload.projects || []).map((p) => ({ id: p.projectReference?.projectId, name: p.friendlyName || '' }));
+    return (payload.projects || []).map((p) => ({ id: p.projectReference?.projectId, name: p.friendlyName || '', number: String(p.numericId || '') }));
+  }
+
+  // Where a GA4 property's export lands, so setup needs no typing. GA4's own
+  // BigQuery link names the project; failing that (no admin access to the
+  // link), every project this account sees is searched for the dataset, which
+  // the export always names analytics_<property id>.
+  async function findExport(propertyId) {
+    const dataset = `analytics_${propertyId}`;
+    const projects = (await listProjects()).filter((p) => p.id);
+    const token = await getToken();
+    let linked = null;
+    try {
+      const res = await fetchImpl(`https://analyticsadmin.googleapis.com/v1alpha/properties/${encodeURIComponent(propertyId)}/bigQueryLinks`, {
+        headers: { Authorization: `Bearer ${token}` },
+        signal: AbortSignal.timeout(20_000),
+      });
+      const link = res.ok ? (await res.json()).bigqueryLinks?.[0] : null;
+      if (link) {
+        const ref = String(link.project || '').replace(/^projects\//, '');
+        linked = { project: projects.find((p) => p.number === ref || p.id === ref)?.id || '', location: link.datasetLocation || '' };
+      }
+    } catch {
+      // Fall through to the search.
+    }
+    const candidates = linked?.project ? [linked.project] : projects.slice(0, 50).map((p) => p.id);
+    const hits = await Promise.all(candidates.map(async (project) => {
+      try {
+        const found = (await listDatasets(project)).find((d) => d.id === dataset);
+        return found ? { project, location: found.location } : null;
+      } catch {
+        return null;
+      }
+    }));
+    const hit = hits.find(Boolean);
+    if (hit) return { found: true, billingProject: hit.project, dataProject: hit.project, dataset, location: hit.location, projects };
+    // Linked, but the first daily export hasn't landed yet.
+    if (linked) return { found: false, linked: true, project: linked.project, dataset, projects };
+    return { found: false, linked: false, dataset, projects };
   }
 
   // Creates the rollup dataset next to the source data; an existing one is fine.
@@ -238,7 +276,7 @@ export function createBigQuery({ getToken, fetchImpl = fetch }) {
     }
   }
 
-  return { query, dryRun, listDatasets, listProjects, listTables, ensureDataset };
+  return { query, dryRun, listDatasets, listProjects, listTables, ensureDataset, findExport };
 }
 
 export function humanBytes(bytes) {

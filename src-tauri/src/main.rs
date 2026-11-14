@@ -1,10 +1,14 @@
-// SiteLens Studio desktop shell: runs the Node server as a sidecar (bundled
+// Kauzl desktop shell: runs the Node server as a sidecar (bundled
 // Node + the server code from resources/app), shows its page in a window and
 // keeps syncing from the menu bar after the window is closed.
 //
 // The server stays on 127.0.0.1:4318 because Google's OAuth redirect URI is
 // registered for that address. If something is already listening there (the
 // dev server), the app uses it rather than starting a second one.
+//
+// Live development (`npm run desktop:dev`): a debug build with STUDIO_DEV_URL
+// set shows that page (Vite's dev server, which reloads on save) instead of the
+// built one, with the API from `npm run dev` on 4318. Release builds ignore it.
 
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
@@ -44,9 +48,32 @@ window.open = (u) => { location.href = new URL(u, location.href).href; return nu
 
 struct Sidecar(Mutex<Option<CommandChild>>);
 
-fn server_up() -> bool {
-    let addr = SocketAddr::from(([127, 0, 0, 1], PORT));
+fn port_open(port: u16) -> bool {
+    let addr = SocketAddr::from(([127, 0, 0, 1], port));
     TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_ok()
+}
+
+fn server_up() -> bool {
+    port_open(PORT)
+}
+
+fn dev_url() -> Option<url::Url> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    std::env::var("STUDIO_DEV_URL").ok().and_then(|u| u.parse().ok())
+}
+
+// The page the window shows: the dev server's in live development, else Studio's own.
+fn page_url() -> url::Url {
+    dev_url().unwrap_or_else(|| ORIGIN.parse().unwrap())
+}
+
+fn page_up() -> bool {
+    match dev_url() {
+        Some(u) => server_up() && port_open(u.port_or_known_default().unwrap_or(PORT)),
+        None => server_up(),
+    }
 }
 
 // Studio's own pages (and the splash page) stay in the window; /auth/google is
@@ -56,7 +83,9 @@ fn stays_inside(url: &url::Url) -> bool {
         return true;
     }
     let local = matches!(url.host_str(), Some("127.0.0.1") | Some("localhost"));
-    local && url.port_or_known_default() == Some(PORT) && url.path() != "/auth/google"
+    let port = url.port_or_known_default();
+    let ours = port == Some(PORT) || dev_url().map_or(false, |d| port == d.port_or_known_default());
+    local && ours && url.path() != "/auth/google"
 }
 
 fn log_path(app: &AppHandle) -> Option<PathBuf> {
@@ -118,7 +147,7 @@ fn show_main(app: &AppHandle) {
     }
     let opener = app.clone();
     let window = WebviewWindowBuilder::new(app, "main", WebviewUrl::App("index.html".into()))
-        .title("SiteLens Studio")
+        .title("Kauzl")
         .inner_size(1360.0, 900.0)
         .min_inner_size(720.0, 480.0)
         .initialization_script(LINK_SCRIPT)
@@ -137,8 +166,8 @@ fn show_main(app: &AppHandle) {
     std::thread::spawn(move || {
         let started = Instant::now();
         while started.elapsed() < START_TIMEOUT {
-            if server_up() {
-                let _ = window.navigate(ORIGIN.parse().unwrap());
+            if page_up() {
+                let _ = window.navigate(page_url());
                 return;
             }
             std::thread::sleep(Duration::from_millis(200));
@@ -146,7 +175,7 @@ fn show_main(app: &AppHandle) {
         let at = log.map(|p| p.display().to_string()).unwrap_or_default();
         let _ = window.eval(&format!(
             "document.querySelector('p').textContent = {:?}",
-            format!("SiteLens Studio’s server didn’t start. Its log is at {at}")
+            format!("Kauzl’s server didn’t start. Its log is at {at}")
         ));
     });
 }
@@ -163,19 +192,19 @@ fn main() {
                 append_log(&log_path(handle), &format!("[start failed] {err}"));
             }
 
-            let open = MenuItem::with_id(app, "open", "Open SiteLens Studio", true, None::<&str>)?;
+            let open = MenuItem::with_id(app, "open", "Open Kauzl", true, None::<&str>)?;
             let browser = MenuItem::with_id(app, "browser", "Open in browser", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit SiteLens Studio", true, None::<&str>)?;
+            let quit = MenuItem::with_id(app, "quit", "Quit Kauzl", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&open, &browser, &PredefinedMenuItem::separator(app)?, &quit])?;
             TrayIconBuilder::with_id("tray")
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("SiteLens Studio")
+                .tooltip("Kauzl")
                 .menu(&menu)
                 .show_menu_on_left_click(true)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show_main(app),
                     "browser" => {
-                        let _ = app.opener().open_url(ORIGIN, None::<&str>);
+                        let _ = app.opener().open_url(page_url().as_str(), None::<&str>);
                     }
                     "quit" => app.exit(0),
                     _ => {}
@@ -193,7 +222,7 @@ fn main() {
             }
         })
         .build(tauri::generate_context!())
-        .expect("failed to build SiteLens Studio")
+        .expect("failed to build Kauzl")
         .run(|app, event| match event {
             // Dock icon clicked with the window hidden.
             #[cfg(target_os = "macos")]

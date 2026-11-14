@@ -6,7 +6,8 @@
 // visitor installs from that page — so installs that bypass the listing (policy
 // installs, side-loading) are not in it.
 
-import { runReport, listAccountSummaries, GaApiError } from '../shared/sitelens/ga4.js';
+import { listAccountSummaries, GaApiError } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 
 // Finds the property Google created for this extension: named exactly after its ID.
 export function findListingProperty(properties, extensionId) {
@@ -17,8 +18,9 @@ async function report(token, propertyId, body) {
   try {
     return await runReport({ token, propertyId, body });
   } catch (err) {
-    // GA's Data API has transient timeouts/5xx/quota blips; one retry clears most.
-    if (err instanceof GaApiError && ['timeout', 'network', 'server', 'quota'].includes(err.kind)) {
+    // GA's Data API has transient timeouts and 5xx blips; one retry clears most.
+    // Not quota: retrying a rate limit a second later only spends more of it.
+    if (err instanceof GaApiError && ['timeout', 'network', 'server'].includes(err.kind)) {
       await new Promise((r) => setTimeout(r, 1200));
       return runReport({ token, propertyId, body });
     }

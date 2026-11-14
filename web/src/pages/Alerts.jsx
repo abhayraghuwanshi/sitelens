@@ -4,8 +4,22 @@ import { api } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Card, Loading, ErrorState, Empty } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { AlertsSettings } from './settings/AlertsSettings.jsx';
 
-export function Alerts() {
+// #/alerts is the feed and digest; #/alerts?view=settings is the rules and where alerts go.
+export function Alerts({ params }) {
+  if (params?.get('view') === 'settings') {
+    return (
+      <>
+        <a class="back-link" href="#/alerts">← Alerts</a>
+        <AlertsSettings />
+      </>
+    );
+  }
+  return <AlertsFeed />;
+}
+
+function AlertsFeed() {
   const data = useAsync(() => api.get('/alerts'), []);
   const [busy, setBusy] = useState('');
   const [msg, setMsg] = useState(null);
@@ -31,6 +45,7 @@ export function Alerts() {
 
   const runNow = (
     <div class="row">
+      <a class="btn" href="#/alerts?view=settings"><Icon name="settings" size={13} /> Settings</a>
       {unread > 0 && <button class="btn" type="button" disabled={Boolean(busy)}
         onClick={() => act('read', () => api.post('/alerts/read', { all: true }), (r) => `Marked ${r.changed} as read.`)}>Mark all read</button>}
       <button class="btn primary" type="button" disabled={Boolean(busy)}
@@ -46,16 +61,16 @@ export function Alerts() {
         <div class="state">
           <h3>Alerts are paused</h3>
           <p>Nothing is checked in the background until you turn them back on.</p>
-          <a class="btn" href="#/settings?tab=alerts">Alert settings</a>
+          <a class="btn" href="#/alerts?view=settings">Alert settings</a>
         </div>
       )}
-      {msg && <p class="small" style={{ margin: 0, color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</p>}
+      {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
 
       <div class="grid cols-2">
         <Card title="Feed" sub={lastRun ? `Last check ${formatRelative(lastRun.at)}${lastRun.daily ? ' · full' : ' · GitHub & Web Store'}` : 'Not checked yet'} actions={runNow}>
           {alerts.length === 0 ? (
-            <p class="note" style={{ margin: 0 }}>
-              No alerts yet. Studio checks GitHub and Web Store snapshots every hour, and GA4 and Search Console once a day after {hourLabel(settings.digestHour)}.
+            <p class="note m-0">
+              No alerts yet. Kauzl checks GitHub and Web Store snapshots every hour, and GA4 and Search Console once a day after {hourLabel(settings.digestHour)}.
             </p>
           ) : (
             <div class="insights">
@@ -94,7 +109,7 @@ function AlertRow({ alert, label, onRead }) {
           {!alert.read && <button class="icon-btn" type="button" title="Mark as read" aria-label="Mark as read" onClick={onRead}><Icon name="x" size={12} /></button>}
         </div>
         <div class="detail">{alert.detail}</div>
-        <div class="muted small" style={{ marginTop: '2px' }}>{label} · {formatRelative(alert.at)}</div>
+        <div class="muted small mt-2">{label} · {formatRelative(alert.at)}</div>
       </div>
     </div>
   );
@@ -108,7 +123,7 @@ function Digest({ digest }) {
           <thead><tr><th>Site</th><th>Sessions</th><th>vs 7d</th><th>Users</th><th>Search clicks</th></tr></thead>
           <tbody>
             {digest.sites.map((s) => s.error ? (
-              <tr key={s.id}><td><b>{s.label}</b></td><td colspan={4} class="small" style={{ color: 'var(--critical-ink)' }}>{s.error}</td></tr>
+              <tr key={s.id}><td><b>{s.label}</b></td><td colspan={4} class="small text-bad">{s.error}</td></tr>
             ) : (
               <tr key={s.id}>
                 <td><a href={`#/site/${s.id}/overview`}><b>{s.label}</b></a></td>
@@ -137,29 +152,30 @@ function Digest({ digest }) {
         </table>
       )}
       {digest.mentions && (
-        <p class="small" style={{ margin: 0 }}>
+        <p class="small m-0">
           <Icon name="chat" size={13} /> Mentions: <b>{n(digest.mentions.count)}</b> new · top <a href={digest.mentions.link} target="_blank" rel="noreferrer">{digest.mentions.top}</a>
         </p>
       )}
       {digest.github && (
-        <p class="small" style={{ margin: 0 }}>
+        <p class="small m-0">
           <Icon name="github" size={13} /> GitHub: <b>+{n(digest.github.stars)}</b> stars, <b>{n(digest.github.views)}</b> repo views
           {digest.github.top && <> · most viewed <a href={`#/github?repo=${encodeURIComponent(digest.github.top)}`}>{digest.github.top}</a></>}
         </p>
       )}
-      <p class="small" style={{ margin: 0 }}>
+      <p class="small m-0">
         {digest.alerts.length ? `${digest.alerts.length} alert${digest.alerts.length === 1 ? '' : 's'} in the 24 hours before it.` : 'No alerts in the 24 hours before it.'}
       </p>
     </div>
   );
 }
 
-// Sidebar entry with an unread count; refreshes every 5 minutes and after actions here.
-export function AlertsNavItem({ active }) {
-  const [unread, setUnread] = useState(0);
+// Unread alert count; refreshes every 5 minutes and after actions on the Alerts page.
+// Returns { unread, bySite }.
+export function useUnreadAlerts() {
+  const [unread, setUnread] = useState({ unread: 0, bySite: {} });
   useEffect(() => {
     let alive = true;
-    const load = () => api.get('/alerts/unread').then((r) => alive && setUnread(r.unread)).catch(() => {});
+    const load = () => api.get('/alerts/unread').then((r) => alive && setUnread(r)).catch(() => {});
     load();
     const timer = setInterval(load, 5 * 60_000);
     window.addEventListener('alerts-changed', load);
@@ -169,11 +185,7 @@ export function AlertsNavItem({ active }) {
       window.removeEventListener('alerts-changed', load);
     };
   }, []);
-  return (
-    <a class={`nav-item${active ? ' active' : ''}`} href="#/alerts">
-      <Icon name="bell" /> Alerts {unread > 0 && <span class="count badge">{unread}</span>}
-    </a>
-  );
+  return unread;
 }
 
 const n = (v) => Number(v || 0).toLocaleString();

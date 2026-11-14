@@ -5,7 +5,7 @@ import { mkdtemp, rm, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createApp } from '../server/index.mjs';
-import { createStore } from '../server/store.mjs';
+import { createStore, normalizeLeaveOut } from '../server/store.mjs';
 
 let server;
 let base;
@@ -134,4 +134,10 @@ test('token is stored owner-only and BigQuery queries are dry-run, parameterized
   nextDryRunBytes = 9_000_000;
   const approved = await post(`/sites/${site.body.id}/warehouse/sql`, { range: '7d', sql: 'SELECT 1', confirmBytes: 9_000_000 });
   assert.equal(approved.status, 200);
+});
+
+test('leave-out rules keep plain country names and default to unengaged visits only', () => {
+  assert.deepEqual(normalizeLeaveOut({ countries: [' Singapore', 'China', 'China', ''] }), { countries: ['Singapore', 'China'], unengagedOnly: true });
+  assert.deepEqual(normalizeLeaveOut({ countries: ['Côte d’Ivoire'], unengagedOnly: false }), { countries: ['Côte d’Ivoire'], unengagedOnly: false });
+  assert.throws(() => normalizeLeaveOut({ countries: ["x') OR TRUE"] }), /doesn’t look like a country/);
 });

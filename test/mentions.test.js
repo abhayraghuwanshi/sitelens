@@ -141,7 +141,7 @@ test('mentions: Reddit uses app-only OAuth and site: search for hosts', async ()
     const search = seen.find((s) => s.u.startsWith('https://oauth.reddit.com/search'));
     assert.equal(search.auth, 'Bearer tok');
     assert.equal(new URL(search.u).searchParams.get('q'), 'site:cool-desk.com');
-    assert.match(search.ua, /sitelens-studio/);
+    assert.match(search.ua, /kauzl/);
   } finally {
     mentions.stop();
     await rm(dir, { recursive: true, force: true });

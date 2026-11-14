@@ -13,7 +13,9 @@ const money = (v) => `$${formatNumber(Math.round(v))}`;
 const SOURCE_LABEL = { event: 'Site event', page: 'Page visited', installs: 'Store installs', downloads: 'Release downloads', stars: 'GitHub stars' };
 const pct = (v) => (v === null || v === undefined ? '—' : `${(v * 100).toFixed(v > 0 && v < 0.1 ? 1 : 0)}%`);
 
-export function Outcomes({ id, range }) {
+export function Outcomes({ id, range, params }) {
+  // From a site (?site=), only that site's product, with no switcher.
+  const siteId = params?.get('site') || '';
   const list = useAsync(() => api.get('/products'), []);
   if (list.error) return <ErrorState error={list.error} onRetry={list.reload} />;
   if (!list.data) return <Loading height={360} />;
@@ -25,11 +27,18 @@ export function Outcomes({ id, range }) {
       </Empty>
     );
   }
-  const product = products.find((p) => p.id === id) || products[0];
+  const product = products.find((p) => p.id === id) || (siteId ? products.find((p) => p.siteId === siteId) : products[0]);
+  if (!product) {
+    return (
+      <Empty title="No product for this site yet">
+        Outcomes are measured per product: the site plus its store listing or repos. <a href={`#/product?site=${siteId}`}>Set one up</a> · <a href="#/outcomes">All products</a>
+      </Empty>
+    );
+  }
   return (
     <>
-      {products.length > 1 && (
-        <div class="row" style={{ marginBottom: '12px' }}>
+      {!siteId && products.length > 1 && (
+        <div class="row mb-12">
           <Segmented label="Product" value={product.id} options={products.map((p) => ({ key: p.id, label: p.label }))} onChange={(key) => navigate(`/outcomes/${key}`)} />
         </div>
       )}
@@ -53,8 +62,8 @@ function OutcomeView({ product, range }) {
   return (
     <>
       <SummaryLine summary={{ text: d.headline, status: worst }} />
-      <div class="meta-line" style={{ alignItems: 'center' }}>
-        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Studio is guessing from event names and linked sources.'}</span>
+      <div class="meta-line items-center">
+        <span>{fromFile ? 'Measured against the goals in the site’s repo file.' : d.goals.custom ? 'Measured against your goals.' : 'No goals set, so Kauzl is guessing from event names and linked sources.'}</span>
         <span class="spacer" />
         <a class="btn" href={editGoals}><Icon name="target" size={13} /> {fromFile ? 'View config' : d.goals.custom ? 'Edit goals' : 'Set goals'}</a>
         <button class="btn ghost" type="button" disabled={data.loading} onClick={() => data.reload({ fresh: true })}><Icon name="refresh" size={13} /> Refresh</button>
@@ -177,7 +186,7 @@ function Funnel({ funnel, host }) {
         })}
       </ol>
       {funnel.store && (
-        <p class="note" style={{ marginTop: '12px' }}>
+        <p class="note mt-12">
           <b>Side path to the Web Store:</b> {formatNumber(funnel.store.visitors)} listing visitors came from {host || 'the site'} ({pct(funnel.store.rate)} of site visitors), {formatNumber(funnel.store.installs)} installed.
         </p>
       )}
@@ -217,7 +226,7 @@ function GoalsCard({ goals, editHref }) {
   const list = goals.list;
   const revenue = list.some((g) => g.revenue > 0);
   return (
-    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Products' : 'Guessed by Studio until you set your own'}
+    <Card title="Goals" sub={goals.from === 'file' ? 'From the site’s repo file' : goals.custom ? 'Set in Settings → Sites & products' : 'Guessed by Kauzl until you set your own'}
       actions={<a class="btn ghost" href={editHref}><Icon name="target" size={13} /> {goals.from === 'file' ? 'Edit in Setup' : goals.custom ? 'Edit' : 'Set goals'}</a>}>
       {list.length ? (
         <div class="table-wrap">

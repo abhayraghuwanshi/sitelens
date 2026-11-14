@@ -2,7 +2,7 @@
 // a shared daily axis. Config lives in studio.json `products`; every source is
 // fetched independently so a missing token or link only blanks its own tiles.
 
-import { runReport } from '../shared/sitelens/ga4.js';
+import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { baseDomain } from '../shared/sitelens/site.js';
 import { ValidationError } from './store.mjs';

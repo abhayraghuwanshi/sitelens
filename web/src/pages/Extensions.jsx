@@ -9,27 +9,41 @@ import { Icon } from '../components/icons.jsx';
 import { dayLabel } from './GitHub.jsx';
 import { useAnnotations } from '../components/Annotations.jsx';
 
-export function Extensions({ range, onChange }) {
+export function Extensions({ range, params, onChange }) {
   const data = useAsync((o) => api.get(`/extensions${qs({ range, fresh: o?.fresh })}`), [range]);
+  // From a site (?site=), only the extensions of that site's product.
+  const scoped = params?.get('site') || '';
+  const products = useAsync(() => (scoped ? api.get('/products') : null), [scoped]);
+  const own = scoped ? products.data?.products.find((p) => p.siteId === scoped)?.extensionIds || [] : null;
   const reload = () => {
     data.reload();
     onChange();
   };
 
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
-  if (!data.data) return <Loading height={360} />;
-  const { extensions } = data.data;
+  if (!data.data || (scoped && !products.data && !products.error)) return <Loading height={360} />;
+  const extensions = own ? data.data.extensions.filter((e) => own.includes(e.id)) : data.data.extensions;
+
+  if (scoped && !extensions.length) {
+    return (
+      <div class="state">
+        <h3>No Chrome extension for this site</h3>
+        <p>Link the site’s extension to its product, and its users, rating and installs show here and on Pay off.</p>
+        <a class="btn" href={`#/settings?tab=sites&edit=${scoped}`}>Link one</a> <a class="btn ghost" href="#/extensions">All extensions</a>
+      </div>
+    );
+  }
 
   return (
     <>
       {extensions.length === 0 && (
         <Empty title="Track a Chrome extension">
-          Studio reads the public Web Store listing once a day (users, rating, version) and keeps the history — the store itself shows no history.
+          Kauzl reads the public Web Store listing once a day (users, rating, version) and keeps the history — the store itself shows no history.
           For installs and uninstalls, import the CSV from the developer dashboard.
         </Empty>
       )}
       {extensions.map((ext) => <ExtensionCard key={ext.id} ext={ext} range={data.data.range} onChange={reload} />)}
-      <AddExtension onAdded={reload} />
+      {scoped ? <p class="note"><a href="#/extensions">All extensions</a></p> : <AddExtension onAdded={reload} />}
     </>
   );
 }
@@ -79,7 +93,7 @@ function ExtensionCard({ ext, range, onChange }) {
     <Card
       title={
         <span class="row" style={{ gap: '10px', flexWrap: 'nowrap' }}>
-          {ext.icon && <img src={ext.icon} alt="" width="28" height="28" style={{ borderRadius: '6px' }} />}
+          {ext.icon && <img src={ext.icon} alt="" width="28" height="28" style={{ borderRadius: 'var(--radius-sm)' }} />}
           <span>{ext.label}</span>
         </span>
       }
@@ -128,11 +142,11 @@ function ExtensionCard({ ext, range, onChange }) {
 
         {usersSeries.filter(Number.isFinite).length >= 2 ? (
           <div>
-            <div class="small muted" style={{ marginBottom: '4px' }}>Users from daily listing snapshots</div>
+            <div class="small muted mb-4">Users from daily listing snapshots</div>
             <LineChart labels={labels} series={[{ label: 'Users', values: usersSeries }]} format={(v, axis) => formatNumber(v, { compact: axis })} height={180} area={false} {...marks} />
           </div>
         ) : (
-          <p class="note">The user history fills in as Studio takes one snapshot a day while it’s running. The Web Store only ever shows today’s number.</p>
+          <p class="note">The user history fills in as Kauzl takes one snapshot a day while it’s running. The Web Store only ever shows today’s number.</p>
         )}
 
         {importNames.length > 0 && (
@@ -237,7 +251,7 @@ function ListingAnalytics({ ext, range, marks }) {
       </div>
       <div class="grid cols-2-1">
         <div>
-          <div class="small muted" style={{ marginBottom: '4px' }}>Where installers come from</div>
+          <div class="small muted mb-4">Where installers come from</div>
           <table class="data">
             <thead><tr><th>Source</th><th class="num">Visitors</th><th class="num">Installs</th><th class="num">Converts</th></tr></thead>
             <tbody>
@@ -253,7 +267,7 @@ function ListingAnalytics({ ext, range, marks }) {
           </table>
         </div>
         <div>
-          <div class="small muted" style={{ marginBottom: '4px' }}>Installs by country</div>
+          <div class="small muted mb-4">Installs by country</div>
           {countries.length ? <BarList rows={countries} label={(r) => countryName(r.country)} value={(r) => r.installs} format={formatNumber} />
             : <p class="muted small">No installs in this range.</p>}
         </div>

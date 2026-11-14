@@ -5,8 +5,9 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  tagSites,
   createAlerts, detectAnomaly, detectDrop, detectStarSpike, denseSeries, mergeAlerts, normalizeSettings,
-  lastDays, localDay, desktopNotify, postWebhook, digestText,
+  lastDays, localDay, desktopNotify, postWebhook, digestText, alertNotice, digestNotice,
 } from '../server/alerts.mjs';
 import { ValidationError } from '../server/store.mjs';
 
@@ -130,14 +131,14 @@ test('daily run alerts on a traffic spike once, and delivers to desktop + webhoo
   assert.equal(first.digest.sites[0].clicks, 30);
   assert.match(first.digest.text, /Shop: 400 sessions/);
   assert.deepEqual(notify.sent.map((s) => s.via), ['desktop', 'desktop', 'webhook']);
-  assert.match(notify.sent.at(-1).text, /spiked[\s\S]*SiteLens digest/);
+  assert.match(notify.sent.at(-1).text, /spiked[\s\S]*Kauzl digest/);
 
   const second = await alerts.run({ daily: true });
   assert.equal(second.fired.length, 0, 'same alert key must not fire twice');
   assert.equal((await alerts.feed()).alerts.length, 1);
-  assert.equal(await alerts.unread(), 1);
+  assert.equal((await alerts.unread()).unread, 1);
   await alerts.markRead({ all: true });
-  assert.equal(await alerts.unread(), 0);
+  assert.equal((await alerts.unread()).unread, 0);
 });
 
 test('hourly tick skips GA4 until the digest hour, then runs daily once', async () => {
@@ -274,4 +275,26 @@ test('goals marked alert in .sitelens.yml alert on a drop, and the file tunes si
   // One report for both event goals; the step without alert isn't queried.
   assert.equal(reports.length, 1);
   assert.deepEqual(reports[0].dimensionFilter.andGroup.expressions[1].filter.inListFilter.values, ['sign_up', 'purchase']);
+});
+
+test('desktop notices: title, subtitle and detail, several items one per line', () => {
+  const one = alertNotice([{ title: 'New Tab by Cooldesk: users down 3 (-6%)', detail: '50 users on the listing.', subject: { label: 'New Tab by Cooldesk' } }]);
+  assert.deepEqual(one, { title: 'New Tab by Cooldesk', subtitle: 'users down 3 (-6%)', body: '50 users on the listing.' });
+  const many = alertNotice(['A', 'B', 'C', 'D', 'E'].map((t) => ({ title: t, detail: '' })));
+  assert.equal(many.subtitle, '5 new alerts');
+  assert.deepEqual(many.body.split('\n'), ['• A', '• B', '• C', 'and 2 more in Alerts']);
+  const d = digestNotice({ day: '2026-11-07', sites: [{ label: 'cooldesk', sessions: 28, sessionsChange: 0.75 }, { label: 'infraplan', error: 'x' }], extensions: [{ label: 'New Tab', users: 50 }], alerts: [{}] });
+  assert.deepEqual(d, { title: 'Kauzl daily digest', subtitle: 'Saturday 7 Nov · 1 alert', body: 'cooldesk: 28 visits (+75%)\ninfraplan: couldn’t read\nNew Tab: 50 users' });
+});
+
+test('tagSites files alerts under a site directly or through its product', () => {
+  const products = [{ siteId: 'cooldesk', repos: ['Me/CoolDesk-Extension'], extensionIds: ['abcdefghijklmnopabcdefghijklmnop'] }, { siteId: '', repos: ['me/lib'] }];
+  const tagged = tagSites([
+    { id: '1', subject: { type: 'site', id: 'infraplan' } },
+    { id: '2', subject: { type: 'repo', id: 'me/cooldesk-extension' } },
+    { id: '3', subject: { type: 'extension', id: 'abcdefghijklmnopabcdefghijklmnop' } },
+    { id: '4', subject: { type: 'repo', id: 'me/lib' } },
+    { id: '5', subject: { type: 'mention', id: 'cooldesk' } },
+  ], products);
+  assert.deepEqual(tagged.map((a) => a.site), ['infraplan', 'cooldesk', 'cooldesk', '', '']);
 });

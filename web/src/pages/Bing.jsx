@@ -26,7 +26,7 @@ export function Bing({ site, range }) {
             {data.error.kind === 'needs-bing'
               ? 'One API key shows Bing clicks, queries, pages and crawl health for every site you’ve verified in Bing.'
               : data.error.hint}
-            <div style={{ marginTop: '10px' }}><a class="btn primary" href="#/settings?i=bing">Open Bing settings</a></div>
+            <div class="mt-10"><a class="btn primary" href="#/settings?i=bing">Open Bing settings</a></div>
           </Empty>
         ) : <ErrorState error={data.error} onRetry={data.reload} />}
       </>
@@ -48,7 +48,7 @@ export function Bing({ site, range }) {
       ]} />
       <p class="note">
         {b.siteUrl} · Bing reported up to {b.range.lastReported || '—'}, so this range ends there.
-        {b.range.historyFrom && ` Studio has kept daily history since ${b.range.historyFrom}.`}
+        {b.range.historyFrom && ` Kauzl has kept daily history since ${b.range.historyFrom}.`}
         {' '}<button class="btn ghost" type="button" onClick={() => data.reload({ fresh: true })} disabled={data.loading}><Icon name="refresh" size={12} /> Refresh</button>
       </p>
 
@@ -94,7 +94,7 @@ export function Bing({ site, range }) {
   );
 }
 
-function Stat({ label, value, bad }) {
+export function Stat({ label, value, bad }) {
   return (
     <div class="crawl-stat">
       <div class="small muted">{label}</div>
@@ -104,7 +104,7 @@ function Stat({ label, value, bad }) {
 }
 
 function QueryTable({ rows, first, field, path }) {
-  if (!rows.length) return <p class="muted small" style={{ padding: '8px 16px' }}>Nothing reported for this range.</p>;
+  if (!rows.length) return <p class="muted small inset">Nothing reported for this range.</p>;
   const show = (v) => {
     if (!path) return v;
     try {
@@ -133,7 +133,7 @@ function QueryTable({ rows, first, field, path }) {
   );
 }
 
-function Submit({ site, quota, host }) {
+export function Submit({ site, quota, host }) {
   const [text, setText] = useState('');
   const [msg, setMsg] = useState(null);
   const [busy, setBusy] = useState(false);
@@ -155,13 +155,13 @@ function Submit({ site, quota, host }) {
   }
   return (
     <Card title="Submit URLs to Bing" sub={left ? `${formatNumber(left.daily)} left today · ${formatNumber(left.monthly)} this month` : ''}>
-      <form class="stack" onSubmit={submit} style={{ gap: '8px' }}>
+      <form class="stack gap-8" onSubmit={submit}>
         <textarea rows={4} value={text} placeholder={`${host}new-page\n${host}blog/launch`} onInput={(e) => setText(e.currentTarget.value)} aria-label="URLs to submit" />
         <div class="row">
           <button class="btn primary" type="submit" disabled={busy || !text.trim()}>{busy ? 'Submitting…' : 'Submit'}</button>
-          {msg && <span class="small" style={{ color: msg.ok ? 'var(--good-ink)' : 'var(--critical-ink)' }}>{msg.text}</span>}
+          {msg && <span class={`small ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</span>}
         </div>
-        <p class="note" style={{ margin: 0 }}>One URL per line. Use it after a deploy or a new post so Bing (and the AI answers built on it) picks the page up within hours.</p>
+        <p class="note m-0">One URL per line. Use it after a deploy or a new post so Bing (and the AI answers built on it) picks the page up within hours.</p>
       </form>
     </Card>
   );
