@@ -111,7 +111,12 @@ document.addEventListener('click', (e) => { if (e.target.closest('main button'))
 
 // Tools recalculate as you type; Enter in a field must not reload the page.
 // (Done here rather than inline onsubmit, so a strict CSP can block inline JS.)
-document.addEventListener('submit', (e) => e.preventDefault());
+// Forms that really post to the server (the early-access form on the home,
+// sign-in and waitlist pages: method="post") are left alone.
+document.addEventListener('submit', (e) => {
+  if (e.target.closest?.('form')?.method?.toLowerCase() === 'post') return;
+  e.preventDefault();
+});
 
 // ── What people do on the page ─────────────────────────
 if (pageKind === 'tool') {
