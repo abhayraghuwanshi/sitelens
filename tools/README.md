@@ -58,10 +58,12 @@ is ever sent.
 | `tool_example`, `tool_option` | Example loaded; preset, view or type picked | `tool`, `detail` |
 | `cta_click` | Link to Kauzl, the demo, sign-in, a tool or a guide | `location`, `detail` (path) |
 | `guide_read` | 75% of a guide scrolled into view | `guide` |
+| `waitlist_join` | Early-access form sent (home, sign-in, /waitlist), or a sign-in by someone not invited | `detail` (where) |
+| `sign_up`, `login` | First / later Google sign-in, sent from the short /signed-in page | `detail` (`google`) |
 
 To send them to GA4 from Tag Manager: create Data Layer Variables `tool`,
 `guide`, `detail` and `location`; a Custom Event trigger with event name
-`^(tool_|cta_|guide_)` (regex); and a **GA4 Event** tag with event name
+`^(tool_|cta_|guide_|waitlist_join$|sign_up$|login$)` (regex); and a **GA4 Event** tag with event name
 `{{Event}}`, those four as parameters, fired by that trigger. Then register
 `tool`, `guide`, `detail` and `location` as event-scoped custom dimensions in GA4.
 

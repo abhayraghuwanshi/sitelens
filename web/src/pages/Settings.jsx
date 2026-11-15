@@ -381,6 +381,7 @@ function BqExportStatus({ propertyId, live, result }) {
       <span class="row gap-8">
         <a class="btn ghost" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Open GA4 Admin</a>
         <button class="btn ghost" type="button" onClick={() => result.reload()}>Check again</button>
+        <a class="btn ghost" href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">Step-by-step guide</a>
       </span>
     </div>
   );
@@ -515,7 +516,7 @@ function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) 
         </div>
 
         <div class="divider" />
-        <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL</label>
+        <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL · <a href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">How to set it up</a></label>
         {form.useBq && (
           <>
             <BqExportStatus propertyId={form.propertyId} live={live} result={bqExport} />
