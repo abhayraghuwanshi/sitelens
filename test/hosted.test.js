@@ -521,12 +521,12 @@ test('the demo can show a real site instead of the sample: view only, and nothin
 
 /* ---------- Early access: waitlist, invites, admin ---------- */
 
-function postForm(path, fields, { cookie, origin = ORIGIN, ip } = {}) {
+function postForm(path, fields, { cookie, origin = ORIGIN, ip, visitor } = {}) {
   const body = new URLSearchParams(fields).toString();
   return new Promise((resolve, reject) => {
     const req = request(`${base}${path}`, {
       method: 'POST',
-      headers: { host: HOST, origin, 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}), ...(ip ? { 'fly-client-ip': ip } : {}) },
+      headers: { host: HOST, origin, 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}), ...(ip ? { 'fly-client-ip': ip } : {}), ...(visitor ? { 'cf-connecting-ip': visitor } : {}) },
     }, (res) => {
       let data = '';
       res.on('data', (c) => (data += c));
@@ -690,6 +690,37 @@ test('with kauzl.com analytics on, sign-in passes through a page that records si
     assert.doesNotMatch(page.body, /<script>(?!<)/, 'no inline script');
     // Not signed in: no page, just sign-in.
     assert.equal((await go('/signed-in?e=login')).headers.location, '/login');
+  } finally {
+    srv.close();
+  }
+});
+
+test('behind Cloudflare the limit is per visitor, and a faked visitor header off Cloudflare is ignored', async () => {
+  // Many people through one Cloudflare edge: each has their own limit.
+  for (let i = 0; i < 12; i++) {
+    const r = await postForm('/waitlist', { email: `edge${i}@example.com` }, { ip: '162.158.10.20', visitor: `192.0.2.${i + 1}` });
+    assert.doesNotMatch(decodeURIComponent(r.headers.location), /Too many/);
+  }
+  // Straight to the server (not Cloudflare) with a new fake visitor each time: still one address.
+  let last;
+  for (let i = 0; i < 11; i++) last = await postForm('/waitlist', { email: `spoof${i}@example.com` }, { ip: '198.51.100.77', visitor: `192.0.2.${100 + i}` });
+  assert.match(decodeURIComponent(last.headers.location), /Too many tries/);
+});
+
+test('a flood from many addresses stops at the hourly cap; people already on the list are unaffected', async () => {
+  const capped = createGateway({ dataDir: await mkdtemp(join(tmpdir(), 'studio-cap-')), masterKey, host: HOST, allowedEmails: parseEmails('alice@example.com'), env: gatewayEnv, fetchImpl: fakeFetch, startJobs: false, waitlistPerHour: 2 });
+  const srv = createServer((req, res) => capped.handle(req, res));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const post = (email, n) => new Promise((resolve) => {
+    const req = request(`http://127.0.0.1:${srv.address().port}/waitlist`, { method: 'POST', headers: { host: HOST, origin: ORIGIN, 'content-type': 'application/x-www-form-urlencoded', 'fly-client-ip': `198.51.100.${n}` } }, (res) => { res.resume(); res.on('end', () => resolve(decodeURIComponent(res.headers.location))); });
+    req.end(new URLSearchParams({ email }).toString());
+  });
+  try {
+    assert.equal(await post('one@example.com', 1), '/waitlist?joined=waitlist');
+    assert.equal(await post('two@example.com', 2), '/waitlist?joined=waitlist');
+    assert.match(await post('three@example.com', 3), /Lots of requests/);
+    assert.equal(capped.db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n, 2);
+    assert.equal(await post('one@example.com', 4), '/waitlist?joined=waitlist');
   } finally {
     srv.close();
   }

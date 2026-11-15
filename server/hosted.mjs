@@ -28,6 +28,7 @@
 // GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), ADMIN_EMAILS (comma-separated; default ALLOWED_EMAILS), STUDIO_DATA_DIR, PORT.
 
 import { createServer } from 'node:http';
+import { BlockList, isIP } from 'node:net';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -141,6 +142,9 @@ export function createGateway({
   fetchImpl = fetch,
   now = Date.now,
   startJobs = true,
+  // New waitlist entries allowed per hour, all addresses together: a flood
+  // from many addresses can't bury real sign-ups.
+  waitlistPerHour = 300,
   // A user's own app over their own sealed folder; tests swap it.
   createUserApp = (user) => createApp({
     store: createStore(join(dataDir, 'users', user.id), { key: userKey(masterKey, user.id) }),
@@ -473,6 +477,7 @@ export function createGateway({
   /* ---------- Early access: the waitlist and invites ---------- */
 
   const WAITLIST_MAX = 50_000;
+  const waitlistBusy = () => db.prepare('SELECT COUNT(*) AS n FROM waitlist WHERE created_at > ?').get(now() - 3_600_000).n >= waitlistPerHour;
   function joinWaitlist(email, source) {
     if (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n >= WAITLIST_MAX) return;
     db.prepare('INSERT OR IGNORE INTO waitlist (email, source, created_at) VALUES (?, ?, ?)').run(email, source, now());
@@ -501,6 +506,8 @@ export function createGateway({
       const email = cleanEmail(form.get('email'));
       if (!email) return seeOther(res, `/waitlist?error=${encodeURIComponent('That doesn’t look like an email address.')}`);
       const from = ['home', 'login', 'waitlist'].includes(form.get('from')) ? form.get('from') : 'waitlist';
+      const known = db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email);
+      if (!known && waitlistBusy()) return seeOther(res, `/waitlist?error=${encodeURIComponent('Lots of requests right now. Try again in a little while.')}`);
       joinWaitlist(email, from);
       return seeOther(res, `/waitlist?joined=${from}`);
     }
@@ -511,10 +518,11 @@ export function createGateway({
   async function adminRoutes(req, res, url) {
     if (url.pathname === '/admin' && ['GET', 'HEAD'].includes(req.method)) {
       const users = db.prepare('SELECT email, created_at AS createdAt, last_seen AS lastSeen FROM users ORDER BY COALESCE(last_seen, created_at) DESC').all();
-      const waitlist = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at DESC').all();
+      const waitlist = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at DESC LIMIT 300').all();
+      const waitlistTotal = db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n;
       const invites = db.prepare('SELECT email, created_at AS createdAt FROM invites ORDER BY created_at DESC').all();
       const activity = db.prepare('SELECT u.email, a.day FROM activity a JOIN users u ON u.id = a.user_id').all();
-      return html(res, 200, adminPage({ users, waitlist, invites, activity, envInvited, now: now(), origin, flash: url.searchParams.get('done') || '' }));
+      return html(res, 200, adminPage({ users, waitlist, waitlistTotal, invites, activity, envInvited, now: now(), origin, flash: url.searchParams.get('done') || '' }));
     }
     if (url.pathname === '/admin/waitlist.csv' && req.method === 'GET') {
       const rows = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at').all();
@@ -696,7 +704,7 @@ export function createGateway({
         const { email, token, consented, viewer } = await finishLogin(url.searchParams.get('code'), url.searchParams.get('state'));
         if (!mayEnter(email)) {
           // They told us who they are, so they're on the waitlist now.
-          joinWaitlist(email, 'sign-in');
+          if (!waitlistBusy()) joinWaitlist(email, 'sign-in');
           const message = `${email} isn’t invited yet. You’re on the waitlist now; we’ll email you when your spot opens.`;
           return res.writeHead(302, { Location: `/login?error=${encodeURIComponent(message)}&joined=sign-in` }).end();
         }
@@ -784,8 +792,25 @@ export function createGateway({
   return { handle, startAll, apps, db };
 }
 
-function clientIp(req) {
-  return String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+// Cloudflare's edge addresses (cloudflare.com/ips). kauzl.com is behind
+// Cloudflare, so Fly sees Cloudflare, and the visitor is in CF-Connecting-IP.
+// The Fly app can also be reached directly, where anyone could set that
+// header, so it's trusted only on requests that come from Cloudflare.
+const CLOUDFLARE = new BlockList();
+for (const net of ['173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
+  '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14',
+  '172.64.0.0/13', '131.0.72.0/22']) CLOUDFLARE.addSubnet(...net.split('/').map((x, i) => (i ? Number(x) : x)), 'ipv4');
+for (const net of ['2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32'])
+  CLOUDFLARE.addSubnet(...net.split('/').map((x, i) => (i ? Number(x) : x)), 'ipv6');
+const fromCloudflare = (ip) => {
+  const v = isIP(ip);
+  return Boolean(v) && CLOUDFLARE.check(ip, v === 4 ? 'ipv4' : 'ipv6');
+};
+
+export function clientIp(req) {
+  const peer = String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+  const visitor = String(req.headers['cf-connecting-ip'] || '').trim();
+  return visitor && isIP(visitor) && fromCloudflare(peer) ? visitor : peer;
 }
 
 async function readBody(req, max) {

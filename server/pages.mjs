@@ -269,7 +269,7 @@ function activitySection({ activity, users, waitlist, invitedSet, now }) {
 
 const SOURCES = { home: 'Home page', login: 'Sign-in page', waitlist: 'Early access page', 'sign-in': 'Tried to sign in' };
 
-export function adminPage({ users, waitlist, invites, activity = [], envInvited, now, origin, flash = '' }) {
+export function adminPage({ users, waitlist, waitlistTotal = waitlist.length, invites, activity = [], envInvited, now, origin, flash = '' }) {
   const live = users.filter((u) => u.lastSeen && now - u.lastSeen < LIVE_MS);
   const today = users.filter((u) => u.lastSeen && now - u.lastSeen < 86_400_000);
   const invitedSet = new Set([...envInvited, ...invites.map((i) => i.email)]);
@@ -302,12 +302,12 @@ export function adminPage({ users, waitlist, invites, activity = [], envInvited,
     <div class="stat live"><b>${live.length}</b><span>Live now</span></div>
     <div class="stat"><b>${today.length}</b><span>Active in the last 24 h</span></div>
     <div class="stat"><b>${invitedSet.size}</b><span>Invited</span></div>
-    <div class="stat"><b>${waiting.length}</b><span>On the waitlist</span></div>
+    <div class="stat"><b>${waitlistTotal}</b><span>Asked for access</span></div>
   </div>
 
   ${activitySection({ activity, users, waitlist, invitedSet, now })}
 
-  <section class="panel"><div class="panel-head"><div><h2>Waitlist</h2><p>Everyone who asked for access, newest first (${waitlist.length} in all, ${waiting.length} not invited yet). Invite someone and they can sign in with that Google account right away.</p></div>
+  <section class="panel"><div class="panel-head"><div><h2>Waitlist</h2><p>Everyone who asked for access, newest first (${waitlistTotal} in all${waitlistTotal > waitlist.length ? `, the newest ${waitlist.length} shown; the CSV has everyone` : ''}). Invite someone and they can sign in with that Google account right away.</p></div>
     <a class="btn quiet" href="/admin/waitlist.csv">Download CSV</a></div>
     ${waitlist.length ? `<div class="scroll"><table><thead><tr><th>Email</th><th>Where</th><th>Joined</th><th></th></tr></thead><tbody>${waitRows}</tbody></table></div>` : '<p class="empty">Nobody has joined yet. Share kauzl.com and they’ll show up here.</p>'}
   </section>
