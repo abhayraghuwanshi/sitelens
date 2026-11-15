@@ -427,14 +427,17 @@ test('robots.txt keeps crawlers out of the app and points at the tools sitemap',
   assert.match(r.body, /Sitemap: https:\/\/sitelens\.test\/sitemap\.xml/);
 });
 
-test('home and sign-in pages may load the brand fonts; home links the free tools', async () => {
+test('home and sign-in pages may load the brand fonts; both link the free tools', async () => {
   const home = await call('/');
   assert.match(home.headers['content-security-policy'], /font-src https:\/\/fonts\.gstatic\.com/);
   assert.doesNotMatch(home.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
   assert.match(home.body, /href="\/tools\/did-it-work\/"/);
   assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js">/);
   assert.doesNotMatch(home.body, /<script>(?!<)/, 'no inline script');
-  assert.match((await call('/login')).headers['content-security-policy'], /fonts\.googleapis\.com/);
+  const login = await call('/login');
+  assert.match(login.headers['content-security-policy'], /fonts\.googleapis\.com/);
+  assert.match(login.body, /href="\/tools\/">Free tools/);
+  assert.match(login.body, /href="\/home">← Back to home/);
 });
 
 test('the public demo: no sign-in, only the sample site, nothing can change', async () => {

@@ -33,6 +33,7 @@ import { createApp, selfFetch } from './index.mjs';
 import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
+import { Agent } from 'undici';
 import { guardOutgoingFetch } from './net-guard.mjs';
 import { homePage, FAVICON, FONTS, owl } from './home.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
@@ -497,12 +498,16 @@ export function createGateway({
 
   // Public, no session: the free tools, fetched from their static host.
   const toolsOrigin = String(env.TOOLS_ORIGIN || '').replace(/\/$/, '');
+  // TOOLS_ORIGIN is the operator's own setting, never a user's URL, so it may be
+  // a private address (a local tools server in development, or Fly's private
+  // network). Only these fetches skip the net guard; every other fetch keeps it.
+  const toolsAgent = toolsOrigin ? new Agent() : null;
   async function proxyTools(req, res, url) {
     if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
     if (url.pathname === '/tools' || url.pathname === '/guides') return res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
     let upstream;
     try {
-      upstream = await fetchImpl(`${toolsOrigin}${url.pathname}${url.search}`, { method: req.method, redirect: 'manual' });
+      upstream = await fetchImpl(`${toolsOrigin}${url.pathname}${url.search}`, { method: req.method, redirect: 'manual', dispatcher: toolsAgent });
     } catch {
       return res.writeHead(502, { 'Content-Type': 'text/plain' }).end('The tools are unavailable right now.');
     }
@@ -547,7 +552,7 @@ export function createGateway({
 
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error')));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin) }));
     }
     if (url.pathname === '/login/google') {
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
@@ -675,42 +680,60 @@ function redirectLogin(res, message) {
 
 const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 
-function loginPage(error) {
+function loginPage(error, { tools = false } = {}) {
+  const G = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>';
+  const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Sign in · Kauzl</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="${FONTS}">
 <style>
-  :root { color-scheme: dark; --ink: #121522; --ink-2: #1C2135; --line: #2A3048; --text: #F6F7F9; --muted: #C9CDD8; --amber: #F5A524; --err: #FF8A80; }
+  :root { color-scheme: dark; --ink: #0E0F12; --ink-2: #17181D; --ink-3: #1F2026; --line: #2A2C33; --text: #F4F4F5; --muted: #A1A1AA; --soft: #D4D4D8; --amber: #F5A524; --err: #FF8A80; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; padding: 16px; position: relative; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
   body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
-  main { position: relative; background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; padding: 64px 32px 28px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 30px 70px rgb(0 0 0 / .45); }
-  main > svg.owl { position: absolute; top: -46px; left: 50%; transform: translateX(-50%); filter: drop-shadow(0 10px 18px rgb(0 0 0 / .4)); }
+  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; width: 100%; margin: 0 auto; padding: 0 24px; height: 64px; }
+  .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 24px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; }
+  header nav { display: flex; gap: 22px; }
+  header nav a { color: var(--soft); text-decoration: none; font-size: 14px; } header nav a:hover { color: #fff; }
+  .stage { position: relative; flex: 1; display: grid; place-items: center; padding: 72px 16px 48px; }
+  main { position: relative; background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; padding: 60px 32px 32px; max-width: 400px; width: 100%; box-shadow: 0 30px 70px rgb(0 0 0 / .45); }
+  main > svg.owl { position: absolute; top: -44px; left: 50%; transform: translateX(-50%); filter: drop-shadow(0 10px 18px rgb(0 0 0 / .4)); }
   svg.owl .eyes { transform-box: fill-box; transform-origin: center; animation: blink 7s infinite; }
   @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
   @media (prefers-reduced-motion: reduce) { svg.owl .eyes { animation: none; } }
-  h1 { font: 800 30px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; margin: 0 0 10px; }
-  p { color: var(--muted); margin: 0 0 24px; }
-  a.btn { display: flex; align-items: center; justify-content: center; min-height: 46px; background: var(--amber); color: var(--ink); text-decoration: none; padding: 10px 16px; border-radius: 11px; font-weight: 600; }
-  a.btn:hover { filter: brightness(1.06); }
-  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-  .err { color: var(--err); background: rgb(255 138 128 / .1); border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; }
-  .alt { display: block; margin-top: 14px; color: var(--amber); font-size: 14px; }
-  .home { display: block; margin-top: 18px; color: var(--muted); font-size: 14px; text-decoration: none; }
-  .home:hover { color: var(--text); }
+  h1 { font: 800 28px/1.1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.035em; margin: 0 0 8px; text-align: center; }
+  .lead { color: var(--soft); margin: 0 0 24px; text-align: center; }
+  .google { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; background: #fff; color: #1F1F1F; text-decoration: none; padding: 10px 16px; border-radius: 12px; font-weight: 600; transition: filter .15s; }
+  .google:hover { filter: brightness(.94); }
+  .err { color: var(--err); background: rgb(255 138 128 / .1); border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; text-align: center; }
+  .or { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: var(--muted); font-size: 13px; }
+  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
+  .opt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: inherit; text-decoration: none; transition: border-color .15s, background .15s; }
+  .opt + .opt { margin-top: 10px; }
+  .opt:hover { border-color: var(--amber); background: var(--ink-3); }
+  .opt span { flex: 1; display: flex; flex-direction: column; }
+  .opt b { font-weight: 600; font-size: 14px; } .opt small { color: var(--muted); font-size: 13px; }
+  .opt svg { color: var(--muted); flex: none; } .opt:hover svg { color: var(--amber); }
 </style></head>
-<body><main>
-  ${owl(84, { variant: 'paper' })}
-  <h1>kauzl</h1>
-  <p>Invite only. Sign in with the Google account you were invited with.</p>
+<body>
+<header>
+  <a class="brand" href="/home" aria-label="Kauzl home">${owl(28, { variant: 'paper' })}kauzl</a>
+  <nav aria-label="Site">${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a></nav>
+</header>
+<div class="stage"><main>
+  ${owl(80, { variant: 'paper' })}
+  <h1>Sign in to Kauzl</h1>
+  <p class="lead">Kauzl is invite only. Use the Google account you were invited with.</p>
   ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
-  <a class="btn" href="/login/google">Sign in with Google</a>
-  <a class="alt" href="/login/google?viewer=1">Someone shared a site with you? Sign in to view it</a>
-  <a class="alt" href="/demo">No invite yet? Look around the demo</a>
-  <a class="home" href="/home">← What is Kauzl?</a>
-</main></body></html>`;
+  <a class="google" href="/login/google">${G}Sign in with Google</a>
+  <p class="or">Not invited?</p>
+  <a class="opt" href="/login/google?viewer=1"><span><b>Someone shared a site with you</b><small>Sign in to view it, read-only</small></span>${arrow}</a>
+  <a class="opt" href="/demo"><span><b>Look around the demo</b><small>No sign-in needed</small></span>${arrow}</a>
+</main></div>
+</body></html>`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
