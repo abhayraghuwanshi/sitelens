@@ -317,7 +317,7 @@ function Hosting({ hosting, setup, siteId, onChange }) {
       {chosen && !chosen.feed && (
         <>
           <label class="field" style={{ maxWidth: '360px' }}><span class="field-label">Plan or note <small>optional</small></span>
-            <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : ''} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
+            <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : provider === 'fly' ? 'App name, e.g. my-app (one machine, sin)' : ''} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
           </label>
           <p class="note m-0">{chosen.label} has no deploy feed Kauzl can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
         </>

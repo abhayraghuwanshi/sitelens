@@ -37,6 +37,7 @@ export const HOSTING = {
   netlify: { label: 'Netlify', feed: false },
   'cloudflare-pages': { label: 'Cloudflare Pages', feed: false },
   'github-pages': { label: 'GitHub Pages', feed: false },
+  fly: { label: 'Fly.io', feed: false },
   other: { label: 'Other / self-hosted', feed: false },
 };
 

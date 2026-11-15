@@ -102,12 +102,14 @@ function FileLink({ site, file, onSaved }) {
   }
   return (
     <div class="stack gap-6">
-      <form class="row" onSubmit={(e) => { e.preventDefault(); save(link.trim()); }}>
+      {/* A row, not a form: this sits inside the site's Edit form, and Enter here must not save the site. */}
+      <div class="row">
         <input type="url" style={{ flex: '1', minWidth: '240px', maxWidth: '560px' }} placeholder="https://github.com/you/repo/blob/branch/.sitelens.yml"
-          value={link} onInput={(e) => setLink(e.currentTarget.value)} aria-label="Link to the .sitelens.yml on GitHub" />
-        <button class="btn primary" type="submit" disabled={busy || !link.trim() || link.trim() === file.link}>Use this file</button>
+          value={link} onInput={(e) => setLink(e.currentTarget.value)} aria-label="Link to the .sitelens.yml on GitHub"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (link.trim() && link.trim() !== file.link) save(link.trim()); } }} />
+        <button class="btn primary" type="button" disabled={busy || !link.trim() || link.trim() === file.link} onClick={() => save(link.trim())}>Use this file</button>
         {file.link && <button class="btn ghost" type="button" disabled={busy} onClick={() => save('')}>Use the default branch</button>}
-      </form>
+      </div>
       <p class="note m-0">{file.link
         ? 'Reading the file at this link. Changes made here open a pull request into its branch.'
         : 'Kauzl reads the file from the default branch of the site’s repo. To use another branch, paste the file’s link from GitHub.'}</p>

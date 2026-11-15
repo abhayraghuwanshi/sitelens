@@ -82,7 +82,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (setupMoved) body = null;
   else if (section === 'site' && view === 'setup') body = <Page title="What Kauzl measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
   else if (section === 'site') body = <ExploreFrame site={site} view={view} params={route.params} auth={auth} ranges={state.ranges} />;
-  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} /></Page>;
+  else if (section === 'settings' || section === 'account') body = <Page title="Account" sub="Sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} siteMeasures={siteMeasures} /></Page>;
   else if (section === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
   else if (section === 'alerts' && route.params.get('view') === 'settings') body = <Page title="Alert settings" sub="What to watch on every site, and where alerts go" back={{ href: '#/alerts', label: 'All alerts' }}><AlertSettings /></Page>;
   else if (section === 'alerts') body = <Page title="All alerts" sub="What moved on every site"><AlertsPage sites={sites} /></Page>;
@@ -91,9 +91,13 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     body = <Page title={section[0].toUpperCase() + section.slice(1)} back={story}><View id={siteId} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
   } else body = <ErrorState error={{ message: 'This page isn’t in the new layout yet.' }} />;
 
-  // Under an existing site's Edit form: who can see it, which visits it leaves out, and what Studio measures.
+  // Inside an existing site's Edit form: what Studio measures (goals, funnels, search, alerts).
+  function siteMeasures(s) {
+    return <Setup site={s} connections={false} />;
+  }
+  // Under it: who can see the site, and which visits it leaves out.
   function siteExtras(s) {
-    return <><SiteAccess site={s} hosted={state.hosted} /><LeaveOut site={s} onSaved={onReload} /><Setup site={s} connections={false} /></>;
+    return <><SiteAccess site={s} hosted={state.hosted} /><LeaveOut site={s} onSaved={onReload} /></>;
   }
 
   const href = (t) => (t === 'story' ? `#/site/${current.id}` : t === 'explore' ? `#/site/${current.id}/${EXPLORE_TABS[0].key}` : `#/site/${current.id}/${t}`);

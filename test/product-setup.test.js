@@ -93,3 +93,9 @@ test('setup.save writes the hosting choice through to Firebase and Vercel links'
   assert.deepEqual(calls.at(-1), ['vercel', 's1', 'prj_abc123']);
   assert.ok(saved);
 });
+
+test('guessHosting knows Fly.io from its CNAME', () => {
+  assert.equal(guessHosting({ cname: ['my-app.fly.dev.'], a: [] }), 'fly');
+  assert.equal(guessHosting({ cname: ['my-app.fly.dev'], a: [] }), 'fly');
+  assert.equal(guessHosting({ cname: ['notfly.dev.example.com'], a: [] }), '');
+});
