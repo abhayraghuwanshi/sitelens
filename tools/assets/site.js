@@ -127,6 +127,19 @@ if (pageKind === 'tool') {
     else if (b.dataset.track) track('tool_option', { detail: b.dataset.track });
   });
 }
+// Something the server just did for this visitor (joined the waitlist, signed
+// in): <body data-event="waitlist_join" data-event-detail="home" data-then="/">.
+// Sent once; with data-then, the page moves on once GTM has sent it (or 1.5 s).
+{
+  const { event, eventDetail, then } = document.body?.dataset || {};
+  if (event) {
+    let gone = false;
+    const go = () => { if (then && !gone) { gone = true; location.replace(then); } };
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event, detail: eventDetail || undefined, eventCallback: go, eventTimeout: 1500 });
+    if (then) setTimeout(go, 1500);
+  }
+}
 // Clicks towards Kauzl, the demo, sign-in, other tools and guides.
 document.addEventListener('click', (e) => {
   const a = e.target.closest('a[href]');

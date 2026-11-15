@@ -225,7 +225,14 @@ p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px
 .final { position: relative; overflow: hidden; display: grid; justify-items: center; text-align: center; background: var(--ink); color: #F6F7F9; border-radius: 28px; padding: 44px; }
 .final > * { position: relative; }
 .final h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: -0.035em; margin: 16px 0 10px; }
-.final p { color: var(--ink-text); margin: 0 auto 24px; max-width: 30em; } .final .ctas { justify-content: center; } .final svg.owl { margin: 0 auto; }
+.final p { color: var(--ink-text); margin: 0 auto 24px; max-width: 30em; }
+.join { display: flex; gap: 10px; width: 100%; max-width: 460px; margin: 0 auto; }
+.join input[type=email] { flex: 1; min-width: 0; min-height: 46px; padding: 10px 14px; border-radius: 11px; border: 1px solid var(--ink-line); background: var(--ink-2); color: #F6F7F9; font: 15px var(--font); }
+.join input[type=email]::placeholder { color: var(--ink-text); opacity: .7; }
+.join input[type=email]:focus { outline: none; border-color: var(--amber); }
+.join .btn { border: 0; cursor: pointer; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.final .fine { margin: 14px auto 0; font-size: 14px; } .final .fine a { color: #F6F7F9; } .final .ctas { justify-content: center; } .final svg.owl { margin: 0 auto; }
 
 footer { margin-top: 72px; padding: 36px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px 32px; flex-wrap: wrap; }
@@ -249,7 +256,7 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
   .sec-head { flex-direction: column; align-items: flex-start; } .sec-head .all { margin: -16px 0 24px; }
   .top .wrap { gap: 16px; }
 }
-@media (max-width: 480px) { .wrap { padding-inline: 16px; } .final { padding: 28px; } section { padding-top: 72px; } }
+@media (max-width: 480px) { .join { flex-direction: column; } .wrap { padding-inline: 16px; } .final { padding: 28px; } section { padding-top: 72px; } }
 `;
 
 // tools: the free tools are served at /tools/ (TOOLS_ORIGIN is set), so link
@@ -286,7 +293,7 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
       <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
         <a class="btn amber" href="/demo">See the live demo</a>
-        <a class="btn ghost" href="${enter}">Open Kauzl</a>
+        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="#early-access">Get early access</a>'}
       </div>
       <ul class="perks"><li>${CHECK}Demo needs no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>
@@ -345,12 +352,20 @@ ${tools ? `  <section id="tools"><div class="wrap">
       <a class="all" href="/guides/">All guides →</a></nav>
   </div></section>
 ` : ''}
-  <section><div class="wrap">
+  <section id="early-access"><div class="wrap">
     <div class="final">
       <div>${owl(56, { variant: 'paper' })}
-        <h2>See your site’s Story</h2>
+        ${signedIn ? `<h2>See your site’s Story</h2>
         <p>Connect a site and find out what last month’s releases, posts and articles actually did.</p>
-        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="/demo">See the demo first</a></div>
+        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="/demo">See the demo first</a></div>` : `<h2>Get early access</h2>
+        <p>Kauzl is opening to a few teams at a time. Leave your email and we’ll invite you, with a link to sign in.</p>
+        <form class="join" method="post" action="/waitlist">
+          <input type="hidden" name="from" value="home">
+          <label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+          <input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" aria-label="Your email">
+          <button class="btn amber" type="submit">Get early access</button>
+        </form>
+        <p class="fine">Already invited? <a href="/login">Sign in</a> · or <a href="/demo">look around the demo</a></p>`}
       </div>
     </div>
   </div></section>

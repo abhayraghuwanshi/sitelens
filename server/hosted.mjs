@@ -1,6 +1,7 @@
 // Kauzl, hosted: an invite-only gateway in front of one app per user.
 //
-//  - Sign-in is Google; the email must be on ALLOWED_EMAILS. The same consent
+//  - Sign-in is Google; the email must be invited: on ALLOWED_EMAILS, or invited
+//    from the admin page (/admin, for ADMIN_EMAILS). The same consent
 //    connects the user's GA4, Search Console and BigQuery, so it's one step.
 //  - A session is a random 256-bit id in an HttpOnly cookie; only its SHA-256
 //    is stored, in /data/gateway.db.
@@ -19,9 +20,12 @@
 //  - /mcp speaks MCP over HTTP to Claude Code and Claude Desktop. A personal
 //    access token (slk_…, made in Account → Claude; only its hash is kept)
 //    picks the user, and the tools run against that user's app and folder.
+//  - Early access: anyone can leave an email (/waitlist, from the home and
+//    sign-in pages; also anyone not invited who tries to sign in). Admins see
+//    the list, who's live, and invite people from /admin.
 //
 // Env: STUDIO_HOST (STUDIO_OLD_HOSTS: other names, comma-separated, that redirect to it), MASTER_KEY (32 bytes, base64), GOOGLE_CLIENT_ID,
-// GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), STUDIO_DATA_DIR, PORT.
+// GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), ADMIN_EMAILS (comma-separated; default ALLOWED_EMAILS), STUDIO_DATA_DIR, PORT.
 
 import { createServer } from 'node:http';
 import { mkdirSync } from 'node:fs';
@@ -35,7 +39,8 @@ import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
 import { Agent } from 'undici';
 import { guardOutgoingFetch } from './net-guard.mjs';
-import { homePage, FAVICON, FONTS, owl } from './home.mjs';
+import { homePage } from './home.mjs';
+import { loginPage, waitlistPage, adminPage, waitlistCsv, signedInPage } from './pages.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
 
 const COOKIE = '__Host-sitelens';
@@ -97,7 +102,7 @@ const TOOLS_PASS_HEADERS = ['content-type', 'etag', 'last-modified'];
 const STATIC_PREFIX = /^\/(tools|guides)(\/|$)/;
 
 export function robotsTxt(origin, { tools = false } = {}) {
-  return `User-agent: *\nDisallow: /api/\nDisallow: /login\nDisallow: /mcp\n${tools ? `\nSitemap: ${origin}/sitemap.xml\n` : ''}`;
+  return `User-agent: *\nDisallow: /api/\nDisallow: /login\nDisallow: /mcp\nDisallow: /admin\n${tools ? `\nSitemap: ${origin}/sitemap.xml\n` : ''}`;
 }
 
 export function parseMasterKey(value) {
@@ -130,7 +135,7 @@ export function createGateway({
   masterKey,
   host,
   oldHosts = [],
-  allowedEmails,
+  allowedEmails: envInvited,
   port = 8080,
   env = process.env,
   fetchImpl = fetch,
@@ -159,7 +164,14 @@ export function createGateway({
     CREATE TABLE IF NOT EXISTS shares (owner_id TEXT NOT NULL REFERENCES users(id), site_id TEXT NOT NULL, email TEXT NOT NULL,
       created_at INTEGER NOT NULL, PRIMARY KEY (owner_id, site_id, email));
     CREATE INDEX IF NOT EXISTS shares_email ON shares (email);
+    CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, source TEXT NOT NULL, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS invites (email TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS activity (user_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, day));
   `);
+  // Invited: ALLOWED_EMAILS plus everyone invited from /admin.
+  const allowedEmails = new Set(envInvited);
+  for (const { email } of db.prepare('SELECT email FROM invites').all()) allowedEmails.add(email);
+  const admins = env.ADMIN_EMAILS ? parseEmails(env.ADMIN_EMAILS) : new Set(envInvited);
   // Tokens made before expiry existed keep lasting until revoked (NULL).
   if (!db.prepare('PRAGMA table_info(mcp_tokens)').all().some((c) => c.name === 'expires_at')) db.exec('ALTER TABLE mcp_tokens ADD COLUMN expires_at INTEGER');
   const origin = `https://${host}`;
@@ -229,10 +241,12 @@ export function createGateway({
   function sessionUser(req) {
     const id = cookies(req)[COOKIE];
     if (!id) return null;
-    const row = db.prepare('SELECT u.id, u.email, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?').get(sha256(id));
+    const row = db.prepare('SELECT u.id, u.email, u.last_seen, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?').get(sha256(id));
     if (!row || row.expires_at < now()) return null;
     // Someone taken off the invite list (and every share) loses access at once.
     if (!mayEnter(row.email)) return null;
+    // Last seen, at most once a minute: the admin page's "live now" and retention.
+    if (!row.last_seen || now() - row.last_seen > 60_000) seen(row.id);
     return { id: row.id, email: row.email };
   }
 
@@ -319,6 +333,12 @@ export function createGateway({
     return jsonOut(res, 405, { error: 'Method not allowed' });
   }
 
+  // A user was active: now (live) and today (the days behind retention).
+  function seen(userId) {
+    db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now(), userId);
+    db.prepare('INSERT OR IGNORE INTO activity (user_id, day) VALUES (?, ?)').run(userId, new Date(now()).toISOString().slice(0, 10));
+  }
+
   function startSession(res, email) {
     let user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
     if (!user) {
@@ -328,7 +348,7 @@ export function createGateway({
     const id = randomBytes(32).toString('base64url');
     db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now());
     db.prepare('INSERT INTO sessions (hash, user_id, expires_at) VALUES (?, ?, ?)').run(sha256(id), user.id, now() + SESSION_DAYS * 86_400_000);
-    db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now(), user.id);
+    seen(user.id);
     res.setHeader('Set-Cookie', `${COOKIE}=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86_400}`);
     return user;
   }
@@ -450,6 +470,77 @@ export function createGateway({
     return entry.count > 20;
   }
 
+  /* ---------- Early access: the waitlist and invites ---------- */
+
+  const WAITLIST_MAX = 50_000;
+  function joinWaitlist(email, source) {
+    if (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n >= WAITLIST_MAX) return;
+    db.prepare('INSERT OR IGNORE INTO waitlist (email, source, created_at) VALUES (?, ?, ?)').run(email, source, now());
+  }
+  // 10 waitlist posts per address per 10 minutes.
+  function waitlistLimited(req) {
+    const key = `wl:${clientIp(req)}`;
+    const entry = attempts.get(key);
+    if (!entry || entry.resetAt < now()) {
+      attempts.set(key, { count: 1, resetAt: now() + 10 * 60_000 });
+      return false;
+    }
+    entry.count += 1;
+    return entry.count > 10;
+  }
+  const html = (res, status, page) => res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(page);
+  const seeOther = (res, location) => res.writeHead(303, { Location: location, 'Cache-Control': 'no-store' }).end();
+  const formBody = async (req) => new URLSearchParams(await readBody(req, 4_000).catch(() => ''));
+
+  async function waitlistRoutes(req, res, url) {
+    if (req.method === 'POST') {
+      if (waitlistLimited(req)) return seeOther(res, `/waitlist?error=${encodeURIComponent('Too many tries. Wait a few minutes.')}`);
+      const form = await formBody(req);
+      // A field people never see: only bots fill it in. They get the thank-you, and nothing is kept.
+      if (form.get('website')) return seeOther(res, '/waitlist?joined=1');
+      const email = cleanEmail(form.get('email'));
+      if (!email) return seeOther(res, `/waitlist?error=${encodeURIComponent('That doesn’t look like an email address.')}`);
+      const from = ['home', 'login', 'waitlist'].includes(form.get('from')) ? form.get('from') : 'waitlist';
+      joinWaitlist(email, from);
+      return seeOther(res, `/waitlist?joined=${from}`);
+    }
+    if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD, POST' }).end();
+    return html(res, 200, waitlistPage({ joined: url.searchParams.get('joined') || '', error: url.searchParams.get('error') || '', tools: Boolean(toolsOrigin), ga: tagId }));
+  }
+
+  async function adminRoutes(req, res, url) {
+    if (url.pathname === '/admin' && ['GET', 'HEAD'].includes(req.method)) {
+      const users = db.prepare('SELECT email, created_at AS createdAt, last_seen AS lastSeen FROM users ORDER BY COALESCE(last_seen, created_at) DESC').all();
+      const waitlist = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at DESC').all();
+      const invites = db.prepare('SELECT email, created_at AS createdAt FROM invites ORDER BY created_at DESC').all();
+      const activity = db.prepare('SELECT u.email, a.day FROM activity a JOIN users u ON u.id = a.user_id').all();
+      return html(res, 200, adminPage({ users, waitlist, invites, activity, envInvited, now: now(), origin, flash: url.searchParams.get('done') || '' }));
+    }
+    if (url.pathname === '/admin/waitlist.csv' && req.method === 'GET') {
+      const rows = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at').all();
+      return res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="kauzl-waitlist.csv"', 'Cache-Control': 'no-store' }).end(waitlistCsv(rows));
+    }
+    if (req.method === 'POST' && ['/admin/invite', '/admin/revoke', '/admin/waitlist/remove'].includes(url.pathname)) {
+      const email = cleanEmail((await formBody(req)).get('email'));
+      if (!email) return seeOther(res, `/admin?done=${encodeURIComponent('That doesn’t look like an email address.')}`);
+      let done;
+      if (url.pathname === '/admin/invite') {
+        db.prepare('INSERT OR IGNORE INTO invites (email, created_at) VALUES (?, ?)').run(email, now());
+        allowedEmails.add(email);
+        done = `Invited ${email}. Send them the link: “Email the link” below.`;
+      } else if (url.pathname === '/admin/revoke') {
+        db.prepare('DELETE FROM invites WHERE email = ?').run(email);
+        if (!envInvited.has(email)) allowedEmails.delete(email);
+        done = envInvited.has(email) ? `${email} is on the server list (ALLOWED_EMAILS), so they stay invited.` : `${email} is no longer invited.`;
+      } else {
+        db.prepare('DELETE FROM waitlist WHERE email = ?').run(email);
+        done = `Removed ${email} from the waitlist.`;
+      }
+      return seeOther(res, `/admin?done=${encodeURIComponent(done)}`);
+    }
+    return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+  }
+
   async function finishLogin(code, state) {
     const pending = loginStates.get(state);
     loginStates.delete(state);
@@ -502,6 +593,8 @@ export function createGateway({
   // a private address (a local tools server in development, or Fly's private
   // network). Only these fetches skip the net guard; every other fetch keeps it.
   const toolsAgent = toolsOrigin ? new Agent() : null;
+  // kauzl.com's own Google tag, on the public pages only; its scripts come from the tools host.
+  const tagId = toolsOrigin && /^(GTM|G)-[A-Z0-9]+$/.test(env.GOOGLE_TAG_ID || '') ? env.GOOGLE_TAG_ID : '';
   async function proxyTools(req, res, url) {
     if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
     if (url.pathname === '/tools' || url.pathname === '/guides') return res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
@@ -550,9 +643,10 @@ export function createGateway({
       return res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Cross-site request refused.');
     }
 
+    if (url.pathname === '/waitlist') return waitlistRoutes(req, res, url);
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin) }));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin), ga: tagId, joined: url.searchParams.get('joined') === 'sign-in' }));
     }
     if (url.pathname === '/login/google') {
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
@@ -585,11 +679,19 @@ export function createGateway({
       try {
         if (url.searchParams.get('error')) throw new Error('Sign-in was cancelled.');
         const { email, token, consented, viewer } = await finishLogin(url.searchParams.get('code'), url.searchParams.get('state'));
-        if (!mayEnter(email)) throw new Error(`${email} isn’t invited yet. Ask for an invite, then try again.`);
+        if (!mayEnter(email)) {
+          // They told us who they are, so they're on the waitlist now.
+          joinWaitlist(email, 'sign-in');
+          const message = `${email} isn’t invited yet. You’re on the waitlist now; we’ll email you when your spot opens.`;
+          return res.writeHead(302, { Location: `/login?error=${encodeURIComponent(message)}&joined=sign-in` }).end();
+        }
+        const firstTime = !db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
         const user = startSession(res, email);
         // Only invited people connect their Google data; viewers just look.
         const done = allowedEmails.has(email) && !viewer ? await connectGoogle(user, email, token, consented) : true;
-        return res.writeHead(302, { Location: done ? '/' : '/login/google?consent=1' }).end();
+        if (!done) return res.writeHead(302, { Location: '/login/google?consent=1' }).end();
+        // With kauzl.com's analytics on, pass through a page that records the sign-in.
+        return res.writeHead(302, { Location: tagId ? `/signed-in?e=${firstTime ? 'sign_up' : 'login'}` : '/' }).end();
       } catch (err) {
         return redirectLogin(res, err.message);
       }
@@ -624,6 +726,14 @@ export function createGateway({
         return res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Sign in to continue.', kind: 'login' }));
       }
       return res.writeHead(302, { Location: '/login' }).end();
+    }
+    if (url.pathname === '/signed-in') {
+      if (!tagId) return res.writeHead(302, { Location: '/' }).end();
+      return html(res, 200, signedInPage({ event: url.searchParams.get('e') === 'sign_up' ? 'sign_up' : 'login', ga: tagId }));
+    }
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      if (!admins.has(user.email)) return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+      return adminRoutes(req, res, url);
     }
     const invited = allowedEmails.has(user.email);
     if (url.pathname === '/api/me') {
@@ -676,64 +786,6 @@ async function readBody(req, max) {
 
 function redirectLogin(res, message) {
   res.writeHead(302, { Location: `/login?error=${encodeURIComponent(message)}` }).end();
-}
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-function loginPage(error, { tools = false } = {}) {
-  const G = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 13 4 4 13 4 24s9 20 20 20 20-9 20-20c0-1.3-.1-2.6-.4-3.9z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z"/></svg>';
-  const arrow = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · Kauzl</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="${FONTS}">
-<style>
-  :root { color-scheme: dark; --ink: #0E0F12; --ink-2: #17181D; --ink-3: #1F2026; --line: #2A2C33; --text: #F4F4F5; --muted: #A1A1AA; --soft: #D4D4D8; --amber: #F5A524; --err: #FF8A80; }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
-  body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
-  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-  header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; width: 100%; margin: 0 auto; padding: 0 24px; height: 64px; }
-  .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 24px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; }
-  header nav { display: flex; gap: 22px; }
-  header nav a { color: var(--soft); text-decoration: none; font-size: 14px; } header nav a:hover { color: #fff; }
-  .stage { position: relative; flex: 1; display: grid; place-items: center; padding: 72px 16px 48px; }
-  main { position: relative; background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; padding: 60px 32px 32px; max-width: 400px; width: 100%; box-shadow: 0 30px 70px rgb(0 0 0 / .45); }
-  main > svg.owl { position: absolute; top: -44px; left: 50%; transform: translateX(-50%); filter: drop-shadow(0 10px 18px rgb(0 0 0 / .4)); }
-  svg.owl .eyes { transform-box: fill-box; transform-origin: center; animation: blink 7s infinite; }
-  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
-  @media (prefers-reduced-motion: reduce) { svg.owl .eyes { animation: none; } }
-  h1 { font: 800 28px/1.1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.035em; margin: 0 0 8px; text-align: center; }
-  .lead { color: var(--soft); margin: 0 0 24px; text-align: center; }
-  .google { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; background: #fff; color: #1F1F1F; text-decoration: none; padding: 10px 16px; border-radius: 12px; font-weight: 600; transition: filter .15s; }
-  .google:hover { filter: brightness(.94); }
-  .err { color: var(--err); background: rgb(255 138 128 / .1); border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; text-align: center; }
-  .or { display: flex; align-items: center; gap: 12px; margin: 24px 0 14px; color: var(--muted); font-size: 13px; }
-  .or::before, .or::after { content: ""; flex: 1; height: 1px; background: var(--line); }
-  .opt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: inherit; text-decoration: none; transition: border-color .15s, background .15s; }
-  .opt + .opt { margin-top: 10px; }
-  .opt:hover { border-color: var(--amber); background: var(--ink-3); }
-  .opt span { flex: 1; display: flex; flex-direction: column; }
-  .opt b { font-weight: 600; font-size: 14px; } .opt small { color: var(--muted); font-size: 13px; }
-  .opt svg { color: var(--muted); flex: none; } .opt:hover svg { color: var(--amber); }
-</style></head>
-<body>
-<header>
-  <a class="brand" href="/home" aria-label="Kauzl home">${owl(28, { variant: 'paper' })}kauzl</a>
-  <nav aria-label="Site">${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a></nav>
-</header>
-<div class="stage"><main>
-  ${owl(80, { variant: 'paper' })}
-  <h1>Sign in to Kauzl</h1>
-  <p class="lead">Kauzl is invite only. Use the Google account you were invited with.</p>
-  ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
-  <a class="google" href="/login/google">${G}Sign in with Google</a>
-  <p class="or">Not invited?</p>
-  <a class="opt" href="/login/google?viewer=1"><span><b>Someone shared a site with you</b><small>Sign in to view it, read-only</small></span>${arrow}</a>
-  <a class="opt" href="/demo"><span><b>Look around the demo</b><small>No sign-in needed</small></span>${arrow}</a>
-</main></div>
-</body></html>`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
