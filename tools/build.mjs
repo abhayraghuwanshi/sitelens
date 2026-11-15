@@ -12,9 +12,19 @@ import { readdir, rm, mkdir, writeFile, cp } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
+import { createHash } from 'node:crypto';
 import { owl } from './assets/lib/owl.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// Asset URLs carry a hash of the assets folder, so a deploy never pairs new
+// pages with a stylesheet or script the browser cached from the last one.
+const ASSET_V = await (async function hashDir(dir, h = createHash('sha256')) {
+  for (const e of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
+    const f = path.join(dir, e.name);
+    if (e.isDirectory()) await hashDir(f, h); else h.update(e.name).update(await readFile(f));
+  }
+  return h;
+})(path.join(here, 'assets')).then((h) => h.digest('hex').slice(0, 10));
 const SITE = (process.env.SITE || 'https://kauzl.com').replace(/\/$/, '');
 const BASE = `/${(process.env.BASE ?? '/tools').replace(/^\/|\/$/g, '')}`.replace(/^\/$/, '');
 const APP = process.env.APP_URL || 'https://kauzl.com';
@@ -93,20 +103,20 @@ function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website
 <link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap">
-<link rel="stylesheet" href="${BASE}/assets/site.css">
+<link rel="stylesheet" href="${BASE}/assets/site.css?v=${ASSET_V}">
 ${ld.map(jsonLd).join('\n')}
 </head><body data-page="${page}">
 <a class="skip" href="#main">${skip}</a>
 <header class="top"><div class="wrap">
-  <a class="brand" href="${href('')}" aria-label="Kauzl free tools">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span><span class="tag">free tools</span></a>
+  <div class="brand"><a class="home-link" href="${APP}/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a><a class="tag" href="${href('')}">free tools</a></div>
   <nav aria-label="Main"><a href="${href('')}">Tools</a><a href="${ghref('')}">Guides</a><a href="${APP}/demo">Demo</a><a class="btn amber small" href="${APP}">Try Kauzl</a></nav>
 </div></header>
 ${band}
 <main class="wrap" id="main">${body}</main>
 ${footer}
-<script type="module" src="${BASE}/assets/site.js"></script>
-${GA ? `<script defer src="${BASE}/assets/ga.js" data-ga="${GA}"></script>` : ''}
-${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}"></script>`).join('\n')}
+<script type="module" src="${BASE}/assets/site.js?v=${ASSET_V}"></script>
+${GA ? `<script defer src="${BASE}/assets/ga.js?v=${ASSET_V}" data-ga="${GA}"></script>` : ''}
+${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}?v=${ASSET_V}"></script>`).join('\n')}
 </body></html>
 `;
 }
@@ -213,14 +223,34 @@ ${cta()}`;
 
 const tile = (p) => `<a class="tile" href="${href(p.slug)}"><span class="ic">${icon(p.slug)}</span><h3>${esc(p.name)}</h3><p>${esc(p.blurb || p.description)}</p><span class="go" aria-hidden="true">Open →</span></a>`;
 
+// The index page: two featured tools with a small picture of what they do,
+// then everything else as short lists under three headings.
+const SHORT = {
+  'did-it-work': 'Did it work?', 'ab-test-calculator': 'A/B test significance', 'sample-size-calculator': 'A/B test sample size',
+  'ai-robots-txt-generator': 'AI robots.txt', 'ai-crawler-log-analyzer': 'AI crawler log analyzer', 'open-graph-preview': 'Open Graph preview',
+  'serp-preview': 'Google snippet preview', 'schema-generator': 'Schema markup',
+};
+const FEATURED = {
+  'did-it-work': {
+    kick: 'Most used', line: 'Paste daily numbers from before and after a launch. Get a straight answer: real change, or noise.',
+    visual: `<div class="fv-ba"><span>Before</span><span class="t"><i style="width:62%"></i></span><b>412/day</b><span>After</span><span class="t a"><i style="width:84%"></i></span><b>538/day</b></div><p class="fv-foot"><b class="good">+31%</b> · very likely real</p>`,
+  },
+  'utm-builder': {
+    kick: 'Campaigns', line: 'Tag every link you share, in bulk, with naming checks so GA4 reports stay clean.',
+    visual: `<p class="fv-url">kauzl.com/pricing<span>?utm_source=</span><b>reddit</b><span>&amp;utm_medium=</span><b>social</b><span>&amp;utm_campaign=</span><b>launch</b></p><p class="fv-foot">3 links tagged · names checked</p>`,
+  },
+};
+const feature = (p) => `<a class="feature" href="${href(p.slug)}"><div><p class="kick">${FEATURED[p.slug].kick}</p><h3>${esc(SHORT[p.slug] || p.name)}</h3><p>${FEATURED[p.slug].line}</p><span class="go">Open the tool →</span></div><div class="fv" aria-hidden="true">${FEATURED[p.slug].visual}</div></a>`;
+const row = (p) => `<li><a class="row" href="${href(p.slug)}"><span class="ic">${icon(p.slug)}</span><span><b>${esc(SHORT[p.slug] || p.name)}</b><small>${esc(p.blurb || p.description)}</small></span></a></li>`;
+
 function indexPage(pages) {
   const groups = [
-    ['Campaigns and experiments', 'Tag the links, then find out what they did.', ['utm-builder', 'did-it-work', 'ab-test-calculator', 'sample-size-calculator']],
-    ['AI search and crawlers', 'Decide who reads your site, and see who actually does.', ['ai-robots-txt-generator', 'ai-crawler-log-analyzer', 'llms-txt-generator']],
-    ['Search and sharing previews', 'How your page looks before anyone clicks.', ['serp-preview', 'open-graph-preview', 'schema-generator']],
+    ['Experiments', 'Know when a test is done, and who won.', ['ab-test-calculator', 'sample-size-calculator']],
+    ['AI search', 'Decide who reads your site, and see who does.', ['ai-robots-txt-generator', 'ai-crawler-log-analyzer', 'llms-txt-generator']],
+    ['Before you publish', 'How your page looks before anyone clicks.', ['serp-preview', 'open-graph-preview', 'schema-generator']],
   ];
   const bySlug = Object.fromEntries(pages.map((p) => [p.slug, p]));
-  const listed = new Set(groups.flatMap(([, , s]) => s));
+  const listed = new Set([...Object.keys(FEATURED), ...groups.flatMap(([, , s]) => s)]);
   const rest = pages.filter((p) => !listed.has(p.slug));
   const band = `<section class="band home"><div class="wrap band-in">
 <div class="band-copy"><p class="eyebrow">Free tools from kauzl</p>
@@ -229,8 +259,11 @@ function indexPage(pages) {
 <div class="perch" aria-hidden="true">${owl(210, { variant: 'paper', className: 'hero-owl' })}<span class="branch"></span></div>
 </div></section>`;
   const body = `
-${groups.map(([name, sub, slugs]) => `<section class="group"><h2 class="section-title">${name}</h2><p class="section-sub">${sub}</p><div class="grid">${slugs.filter((s) => bySlug[s]).map((s) => tile(bySlug[s])).join('')}</div></section>`).join('\n')}
-${rest.length ? `<h2 class="section-title">More</h2><div class="grid">${rest.map(tile).join('')}</div>` : ''}
+<section class="group"><h2 class="section-title">Start here</h2><p class="section-sub">The two questions every launch asks.</p>
+<div class="features">${Object.keys(FEATURED).filter((s) => bySlug[s]).map((s) => feature(bySlug[s])).join('')}</div></section>
+<section class="group"><h2 class="section-title">More tools</h2>
+<div class="cols">${groups.map(([name, sub, slugs]) => `<div class="col"><h3>${name}</h3><p class="col-sub">${sub}</p><ul>${slugs.filter((s) => bySlug[s]).map((s) => row(bySlug[s])).join('')}</ul></div>`).join('')}
+${rest.length ? `<div class="col"><h3>More</h3><ul>${rest.map(row).join('')}</ul></div>` : ''}</div></section>
 ${cta()}`;
   return layout({
     slug: '', page: 'index:tools', title: 'Free Marketing & Analytics Tools: UTM Builder, A/B Test Calculator, AI robots.txt | Kauzl',

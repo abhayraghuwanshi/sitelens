@@ -1,0 +1,20 @@
+version: 1
+site: kauzl.com
+kind: saas
+
+goals:
+  # /signed-in (server/pages.mjs signedInPage, sent by tools/assets/site.js) after any
+  # later Google sign-in. First, so Retention follows people who keep coming back.
+  - { event: login, label: Sign-ins }
+  # /signed-in after someone's first Google sign-in.
+  - { event: sign_up, label: New users }
+  # The thank-you after the early-access form (home, sign-in page, /waitlist), or a
+  # sign-in by someone not invited yet (detail says which).
+  - { event: waitlist_join, label: Early-access sign-ups, alert: { when: drop, pct: 60, min: 2 } }
+  # tools/assets/site.js: a free tool produced a result; a click towards the demo or sign-in.
+  - { event: tool_result, label: Used a free tool, role: step }
+  - { event: cta_click, label: Clicked towards Kauzl, role: step }
+
+funnels:
+  - name: Home to early access
+    steps: [page:/, event:cta_click, event:waitlist_join]

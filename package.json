@@ -29,6 +29,7 @@
     "desktop:preview": "npm run desktop:stage && tauri dev",
     "tools:build": "node tools/build.mjs",
     "tools:dev": "node tools/build.mjs && npx --yes serve tools/dist",
+    "site:dev": "node scripts/site-dev.mjs",
     "tools:deploy": "node tools/build.mjs && vercel deploy tools/dist --prod --yes --project kauzl-tools"
   },
   "devDependencies": {

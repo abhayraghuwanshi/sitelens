@@ -18,24 +18,13 @@ export const FAVICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="htt
 
 export const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap';
 
-const icon = (d) => `<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
-const ICONS = {
-  story: '<path d="M4 5a2 2 0 0 1 2-2h12v18H6a2 2 0 0 1-2-2z"/><path d="M8 7h6"/><path d="M8 11h6"/>',
-  timeline: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="12" cy="15" r="1.5"/>',
-  campaigns: '<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>',
-  ai: '<path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/><path d="M9 12h.01"/><path d="M12 12h.01"/><path d="M15 12h.01"/>',
-  todos: '<rect x="3" y="3" width="18" height="18" rx="3"/><path d="M8 12l3 3 5-6"/>',
-  claude: '<path d="M4 17l6-5-6-5"/><path d="M12 19h8"/>',
-  'did-it-work': '<path d="M4 19h16"/><path d="M7 15v-3"/><path d="M11 15V9"/><path d="M15 15V6"/><path d="M19 15V4"/>',
-  'ai-robots-txt-generator': '<path d="M12 3l8 3v6c0 4.5-3.4 8-8 9-4.6-1-8-4.5-8-9V6z"/><path d="M9 12l2 2 4-4"/>',
-};
 const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 // What's inside: each feature as a small picture of its real screen, linked
 // to that part of the demo (/demo?to=<view>, server/hosted.mjs).
 const BENTO = [
   { key: 'story', size: 'wide', title: 'The Story', to: 'story',
-    text: 'Open a site and read what happened, in sentences: what moved, why, and what shipped around then. No reports to build.',
+    text: 'What moved, why, and what shipped around then. In sentences.',
     visual: `<div class="v-story">
       <p class="v-lead">Sign-ups rose <b class="good">18%</b> after the pricing change.</p>
       <svg viewBox="0 0 300 80" class="v-chart" aria-hidden="true">
@@ -44,34 +33,33 @@ const BENTO = [
         <line class="flag" x1="150" y1="6" x2="150" y2="76"/><circle class="dot" cx="150" cy="40" r="4"/>
         <text x="156" y="13">Pricing page v2</text>
       </svg>
-      <div class="v-chips"><span>/pricing <b class="good">+41%</b></span><span>Reddit <b class="good">+225%</b></span><span>Google <b class="good">+12%</b></span></div>
-    </div>` },
+          </div>` },
   { key: 'ai', title: 'AI answers', to: 'ai',
-    text: 'Ask ChatGPT, Claude, Gemini and Perplexity what your customers ask. See if they name you, cite you, or send visitors.',
+    text: 'See if ChatGPT, Claude, Gemini and Perplexity name you.',
     visual: `<div class="v-ai">
       <p class="v-q">What’s a good privacy-friendly analytics tool?</p>
       <ol class="v-a"><li>Plausible</li><li class="you">Your site <span class="pill">named · cited</span></li><li>Fathom</li></ol>
       <p class="v-foot">Named by <b>3 of 4</b> assistants this week</p>
     </div>` },
   { key: 'timeline', title: 'Timeline', to: 'timeline',
-    text: 'Every day on one calendar, with your releases, deploys, posts and mentions on it. A spike explains itself.',
+    text: 'Releases, posts and mentions on the same days as your traffic.',
     visual: `<div class="v-week" aria-hidden="true">
       ${[['Mon', 34, ''], ['Tue', 38, 'deploy'], ['Wed', 41, ''], ['Thu', 88, 'reddit'], ['Fri', 63, ''], ['Sat', 30, ''], ['Sun', 28, '']].map(([d, h, m]) => `<div class="day${m ? ` has ${m}` : ''}"><span class="mark">${m === 'deploy' ? 'v2.3' : m === 'reddit' ? 'Post' : ''}</span><i style="height:${h}%"></i><span class="d">${d}</span></div>`).join('')}
     </div>` },
   { key: 'campaigns', title: 'Campaigns', to: 'campaigns',
-    text: 'Every tagged link and Google Ads spend, measured against what matters: sign-ups, installs, sales.',
+    text: 'Every tagged link, measured in sign-ups and sales.',
     visual: `<table class="v-camp" aria-hidden="true"><tbody>
       ${[['reddit / social', 31, 100], ['newsletter / email', 24, 77], ['google / cpc', 6, 19]].map(([n, v, w]) => `<tr><td>${n}</td><td class="bar"><i style="width:${w}%"></i></td><td class="num">${v}</td></tr>`).join('')}
     </tbody></table><p class="v-foot">Sign-ups by campaign, last 28 days</p>` },
   { key: 'todos', title: 'To-dos that report back', to: 'todos',
-    text: 'Turn a finding into a change. Tick it off when it ships, and Kauzl checks whether it helped.',
+    text: 'Tick off a change and Kauzl checks whether it helped.',
     visual: `<div class="v-todo">
       <p class="v-task"><span class="tick" aria-hidden="true">✓</span> Rewrite the pricing headline <span class="muted">shipped Nov 3</span></p>
       <div class="v-ba"><span>Before</span><span class="t"><i style="width:70%"></i></span><b>12/day</b><span>After</span><span class="t a"><i style="width:88%"></i></span><b>15/day</b></div>
       <p class="v-foot"><b class="good">+25%</b> · probably real, 3 weeks of data</p>
     </div>` },
   { key: 'claude', size: 'full', title: 'Inside Claude', to: null,
-    text: 'An MCP server for Claude Code and Claude. Your agent reads the numbers, works through your to-dos and writes up what it changed.',
+    text: 'An MCP server: your agent reads the numbers and works through your to-dos.',
     visual: `<pre class="v-term" aria-label="Example conversation with Claude using Kauzl"><span class="you">you ›</span> why did sign-ups dip last week?
 <span class="tool">● kauzl.daily_metrics</span>(site: "acme", range: "28d")
 <span class="tool">● kauzl.day_story</span>(date: "2026-11-04")
@@ -98,9 +86,10 @@ const FREE_TOOLS = [
 const CSS = `
 :root { color-scheme: light; --ink: #121522; --ink-2: #1C2135; --ink-line: #2A3048; --ink-text: #C9CDD8; --amber: #F5A524; --before: #9AA1B2;
   --bg: #F6F7F9; --surface: #FFFFFF; --sunk: #EEF0F4; --text: #121522; --text-2: #3A3F50; --muted: #5B6172; --line: #E3E6EC; --link: #A35F00;
-  --good: #1F7A3D; --good-soft: #E4F4E9; --amber-soft: #FDF1DC;
+  --good: #1F7A3D; --good-soft: #E4F4E9; --amber-soft: #FDF1DC; --label: #A35F00; --label-ink: #F5A524;
   --head: "Bricolage Grotesque", "Inter", system-ui, sans-serif; --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; }
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --bg: #0C0E17; --surface: #161A28; --sunk: #10131D; --text: #F6F7F9; --text-2: #C9CDD8; --muted: #9AA1B2; --line: #262B3D; --link: #F5B84A; --good: #5FD08A; --good-soft: #13291C; --amber-soft: #2E2410; } }
+/* Dark: neutral charcoal, not navy; amber only for actions, the owl and "after". */
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #141519; --ink-2: #1B1C21; --ink-line: #2A2C33; --ink-text: #C4C4CC; --before: #8B8B94; --bg: #0E0F12; --surface: #17181D; --sunk: #111215; --text: #F4F4F5; --text-2: #D4D4D8; --muted: #A1A1AA; --line: #26282F; --link: #F4F4F5; --amber-soft: #1F2026; --label: #A1A1AA; --label-ink: #A1A1AA; --good: #5FD08A; --good-soft: #13291C; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--link); }
@@ -135,13 +124,13 @@ nav.links a:hover { color: #fff; }
 .hero::before, .final::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
 .hero::before { mask-image: linear-gradient(90deg, transparent, #000 60%); }
 .hero-in { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 56px; align-items: center; }
-.eyebrow { margin: 0 0 18px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--amber); }
+.eyebrow { margin: 0 0 18px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--label-ink); }
 .hero h1 { font-size: clamp(42px, 6.6vw, 76px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; margin: 0 0 20px; }
 .hero h1 em { font-style: normal; color: var(--amber); }
 .lead { font-size: 19px; color: var(--ink-text); margin: 0 0 30px; max-width: 32em; }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
 .perks { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; margin: 22px 0 0; font-size: 14px; color: var(--ink-text); }
-.perks li { display: inline-flex; align-items: center; gap: 6px; } .perks svg { color: var(--amber); }
+.perks li { display: inline-flex; align-items: center; gap: 6px; } .perks svg { color: var(--label-ink); }
 
 /* the Story card, with the owl perched on top */
 .story-wrap { position: relative; padding-top: 58px; }
@@ -154,40 +143,31 @@ nav.links a:hover { color: #fff; }
 .story svg.chart { width: 100%; height: auto; display: block; margin: 4px 0 6px; }
 .chart .prev { stroke: var(--before); } .chart .now { stroke: var(--amber); } .chart .mark { stroke: var(--muted); } .chart .dot { fill: var(--amber); }
 .chart text { fill: var(--muted); font: 600 9px var(--font); }
-.legend { display: flex; gap: 16px; font-size: 12px; color: var(--muted); margin-bottom: 14px; }
-.legend span::before { content: ""; display: inline-block; width: 14px; height: 4px; border-radius: 2px; margin-right: 6px; vertical-align: middle; background: var(--before); }
-.legend span:last-child::before { background: var(--amber); }
 .moved { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 9px; font-size: 14px; color: var(--text-2); }
 .moved li { display: flex; gap: 10px; align-items: baseline; }
 .moved b { color: var(--text); font-weight: 600; }
-.story-link { display: inline-block; margin-top: 16px; font-size: 14px; font-weight: 600; color: var(--link); text-decoration: none; }
-.story-link:hover { text-decoration: underline; }
 .tag { flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 6px; background: var(--ink); color: var(--amber); }
 
 /* sections */
-section { padding: 72px 0 0; }
-.kicker { margin: 0 0 8px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--link); }
+section { padding: 112px 0 0; }
+.kicker { margin: 0 0 8px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--label); }
 h2.title { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: -0.035em; margin: 0 0 10px; }
 p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 1px 2px rgb(18 21 34 / .04); }
 .card h3 { margin: 16px 0 8px; font-size: 19px; }
 .card p { margin: 0; color: var(--text-2); font-size: 15px; }
-.ic { width: 44px; height: 44px; border-radius: 12px; background: var(--ink); color: var(--amber); display: grid; place-items: center; }
 /* What's inside: a bento of small product pictures */
 .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .b-card { display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 22px; transition: border-color .15s, transform .15s, box-shadow .15s; min-width: 0; }
 .b-card:hover { border-color: var(--amber); transform: translateY(-2px); box-shadow: 0 16px 36px rgb(18 21 34 / .1); }
 .b-card.wide { grid-column: span 2; }
-.b-card.full { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 8px 28px; align-items: center; background: var(--ink); color: #F6F7F9; border-color: var(--ink-line); }
-.b-card.full .b-text { color: var(--ink-text); } .b-card.full .b-vis { grid-row: 1 / span 3; grid-column: 2; margin: 0; background: #0B0D16; border: 1px solid var(--ink-line); }
-.b-card.full .b-link { color: var(--amber); }
-.b-head { display: flex; align-items: center; gap: 12px; }
-.b-head h3 { margin: 0; font-size: 19px; }
-.b-text { margin: 10px 0 14px; font-size: 15px; color: var(--text-2); }
-.b-vis { flex: 1; background: var(--sunk); border-radius: 14px; padding: 16px; margin-bottom: 14px; font-size: 13px; min-width: 0; }
-.b-link { font-size: 14px; font-weight: 600; color: var(--link); text-decoration: none; }
-.b-link:hover { text-decoration: underline; }
+.b-card.full { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); gap: 8px 28px; align-content: center; background: var(--ink); color: #F6F7F9; border-color: var(--ink-line); }
+.b-card.full .b-text { color: var(--ink-text); } .b-card.full .b-vis { grid-row: 1 / span 2; grid-column: 2; margin: 0; background: #0B0C0F; border: 1px solid var(--ink-line); }
+.b-card { text-decoration: none; color: inherit; }
+.b-card h3 { margin: 0; font-size: 19px; }
+.b-text { margin: 6px 0 16px; font-size: 15px; color: var(--text-2); }
+.b-vis { flex: 1; background: var(--sunk); border-radius: 14px; padding: 16px; font-size: 13px; min-width: 0; }
 .good { color: var(--good); }
 .v-foot { margin: 10px 0 0; color: var(--muted); font-size: 12.5px; }
 .v-lead { margin: 0 0 6px; font: 700 17px/1.3 var(--head); letter-spacing: -0.01em; }
@@ -196,8 +176,6 @@ p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px
 .v-chart .prev { stroke: var(--before); stroke-dasharray: 4 4; stroke-width: 2; } .v-chart .now { stroke: var(--amber); }
 .v-chart .flag { stroke: var(--muted); stroke-dasharray: 3 3; } .v-chart .dot { fill: var(--amber); }
 .v-chart text { fill: var(--muted); font: 600 7px var(--font); }
-.v-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-.v-chips span { background: var(--surface); border: 1px solid var(--line); border-radius: 99px; padding: 3px 10px; }
 .v-q { margin: 0 0 10px; background: var(--ink); color: #F6F7F9; border-radius: 12px 12px 4px 12px; padding: 8px 12px; margin-left: 18%; }
 .v-a { margin: 0; padding: 10px 12px 10px 30px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px 12px 12px 4px; margin-right: 10%; }
 .v-a li { padding: 2px 0; } .v-a li.you { font-weight: 700; }
@@ -206,7 +184,7 @@ p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px
 .v-week .day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
 .v-week i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; background: var(--before); }
 .v-week .has i { background: var(--amber); }
-.v-week .mark { font-size: 10px; font-weight: 700; color: var(--link); min-height: 14px; }
+.v-week .mark { font-size: 10px; font-weight: 700; color: var(--label); min-height: 14px; }
 .v-week .d { font-size: 11px; color: var(--muted); }
 .v-camp { width: 100%; border-collapse: collapse; }
 .v-camp td { padding: 6px 0; } .v-camp td:first-child { white-space: nowrap; padding-right: 10px; color: var(--text-2); }
@@ -226,65 +204,65 @@ p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px
 .steps .card h3 { margin-top: 14px; }
 
 /* why an owl */
-.owl-why { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 40px; align-items: center; background: var(--surface); border: 1px solid var(--line); border-radius: 24px; padding: 36px 40px; }
-.owl-why h2 { font-size: clamp(26px, 3.2vw, 34px); font-weight: 800; margin: 0 0 10px; letter-spacing: -0.03em; }
-.owl-why p { margin: 0 0 10px; color: var(--text-2); max-width: 38em; }
-.owl-why .say { font-size: 14px; color: var(--muted); margin: 0; }
-.eyes-key { display: flex; gap: 22px; margin: 16px 0 4px; font-size: 14px; color: var(--text-2); }
-.eyes-key span { display: inline-flex; align-items: center; gap: 8px; }
-.eyes-key i { width: 14px; height: 14px; border-radius: 50%; border: 3px solid var(--amber); }
-.eyes-key span + span i { background: var(--amber); }
 
-.sources { display: flex; flex-wrap: wrap; gap: 10px; }
-.sources span { padding: 8px 15px; border-radius: 99px; border: 1px solid var(--line); background: var(--surface); font-size: 14px; font-weight: 500; color: var(--text-2); }
 
 .tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .tile { display: flex; flex-direction: column; text-decoration: none; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; transition: border-color .15s, transform .15s, box-shadow .15s; }
 .tile:hover { border-color: var(--amber); transform: translateY(-2px); box-shadow: 0 14px 30px rgb(18 21 34 / .1); }
-.tile h3 { margin: 14px 0 6px; font-size: 18px; }
+.tile h3 { margin: 0 0 6px; font-size: 18px; }
 .tile p { margin: 0 0 14px; font-size: 14px; color: var(--text-2); flex: 1; }
 .tile .go { font-size: 14px; font-weight: 600; color: var(--link); }
-.more { margin: 16px 0 0; font-size: 15px; }
-.sub-h { margin: 40px 0 16px; font-size: 22px; font-weight: 800; letter-spacing: -0.02em; }
-.tile .kick { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--link); }
+.sec-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
+.all { flex: none; font-size: 15px; font-weight: 600; color: var(--link); text-decoration: none; white-space: nowrap; } .all:hover { text-decoration: underline; }
+.sec-head .all { margin-bottom: 34px; }
+.guides { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; margin-top: 16px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
+.guides .lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.guides .chips { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
+.guides .chips a { padding: 6px 12px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); color: var(--text-2); font-size: 14px; text-decoration: none; transition: border-color .15s, color .15s; }
+.guides .chips a:hover { border-color: var(--amber); color: var(--text); }
+.tile .kick { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
 
-.final { position: relative; overflow: hidden; display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 36px; align-items: center; background: var(--ink); color: #F6F7F9; border-radius: 28px; padding: 44px; }
+.final { position: relative; overflow: hidden; display: grid; justify-items: center; text-align: center; background: var(--ink); color: #F6F7F9; border-radius: 28px; padding: 44px; }
 .final > * { position: relative; }
 .final h2 { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: -0.035em; margin: 16px 0 10px; }
-.final p { color: var(--ink-text); margin: 0 0 24px; max-width: 30em; }
-.bars-card { background: var(--ink-2); border: 1px solid var(--ink-line); border-radius: 18px; padding: 20px; font-size: 13px; color: var(--ink-text); }
-.bars { display: flex; align-items: flex-end; gap: 14px; height: 150px; margin-top: 12px; }
-.bars i { flex: 1; border-radius: 8px; } .bars .b { height: 52%; background: var(--before); } .bars .a { height: 90%; background: var(--amber); }
-.keys { display: flex; gap: 14px; margin-top: 8px; } .keys span { flex: 1; text-align: center; }
+.final p { color: var(--ink-text); margin: 0 auto 24px; max-width: 30em; }
+.join { display: flex; gap: 10px; width: 100%; max-width: 460px; margin: 0 auto; }
+.join input[type=email] { flex: 1; min-width: 0; min-height: 46px; padding: 10px 14px; border-radius: 11px; border: 1px solid var(--ink-line); background: var(--ink-2); color: #F6F7F9; font: 15px var(--font); }
+.join input[type=email]::placeholder { color: var(--ink-text); opacity: .7; }
+.join input[type=email]:focus { outline: none; border-color: var(--amber); }
+.join .btn { border: 0; cursor: pointer; }
+.hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+.final .fine { margin: 14px auto 0; font-size: 14px; } .final .fine a { color: #F6F7F9; } .final .ctas { justify-content: center; } .final svg.owl { margin: 0 auto; }
 
 footer { margin-top: 72px; padding: 36px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
 footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px 32px; flex-wrap: wrap; }
 .foot-brand { display: flex; gap: 12px; align-items: center; }
-.foot-brand p { margin: 0; } .foot-brand .word { font-size: 22px; color: var(--text); }
+.foot-brand p { margin: 0; } .foot-brand .why { margin-top: 6px; max-width: 34em; font-size: 13px; } .foot-brand .word { font-size: 22px; color: var(--text); }
 footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: var(--muted); text-decoration: none; } footer nav a:hover { color: var(--text); }
 @media (prefers-color-scheme: dark) {
-  .final, .ic, .tag { border: 1px solid var(--ink-line); }
+  .final, .tag { border: 1px solid var(--ink-line); }
   /* Ink owls would vanish on dark cards: draw them light. */
-  .foot-brand svg.owl path:first-child, .owl-why svg.owl path:first-child { fill: #F6F7F9; }
-  .foot-brand svg.owl .eyes > circle, .owl-why svg.owl .eyes > circle { fill: var(--ink); }
+  .foot-brand svg.owl path:first-child { fill: #F6F7F9; }
+  .foot-brand svg.owl .eyes > circle { fill: var(--ink); }
 }
 
 @media (max-width: 900px) {
-  .hero-in, .final { grid-template-columns: minmax(0, 1fr); }
+  .hero-in { grid-template-columns: minmax(0, 1fr); }
   .hero { padding: 44px 0 100px; }
   .grid, .steps, .tiles, .bento { grid-template-columns: minmax(0, 1fr); }
   .b-card.wide, .b-card.full { grid-column: auto; }
   .b-card.full { grid-template-columns: minmax(0, 1fr); } .b-card.full .b-vis { grid-row: auto; grid-column: auto; }
-  .owl-why { grid-template-columns: minmax(0, 1fr); padding: 28px; gap: 20px; }
-  nav.links { display: none; }
-  .top .wrap { justify-content: space-between; }
+  nav.links a:not(.keep) { display: none; }
+  .sec-head { flex-direction: column; align-items: flex-start; } .sec-head .all { margin: -16px 0 24px; }
+  .top .wrap { gap: 16px; }
 }
-@media (max-width: 480px) { .wrap { padding-inline: 16px; } .final { padding: 28px; } section { padding-top: 56px; } }
+@media (max-width: 480px) { .join { flex-direction: column; } .wrap { padding-inline: 16px; } .final { padding: 28px; } section { padding-top: 72px; } }
 `;
 
 // tools: the free tools are served at /tools/ (TOOLS_ORIGIN is set), so link
 // them and borrow their site.js for the owl's moving eyes.
-export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
+export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = {}) {
+  const q = v ? `?v=${encodeURIComponent(v)}` : '';
   const enter = signedIn ? '/' : '/login';
   const toolsLink = (html) => (tools ? html : '');
   return `<!doctype html>
@@ -304,7 +282,7 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
 <body data-page="home:">
 <header class="top"><div class="wrap">
   <a class="brand" href="/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a>
-  <nav class="links" aria-label="Sections"><a href="/demo">Demo</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}</nav>
+  <nav class="links" aria-label="Sections"><a href="/demo">Demo</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a class="keep" href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}</nav>
   <a class="btn amber small" href="${enter}">Open Kauzl</a>
 </div></header>
 
@@ -316,9 +294,9 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
       <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
         <a class="btn amber" href="/demo">See the live demo</a>
-        <a class="btn ghost" href="${enter}">Open Kauzl</a>
+        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="/waitlist">Get early access</a>'}
       </div>
-      <ul class="perks"><li>${CHECK}Demo needs no sign-up</li><li>${CHECK}${signedIn ? 'You’re signed in' : 'Early access, invite only'}</li><li>${CHECK}No tracking script</li><li>${CHECK}Read-only Google access</li></ul>
+      <ul class="perks"><li>${CHECK}Demo needs no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>
 
     <div class="story-wrap">
@@ -333,13 +311,10 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
           <circle class="dot" cx="140" cy="24" r="5" />
           <text x="146" y="14">Launch post</text>
         </svg>
-        <div class="legend"><span>Previous 28 days</span><span>Last 28 days</span></div>
         <ul class="moved">
           <li><span class="tag">Post</span><span><b>Reddit</b> sent 18 more visits <span class="up">↑ 225%</span>, the day after your launch post.</span></li>
-          <li><span class="tag">Search</span><span><b>Google</b> sent 62 more visits <span class="up">↑ 41%</span>.</span></li>
           <li><span class="tag">AI</span><span><b>ChatGPT</b> now names you for “Raycast alternative for Windows”.</span></li>
         </ul>
-        <a class="story-link" href="/demo">Open the full Story in the demo →</a>
       </figure>
     </div>
   </div></div>
@@ -348,18 +323,17 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
     <p class="kicker">What’s inside</p><h2 class="title">Answers, not dashboards</h2>
     <p class="sub">Most analytics tools count visits. Kauzl connects them to what you did, so you can tell which work paid off.</p>
     <div class="bento">
-      ${BENTO.map((b) => `<article class="b-card${b.size ? ` ${b.size}` : ''}">
-        <div class="b-head"><span class="ic">${icon(ICONS[b.key])}</span><h3>${b.title}</h3></div>
+      ${BENTO.map((b) => `<a class="b-card${b.size ? ` ${b.size}` : ''}" href="/demo${b.to ? `?to=${b.to}` : ''}">
+        <h3>${b.title}</h3>
         <p class="b-text">${b.text}</p>
         <div class="b-vis">${b.visual}</div>
-        ${b.to ? `<a class="b-link" href="/demo?to=${b.to}">See it in the demo →</a>` : '<a class="b-link" href="/demo">Try the demo, then connect Claude →</a>'}
-      </article>`).join('\n      ')}
+      </a>`).join('\n      ')}
     </div>
   </div></section>
 
   <section id="how"><div class="wrap">
     <p class="kicker">How it works</p><h2 class="title">Set up in a few minutes</h2>
-    <p class="sub">No new tracking script. Kauzl reads the tools you already use.</p>
+    <p class="sub">No new tracking script. Kauzl reads what you already use: ${SOURCES.join(', ').replace(/, ([^,]*)$/, ' and $1')}.</p>
     <div class="steps">
       <div class="card"><h3>Sign in with Google</h3><p>Pick your Analytics property and Search Console site. Read-only access.</p></div>
       <div class="card"><h3>Add what you ship</h3><p>Link the GitHub repo, store listing and accounts you post from, so releases and posts land on the Timeline.</p></div>
@@ -367,56 +341,42 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
     </div>
   </div></section>
 
-  <section><div class="wrap">
-    <div class="owl-why">
-      ${owl(150)}
-      <div>
-        <p class="kicker">Why an owl</p>
-        <h2>A small owl that watches what you ship</h2>
-        <p><em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”: did your change cause this? Look at its eyes. The left one is empty, the right one is filled.</p>
-        <div class="eyes-key"><span><i></i>Before you shipped</span><span><i></i>After</span></div>
-        <p class="say">Said KAW-zuhl.</p>
-      </div>
-    </div>
-  </div></section>
-
-  <section id="sources"><div class="wrap">
-    <p class="kicker">Works with</p><h2 class="title">Your tools, one timeline</h2>
-    <p class="sub">Your numbers stay in the tools you own. Kauzl brings them together.</p>
-    <div class="sources">${SOURCES.map((s) => `<span>${s}</span>`).join('')}</div>
-  </div></section>
-
 ${tools ? `  <section id="tools"><div class="wrap">
-    <p class="kicker">Free tools and guides</p><h2 class="title">Start without signing up</h2>
-    <p class="sub">Small tools that run in your browser. Nothing you type leaves the page.</p>
+    <div class="sec-head"><div><p class="kicker">Free tools</p><h2 class="title">Start without signing up</h2>
+    <p class="sub">Small tools that run in your browser. Nothing you type leaves the page.</p></div>
+    <a class="all" href="/tools/">All 10 tools →</a></div>
     <div class="tiles">
-      ${FREE_TOOLS.map(([slug, name, blurb]) => `<a class="tile" href="/tools/${slug}/"><span class="ic">${icon(ICONS[slug] || ICONS.campaigns)}</span><h3>${name}</h3><p>${blurb}</p><span class="go">Open →</span></a>`).join('\n      ')}
+      ${FREE_TOOLS.map(([slug, name, blurb]) => `<a class="tile" href="/tools/${slug}/"><h3>${name}</h3><p>${blurb}</p><span class="go">Open →</span></a>`).join('\n      ')}
     </div>
-    <p class="more"><a href="/tools/">All 10 free tools →</a></p>
-    <h3 class="sub-h">Guides</h3>
-    <div class="tiles">
-      ${GUIDES.map(([slug, name, blurb]) => `<a class="tile" href="/guides/${slug}/"><span class="kick">Guide</span><h3>${name}</h3><p>${blurb}</p><span class="go">Read →</span></a>`).join('\n      ')}
-    </div>
-    <p class="more"><a href="/guides/">All guides →</a></p>
+    <nav class="guides" aria-label="Guides"><span class="lbl">Guides</span>
+      <div class="chips">${GUIDES.map(([slug, name]) => `<a href="/guides/${slug}/">${name}</a>`).join('')}</div>
+      <a class="all" href="/guides/">All guides →</a></nav>
   </div></section>
 ` : ''}
-  <section><div class="wrap">
+  <section id="early-access"><div class="wrap">
     <div class="final">
       <div>${owl(56, { variant: 'paper' })}
-        <h2>See your site’s Story</h2>
+        ${signedIn ? `<h2>See your site’s Story</h2>
         <p>Connect a site and find out what last month’s releases, posts and articles actually did.</p>
-        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="/demo">See the demo first</a></div>
+        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="/demo">See the demo first</a></div>` : `<h2>Get early access</h2>
+        <p>Kauzl is opening to a few teams at a time. Leave your email and we’ll invite you, with a link to sign in.</p>
+        <form class="join" method="post" action="/waitlist">
+          <input type="hidden" name="from" value="home">
+          <label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+          <input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" aria-label="Your email">
+          <button class="btn amber" type="submit">Get early access</button>
+        </form>
+        <p class="fine">Already invited? <a href="/login">Sign in</a> · or <a href="/demo">look around the demo</a></p>`}
       </div>
-      <div class="bars-card" aria-hidden="true">Your last launch<div class="bars"><i class="b"></i><i class="a"></i></div><div class="keys"><span>Before</span><span>After</span></div></div>
     </div>
   </div></section>
 </main>
 
 <footer><div class="wrap">
-  <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p></div></div>
+  <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p><p class="why"><b>Why an owl</b> · <em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”. Its left eye is before you shipped, the right one after.</p></div></div>
   <nav aria-label="Footer">${toolsLink('<a href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}<a href="#features">Features</a><a href="${enter}">Open Kauzl</a></nav>
 </div></footer>
-${tools ? '<script type="module" src="/tools/assets/site.js"></script>' : ''}
-${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js" data-ga="${ga}"></script>` : ''}
+${tools ? `<script type="module" src="/tools/assets/site.js${q}"></script>` : ''}
+${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js${q}" data-ga="${ga}"></script>` : ''}
 </body></html>`;
 }

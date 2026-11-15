@@ -1,6 +1,7 @@
 // Kauzl, hosted: an invite-only gateway in front of one app per user.
 //
-//  - Sign-in is Google; the email must be on ALLOWED_EMAILS. The same consent
+//  - Sign-in is Google; the email must be invited: on ALLOWED_EMAILS, or invited
+//    from the admin page (/admin, for ADMIN_EMAILS). The same consent
 //    connects the user's GA4, Search Console and BigQuery, so it's one step.
 //  - A session is a random 256-bit id in an HttpOnly cookie; only its SHA-256
 //    is stored, in /data/gateway.db.
@@ -19,11 +20,15 @@
 //  - /mcp speaks MCP over HTTP to Claude Code and Claude Desktop. A personal
 //    access token (slk_…, made in Account → Claude; only its hash is kept)
 //    picks the user, and the tools run against that user's app and folder.
+//  - Early access: anyone can leave an email (/waitlist, from the home and
+//    sign-in pages; also anyone not invited who tries to sign in). Admins see
+//    the list, who's live, and invite people from /admin.
 //
 // Env: STUDIO_HOST (STUDIO_OLD_HOSTS: other names, comma-separated, that redirect to it), MASTER_KEY (32 bytes, base64), GOOGLE_CLIENT_ID,
-// GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), STUDIO_DATA_DIR, PORT.
+// GOOGLE_CLIENT_SECRET, ALLOWED_EMAILS (comma-separated), ADMIN_EMAILS (comma-separated; default ALLOWED_EMAILS), STUDIO_DATA_DIR, PORT.
 
 import { createServer } from 'node:http';
+import { BlockList, isIP } from 'node:net';
 import { mkdirSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,8 +38,10 @@ import { createApp, selfFetch } from './index.mjs';
 import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
 import { SCOPES } from './auth.mjs';
+import { Agent } from 'undici';
 import { guardOutgoingFetch } from './net-guard.mjs';
-import { homePage, FAVICON, FONTS, owl } from './home.mjs';
+import { homePage } from './home.mjs';
+import { loginPage, waitlistPage, adminPage, waitlistCsv, signedInPage } from './pages.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
 
 const COOKIE = '__Host-sitelens';
@@ -96,7 +103,7 @@ const TOOLS_PASS_HEADERS = ['content-type', 'etag', 'last-modified'];
 const STATIC_PREFIX = /^\/(tools|guides)(\/|$)/;
 
 export function robotsTxt(origin, { tools = false } = {}) {
-  return `User-agent: *\nDisallow: /api/\nDisallow: /login\nDisallow: /mcp\n${tools ? `\nSitemap: ${origin}/sitemap.xml\n` : ''}`;
+  return `User-agent: *\nDisallow: /api/\nDisallow: /login\nDisallow: /mcp\nDisallow: /admin\n${tools ? `\nSitemap: ${origin}/sitemap.xml\n` : ''}`;
 }
 
 export function parseMasterKey(value) {
@@ -129,12 +136,15 @@ export function createGateway({
   masterKey,
   host,
   oldHosts = [],
-  allowedEmails,
+  allowedEmails: envInvited,
   port = 8080,
   env = process.env,
   fetchImpl = fetch,
   now = Date.now,
   startJobs = true,
+  // New waitlist entries allowed per hour, all addresses together: a flood
+  // from many addresses can't bury real sign-ups.
+  waitlistPerHour = 300,
   // A user's own app over their own sealed folder; tests swap it.
   createUserApp = (user) => createApp({
     store: createStore(join(dataDir, 'users', user.id), { key: userKey(masterKey, user.id) }),
@@ -158,7 +168,14 @@ export function createGateway({
     CREATE TABLE IF NOT EXISTS shares (owner_id TEXT NOT NULL REFERENCES users(id), site_id TEXT NOT NULL, email TEXT NOT NULL,
       created_at INTEGER NOT NULL, PRIMARY KEY (owner_id, site_id, email));
     CREATE INDEX IF NOT EXISTS shares_email ON shares (email);
+    CREATE TABLE IF NOT EXISTS waitlist (email TEXT PRIMARY KEY, source TEXT NOT NULL, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS invites (email TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS activity (user_id TEXT NOT NULL, day TEXT NOT NULL, PRIMARY KEY (user_id, day));
   `);
+  // Invited: ALLOWED_EMAILS plus everyone invited from /admin.
+  const allowedEmails = new Set(envInvited);
+  for (const { email } of db.prepare('SELECT email FROM invites').all()) allowedEmails.add(email);
+  const admins = env.ADMIN_EMAILS ? parseEmails(env.ADMIN_EMAILS) : new Set(envInvited);
   // Tokens made before expiry existed keep lasting until revoked (NULL).
   if (!db.prepare('PRAGMA table_info(mcp_tokens)').all().some((c) => c.name === 'expires_at')) db.exec('ALTER TABLE mcp_tokens ADD COLUMN expires_at INTEGER');
   const origin = `https://${host}`;
@@ -228,10 +245,12 @@ export function createGateway({
   function sessionUser(req) {
     const id = cookies(req)[COOKIE];
     if (!id) return null;
-    const row = db.prepare('SELECT u.id, u.email, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?').get(sha256(id));
+    const row = db.prepare('SELECT u.id, u.email, u.last_seen, s.expires_at FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.hash = ?').get(sha256(id));
     if (!row || row.expires_at < now()) return null;
     // Someone taken off the invite list (and every share) loses access at once.
     if (!mayEnter(row.email)) return null;
+    // Last seen, at most once a minute: the admin page's "live now" and retention.
+    if (!row.last_seen || now() - row.last_seen > 60_000) seen(row.id);
     return { id: row.id, email: row.email };
   }
 
@@ -318,6 +337,12 @@ export function createGateway({
     return jsonOut(res, 405, { error: 'Method not allowed' });
   }
 
+  // A user was active: now (live) and today (the days behind retention).
+  function seen(userId) {
+    db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now(), userId);
+    db.prepare('INSERT OR IGNORE INTO activity (user_id, day) VALUES (?, ?)').run(userId, new Date(now()).toISOString().slice(0, 10));
+  }
+
   function startSession(res, email) {
     let user = db.prepare('SELECT id, email FROM users WHERE email = ?').get(email);
     if (!user) {
@@ -327,7 +352,7 @@ export function createGateway({
     const id = randomBytes(32).toString('base64url');
     db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(now());
     db.prepare('INSERT INTO sessions (hash, user_id, expires_at) VALUES (?, ?, ?)').run(sha256(id), user.id, now() + SESSION_DAYS * 86_400_000);
-    db.prepare('UPDATE users SET last_seen = ? WHERE id = ?').run(now(), user.id);
+    seen(user.id);
     res.setHeader('Set-Cookie', `${COOKIE}=${id}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${SESSION_DAYS * 86_400}`);
     return user;
   }
@@ -449,6 +474,81 @@ export function createGateway({
     return entry.count > 20;
   }
 
+  /* ---------- Early access: the waitlist and invites ---------- */
+
+  const WAITLIST_MAX = 50_000;
+  const waitlistBusy = () => db.prepare('SELECT COUNT(*) AS n FROM waitlist WHERE created_at > ?').get(now() - 3_600_000).n >= waitlistPerHour;
+  function joinWaitlist(email, source) {
+    if (db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n >= WAITLIST_MAX) return;
+    db.prepare('INSERT OR IGNORE INTO waitlist (email, source, created_at) VALUES (?, ?, ?)').run(email, source, now());
+  }
+  // 10 waitlist posts per address per 10 minutes.
+  function waitlistLimited(req) {
+    const key = `wl:${clientIp(req)}`;
+    const entry = attempts.get(key);
+    if (!entry || entry.resetAt < now()) {
+      attempts.set(key, { count: 1, resetAt: now() + 10 * 60_000 });
+      return false;
+    }
+    entry.count += 1;
+    return entry.count > 10;
+  }
+  const html = (res, status, page) => res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(page);
+  const seeOther = (res, location) => res.writeHead(303, { Location: location, 'Cache-Control': 'no-store' }).end();
+  const formBody = async (req) => new URLSearchParams(await readBody(req, 4_000).catch(() => ''));
+
+  async function waitlistRoutes(req, res, url) {
+    if (req.method === 'POST') {
+      if (waitlistLimited(req)) return seeOther(res, `/waitlist?error=${encodeURIComponent('Too many tries. Wait a few minutes.')}`);
+      const form = await formBody(req);
+      // A field people never see: only bots fill it in. They get the thank-you, and nothing is kept.
+      if (form.get('website')) return seeOther(res, '/waitlist?joined=1');
+      const email = cleanEmail(form.get('email'));
+      if (!email) return seeOther(res, `/waitlist?error=${encodeURIComponent('That doesn’t look like an email address.')}`);
+      const from = ['home', 'login', 'waitlist'].includes(form.get('from')) ? form.get('from') : 'waitlist';
+      const known = db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email);
+      if (!known && waitlistBusy()) return seeOther(res, `/waitlist?error=${encodeURIComponent('Lots of requests right now. Try again in a little while.')}`);
+      joinWaitlist(email, from);
+      return seeOther(res, `/waitlist?joined=${from}`);
+    }
+    if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD, POST' }).end();
+    return html(res, 200, waitlistPage({ joined: url.searchParams.get('joined') || '', error: url.searchParams.get('error') || '', tools: Boolean(toolsOrigin), ga: tagId, v: await assetVersion() }));
+  }
+
+  async function adminRoutes(req, res, url) {
+    if (url.pathname === '/admin' && ['GET', 'HEAD'].includes(req.method)) {
+      const users = db.prepare('SELECT email, created_at AS createdAt, last_seen AS lastSeen FROM users ORDER BY COALESCE(last_seen, created_at) DESC').all();
+      const waitlist = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at DESC LIMIT 300').all();
+      const waitlistTotal = db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n;
+      const invites = db.prepare('SELECT email, created_at AS createdAt FROM invites ORDER BY created_at DESC').all();
+      const activity = db.prepare('SELECT u.email, a.day FROM activity a JOIN users u ON u.id = a.user_id').all();
+      return html(res, 200, adminPage({ users, waitlist, waitlistTotal, invites, activity, envInvited, now: now(), origin, flash: url.searchParams.get('done') || '' }));
+    }
+    if (url.pathname === '/admin/waitlist.csv' && req.method === 'GET') {
+      const rows = db.prepare('SELECT email, source, created_at AS createdAt FROM waitlist ORDER BY created_at').all();
+      return res.writeHead(200, { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': 'attachment; filename="kauzl-waitlist.csv"', 'Cache-Control': 'no-store' }).end(waitlistCsv(rows));
+    }
+    if (req.method === 'POST' && ['/admin/invite', '/admin/revoke', '/admin/waitlist/remove'].includes(url.pathname)) {
+      const email = cleanEmail((await formBody(req)).get('email'));
+      if (!email) return seeOther(res, `/admin?done=${encodeURIComponent('That doesn’t look like an email address.')}`);
+      let done;
+      if (url.pathname === '/admin/invite') {
+        db.prepare('INSERT OR IGNORE INTO invites (email, created_at) VALUES (?, ?)').run(email, now());
+        allowedEmails.add(email);
+        done = `Invited ${email}. Send them the link: “Email the link” below.`;
+      } else if (url.pathname === '/admin/revoke') {
+        db.prepare('DELETE FROM invites WHERE email = ?').run(email);
+        if (!envInvited.has(email)) allowedEmails.delete(email);
+        done = envInvited.has(email) ? `${email} is on the server list (ALLOWED_EMAILS), so they stay invited.` : `${email} is no longer invited.`;
+      } else {
+        db.prepare('DELETE FROM waitlist WHERE email = ?').run(email);
+        done = `Removed ${email} from the waitlist.`;
+      }
+      return seeOther(res, `/admin?done=${encodeURIComponent(done)}`);
+    }
+    return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+  }
+
   async function finishLogin(code, state) {
     const pending = loginStates.get(state);
     loginStates.delete(state);
@@ -497,12 +597,33 @@ export function createGateway({
 
   // Public, no session: the free tools, fetched from their static host.
   const toolsOrigin = String(env.TOOLS_ORIGIN || '').replace(/\/$/, '');
+  // TOOLS_ORIGIN is the operator's own setting, never a user's URL, so it may be
+  // a private address (a local tools server in development, or Fly's private
+  // network). Only these fetches skip the net guard; every other fetch keeps it.
+  const toolsAgent = toolsOrigin ? new Agent() : null;
+  // kauzl.com's own Google tag, on the public pages only; its scripts come from the tools host.
+  const tagId = toolsOrigin && /^(GTM|G)-[A-Z0-9]+$/.test(env.GOOGLE_TAG_ID || '') ? env.GOOGLE_TAG_ID : '';
+  // The tools build stamps its asset URLs (?v=<hash>). Our own pages load site.js
+  // and ga.js from there too, with the same stamp, so a tools deploy reaches
+  // visitors at once instead of after a CDN or browser cache runs out.
+  // Read from the tools index, at most every 5 minutes.
+  const assets = { v: '', at: 0 };
+  async function assetVersion() {
+    if (!toolsOrigin || now() - assets.at < 5 * 60_000) return assets.v;
+    assets.at = now();
+    try {
+      const page = await fetchImpl(`${toolsOrigin}/tools/`, { dispatcher: toolsAgent });
+      const m = page.ok && (await page.text()).match(/assets\/site\.css\?v=([a-f0-9]{6,40})/);
+      if (m) assets.v = m[1];
+    } catch {}
+    return assets.v;
+  }
   async function proxyTools(req, res, url) {
     if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
     if (url.pathname === '/tools' || url.pathname === '/guides') return res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
     let upstream;
     try {
-      upstream = await fetchImpl(`${toolsOrigin}${url.pathname}${url.search}`, { method: req.method, redirect: 'manual' });
+      upstream = await fetchImpl(`${toolsOrigin}${url.pathname}${url.search}`, { method: req.method, redirect: 'manual', dispatcher: toolsAgent });
     } catch {
       return res.writeHead(502, { 'Content-Type': 'text/plain' }).end('The tools are unavailable right now.');
     }
@@ -545,9 +666,10 @@ export function createGateway({
       return res.writeHead(403, { 'Content-Type': 'text/plain' }).end('Cross-site request refused.');
     }
 
+    if (url.pathname === '/waitlist') return waitlistRoutes(req, res, url);
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error')));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin), ga: tagId, joined: url.searchParams.get('joined') === 'sign-in', v: await assetVersion() }));
     }
     if (url.pathname === '/login/google') {
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
@@ -580,11 +702,19 @@ export function createGateway({
       try {
         if (url.searchParams.get('error')) throw new Error('Sign-in was cancelled.');
         const { email, token, consented, viewer } = await finishLogin(url.searchParams.get('code'), url.searchParams.get('state'));
-        if (!mayEnter(email)) throw new Error(`${email} isn’t invited yet. Ask for an invite, then try again.`);
+        if (!mayEnter(email)) {
+          // They told us who they are, so they're on the waitlist now.
+          if (!waitlistBusy()) joinWaitlist(email, 'sign-in');
+          const message = `${email} isn’t invited yet. You’re on the waitlist now; we’ll email you when your spot opens.`;
+          return res.writeHead(302, { Location: `/login?error=${encodeURIComponent(message)}&joined=sign-in` }).end();
+        }
+        const firstTime = !db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
         const user = startSession(res, email);
         // Only invited people connect their Google data; viewers just look.
         const done = allowedEmails.has(email) && !viewer ? await connectGoogle(user, email, token, consented) : true;
-        return res.writeHead(302, { Location: done ? '/' : '/login/google?consent=1' }).end();
+        if (!done) return res.writeHead(302, { Location: '/login/google?consent=1' }).end();
+        // With kauzl.com's analytics on, pass through a page that records the sign-in.
+        return res.writeHead(302, { Location: tagId ? `/signed-in?e=${firstTime ? 'sign_up' : 'login'}` : '/' }).end();
       } catch (err) {
         return redirectLogin(res, err.message);
       }
@@ -611,7 +741,7 @@ export function createGateway({
     // The public home page: at /home for everyone, at / for visitors without a session or the demo.
     if (url.pathname === '/home' || (!user && !demo && url.pathname === '/')) {
       if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID }));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID, v: await assetVersion() }));
     }
     if (demo) return demoRoutes(req, res, url);
     if (!user) {
@@ -619,6 +749,14 @@ export function createGateway({
         return res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Sign in to continue.', kind: 'login' }));
       }
       return res.writeHead(302, { Location: '/login' }).end();
+    }
+    if (url.pathname === '/signed-in') {
+      if (!tagId) return res.writeHead(302, { Location: '/' }).end();
+      return html(res, 200, signedInPage({ event: url.searchParams.get('e') === 'sign_up' ? 'sign_up' : 'login', ga: tagId, v: await assetVersion() }));
+    }
+    if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
+      if (!admins.has(user.email)) return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
+      return adminRoutes(req, res, url);
     }
     const invited = allowedEmails.has(user.email);
     if (url.pathname === '/api/me') {
@@ -654,8 +792,25 @@ export function createGateway({
   return { handle, startAll, apps, db };
 }
 
-function clientIp(req) {
-  return String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+// Cloudflare's edge addresses (cloudflare.com/ips). kauzl.com is behind
+// Cloudflare, so Fly sees Cloudflare, and the visitor is in CF-Connecting-IP.
+// The Fly app can also be reached directly, where anyone could set that
+// header, so it's trusted only on requests that come from Cloudflare.
+const CLOUDFLARE = new BlockList();
+for (const net of ['173.245.48.0/20', '103.21.244.0/22', '103.22.200.0/22', '103.31.4.0/22', '141.101.64.0/18', '108.162.192.0/18',
+  '190.93.240.0/20', '188.114.96.0/20', '197.234.240.0/22', '198.41.128.0/17', '162.158.0.0/15', '104.16.0.0/13', '104.24.0.0/14',
+  '172.64.0.0/13', '131.0.72.0/22']) CLOUDFLARE.addSubnet(...net.split('/').map((x, i) => (i ? Number(x) : x)), 'ipv4');
+for (const net of ['2400:cb00::/32', '2606:4700::/32', '2803:f800::/32', '2405:b500::/32', '2405:8100::/32', '2a06:98c0::/29', '2c0f:f248::/32'])
+  CLOUDFLARE.addSubnet(...net.split('/').map((x, i) => (i ? Number(x) : x)), 'ipv6');
+const fromCloudflare = (ip) => {
+  const v = isIP(ip);
+  return Boolean(v) && CLOUDFLARE.check(ip, v === 4 ? 'ipv4' : 'ipv6');
+};
+
+export function clientIp(req) {
+  const peer = String(req.headers['fly-client-ip'] || req.socket?.remoteAddress || '');
+  const visitor = String(req.headers['cf-connecting-ip'] || '').trim();
+  return visitor && isIP(visitor) && fromCloudflare(peer) ? visitor : peer;
 }
 
 async function readBody(req, max) {
@@ -671,46 +826,6 @@ async function readBody(req, max) {
 
 function redirectLogin(res, message) {
   res.writeHead(302, { Location: `/login?error=${encodeURIComponent(message)}` }).end();
-}
-
-const escapeHtml = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-
-function loginPage(error) {
-  return `<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sign in · Kauzl</title><link rel="icon" type="image/svg+xml" href="${FAVICON}">
-<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="${FONTS}">
-<style>
-  :root { color-scheme: dark; --ink: #121522; --ink-2: #1C2135; --line: #2A3048; --text: #F6F7F9; --muted: #C9CDD8; --amber: #F5A524; --err: #FF8A80; }
-  * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: grid; place-items: center; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; padding: 16px; position: relative; }
-  body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
-  main { position: relative; background: var(--ink-2); border: 1px solid var(--line); border-radius: 22px; padding: 64px 32px 28px; max-width: 380px; width: 100%; text-align: center; box-shadow: 0 30px 70px rgb(0 0 0 / .45); }
-  main > svg.owl { position: absolute; top: -46px; left: 50%; transform: translateX(-50%); filter: drop-shadow(0 10px 18px rgb(0 0 0 / .4)); }
-  svg.owl .eyes { transform-box: fill-box; transform-origin: center; animation: blink 7s infinite; }
-  @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
-  @media (prefers-reduced-motion: reduce) { svg.owl .eyes { animation: none; } }
-  h1 { font: 800 30px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; margin: 0 0 10px; }
-  p { color: var(--muted); margin: 0 0 24px; }
-  a.btn { display: flex; align-items: center; justify-content: center; min-height: 46px; background: var(--amber); color: var(--ink); text-decoration: none; padding: 10px 16px; border-radius: 11px; font-weight: 600; }
-  a.btn:hover { filter: brightness(1.06); }
-  a:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
-  .err { color: var(--err); background: rgb(255 138 128 / .1); border-radius: 10px; padding: 9px 12px; margin: 0 0 16px; }
-  .alt { display: block; margin-top: 14px; color: var(--amber); font-size: 14px; }
-  .home { display: block; margin-top: 18px; color: var(--muted); font-size: 14px; text-decoration: none; }
-  .home:hover { color: var(--text); }
-</style></head>
-<body><main>
-  ${owl(84, { variant: 'paper' })}
-  <h1>kauzl</h1>
-  <p>Invite only. Sign in with the Google account you were invited with.</p>
-  ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
-  <a class="btn" href="/login/google">Sign in with Google</a>
-  <a class="alt" href="/login/google?viewer=1">Someone shared a site with you? Sign in to view it</a>
-  <a class="alt" href="/demo">No invite yet? Look around the demo</a>
-  <a class="home" href="/home">← What is Kauzl?</a>
-</main></body></html>`;
 }
 
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

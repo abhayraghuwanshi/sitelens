@@ -96,3 +96,23 @@ test('log analyzer reads combined logs and JSON lines', () => {
   assert.deepEqual(r.bots[0].paths[0], ['/blog/post', 1]);
   assert.equal(r.bots[1].paths[0][0], '/docs');
 });
+
+test('site.js keeps tool forms from reloading but lets real posting forms submit', async () => {
+  // The home, sign-in and waitlist pages load site.js too; their early-access
+  // form (method="post") must reach the server.
+  const { readFile } = await import('node:fs/promises');
+  const src = await readFile(new URL('../tools/assets/site.js', import.meta.url), 'utf8');
+  const handler = src.match(/document\.addEventListener\('submit', \(e\) => \{([\s\S]*?)\n\}\);/);
+  assert.ok(handler, 'one submit handler');
+  const run = new Function('e', handler[1]);
+  const event = (method) => {
+    const form = { method, closest: () => form };
+    return { target: form, prevented: false, preventDefault() { this.prevented = true; } };
+  };
+  const post = event('post');
+  run(post);
+  assert.equal(post.prevented, false);
+  const tool = event('get');
+  run(tool);
+  assert.equal(tool.prevented, true);
+});

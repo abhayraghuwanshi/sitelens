@@ -386,6 +386,7 @@ async function toolsFetch(url, init) {
   const path = new URL(url).pathname;
   if (path === '/tools/utm-builder/') return new Response('<h1>UTM</h1>', { headers: { 'content-type': 'text/html; charset=utf-8', etag: '"a1"', 'set-cookie': 'x=1', 'x-vercel-id': 'iad1' } });
   if (path === '/tools/assets/site.js') return new Response('export {}', { headers: { 'content-type': 'application/javascript' } });
+  if (path === '/tools/') return new Response('<link rel="stylesheet" href="/tools/assets/site.css?v=abc123def0">', { headers: { 'content-type': 'text/html; charset=utf-8' } });
   if (path === '/tools/old') return new Response(null, { status: 308, headers: { location: 'https://tools.example/tools/new/' } });
   return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
 }
@@ -427,14 +428,18 @@ test('robots.txt keeps crawlers out of the app and points at the tools sitemap',
   assert.match(r.body, /Sitemap: https:\/\/sitelens\.test\/sitemap\.xml/);
 });
 
-test('home and sign-in pages may load the brand fonts; home links the free tools', async () => {
+test('home and sign-in pages may load the brand fonts; both link the free tools', async () => {
   const home = await call('/');
   assert.match(home.headers['content-security-policy'], /font-src https:\/\/fonts\.gstatic\.com/);
   assert.doesNotMatch(home.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
   assert.match(home.body, /href="\/tools\/did-it-work\/"/);
-  assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js">/);
+  // Stamped with the tools build's version, so a tools deploy gets past CDN caches.
+  assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js\?v=abc123def0">/);
   assert.doesNotMatch(home.body, /<script>(?!<)/, 'no inline script');
-  assert.match((await call('/login')).headers['content-security-policy'], /fonts\.googleapis\.com/);
+  const login = await call('/login');
+  assert.match(login.headers['content-security-policy'], /fonts\.googleapis\.com/);
+  assert.match(login.body, /href="\/tools\/">Free tools/);
+  assert.match(login.body, /href="\/home">← Back to home/);
 });
 
 test('the public demo: no sign-in, only the sample site, nothing can change', async () => {
@@ -512,4 +517,211 @@ test('the demo can show a real site instead of the sample: view only, and nothin
   }
   // Unset again: the sample site.
   assert.equal((await call('/demo')).headers.location, '/#/site/demo/story');
+});
+
+/* ---------- Early access: waitlist, invites, admin ---------- */
+
+function postForm(path, fields, { cookie, origin = ORIGIN, ip, visitor } = {}) {
+  const body = new URLSearchParams(fields).toString();
+  return new Promise((resolve, reject) => {
+    const req = request(`${base}${path}`, {
+      method: 'POST',
+      headers: { host: HOST, origin, 'content-type': 'application/x-www-form-urlencoded', ...(cookie ? { cookie } : {}), ...(ip ? { 'fly-client-ip': ip } : {}), ...(visitor ? { 'cf-connecting-ip': visitor } : {}) },
+    }, (res) => {
+      let data = '';
+      res.on('data', (c) => (data += c));
+      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body: data }));
+    });
+    req.on('error', reject);
+    req.end(body);
+  });
+}
+const waitlisted = () => gateway.db.prepare('SELECT email, source FROM waitlist ORDER BY email').all().map((r) => ({ ...r }));
+
+test('anyone can join the waitlist from the home page; bad emails, bots and other sites are turned away', async () => {
+  const home = await call('/');
+  assert.match(home.body, /<form class="join" method="post" action="\/waitlist">/);
+  assert.match(home.body, /href="\/waitlist">Get early access/);
+
+  const ok = await postForm('/waitlist', { email: ' New.Person@Example.com ', from: 'home' }, { ip: '203.0.113.1' });
+  assert.equal(ok.status, 303);
+  assert.equal(ok.headers.location, '/waitlist?joined=home');
+  const thanks = await call('/waitlist?joined=home');
+  assert.match(thanks.body, /You’re on the list/);
+  // The thank-you page records the join in kauzl.com's analytics (no tag ID here, so no scripts).
+  assert.match(thanks.body, /data-event="waitlist_join" data-event-detail="home"/);
+  // An unknown source (or a bot's thank-you) records nothing.
+  assert.doesNotMatch((await call('/waitlist?joined=1')).body, /data-event=/);
+  // Joining twice keeps one row, from where they first came.
+  await postForm('/waitlist', { email: 'new.person@example.com', from: 'login' }, { ip: '203.0.113.1' });
+  assert.deepEqual(waitlisted().filter((r) => r.email === 'new.person@example.com'), [{ email: 'new.person@example.com', source: 'home' }]);
+
+  const bad = await postForm('/waitlist', { email: 'not-an-email' }, { ip: '203.0.113.2' });
+  assert.match(decodeURIComponent(bad.headers.location), /doesn’t look like an email/);
+  // The hidden field: a bot gets the thank-you, and nothing is kept.
+  await postForm('/waitlist', { email: 'bot@example.com', website: 'http://spam' }, { ip: '203.0.113.2' });
+  assert.ok(!waitlisted().some((r) => r.email === 'bot@example.com'));
+  // Posted from another site: refused.
+  assert.equal((await postForm('/waitlist', { email: 'csrf@example.com' }, { origin: 'https://evil.test', ip: '203.0.113.2' })).status, 403);
+  assert.ok(!waitlisted().some((r) => r.email === 'csrf@example.com'));
+});
+
+test('the waitlist is rate-limited per address', async () => {
+  const ip = '203.0.113.50';
+  for (let i = 0; i < 10; i++) await postForm('/waitlist', { email: `burst${i}@example.com` }, { ip });
+  const over = await postForm('/waitlist', { email: 'burst-over@example.com' }, { ip });
+  assert.match(decodeURIComponent(over.headers.location), /Too many tries/);
+  assert.ok(!waitlisted().some((r) => r.email === 'burst-over@example.com'));
+});
+
+test('someone not invited who tries to sign in lands on the waitlist', async () => {
+  const { done } = await signIn('curious@example.com');
+  assert.match(decodeURIComponent(done.headers.location), /You’re on the waitlist now/);
+  assert.ok(waitlisted().some((r) => r.email === 'curious@example.com' && r.source === 'sign-in'));
+  assert.match((await call('/login')).body, /action="\/waitlist"/);
+});
+
+test('admins see the waitlist and who is live, invite people, and only admins can', async () => {
+  const outsider = await call('/admin');
+  assert.equal(outsider.status, 302);
+  assert.equal(outsider.headers.location, '/login');
+
+  const alice = (await signIn('alice@example.com')).cookie;
+  const page = await call('/admin', { cookie: alice });
+  assert.equal(page.status, 200);
+  assert.match(page.body, /new\.person@example\.com/);
+  assert.match(page.body, /<b>\d+<\/b><span>Live now/);
+  const csv = await call('/admin/waitlist.csv', { cookie: alice });
+  assert.match(csv.headers['content-type'], /text\/csv/);
+  assert.match(csv.body, /^email,source,joined\r\n/);
+  assert.match(csv.body, /"curious@example\.com","sign-in"/);
+
+  // Invite from the waitlist: they can sign in at once, and leave the waitlist view.
+  const inv = await postForm('/admin/invite', { email: 'curious@example.com' }, { cookie: alice });
+  assert.equal(inv.status, 303);
+  assert.match(decodeURIComponent(inv.headers.location), /Invited curious@example\.com/);
+  const curious = await signIn('curious@example.com');
+  assert.equal(curious.done.headers.location, '/');
+  assert.match((await call('/admin', { cookie: alice })).body, /mailto:curious%40example\.com/);
+  // Invited people stay on the waitlist view, marked, so a test with an invited email still shows up.
+  assert.match((await call('/admin', { cookie: alice })).body, /curious@example\.com<\/td><td>Tried to sign in<\/td><td class="when">[^<]*<\/td>\s*<td class="acts"><span class="tag">Invited<\/span>/);
+
+  // Not an admin: the page doesn't exist for them, and they can't invite.
+  assert.equal((await call('/admin', { cookie: curious.cookie })).status, 404);
+  assert.equal((await postForm('/admin/invite', { email: 'friend@example.com' }, { cookie: curious.cookie })).status, 404);
+  assert.ok(!gateway.db.prepare('SELECT 1 FROM invites WHERE email = ?').get('friend@example.com'));
+
+  // Revoke: their session stops working at once. Server-list people stay invited.
+  await postForm('/admin/revoke', { email: 'curious@example.com' }, { cookie: alice });
+  assert.equal((await call('/api/me', { cookie: curious.cookie })).status, 401);
+  const keep = await postForm('/admin/revoke', { email: 'bob2@example.com' }, { cookie: alice });
+  assert.match(decodeURIComponent(keep.headers.location), /stay invited/);
+
+  await postForm('/admin/waitlist/remove', { email: 'new.person@example.com' }, { cookie: alice });
+  assert.ok(!waitlisted().some((r) => r.email === 'new.person@example.com'));
+});
+
+test('invites made in /admin survive a restart', async () => {
+  const alice = (await signIn('alice@example.com')).cookie;
+  await postForm('/admin/invite', { email: 'tester@example.com' }, { cookie: alice });
+  const again = createGateway({ dataDir: dir, masterKey, host: HOST, allowedEmails: parseEmails('alice@example.com'), env: gatewayEnv, fetchImpl: fakeFetch, startJobs: false });
+  const s2 = createServer((req, res) => again.handle(req, res));
+  await new Promise((r) => s2.listen(0, '127.0.0.1', r));
+  try {
+    const port = s2.address().port;
+    const go = (path, headers = {}) => new Promise((resolve) => request(`http://127.0.0.1:${port}${path}`, { headers: { host: HOST, 'fly-client-ip': '198.51.100.250', ...headers } }, (res) => { res.resume(); res.on('end', () => resolve(res)); }).end());
+    const start = await go('/login/google');
+    const state = new URL(start.headers.location).searchParams.get('state');
+    const done = await go(`/login/callback?code=${encodeURIComponent('tester@example.com')}&state=${state}`);
+    assert.equal(done.headers.location, '/');
+  } finally {
+    s2.close();
+  }
+});
+
+test('the server keeps one row per person per active day, and admin shows retention from it', async () => {
+  const alice = (await signIn('alice@example.com')).cookie;
+  await call('/api/me', { cookie: alice });
+  const today = new Date().toISOString().slice(0, 10);
+  const rows = gateway.db.prepare("SELECT a.day FROM activity a JOIN users u ON u.id = a.user_id WHERE u.email = 'alice@example.com'").all();
+  assert.deepEqual(rows.map((r) => r.day), [today]);
+  const page = await call('/admin', { cookie: alice });
+  assert.match(page.body, /Activity and retention/);
+  assert.match(page.body, /Started week of/);
+});
+
+test('retention groups people by their first week and counts who was active each week after', async () => {
+  const { retention } = await import('../server/pages.mjs');
+  const now = Date.parse('2026-11-18T12:00:00Z'); // a Wednesday
+  const cohorts = retention([
+    { email: 'a', day: '2026-11-02' }, { email: 'a', day: '2026-11-10' }, { email: 'a', day: '2026-11-17' },
+    { email: 'b', day: '2026-11-03' },
+    { email: 'c', day: '2026-11-16' },
+  ], now);
+  assert.deepEqual(cohorts.map((c) => [c.week, c.size, c.cells.map((x) => x.n)]), [
+    ['2026-11-16', 1, [1]],
+    ['2026-11-02', 2, [2, 1, 1]],
+  ]);
+});
+
+test('with kauzl.com analytics on, sign-in passes through a page that records sign_up, then login', async () => {
+  const tagged = createGateway({ dataDir: dir, masterKey, host: HOST, allowedEmails: parseEmails('fresh@example.com'), env: { ...gatewayEnv, GOOGLE_TAG_ID: 'GTM-TEST1' }, fetchImpl: fakeFetch, startJobs: false });
+  const srv = createServer((req, res) => tagged.handle(req, res));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const go = (path, headers = {}) => new Promise((resolve) => request(`http://127.0.0.1:${srv.address().port}${path}`, { headers: { host: HOST, 'fly-client-ip': '198.51.100.251', ...headers } }, (res) => {
+    let body = '';
+    res.on('data', (c) => (body += c));
+    res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, body }));
+  }).end());
+  const signInHere = async () => {
+    const start = await go('/login/google');
+    const state = new URL(start.headers.location).searchParams.get('state');
+    return go(`/login/callback?code=${encodeURIComponent('fresh@example.com')}&state=${state}`);
+  };
+  try {
+    const first = await signInHere();
+    assert.equal(first.headers.location, '/signed-in?e=sign_up');
+    const second = await signInHere();
+    assert.equal(second.headers.location, '/signed-in?e=login');
+    const cookie = String(second.headers['set-cookie']).split(';')[0];
+    const page = await go('/signed-in?e=login', { cookie });
+    assert.match(page.body, /data-event="login" data-event-detail="google" data-then="\/"/);
+    assert.match(page.body, /<script defer src="\/tools\/assets\/ga\.js" data-ga="GTM-TEST1">/);
+    assert.doesNotMatch(page.body, /<script>(?!<)/, 'no inline script');
+    // Not signed in: no page, just sign-in.
+    assert.equal((await go('/signed-in?e=login')).headers.location, '/login');
+  } finally {
+    srv.close();
+  }
+});
+
+test('behind Cloudflare the limit is per visitor, and a faked visitor header off Cloudflare is ignored', async () => {
+  // Many people through one Cloudflare edge: each has their own limit.
+  for (let i = 0; i < 12; i++) {
+    const r = await postForm('/waitlist', { email: `edge${i}@example.com` }, { ip: '162.158.10.20', visitor: `192.0.2.${i + 1}` });
+    assert.doesNotMatch(decodeURIComponent(r.headers.location), /Too many/);
+  }
+  // Straight to the server (not Cloudflare) with a new fake visitor each time: still one address.
+  let last;
+  for (let i = 0; i < 11; i++) last = await postForm('/waitlist', { email: `spoof${i}@example.com` }, { ip: '198.51.100.77', visitor: `192.0.2.${100 + i}` });
+  assert.match(decodeURIComponent(last.headers.location), /Too many tries/);
+});
+
+test('a flood from many addresses stops at the hourly cap; people already on the list are unaffected', async () => {
+  const capped = createGateway({ dataDir: await mkdtemp(join(tmpdir(), 'studio-cap-')), masterKey, host: HOST, allowedEmails: parseEmails('alice@example.com'), env: gatewayEnv, fetchImpl: fakeFetch, startJobs: false, waitlistPerHour: 2 });
+  const srv = createServer((req, res) => capped.handle(req, res));
+  await new Promise((r) => srv.listen(0, '127.0.0.1', r));
+  const post = (email, n) => new Promise((resolve) => {
+    const req = request(`http://127.0.0.1:${srv.address().port}/waitlist`, { method: 'POST', headers: { host: HOST, origin: ORIGIN, 'content-type': 'application/x-www-form-urlencoded', 'fly-client-ip': `198.51.100.${n}` } }, (res) => { res.resume(); res.on('end', () => resolve(decodeURIComponent(res.headers.location))); });
+    req.end(new URLSearchParams({ email }).toString());
+  });
+  try {
+    assert.equal(await post('one@example.com', 1), '/waitlist?joined=waitlist');
+    assert.equal(await post('two@example.com', 2), '/waitlist?joined=waitlist');
+    assert.match(await post('three@example.com', 3), /Lots of requests/);
+    assert.equal(capped.db.prepare('SELECT COUNT(*) AS n FROM waitlist').get().n, 2);
+    assert.equal(await post('one@example.com', 4), '/waitlist?joined=waitlist');
+  } finally {
+    srv.close();
+  }
 });

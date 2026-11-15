@@ -111,7 +111,12 @@ document.addEventListener('click', (e) => { if (e.target.closest('main button'))
 
 // Tools recalculate as you type; Enter in a field must not reload the page.
 // (Done here rather than inline onsubmit, so a strict CSP can block inline JS.)
-document.addEventListener('submit', (e) => e.preventDefault());
+// Forms that really post to the server (the early-access form on the home,
+// sign-in and waitlist pages: method="post") are left alone.
+document.addEventListener('submit', (e) => {
+  if (e.target.closest?.('form')?.method?.toLowerCase() === 'post') return;
+  e.preventDefault();
+});
 
 // ── What people do on the page ─────────────────────────
 if (pageKind === 'tool') {
@@ -126,6 +131,19 @@ if (pageKind === 'tool') {
     if (b.id === 'example') track('tool_example');
     else if (b.dataset.track) track('tool_option', { detail: b.dataset.track });
   });
+}
+// Something the server just did for this visitor (joined the waitlist, signed
+// in): <body data-event="waitlist_join" data-event-detail="home" data-then="/">.
+// Sent once; with data-then, the page moves on once GTM has sent it (or 1.5 s).
+{
+  const { event, eventDetail, then } = document.body?.dataset || {};
+  if (event) {
+    let gone = false;
+    const go = () => { if (then && !gone) { gone = true; location.replace(then); } };
+    window.dataLayer = window.dataLayer || [];
+    window.dataLayer.push({ event, detail: eventDetail || undefined, eventCallback: go, eventTimeout: 1500 });
+    if (then) setTimeout(go, 1500);
+  }
 }
 // Clicks towards Kauzl, the demo, sign-in, other tools and guides.
 document.addEventListener('click', (e) => {
