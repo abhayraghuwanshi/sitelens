@@ -261,7 +261,8 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
 
 // tools: the free tools are served at /tools/ (TOOLS_ORIGIN is set), so link
 // them and borrow their site.js for the owl's moving eyes.
-export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
+export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = {}) {
+  const q = v ? `?v=${encodeURIComponent(v)}` : '';
   const enter = signedIn ? '/' : '/login';
   const toolsLink = (html) => (tools ? html : '');
   return `<!doctype html>
@@ -375,7 +376,7 @@ ${tools ? `  <section id="tools"><div class="wrap">
   <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p><p class="why"><b>Why an owl</b> · <em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”. Its left eye is before you shipped, the right one after.</p></div></div>
   <nav aria-label="Footer">${toolsLink('<a href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}<a href="#features">Features</a><a href="${enter}">Open Kauzl</a></nav>
 </div></footer>
-${tools ? '<script type="module" src="/tools/assets/site.js"></script>' : ''}
-${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js" data-ga="${ga}"></script>` : ''}
+${tools ? `<script type="module" src="/tools/assets/site.js${q}"></script>` : ''}
+${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js${q}" data-ga="${ga}"></script>` : ''}
 </body></html>`;
 }

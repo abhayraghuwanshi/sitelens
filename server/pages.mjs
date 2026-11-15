@@ -56,9 +56,10 @@ const CSS = `
 // ga: the Google tag ID, when kauzl.com's analytics are on (scripts come from /tools/assets).
 // event: something that just happened, sent once by site.js: { name, detail, then }.
 // `then` is where to go next, after the event is sent (or 1.5 s, whichever is first).
-function shell({ title, nav = '', body, extraCss = '', ga = '', event = null, head = '' }) {
+function shell({ title, nav = '', body, extraCss = '', ga = '', v = '', event = null, head = '' }) {
+  const q = v ? `?v=${encodeURIComponent(v)}` : '';
   const attrs = event ? ` data-event="${escapeHtml(event.name)}"${event.detail ? ` data-event-detail="${escapeHtml(event.detail)}"` : ''}${event.then ? ` data-then="${escapeHtml(event.then)}"` : ''}` : '';
-  const scripts = ga ? `<script type="module" src="/tools/assets/site.js"></script>\n<script defer src="/tools/assets/ga.js" data-ga="${escapeHtml(ga)}"></script>` : '';
+  const scripts = ga ? `<script type="module" src="/tools/assets/site.js${q}"></script>\n<script defer src="/tools/assets/ga.js${q}" data-ga="${escapeHtml(ga)}"></script>` : '';
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="robots" content="noindex">
@@ -86,10 +87,11 @@ export function joinForm(from, { email = '' } = {}) {
   </form>`;
 }
 
-export function loginPage(error, { tools = false, ga = '', joined = false } = {}) {
+export function loginPage(error, { tools = false, ga = '', joined = false, v = '' } = {}) {
   return shell({
     title: 'Sign in · Kauzl',
     ga,
+    v,
     event: joined ? { name: 'waitlist_join', detail: 'sign-in' } : null,
     nav: `${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a>`,
     body: `<div class="stage"><main class="card">
@@ -111,7 +113,7 @@ export function loginPage(error, { tools = false, ga = '', joined = false } = {}
 
 // /waitlist: the form on its own, the thank-you, or what went wrong.
 const JOIN_SOURCES = new Set(['home', 'login', 'waitlist']);
-export function waitlistPage({ joined = '', error = '', tools = false, ga = '' } = {}) {
+export function waitlistPage({ joined = '', error = '', tools = false, ga = '', v = '' } = {}) {
   const inner = joined
     ? `<h1>You’re on the list</h1>
   <p class="lead">Thanks. We’ll email you when your spot opens, with a link to sign in.</p>
@@ -125,6 +127,7 @@ export function waitlistPage({ joined = '', error = '', tools = false, ga = '' }
   return shell({
     title: joined ? 'You’re on the list · Kauzl' : 'Early access · Kauzl',
     ga,
+    v,
     event: JOIN_SOURCES.has(joined) ? { name: 'waitlist_join', detail: joined } : null,
     nav: `${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a>`,
     body: `<div class="stage"><main class="card">${owl(80, { variant: 'paper' })}${inner}</main></div>`,
@@ -133,10 +136,11 @@ export function waitlistPage({ joined = '', error = '', tools = false, ga = '' }
 
 // After Google sign-in: a moment on a public page so kauzl.com's analytics see
 // the sign-in (the app itself loads no tag), then on into the app.
-export function signedInPage({ event, ga }) {
+export function signedInPage({ event, ga, v = '' }) {
   return shell({
     title: 'Signing you in · Kauzl',
     ga,
+    v,
     event: { name: event, detail: 'google', then: '/' },
     head: '<meta http-equiv="refresh" content="3;url=/">',
     body: `<div class="stage"><main class="card">${owl(80, { variant: 'paper' })}<h1>${event === 'sign_up' ? 'Welcome to Kauzl' : 'Welcome back'}</h1>

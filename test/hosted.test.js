@@ -386,6 +386,7 @@ async function toolsFetch(url, init) {
   const path = new URL(url).pathname;
   if (path === '/tools/utm-builder/') return new Response('<h1>UTM</h1>', { headers: { 'content-type': 'text/html; charset=utf-8', etag: '"a1"', 'set-cookie': 'x=1', 'x-vercel-id': 'iad1' } });
   if (path === '/tools/assets/site.js') return new Response('export {}', { headers: { 'content-type': 'application/javascript' } });
+  if (path === '/tools/') return new Response('<link rel="stylesheet" href="/tools/assets/site.css?v=abc123def0">', { headers: { 'content-type': 'text/html; charset=utf-8' } });
   if (path === '/tools/old') return new Response(null, { status: 308, headers: { location: 'https://tools.example/tools/new/' } });
   return new Response('Not found', { status: 404, headers: { 'content-type': 'text/plain' } });
 }
@@ -432,7 +433,8 @@ test('home and sign-in pages may load the brand fonts; both link the free tools'
   assert.match(home.headers['content-security-policy'], /font-src https:\/\/fonts\.gstatic\.com/);
   assert.doesNotMatch(home.headers['content-security-policy'], /script-src[^;]*unsafe-inline/);
   assert.match(home.body, /href="\/tools\/did-it-work\/"/);
-  assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js">/);
+  // Stamped with the tools build's version, so a tools deploy gets past CDN caches.
+  assert.match(home.body, /<script type="module" src="\/tools\/assets\/site\.js\?v=abc123def0">/);
   assert.doesNotMatch(home.body, /<script>(?!<)/, 'no inline script');
   const login = await call('/login');
   assert.match(login.headers['content-security-policy'], /fonts\.googleapis\.com/);

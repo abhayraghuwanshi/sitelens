@@ -505,7 +505,7 @@ export function createGateway({
       return seeOther(res, `/waitlist?joined=${from}`);
     }
     if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD, POST' }).end();
-    return html(res, 200, waitlistPage({ joined: url.searchParams.get('joined') || '', error: url.searchParams.get('error') || '', tools: Boolean(toolsOrigin), ga: tagId }));
+    return html(res, 200, waitlistPage({ joined: url.searchParams.get('joined') || '', error: url.searchParams.get('error') || '', tools: Boolean(toolsOrigin), ga: tagId, v: await assetVersion() }));
   }
 
   async function adminRoutes(req, res, url) {
@@ -595,6 +595,21 @@ export function createGateway({
   const toolsAgent = toolsOrigin ? new Agent() : null;
   // kauzl.com's own Google tag, on the public pages only; its scripts come from the tools host.
   const tagId = toolsOrigin && /^(GTM|G)-[A-Z0-9]+$/.test(env.GOOGLE_TAG_ID || '') ? env.GOOGLE_TAG_ID : '';
+  // The tools build stamps its asset URLs (?v=<hash>). Our own pages load site.js
+  // and ga.js from there too, with the same stamp, so a tools deploy reaches
+  // visitors at once instead of after a CDN or browser cache runs out.
+  // Read from the tools index, at most every 5 minutes.
+  const assets = { v: '', at: 0 };
+  async function assetVersion() {
+    if (!toolsOrigin || now() - assets.at < 5 * 60_000) return assets.v;
+    assets.at = now();
+    try {
+      const page = await fetchImpl(`${toolsOrigin}/tools/`, { dispatcher: toolsAgent });
+      const m = page.ok && (await page.text()).match(/assets\/site\.css\?v=([a-f0-9]{6,40})/);
+      if (m) assets.v = m[1];
+    } catch {}
+    return assets.v;
+  }
   async function proxyTools(req, res, url) {
     if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
     if (url.pathname === '/tools' || url.pathname === '/guides') return res.writeHead(308, { Location: `${url.pathname}/${url.search}` }).end();
@@ -646,7 +661,7 @@ export function createGateway({
     if (url.pathname === '/waitlist') return waitlistRoutes(req, res, url);
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin), ga: tagId, joined: url.searchParams.get('joined') === 'sign-in' }));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin), ga: tagId, joined: url.searchParams.get('joined') === 'sign-in', v: await assetVersion() }));
     }
     if (url.pathname === '/login/google') {
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
@@ -718,7 +733,7 @@ export function createGateway({
     // The public home page: at /home for everyone, at / for visitors without a session or the demo.
     if (url.pathname === '/home' || (!user && !demo && url.pathname === '/')) {
       if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID }));
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID, v: await assetVersion() }));
     }
     if (demo) return demoRoutes(req, res, url);
     if (!user) {
@@ -729,7 +744,7 @@ export function createGateway({
     }
     if (url.pathname === '/signed-in') {
       if (!tagId) return res.writeHead(302, { Location: '/' }).end();
-      return html(res, 200, signedInPage({ event: url.searchParams.get('e') === 'sign_up' ? 'sign_up' : 'login', ga: tagId }));
+      return html(res, 200, signedInPage({ event: url.searchParams.get('e') === 'sign_up' ? 'sign_up' : 'login', ga: tagId, v: await assetVersion() }));
     }
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
       if (!admins.has(user.email)) return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
