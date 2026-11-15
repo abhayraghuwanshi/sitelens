@@ -221,6 +221,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...siteConfigRoutes({
       siteConfig,
       siteOr404,
+      async saveLink(site, link) {
+        await store.update((s) => {
+          const saved = s.sites.find((x) => x.id === site.id);
+          if (!saved) return;
+          if (link) saved.configLink = link;
+          else delete saved.configLink;
+        });
+      },
       // What the site really sent, to flag config names that never fire.
       async firedEvents(site) {
         if (site.propertyId) return outcomes.eventNames(site);

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection } from '../server/site-config.mjs';
+import { parseConfigLink, parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection } from '../server/site-config.mjs';
 import { readFile } from 'node:fs/promises';
 import { openCacheDb } from '../server/cache.mjs';
 
@@ -484,4 +484,102 @@ test('a copy cached on disk by an older Studio is parsed again, so new keys appl
   const got = await cfg.get(site);
   assert.equal(got.config.metrics[0].label, 'Pings');
   assert.deepEqual(got.warnings, []);
+});
+
+test('a pasted GitHub link names the repo, and every branch/path split to try', () => {
+  assert.deepEqual(parseConfigLink('https://github.com/me/web/blob/hosted-fly/.sitelens.yml'), { repo: 'me/web', candidates: [{ ref: 'hosted-fly', path: '.sitelens.yml' }] });
+  assert.deepEqual(parseConfigLink('https://github.com/me/web/blob/feature/x/.sitelens/shop.test.yml').candidates, [
+    { ref: 'feature', path: 'x/.sitelens/shop.test.yml' },
+    { ref: 'feature/x', path: '.sitelens/shop.test.yml' },
+    { ref: 'feature/x/.sitelens', path: 'shop.test.yml' },
+  ]);
+  assert.equal(parseConfigLink('https://raw.githubusercontent.com/me/web/dev/.sitelens.yml').candidates[0].ref, 'dev');
+  for (const bad of ['', 'not a url', 'https://gitlab.com/me/web/blob/main/.sitelens.yml', 'https://github.com/me/web/blob/main/README.md', 'https://github.com/me/web/tree/main', 'https://github.com/me/web/blob/main/../x.yml']) {
+    assert.equal(parseConfigLink(bad), null, bad);
+  }
+});
+
+// GitHub contents, per branch.
+function branchedGitHub(files) {
+  const calls = [];
+  const json = (body, status = 200) => ({ ok: status < 300, status, json: async () => body });
+  const fetchImpl = async (url, opts = {}) => {
+    const method = opts.method || 'GET';
+    const u = new URL(url);
+    calls.push({ method, path: u.pathname, ref: u.searchParams.get('ref'), body: opts.body ? JSON.parse(opts.body) : null });
+    const contents = /^\/repos\/([^/]+\/[^/]+)\/contents\/(.+)$/.exec(u.pathname);
+    if (method === 'GET' && contents) {
+      const ref = u.searchParams.get('ref') || 'main';
+      const text = files[`${contents[1]}@${ref}:${decodeURIComponent(contents[2])}`];
+      if (text === undefined) return json({ message: 'Not Found' }, 404);
+      return json({ type: 'file', encoding: 'base64', content: Buffer.from(text).toString('base64'), sha: `sha-${ref}`, html_url: `https://github.com/${contents[1]}/blob/${ref}/${decodeURIComponent(contents[2])}` });
+    }
+    if (method === 'GET' && /^\/repos\/[^/]+\/[^/]+$/.test(u.pathname)) return json({ default_branch: 'main' });
+    if (method === 'GET' && u.pathname.includes('/git/ref/heads/')) return json({ object: { sha: 'base-sha' } });
+    if (method === 'POST' && u.pathname.endsWith('/git/refs')) return json({}, 201);
+    if (method === 'PUT' && contents) return json({}, 201);
+    if (method === 'POST' && u.pathname.endsWith('/pulls')) return json({ html_url: 'https://github.com/me/web/pull/9', number: 9 }, 201);
+    return json({}, 404);
+  };
+  return { calls, fetchImpl };
+}
+
+test('a linked file is read from its branch, ahead of the default branch, and changes go to that branch', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const gh = branchedGitHub({
+    'me/web@main:.sitelens.yml': 'version: 1\ngoals:\n  - { event: old_one }\n',
+    'me/web@hosted-fly:.sitelens.yml': 'version: 1\ngoals:\n  - { event: login }\n',
+  });
+  const cfg = createSiteConfig({ dir, repos: async () => ['me/web'], getToken: async () => 't', fetchImpl: gh.fetchImpl });
+  const linked = { ...site, configLink: 'https://github.com/me/web/blob/hosted-fly/.sitelens.yml' };
+  const out = await cfg.get(linked, { fresh: true });
+  assert.equal(out.found, true);
+  assert.deepEqual(out.config.goals.map((g) => g.match), ['login']);
+  assert.equal(out.source.ref, 'hosted-fly');
+  // Without the link: the default branch, as before.
+  cfg.forget(site.id);
+  assert.deepEqual((await cfg.get(site, { fresh: true })).config.goals.map((g) => g.match), ['old_one']);
+
+  // A change from Setup opens its pull request into the linked branch.
+  cfg.forget(site.id);
+  const pr = await cfg.saveSection(linked, 'alerts', 'alerts:\n  traffic: { pct: 40 }');
+  assert.equal(pr.number, 9);
+  assert.equal(gh.calls.find((c) => c.method === 'POST' && c.path.endsWith('/pulls')).body.base, 'hosted-fly');
+  assert.ok(gh.calls.some((c) => c.path.endsWith('/git/ref/heads/hosted-fly')));
+});
+
+test('a link to a missing file says so, and does not quietly fall back to the default branch', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const gh = branchedGitHub({ 'me/web@main:.sitelens.yml': 'version: 1\n' });
+  const cfg = createSiteConfig({ dir, repos: async () => ['me/web'], getToken: async () => 't', fetchImpl: gh.fetchImpl });
+  const out = await cfg.get({ ...site, configLink: 'https://github.com/me/web/blob/nope/.sitelens.yml' }, { fresh: true });
+  assert.equal(out.found, false);
+  assert.match(out.notes.join(' '), /isn’t on GitHub/);
+});
+
+test('POST /config/link checks and saves the link, and an empty one clears it', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const gh = branchedGitHub({ 'me/web@hosted-fly:.sitelens.yml': 'version: 1\ngoals:\n  - { event: login }\n' });
+  const siteConfig = createSiteConfig({ dir, repos: async () => ['me/web'], getToken: async () => 't', fetchImpl: gh.fetchImpl });
+  let saved = null;
+  const stored = { ...site };
+  const routes = siteConfigRoutes({ siteConfig, siteOr404: async () => stored, firedEvents: async () => null, draftInputs: async () => ({}), saveLink: async (_s, link) => { saved = link; } });
+  const [, , handler] = routes.find(([m, re]) => m === 'POST' && re.test(`/api/sites/${site.id}/config/link`));
+  const call = (link) => handler({ match: [null, site.id], body: { link } });
+  await assert.rejects(call('https://example.com/x.yml'), /GitHub link/);
+  assert.equal(saved, null);
+  const out = await call('https://github.com/me/web/blob/hosted-fly/.sitelens.yml');
+  assert.equal(saved, 'https://github.com/me/web/blob/hosted-fly/.sitelens.yml');
+  assert.equal(out.found, true);
+  await call('');
+  assert.equal(saved, '');
+});
+
+test('editing a site in Settings keeps its .sitelens.yml link', async () => {
+  const { createStore } = await import('../server/store.mjs');
+  const store = createStore(await mkdtemp(join(tmpdir(), 'sitelens-store-')));
+  const saved = await store.saveSite({ label: 'Shop', host: 'shop.test' });
+  await store.update((s) => { s.sites[0].configLink = 'https://github.com/me/web/blob/dev/.sitelens.yml'; });
+  await store.saveSite({ ...saved, label: 'Shop 2' });
+  assert.equal((await store.site(saved.id)).configLink, 'https://github.com/me/web/blob/dev/.sitelens.yml');
 });

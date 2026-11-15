@@ -77,6 +77,8 @@ export function createStore(dir = process.env.STUDIO_DATA_DIR || resolve('.data'
         // Settings edits don't send query groups; keep the saved ones.
         if (index >= 0 && site.searchGroups === undefined && s.sites[index].searchGroups) site.searchGroups = s.sites[index].searchGroups;
         if (index >= 0 && site.leaveOut === undefined && s.sites[index].leaveOut) site.leaveOut = s.sites[index].leaveOut;
+        // Nor the .sitelens.yml link set in Setup.
+        if (index >= 0 && site.configLink === undefined && s.sites[index].configLink) site.configLink = s.sites[index].configLink;
         if (index >= 0) s.sites[index] = site;
         else s.sites.push(site);
       });
@@ -168,6 +170,7 @@ export function normalizeSite(input = {}) {
     bq,
     ...(Array.isArray(input.searchGroups) ? { searchGroups: normalizeGroups(input.searchGroups) } : {}),
     ...(input.leaveOut ? { leaveOut: normalizeLeaveOut(input.leaveOut) } : {}),
+    ...(typeof input.configLink === 'string' && input.configLink ? { configLink: text(input.configLink, 500) } : {}),
   };
 }
 
