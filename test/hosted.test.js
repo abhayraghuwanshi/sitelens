@@ -539,7 +539,7 @@ const waitlisted = () => gateway.db.prepare('SELECT email, source FROM waitlist 
 test('anyone can join the waitlist from the home page; bad emails, bots and other sites are turned away', async () => {
   const home = await call('/');
   assert.match(home.body, /<form class="join" method="post" action="\/waitlist">/);
-  assert.match(home.body, /href="#early-access">Get early access/);
+  assert.match(home.body, /href="\/waitlist">Get early access/);
 
   const ok = await postForm('/waitlist', { email: ' New.Person@Example.com ', from: 'home' }, { ip: '203.0.113.1' });
   assert.equal(ok.status, 303);
@@ -601,6 +601,8 @@ test('admins see the waitlist and who is live, invite people, and only admins ca
   const curious = await signIn('curious@example.com');
   assert.equal(curious.done.headers.location, '/');
   assert.match((await call('/admin', { cookie: alice })).body, /mailto:curious%40example\.com/);
+  // Invited people stay on the waitlist view, marked, so a test with an invited email still shows up.
+  assert.match((await call('/admin', { cookie: alice })).body, /curious@example\.com<\/td><td>Tried to sign in<\/td><td class="when">[^<]*<\/td>\s*<td class="acts"><span class="tag">Invited<\/span>/);
 
   // Not an admin: the page doesn't exist for them, and they can't invite.
   assert.equal((await call('/admin', { cookie: curious.cookie })).status, 404);

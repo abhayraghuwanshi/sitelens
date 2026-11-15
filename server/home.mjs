@@ -293,7 +293,7 @@ export function homePage({ signedIn = false, tools = false, ga = '' } = {}) {
       <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
         <a class="btn amber" href="/demo">See the live demo</a>
-        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="#early-access">Get early access</a>'}
+        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="/waitlist">Get early access</a>'}
       </div>
       <ul class="perks"><li>${CHECK}Demo needs no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>

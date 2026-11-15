@@ -274,8 +274,9 @@ export function adminPage({ users, waitlist, invites, activity = [], envInvited,
 
   const userRows = users.map((u) => `<tr><td><span class="dot${u.lastSeen && now - u.lastSeen < LIVE_MS ? ' on' : ''}"></span>${escapeHtml(u.email)}</td>
     <td><span class="tag">${invitedSet.has(u.email) ? 'Invited' : 'Viewer'}</span></td><td class="when">${ago(u.lastSeen, now)}</td><td class="when">${day(u.createdAt)}</td></tr>`).join('');
-  const waitRows = waiting.map((w) => `<tr><td>${escapeHtml(w.email)}</td><td>${escapeHtml(SOURCES[w.source] || w.source || '')}</td><td class="when">${ago(w.createdAt, now)}</td>
-    <td class="acts">${post('/admin/invite', w.email, 'Invite')}${post('/admin/waitlist/remove', w.email, 'Remove')}</td></tr>`).join('');
+  // Everyone who joined, newest first; people already invited stay listed, marked.
+  const waitRows = waitlist.map((w) => `<tr><td>${escapeHtml(w.email)}</td><td>${escapeHtml(SOURCES[w.source] || w.source || '')}</td><td class="when">${ago(w.createdAt, now)}</td>
+    <td class="acts">${invitedSet.has(w.email) ? '<span class="tag">Invited</span>' : post('/admin/invite', w.email, 'Invite')}${post('/admin/waitlist/remove', w.email, 'Remove')}</td></tr>`).join('');
   const inviteRows = [
     ...[...envInvited].sort().map((email) => ({ email, env: true })),
     ...invites.filter((i) => !envInvited.has(i.email)),
@@ -302,9 +303,9 @@ export function adminPage({ users, waitlist, invites, activity = [], envInvited,
 
   ${activitySection({ activity, users, waitlist, invitedSet, now })}
 
-  <section class="panel"><div class="panel-head"><div><h2>Waitlist</h2><p>Invite someone and they can sign in with that Google account right away.</p></div>
+  <section class="panel"><div class="panel-head"><div><h2>Waitlist</h2><p>Everyone who asked for access, newest first (${waitlist.length} in all, ${waiting.length} not invited yet). Invite someone and they can sign in with that Google account right away.</p></div>
     <a class="btn quiet" href="/admin/waitlist.csv">Download CSV</a></div>
-    ${waiting.length ? `<div class="scroll"><table><thead><tr><th>Email</th><th>Where</th><th>Joined</th><th></th></tr></thead><tbody>${waitRows}</tbody></table></div>` : '<p class="empty">Nobody waiting. Share kauzl.com and they’ll show up here.</p>'}
+    ${waitlist.length ? `<div class="scroll"><table><thead><tr><th>Email</th><th>Where</th><th>Joined</th><th></th></tr></thead><tbody>${waitRows}</tbody></table></div>` : '<p class="empty">Nobody has joined yet. Share kauzl.com and they’ll show up here.</p>'}
   </section>
 
   <section class="panel"><div class="panel-head"><div><h2>Invited</h2><p>After inviting, send them the link. “Email the link” opens a ready-made email in your mail app.</p></div></div>
