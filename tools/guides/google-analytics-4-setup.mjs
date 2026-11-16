@@ -6,7 +6,7 @@ export default {
   short: 'Set up Google Analytics 4',
   title: 'How to Set Up Google Analytics 4: Tracking Setup Step by Step | Kauzl',
   h1: 'How to set up Google Analytics 4, step by step',
-  description: 'A plain-English Google Analytics 4 tracking setup: create the property, install the tag, check it works, keep 14 months of data, filter your own visits, mark key events and link Search Console.',
+  description: 'A plain-English GA4 setup: create the property, install and test the tag, keep 14 months of data, filter your visits, link Search Console.',
   blurb: 'Create the property, install the tag, and the five settings most sites forget.',
   lead: 'Getting GA4 to count visits takes ten minutes. Getting it to count them <em>usefully</em> takes five more settings that most sites skip. This guide covers both.',
   published: '2026-11-14',

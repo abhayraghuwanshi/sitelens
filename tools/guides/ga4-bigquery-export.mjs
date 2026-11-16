@@ -6,7 +6,7 @@ export default {
   short: 'Connect GA4 to BigQuery',
   title: 'How to Connect GA4 to BigQuery: The Free Export, Step by Step | Kauzl',
   h1: 'How to connect GA4 to BigQuery, step by step',
-  description: 'Turn on the free GA4 BigQuery export: the Google Cloud project, the link in GA4 Admin, the settings to pick, what it costs, and how to use the raw events for funnels, paths and retention.',
+  description: 'Turn on the free GA4 BigQuery export: the Cloud project, the GA4 link, which settings to pick, what it costs, and using raw events for funnels.',
   blurb: 'The free export that gives you every raw event: link it once, and funnels, paths and retention work on your own data.',
   lead: 'GA4’s reports show totals. The <strong>BigQuery export</strong> gives you every single event, as rows you can query. It’s free for standard properties, takes ten minutes to link, and is the only way to answer questions like “which pages did people read before signing up?” on your own data.',
   published: '2026-11-15',

@@ -1,7 +1,7 @@
 export default {
   name: 'Open Graph Preview & Meta Tag Generator',
   title: 'Open Graph Preview & Meta Tag Generator: X, LinkedIn, Slack, Facebook | Kauzl',
-  description: 'Preview how your link looks when shared on X, LinkedIn, Facebook, Slack and Discord, and generate the Open Graph and Twitter Card meta tags to paste into your page.',
+  description: 'Preview your link on X, LinkedIn, Facebook, Slack and Discord, and generate the Open Graph and Twitter Card meta tags to paste in.',
   blurb: 'See your link card on X, LinkedIn and Slack, and copy the meta tags.',
   related: ['serp-preview', 'utm-builder', 'schema-generator'],
   h1: 'Open Graph preview and meta tag generator',

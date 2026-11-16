@@ -6,7 +6,7 @@ export default {
   short: 'Which AI crawlers to block',
   title: 'GPTBot vs OAI-SearchBot vs ClaudeBot: Which AI Crawlers to Block in robots.txt | Kauzl',
   h1: 'GPTBot, OAI-SearchBot, ClaudeBot: which AI crawlers should you block?',
-  description: 'Every major AI crawler explained: which ones train models and which ones power AI search. Copy-paste robots.txt rules to block training while staying visible in ChatGPT, Claude and Perplexity.',
+  description: 'Every major AI crawler explained, training vs search, with copy-paste robots.txt rules to block training and stay visible in AI search.',
   blurb: 'Training crawlers vs AI search crawlers, and robots.txt rules that keep you citable.',
   lead: 'Blocking “AI” in robots.txt isn’t one switch. Each company runs separate crawlers for training and for search, and blocking the wrong one quietly removes you from AI answers.',
   published: '2026-11-14',

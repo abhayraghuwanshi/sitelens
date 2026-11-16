@@ -7,7 +7,7 @@ export default {
   short: 'Statistical significance, explained',
   title: 'What Does Statistically Significant Mean? A/B Testing in Plain English | Kauzl',
   h1: 'What does “statistically significant” mean in an A/B test?',
-  description: 'Statistical significance and p-values explained without the maths degree: what 95% confidence really means, a worked A/B example, and the four mistakes that produce fake winners.',
+  description: 'Statistical significance without the maths degree: what 95% confidence means, a worked A/B example, and four mistakes that make fake winners.',
   blurb: 'p-values and 95% confidence in plain English, with a worked example and common traps.',
   lead: 'Your testing tool says variant B won “with 95% significance”. Here’s what that actually promises, what it doesn’t, and how to avoid shipping a winner that was only luck.',
   published: '2026-11-14',

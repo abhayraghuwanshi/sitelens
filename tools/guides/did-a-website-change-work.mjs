@@ -7,7 +7,7 @@ export default {
   short: 'Did a website change work?',
   title: 'How to Tell if a Website Change Worked: Before/After Analysis in GA4 | Kauzl',
   h1: 'How to tell if a website change actually worked',
-  description: 'A practical before/after method for redesigns, new pages, pricing changes and launches: pick the metric, compare fair periods, rule out coincidences, and test whether the change is real.',
+  description: 'A before/after method for redesigns, pricing changes and launches: pick the metric, compare fair periods, rule out coincidences, test if it’s real.',
   blurb: 'A fair before/after method for redesigns, launches and pricing changes.',
   lead: 'You shipped a redesign, a new pricing page or a launch post, and the numbers moved. Or didn’t. Here’s how to tell a real effect from a normal wobble, without an A/B test.',
   published: '2026-11-14',

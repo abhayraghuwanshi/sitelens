@@ -1,7 +1,7 @@
 export default {
   name: 'llms.txt Generator',
   title: 'llms.txt Generator: Create an llms.txt File for AI Assistants (Free) | Kauzl',
-  description: 'Create an llms.txt file in the format from llmstxt.org: a short Markdown map of your site that helps ChatGPT, Claude and AI coding tools find your most important pages and docs.',
+  description: 'Create an llms.txt in the llmstxt.org format: a short Markdown map of your site that helps ChatGPT, Claude and AI tools find your key pages.',
   blurb: 'A Markdown map of your site that helps AI assistants find your key pages.',
   related: ['ai-robots-txt-generator', 'ai-crawler-log-analyzer', 'schema-generator'],
   h1: 'llms.txt generator',

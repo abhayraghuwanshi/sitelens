@@ -40,7 +40,7 @@ The tools live on Vercel (https://kauzl-tools.vercel.app/tools/) and appear at
 `/tools/*` there, set by `TOOLS_ORIGIN` in `fly.toml`. So a tools change needs
 only `npm run tools:deploy`, no `fly deploy`; kauzl.com caches pages for 5
 minutes and assets for an hour. The Fly app also serves `/robots.txt` with the
-tools sitemap. Submit `https://kauzl.com/tools/sitemap.xml` in Search Console
+sitemap. Submit `https://kauzl.com/sitemap.xml` (tools and guides) in Search Console
 and Bing Webmaster Tools.
 
 ## Usage analytics

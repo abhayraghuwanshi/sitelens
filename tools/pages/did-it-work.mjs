@@ -1,7 +1,7 @@
 export default {
   name: 'Did It Work? Launch Impact Checker',
   title: 'Did It Work? Free Before/After Launch Impact Calculator | Kauzl',
-  description: 'Paste daily visits, sign-ups or sales from before and after a launch, redesign or campaign. Find out whether the change is real or just noise, with a plain-English verdict.',
+  description: 'Paste daily numbers from before and after a launch, redesign or campaign. Find out if the change is real or just noise, in plain English.',
   blurb: 'Paste daily numbers from before and after a change. Find out if the jump is real or noise.',
   related: ['utm-builder', 'ab-test-calculator', 'sample-size-calculator'],
   h1: 'Did it work? Before/after impact checker',

@@ -79,7 +79,7 @@ const QA = [
 // The last answer: the same questions, asked from any AI agent through the MCP server.
 const AGENT = {
   q: 'Or just ask your agent.',
-  a: 'Kauzl is an MCP server, so it works in Claude, ChatGPT, Cursor or any agent that speaks MCP. It reads the numbers, explains the dip and works through your to-dos.',
+  a: 'Kauzl is an MCP server, so it works in Claude Code, Claude Desktop, Cursor and other agents that speak MCP. It reads the numbers, explains the dip and works through your to-dos.',
   visual: `<pre class="v-term" aria-label="Example conversation with an AI agent using Kauzl"><span class="you">you ›</span> why did sign-ups dip last week?
 <span class="tool">● kauzl.daily_metrics</span>(site: "acme", range: "28d")
 <span class="tool">● kauzl.day_story</span>(date: "2026-11-04")
@@ -104,7 +104,7 @@ const HUB_OUT = [
   ['Search on Google and Bing', 'Where each page ranks on both, and what people search for. Bing also feeds Copilot, DuckDuckGo and ChatGPT search.', 'pages'],
   ['Alerts that know a normal week', 'Drops and spikes against the same weekday, with a daily digest in Slack or Discord.', 'alerts'],
   ['Verdicts on articles and posts', 'Content and Reddit cycles: grow, keep, improve or cut, every 14 days.', 'cycles'],
-  ['Answers in your agent', 'Every number over MCP, in Claude, ChatGPT, Cursor or any agent.', null],
+  ['Answers in your agent', 'Every number over MCP, in Claude, Cursor and other MCP agents.', null],
 ];
 
 
@@ -122,6 +122,8 @@ const GUIDES = [
   ['did-a-website-change-work', 'How to tell if a website change worked', 'A fair before/after method for redesigns, launches and pricing changes.'],
   ['search-console-vs-google-analytics', 'Search Console vs Google Analytics', 'Eight reasons clicks and sessions never match.'],
   ['kauzl-vs-plausible', 'Kauzl vs Plausible', 'One counts visits, one explains them. When to use which.'],
+  ['google-analytics-alternatives', 'Google Analytics alternatives', 'Nine options, grouped by the reason you want out of GA4.'],
+  ['google-analytics-mcp-server', 'Google Analytics MCP', 'Ask Claude why your traffic moved: setup and prompts.'],
 ];
 
 const FREE_TOOLS = [

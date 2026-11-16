@@ -89,7 +89,16 @@ async function loadPages() {
 
 let footer = '';
 
+// Search engines show about 160 characters of a description, and Bing Webmaster
+// Tools flags anything outside 25-160, so a page outside that range doesn't build.
+export const DESCRIPTION = { min: 25, max: 160 };
+function checkDescription(where, description) {
+  const n = [...String(description || '')].length;
+  if (n < DESCRIPTION.min || n > DESCRIPTION.max) throw new Error(`${where}: the meta description is ${n} characters; keep it between ${DESCRIPTION.min} and ${DESCRIPTION.max}.`);
+}
+
 function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website', skip = 'Skip to the tool', title, description, band, body, ld = [], scripts = [] }) {
+  checkDescription(canonical, description);
   return `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
@@ -267,7 +276,7 @@ ${rest.length ? `<div class="col"><h3>More</h3><ul>${rest.map(row).join('')}</ul
 ${cta()}`;
   return layout({
     slug: '', page: 'index:tools', title: 'Free Marketing & Analytics Tools: UTM Builder, A/B Test Calculator, AI robots.txt | Kauzl',
-    description: 'Free browser-based tools for marketers and founders: UTM builder, A/B test and sample size calculators, launch impact checker, AI robots.txt and llms.txt generators, SERP and Open Graph previews.',
+    description: 'Free browser tools for marketers and founders: UTM builder, A/B test calculators, launch checker, AI robots.txt and llms.txt, SERP and OG previews.',
     band, body, ld: [{ '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Kauzl free tools', url: url(''), hasPart: pages.map((p) => ({ '@type': 'WebApplication', name: p.name, url: url(p.slug) })) }],
   });
 }

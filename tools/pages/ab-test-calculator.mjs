@@ -1,7 +1,7 @@
 export default {
   name: 'A/B Test Significance Calculator',
   title: 'A/B Test Significance Calculator: Free, Instant p-value & Uplift | Kauzl',
-  description: 'Enter visitors and conversions for A and B. Get the conversion rates, uplift, p-value, confidence interval and chance that B beats A, with a plain-English answer.',
+  description: 'Enter visitors and conversions for A and B. Get conversion rates, uplift, p-value, confidence interval and the chance B wins, in plain English.',
   blurb: 'Is variant B really better? Uplift, p-value and the chance B beats A.',
   related: ['sample-size-calculator', 'did-it-work', 'utm-builder'],
   h1: 'A/B test significance calculator',

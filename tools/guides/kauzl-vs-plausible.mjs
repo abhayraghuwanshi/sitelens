@@ -8,7 +8,7 @@ export default {
   short: 'Kauzl vs Plausible',
   title: 'Kauzl vs Plausible: Which One Do You Need? (Honest Comparison) | Kauzl',
   h1: 'Kauzl vs Plausible: one counts visits, one explains them',
-  description: 'Plausible is a simple, privacy-first replacement for Google Analytics. Kauzl reads the analytics you already have and tells you why the numbers moved. Here’s when to use which, written by the Kauzl team.',
+  description: 'Plausible is a privacy-first Google Analytics replacement. Kauzl reads the analytics you have and says why numbers moved. When to use which.',
   blurb: 'One counts visits, one explains them. When to use which.',
   lead: 'We make Kauzl, so read this with that in mind. We’ve tried to be fair: Plausible is a good product, and for a lot of sites it’s the better choice.',
   published: '2026-11-16',

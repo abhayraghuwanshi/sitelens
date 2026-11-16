@@ -7,7 +7,7 @@ export default {
   short: 'Search Console vs Google Analytics',
   title: 'Search Console vs Google Analytics: Why Clicks and Sessions Don’t Match | Kauzl',
   h1: 'Search Console vs Google Analytics: why the numbers never match',
-  description: 'Search Console clicks and GA4 organic sessions are never equal. Here are the eight reasons, how to compare them fairly, and which tool to trust for which question.',
+  description: 'Search Console clicks and GA4 organic sessions never match. The eight reasons, how to compare them fairly, and which to trust for what.',
   blurb: 'Eight reasons GSC clicks and GA4 sessions differ, and how to compare them fairly.',
   lead: 'Search Console says Google sent 1,200 clicks. GA4 says 950 organic sessions. Neither is broken: they measure different things in different places. Here’s what each one counts.',
   published: '2026-11-14',
