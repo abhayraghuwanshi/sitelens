@@ -536,7 +536,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const result = await engines.rollup(site, body.range || '90d');
       // Never point a site at an empty rollup: every session view would go blank.
       result.linked = Boolean(body.use && result.sessions > 0);
-      if (result.linked) await store.saveSite({ ...site, bq: { ...site.bq, sessionsTable: result.table } });
+      if (result.linked) await store.saveSite({ ...site, bq: { ...site.bq, sessionsTable: result.table, systemTable: result.table } });
       return result;
     }],
   ];

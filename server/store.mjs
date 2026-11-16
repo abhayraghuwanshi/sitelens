@@ -155,6 +155,8 @@ export function normalizeSite(input = {}) {
       streamId,
       endDate,
       sessionsTable,
+      // The rollup table known to carry os + browser (see hasSystem in sql.mjs).
+      systemTable: sessionsTable && text(input.bq.systemTable, 400) === sessionsTable ? sessionsTable : '',
       maxBytes: Math.max(0, Number(input.bq.maxBytes) || 0) || 5e9,
     };
   }

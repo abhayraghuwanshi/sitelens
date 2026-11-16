@@ -66,6 +66,19 @@ test('a materialized sessions table replaces the raw-event scan', () => {
   assert.ok(!('stream_id' in built.params), 'rollup was already built for one stream');
 });
 
+test('a rollup Studio built carries browser and OS; an older one does not', () => {
+  const table = 'pay-proj.sitelens_x.sessions';
+  const old = sql.sessionsListSql({ ...bq, sessionsTable: table }, range).sql;
+  assert.match(old, /'\(not set\)' AS browser/);
+  assert.ok(!old.includes("os = 'Windows'"));
+  const built = sql.sessionsListSql({ ...bq, sessionsTable: table, systemTable: table }, range).sql;
+  assert.match(built, /IFNULL\(NULLIF\(browser, ''\), '\(not set\)'\) AS browser/);
+  assert.ok(built.includes("os = 'Windows'"));
+  // Pointing the site at another table drops the marker's effect.
+  const swapped = sql.sessionsListSql({ ...bq, sessionsTable: 'p.d.other', systemTable: table }, range).sql;
+  assert.match(swapped, /'\(not set\)' AS browser/);
+});
+
 test('console placeholders expand; sessions placeholder wraps the session CTE', () => {
   const plain = sql.expandConsoleSql(bq, range, 'SELECT 1 FROM {{events}} WHERE _TABLE_SUFFIX BETWEEN {{start}} AND {{end}};');
   assert.match(plain.sql, /events_\*` WHERE _TABLE_SUFFIX BETWEEN '20210104' AND '20210131'$/);

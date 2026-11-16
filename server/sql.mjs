@@ -457,17 +457,23 @@ ORDER BY sessions DESC`,
   return { sql, params: sessionParams(bq) };
 }
 
-// A session's browser as GA4 names it. A rollup table built before `browser`
-// existed doesn't know it.
+// Whether the sessions source has the `os` and `browser` columns. Raw events
+// always do; a rollup only when Studio built it after they were added (it
+// records the table in `systemTable`). An older or hand-entered table doesn't.
+function hasSystem(bq) {
+  return !bq.sessionsTable || bq.systemTable === bq.sessionsTable;
+}
+
+// A session's browser as GA4 names it.
 function browserOf(bq) {
-  return bq.sessionsTable ? `'(not set)'` : `IFNULL(NULLIF(browser, ''), '(not set)')`;
+  return hasSystem(bq) ? `IFNULL(NULLIF(browser, ''), '(not set)')` : `'(not set)'`;
 }
 
 // A session's system, named like the leavers' groups. A rollup table built
 // before `os` existed only knows the device category.
 function systemGroup(bq) {
   const phone = `IFNULL(device, '') IN ('mobile', 'tablet')`;
-  if (bq.sessionsTable) return `IF(${phone}, 'Phones and tablets', 'Computers')`;
+  if (!hasSystem(bq)) return `IF(${phone}, 'Phones and tablets', 'Computers')`;
   return `CASE
     WHEN ${phone} THEN 'Phones and tablets'
     WHEN os = 'Chrome OS' THEN 'Chromebooks'
