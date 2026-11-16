@@ -179,6 +179,10 @@ export function trialVerdict({ days, elapsed, before, after }) {
 
 export function createArticleEditor({ auth, store, articles, annotations, getToken, env = process.env, fetchImpl = fetch, now = Date.now, createClient = (apiKey) => new Anthropic({ apiKey }) }) {
   const metaCache = new Map(); // repo:text → { file, at }
+  // Search Console numbers for one page and date range. They change once a day,
+  // so opening an article again (from a to-do, say) doesn't wait on Google.
+  const queryCache = new Map(); // site:path:start:end:limit → { at, value: Promise }
+  const QUERY_TTL = 30 * 60_000;
 
   async function gh(method, path, token, body) {
     if (method === 'GET') return (await githubGet(fetchImpl, path, token)).json();
@@ -218,7 +222,18 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     return file;
   }
 
-  async function pageQueries(site, path, startDate, endDate, rowLimit = 250) {
+  function pageQueries(site, path, startDate, endDate, rowLimit = 250) {
+    const key = `${site.id}:${site.searchSite}:${normPath(path)}:${startDate}:${endDate}:${rowLimit}`;
+    const hit = queryCache.get(key);
+    if (hit && now() - hit.at < QUERY_TTL) return hit.value;
+    if (queryCache.size > 500) queryCache.clear();
+    const value = fetchPageQueries(site, path, startDate, endDate, rowLimit);
+    queryCache.set(key, { at: now(), value });
+    value.catch(() => queryCache.delete(key)); // a failure isn't kept
+    return value;
+  }
+
+  async function fetchPageQueries(site, path, startDate, endDate, rowLimit) {
     const token = await auth.token();
     const host = site.host.replace(/^www\./, '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const pathRe = normPath(path).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -329,33 +344,51 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     return { title: await field('title'), description: await field('description') };
   }
 
+  // Everything the article page shows. The slow parts (the article list, the
+  // live page, the GitHub file, Search Console) run side by side, not in turn.
   async function detail(site, path, rangeKey = '28d') {
     if (site.demo) throw new EngineError('The sample site has no articles to edit. Open one of your own sites.', { kind: 'demo' });
+    // Search Console needs only the path, so it starts before the article is found.
+    const searchFor = (p) => {
+      if (!site.searchSite) return Promise.resolve(null);
+      const range = searchRange(rangeKey);
+      return Promise.all([
+        pageQueries(site, p, range.current.startDate, range.current.endDate),
+        pageQueries(site, p, range.previous.startDate, range.previous.endDate),
+      ]).then(([cur, prev]) => ({ range, cur, prev }));
+    };
+    let searching = searchFor(normPath(path));
+    searching.catch(() => {});
     const row = await articles.find(site, path, rangeKey);
     if (!row) throw new EngineError('That article isn’t in the sitemap or the site’s code.', { status: 404, kind: 'notfound' });
-    const live = (await articles.readPage(site, row.path)) || { title: '', description: '' };
-    const token = await getToken();
-    const out = { article: row, live, source: null, meta: null, search: null, checks: [], opportunities: [], updates: [], compare: null, trial: null, notes: {} };
+    if (normPath(row.path) !== normPath(path)) searching = searchFor(row.path);
+    const out = { article: row, live: null, source: null, meta: null, search: null, checks: [], opportunities: [], updates: [], compare: null, trial: null, notes: {} };
 
-    if (row.file && token) {
+    const token = await getToken();
+    const readSource = async () => {
+      if (!row.file) {
+        out.notes.source = 'No source file in your GitHub repos matches this URL, so it can’t be edited here.';
+        return;
+      }
+      if (!token) {
+        out.notes.source = 'Add a GitHub token in Settings → GitHub to load and edit this article.';
+        return;
+      }
       try {
         const branch = row.file.branch || 'HEAD';
         const { text, sha } = await readFile(token, row.file.repo, row.file.file, branch);
         out.source = { repo: row.file.repo, file: row.file.file, branch, sha, markdown: text, href: row.file.href };
-        out.meta = await metaSources(token, row.file.repo, text, live);
       } catch (err) {
         out.notes.source = `Couldn’t read ${row.file.file}: ${err.message}`;
       }
-    } else if (row.file) out.notes.source = 'Add a GitHub token in Settings → GitHub to load and edit this article.';
-    else out.notes.source = 'No source file in your GitHub repos matches this URL, so it can’t be edited here.';
-
-    if (site.searchSite) {
+    };
+    const readSearch = async () => {
+      if (!site.searchSite) {
+        out.notes.search = 'Pick a Search Console property in Settings to see the queries this article ranks for.';
+        return;
+      }
       try {
-        const range = searchRange(rangeKey);
-        const [cur, prev] = await Promise.all([
-          pageQueries(site, row.path, range.current.startDate, range.current.endDate),
-          pageQueries(site, row.path, range.previous.startDate, range.previous.endDate),
-        ]);
+        const { range, cur, prev } = await searching;
         // Each search's numbers the period before, so the page's demand shows what's rising, new or falling.
         const before = new Map(prev.queries.map((q) => [q.query, q]));
         const queries = cur.queries.map((q) => ({ ...q, previous: { impressions: before.get(q.query)?.impressions || 0, clicks: before.get(q.query)?.clicks || 0 } }));
@@ -366,21 +399,27 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
       } catch (err) {
         out.notes.search = err.message;
       }
-    } else out.notes.search = 'Pick a Search Console property in Settings to see the queries this article ranks for.';
+    };
+    const [live] = await Promise.all([
+      articles.readPage(site, row.path),
+      readSource(),
+      readSearch(),
+      history(site, row.path).then((h) => Object.assign(out, h), (err) => { out.notes.history = err.message; }),
+      trial(site, row.path).then((t) => { out.trial = t; }, (err) => { out.notes.trial = err.message; }),
+    ]);
+    out.live = live || { title: '', description: '' };
+    // Where the live title and description come from needs both the page and the file.
+    if (out.source && token) {
+      try {
+        out.meta = await metaSources(token, row.file.repo, out.source.markdown, out.live);
+      } catch (err) {
+        out.notes.source = `Couldn’t read ${row.file.file}: ${err.message}`;
+      }
+    }
 
-    const title = live.title || out.meta?.title.value || '';
-    const description = live.description || out.meta?.description.value || '';
+    const title = out.live.title || out.meta?.title.value || '';
+    const description = out.live.description || out.meta?.description.value || '';
     out.checks = articleChecks({ title, description, md: out.source?.markdown || '', queries: out.search?.queries || [] });
-    try {
-      Object.assign(out, await history(site, row.path));
-    } catch (err) {
-      out.notes.history = err.message;
-    }
-    try {
-      out.trial = await trial(site, row.path);
-    } catch (err) {
-      out.notes.trial = err.message;
-    }
     return out;
   }
 

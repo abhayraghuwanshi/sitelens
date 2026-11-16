@@ -159,7 +159,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
   const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig, cacheDb });
   const campaigns = createCampaigns({ auth, siteConfig });
-  const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb });
+  // Setting a page's next goal moves its to-do on (todos is created below).
+  const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
   const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });
   const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
@@ -199,7 +200,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...vitalsRoutes({ vitals, store, siteOr404, fetchImpl }),
     ...alertRoutes(alerts),
     ...mentionRoutes({ mentions }),
-    ...postRoutes({ posts }),
+    ...postRoutes({ posts, annotations }),
     ...bingRoutes({ bing, siteOr404 }),
     ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
     ...pageReviewRoutes({ review: pageReview, siteOr404 }),

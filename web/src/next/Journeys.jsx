@@ -4,6 +4,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
+import { Marked } from '../components/Marks.jsx';
 
 // Journeys: where a visit came from × the page it landed on × what it did,
 // from BigQuery (so the site's leave-out rule applies). Steps and the outcome
@@ -124,7 +125,7 @@ function JourneyRow({ site, j, steps, outcome, range, open, onToggle }) {
   return (
     <div class={`nx-journey${open ? ' open' : ''}`}>
       <button type="button" class="nx-jrow" onClick={onToggle} aria-expanded={open}>
-        <span><b>{j.name}</b>{kind && <span class="muted small"> · {kind}</span>}
+        <span><Marked kind="source" name={j.name}><b>{j.name}</b></Marked>{kind && <span class="muted small"> · {kind}</span>}
           {first.length > 0 && <span class="muted small nx-jfirst">first came from {first.slice(0, 2).map(([name]) => name).join(', ')}</span>}</span>
         <span class="nx-path">{pageName(j.landing)}</span>
         <span class="nx-num">{fmt(j.sessions)}</span>
@@ -231,7 +232,7 @@ function Summary({ j }) {
             <div class="nx-jsys-row nx-jsys-head" role="row"><span role="columnheader" /><span role="columnheader" /><span class="nx-num" role="columnheader">Visits</span><span class="nx-num" role="columnheader" title={label}>Converted</span></div>
             {rows.map((x) => (
               <div class="nx-jsys-row" role="row" key={x.name}>
-                <span role="cell">{x.name}</span>
+                <span role="cell"><Marked kind="browser" name={x.name} /></span>
                 <span class="nx-bar" role="cell"><span style={{ width: `${Math.max(1.5, (x.sessions / max) * 100)}%` }} /></span>
                 <span class="nx-num" role="cell">{fmt(x.sessions)}</span>
                 <span class="nx-num" role="cell"><b class={x.converted ? 'good' : 'muted'}>{fmt(x.converted)}</b> <span class="muted small nx-jsys-pct">{pct(x.converted, x.sessions)}</span></span>

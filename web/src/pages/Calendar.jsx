@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useState, useEffect } from 'preact/hooks';
 import { formatNumber, formatDate } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync, navigate, withParam, usePersistent } from '../hooks.js';
@@ -7,6 +7,7 @@ import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { Icon } from '../components/icons.jsx';
 import { LineChart, kindColor } from '../charts/LineChart.jsx';
 import { postHref } from './Posts.jsx';
+import { Marked } from '../components/Marks.jsx';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const METRICS = [
@@ -22,6 +23,8 @@ export function Calendar({ sites, params }) {
   const [metric, setMetric] = usePersistent('calendar-metric', 'sessions');
   const site = params.get('site') || (savedSite === 'all' || sites.some((s) => s.id === savedSite) ? savedSite : 'all');
   const month = params.get('month') || '';
+  const [adding, setAdding] = useState(false);
+  const [added, setAdded] = useState('');
   const data = useAsync((opts) => api.get(`/calendar${qs({ month, site, fresh: opts?.fresh })}`), [month, site]);
 
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
@@ -52,6 +55,8 @@ export function Calendar({ sites, params }) {
           {m.month !== thisMonth && <button class="btn ghost" type="button" onClick={() => navigate(withParam('day', '', `#${withParam('month', '')}`))}>This month</button>}
         </div>
         <span class="grow" />
+        {added && !adding && <span class="small text-good" role="status">{added}</span>}
+        {!adding && <button type="button" class="btn primary" onClick={() => { setAdding(true); setAdded(''); }}><Icon name="plus" size={13} /> Add post or note</button>}
         <label class="sr-only" for="calendar-site">Site</label>
         <select id="calendar-site" value={site} onChange={(e) => pickSite(e.currentTarget.value)} style={{ width: 'auto' }}>
           <option value="all">All sites</option>
@@ -62,6 +67,9 @@ export function Calendar({ sites, params }) {
           <Icon name="refresh" size={14} />
         </button>
       </div>
+
+      {adding && <TimelineAdd key={`add:${site}`} site={site} sites={sites} date={selected} today={m.today}
+        onClose={() => setAdding(false)} onAdded={(msg) => { setAdding(false); setAdded(msg); data.reload(); }} />}
 
       {m.errors.length > 0 && (
         <div class="state error" role="alert">
@@ -91,7 +99,7 @@ export function Calendar({ sites, params }) {
           </Card>
           <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
         </div>
-        <DayStory key={`${site}:${selected}`} date={selected} site={site} today={m.today} onChange={data.reload} />
+        <DayStory key={`${site}:${selected}:${t.events}`} date={selected} site={site} today={m.today} onChange={data.reload} />
       </div>
     </>
   );
@@ -229,7 +237,7 @@ function DayStory({ date, site, today, onChange }) {
             <div key={s.id} class="cal-moved">
               {d.sites.length > 1 && <h3 class="cal-sub"><a href={`#/site/${s.id}/overview`}>{s.label}</a></h3>}
               <div class="cal-moved-cols">
-                <MovedList title="Sources" rows={sources} />
+                <MovedList title="Sources" rows={sources} marks="source" />
                 <MovedList title="Landing pages" rows={pages} mono />
                 {queries.length > 0 && (
                   <div>
@@ -266,6 +274,7 @@ function DayStory({ date, site, today, onChange }) {
                         {e.url && <>{' '}<a href={e.url} target="_blank" rel="noreferrer" class="muted" title="Open the post" aria-label="Open the post"><Icon name="external" size={12} /></a></>}
                       </>
                     ) : e.url ? <a href={e.url} target="_blank" rel="noreferrer">{e.label}</a> : e.label}
+                    {e.kind === 'note' && e.body && <span class="cal-note-body">{e.body}</span>}
                   </span>
                   <span class="muted">{e.when}</span>
                   {e.id.startsWith('post:manual:') && e.when === 'that day' && (
@@ -274,11 +283,16 @@ function DayStory({ date, site, today, onChange }) {
                       <Icon name="x" size={12} />
                     </button>
                   )}
+                  {e.kind === 'note' && e.when === 'that day' && (
+                    <button class="btn ghost" type="button" title="Delete note" aria-label="Delete note"
+                      onClick={async () => { await api.del(`/annotations/${encodeURIComponent(e.id)}?author=you`); data.reload(); onChange?.(); }}>
+                      <Icon name="x" size={12} />
+                    </button>
+                  )}
                 </li>
               ))}
             </ul>
           ) : <p class="small muted">Nothing shipped, posted or alerted that day or the day before.</p>}
-          <AddLink date={date} site={site} onAdded={() => { data.reload(); onChange?.(); }} />
         </div>
 
         {d.sessions === null && !d.lines.length && !d.events.length && (
@@ -290,7 +304,7 @@ function DayStory({ date, site, today, onChange }) {
 }
 
 // Sources or landing pages that day: sessions, and the change on a usual same weekday.
-function MovedList({ title, rows, mono = false }) {
+function MovedList({ title, rows, mono = false, marks = '' }) {
   if (!rows.length) return null;
   return (
     <div>
@@ -300,7 +314,7 @@ function MovedList({ title, rows, mono = false }) {
           const gain = Math.round(r.gain);
           return (
             <li key={r.label} title={`${formatNumber(r.value)} sessions, usually ${formatNumber(r.expected)}`}>
-              <span>{mono ? <code>{r.label}</code> : r.label}</span>
+              <span>{mono ? <code>{r.label}</code> : marks ? <Marked kind={marks} name={r.label} /> : r.label}</span>
               <b>{formatNumber(r.value)} <span class={`delta ${gain > 0 ? 'up' : gain < 0 ? 'down' : 'flat'}`}>{gain ? `${gain > 0 ? '+' : '−'}${formatNumber(Math.abs(gain))}` : 'same'}</span></b>
             </li>
           );
@@ -310,51 +324,62 @@ function MovedList({ title, rows, mono = false }) {
   );
 }
 
-// A post you made that day (Reddit, LinkedIn, X, a blog…), saved as a manual post
-// so it shows here, on Posts, and in that platform's traffic attribution.
-function AddLink({ date, site, onAdded }) {
-  const [open, setOpen] = useState(false);
-  const [url, setUrl] = useState('');
-  const [title, setTitle] = useState('');
-  const [error, setError] = useState('');
+// The box at the top of the Timeline: paste a post link (Reddit, X, LinkedIn,
+// Hacker News…) and it's saved as a post, so its visits are counted; anything
+// else, with or without a link, is a note: a pricing change, a newsletter, a
+// launch. It lands on the picked day, for the picked site.
+function TimelineAdd({ site, sites, date, today, onClose, onAdded }) {
+  const [text, setText] = useState('');
+  const [day, setDay] = useState(date > today ? today : date);
+  const [detail, setDetail] = useState('');
+  const [more, setMore] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const siteLabel = site === 'all' ? '' : sites.find((s) => s.id === site)?.label || '';
+  // Follow the day picked on the calendar.
+  useEffect(() => setDay(date > today ? today : date), [date, today]);
 
-  if (!open) {
-    return (
-      <button class="link-btn cal-add-open" type="button" onClick={() => setOpen(true)}>
-        <Icon name="plus" size={13} /> Add a post link
-      </button>
-    );
-  }
   async function add(e) {
     e.preventDefault();
+    const url = text.match(/https?:\/\/\S+/)?.[0] || '';
+    const words = text.replace(url, '').replace(/\s+/g, ' ').trim();
+    if (!url && !words) return;
     setBusy(true);
     setError('');
     try {
-      await api.post('/posts/manual', { url, title, date, site: site === 'all' ? '' : site });
-      setUrl('');
-      setTitle('');
-      setOpen(false);
-      onAdded();
+      const res = await api.post('/timeline', { url, text: words, body: detail, date: day, site: site === 'all' ? '' : site });
+      if (day !== date) navigate(withParam('month', day.slice(0, 7), `#${withParam('day', day)}`));
+      onAdded(res.kind === 'post' ? `Added your ${PLATFORMS[res.platform] || 'post'} post to ${dayLabel(day)}.` : `Added a note to ${dayLabel(day)}.`);
     } catch (err) {
       setError(err.message);
     } finally {
       setBusy(false);
     }
   }
+
   return (
-    <form class="cal-add stack" onSubmit={add}>
-      <h3 class="cal-sub">Add a post link</h3>
-      <label class="field">Post URL<input required autoFocus type="url" value={url} placeholder="https://www.reddit.com/r/…" onInput={(e) => setUrl(e.currentTarget.value)} /></label>
-      <label class="field"><span class="field-label">Title <small>optional</small></span><input value={title} placeholder="What it was about" onInput={(e) => setTitle(e.currentTarget.value)} /></label>
-      <div class="row gap-8">
-        <button class="btn primary" type="submit" disabled={busy}><Icon name="plus" size={13} /> Add to {dayLabel(date)}</button>
-        <button class="btn ghost" type="button" onClick={() => { setOpen(false); setError(''); }}>Cancel</button>
-        {error && <span class="small text-bad">{error}</span>}
+    <form class="todo-new cal-add" onSubmit={add} onKeyDown={(e) => { if (e.key === 'Escape') onClose(); }}>
+      <div class="todo-new-row">
+        <input type="text" value={text} maxLength={600} autoFocus aria-label="Post link or note"
+          placeholder="Paste a post link, or write what you did: changed pricing, sent the newsletter…"
+          onInput={(e) => setText(e.currentTarget.value)} />
+        <label class="sr-only" for="cal-add-day">Day</label>
+        <input id="cal-add-day" type="date" value={day} max={today} required onInput={(e) => setDay(e.currentTarget.value)} />
+        <button type="submit" class="btn primary" disabled={busy || !text.trim()}><Icon name="plus" size={13} /> {busy ? 'Adding…' : 'Add'}</button>
+        <button type="button" class="btn icon-btn" title="Close" aria-label="Close" onClick={onClose}><Icon name="x" size={14} /></button>
       </div>
+      <div class="row gap-8 cal-add-foot">
+        {more
+          ? <textarea rows={2} value={detail} maxLength={4000} placeholder="Details: what changed, why, what you expect…" aria-label="Details" onInput={(e) => setDetail(e.currentTarget.value)} />
+          : <button type="button" class="todo-link" onClick={() => setMore(true)}>+ Add details</button>}
+        <span class="small muted">{siteLabel ? `For ${siteLabel}` : 'For all sites'}. Links to Reddit, X, LinkedIn, Hacker News and other posts count their visits.</span>
+      </div>
+      {error && <p class="nx-error" role="alert">{error}</p>}
     </form>
   );
 }
+
+const PLATFORMS = { reddit: 'Reddit', x: 'X', linkedin: 'LinkedIn', hn: 'Hacker News', devto: 'DEV', medium: 'Medium', ph: 'Product Hunt', bluesky: 'Bluesky', lobsters: 'Lobsters', mastodon: 'Mastodon' };
 
 // Yesterday when it's in view, else the month's biggest mover, else its last day.
 function defaultDay(m) {

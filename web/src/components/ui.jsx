@@ -1,4 +1,5 @@
 import { Fragment } from 'preact';
+import { useEffect, useState } from 'preact/hooks';
 import { formatDelta } from '@shared/format.js';
 import { Icon } from './icons.jsx';
 
@@ -66,8 +67,46 @@ export function KpiStrip({ items }) {
   );
 }
 
-export function Loading({ height = 240 }) {
-  return <div class="skeleton" style={{ height: `${height}px` }} aria-label="Loading" role="status" />;
+// While something loads: a shimmering block of the space it will take. Big
+// enough blocks get the Kauzl owl, looking around (left eye before, right eye
+// after) with a line of what it's reading, and a note if it takes a while.
+// `owl` puts a small one beside the label in a short block too, for a panel
+// that loads on its own (not the header bar above a bigger block).
+export function Loading({ height = 240, label = '', owl: small = false }) {
+  const owl = height >= 110 || small;
+  return (
+    <div class={`skeleton${owl ? ' loading-owl' : ''}${height < 110 ? ' small' : ''}`} style={{ height: `${height}px` }} aria-label={label || 'Loading'} role="status">
+      {owl && <OwlLoader label={label} size={height < 110 ? 28 : 52} />}
+    </div>
+  );
+}
+
+const OWL_BODY = 'M11 26 L12 6 L25 15 Q32 13 39 15 L52 6 L53 26 Q56 34 56 38 Q56 58 32 58 Q8 58 8 38 Q8 34 11 26 Z';
+
+export function OwlLoader({ label = '', size = 52 }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 4000);
+    return () => clearTimeout(t);
+  }, []);
+  return (
+    <div class="owl-loader" aria-hidden="true">
+      <svg class="owl-loader-owl" viewBox="0 0 64 64" width={size} height={size}>
+        <path d={OWL_BODY} class="owl-body" />
+        <g class="owl-eyes">
+          <circle cx="22.5" cy="34" r="9.5" class="owl-white" />
+          <circle cx="41.5" cy="34" r="9.5" class="owl-white" />
+          <g class="owl-pupils">
+            <circle cx="22.5" cy="34" r="4.2" class="owl-ring" />
+            <circle cx="41.5" cy="34" r="5" class="owl-amber" />
+          </g>
+        </g>
+        <path d="M32 44 L28.8 47.6 L32 52 L35.2 47.6 Z" class="owl-amber" />
+      </svg>
+      <span class="owl-loader-text">{label || 'Loading…'}</span>
+      {slow && <span class="owl-loader-slow">Still working: Google can take a few seconds.</span>}
+    </div>
+  );
 }
 
 // Where each setup error is fixed.

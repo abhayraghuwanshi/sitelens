@@ -88,7 +88,7 @@ function SharedList({ site }) {
       </form>
       {error && <p class="nx-error small m-0" role="alert">{error}</p>}
       {list.error ? <ErrorState error={list.error} onRetry={list.reload} />
-        : !list.data ? <Loading height={60} />
+        : !list.data ? <Loading height={60} owl />
         : people.length ? (
           <ul class="nx-access-list">
             {people.map((p) => (

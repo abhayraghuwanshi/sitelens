@@ -142,3 +142,32 @@ test('context: a source to-do brings its visits, the searches and pages that mov
   assert.match((await context({ site: 'abc', title: 'x' })).note, /written by hand/);
   assert.deepEqual(subjectOf({ link: '#/site/abc/pages?range=28d&path=%2Fpricing' }), { kind: 'page', key: '/pricing' });
 });
+
+test('carryGoal: a page’s to-do moves on to its next goal and keeps the reached one', async () => {
+  const { goalTodo } = await import('../shared/goal-format.js');
+  const { annotations, todos, done } = await setup();
+  try {
+    const path = '/blog/dock';
+    const old = { key: 'search:bigger', title: 'Go after a bigger search', metric: 'impressions', from: 2732, to: 4098, checkBy: '2026-12-19' };
+    const next = { key: 'help:engaged', title: 'Get 78% of readers to stay', metric: 'engagement', from: 0.68, to: 0.78, checkBy: '2026-12-14' };
+    const first = await todos.add({ site: 's1', ...goalTodo(old, path, 's1') });
+    // Another page's goal to-do isn't touched.
+    await todos.add({ site: 's1', ...goalTodo(old, '/other', 's1') });
+
+    const moved = await todos.carryGoal({ site: 's1', path, previous: old, reached: true, now: 4126, target: next });
+    assert.equal(moved.id, first.id);
+    assert.equal(moved.title, 'Get 78% of readers to stay (/blog/dock)');
+    assert.equal(moved.from, 'goal:/blog/dock:help:engaged');
+    assert.equal(moved.detail, 'From 68% to 78% by 2026-12-14.');
+    assert.deepEqual(moved.goals, [{ title: 'Go after a bigger search', line: '2,732 → 4,098 impressions, reached 4,126 impressions', reached: true, at: NOW }]);
+    const { todos: list } = await todos.list({ site: 's1' });
+    assert.equal(list.filter((t) => t.from?.startsWith('goal:/blog/dock:')).length, 1);
+    const notes = await annotations.list({ scopes: ['site:s1'] });
+    assert.ok(notes.some((n) => n.label === 'Goal reached: Go after a bigger search (/blog/dock)'));
+
+    // No to-do for that goal: nothing happens.
+    assert.equal(await todos.carryGoal({ site: 's1', path: '/none', previous: old, target: next }), null);
+  } finally {
+    await done();
+  }
+});

@@ -2,7 +2,10 @@ import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading } from './ui.jsx';
-import { AddTodo, useTodos } from './Todos.jsx';
+import { AddTodo, useTodos, GoalHistory } from './Todos.jsx';
+import { value, span, goalTodo } from '../../../shared/goal-format.js';
+
+export { value };
 
 // A page's goal (server/page-goals.mjs): what it's for, whether it does that,
 // and the next realistic target, which you can set and then track. Kept to a
@@ -15,20 +18,6 @@ const PURPOSES = [
 const SERVING = { yes: 'good', partly: 'warn', no: 'bad' };
 const CURVE = 'Estimated with a generic click-rate-by-position curve: a way to size a target, not a forecast.';
 const day = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-
-export function value(metric, v) {
-  if (v === null || v === undefined) return '—';
-  if (metric === 'position') return `position ${Number(v).toFixed(1)}`;
-  if (['ctr', 'rate', 'engagement'].includes(metric)) return `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%`;
-  const n = Math.round(v);
-  return `${n.toLocaleString('en-US')} ${n === 1 ? metric.replace(/s$/, '') : metric}`;
-}
-
-// "position 5.3 → 3", "1.2% → 3%": the unit once.
-// Counts (impressions, clicks) are totals over the review's days, so it says so.
-const span = (metric, from, to, days) => (metric === 'position' ? `position ${Number(from).toFixed(1)} → ${Math.round(to * 10) / 10}`
-  : ['impressions', 'clicks'].includes(metric) ? `${Math.round(from).toLocaleString('en-US')} → ${value(metric, to)}${days ? ` in ${days} days` : ''}`
-  : `${value(metric, from)} → ${value(metric, to)}`);
 
 // "+52 clicks a month" when the goal is sized in clicks, else its own words.
 const worth = (n) => (n.gainValue !== undefined ? `+${Math.round(n.gainValue).toLocaleString('en-US')} clicks a month` : n.gain);
@@ -55,10 +44,7 @@ export function GoalPanel({ site, path, goal, onSaved, close = [] }) {
   const shown = t || n;
   const key = `goal:${path}:${shown.key}`;
   const added = (todos.data?.todos || []).find((x) => x.from === key);
-  const todo = {
-    title: `${shown.title} (${path})`, detail: t ? `From ${value(t.metric, t.from)} to ${value(t.metric, t.to)} by ${t.checkBy}.` : `${n.why} ${n.how}`,
-    link: `#/site/${site.id}/articles?article=${encodeURIComponent(path)}`, from: key, subject: { kind: 'search', key: path }, baseline: { metric: shown.metric, from: shown.from, to: shown.to },
-  };
+  const todo = t ? goalTodo(t, path, site.id) : { ...goalTodo(n, path, site.id), detail: `${n.why} ${n.how}` };
 
   return (
     <div class="page-goal">
@@ -105,6 +91,10 @@ export function GoalPanel({ site, path, goal, onSaved, close = [] }) {
             <p>{n.how}</p>
           </details>
         )}
+        <details class="goal-more">
+          <summary>Past goals for this page</summary>
+          <GoalHistory siteId={site.id} path={path} goal={goal} />
+        </details>
         {close.length > 0 && (
           <details class="goal-more">
             <summary>{close.length} other search{close.length === 1 ? '' : 'es'} close to winning</summary>

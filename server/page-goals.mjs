@@ -13,7 +13,8 @@
 // change usually takes to show (rankings ~6, a title ~3, the page itself ~4).
 //
 // A goal you set is kept in studio.json `pageGoals[siteId][path]` =
-// { purpose?, target?: { key, title, metric, from, to, query?, checkBy, setAt } }
+// { purpose?, target?: { key, title, metric, from, to, query?, checkBy, setAt },
+//   past?: [{ key, title, metric, from, to, now, setAt, ended: reached|replaced|dropped, endedAt }] }
 // and its progress is read from the same numbers each time.
 
 import { expectedCtr } from '../shared/sitelens/gsc.js';

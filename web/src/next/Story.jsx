@@ -7,6 +7,7 @@ import { Page } from './Page.jsx';
 import { LeftOutLine } from './LeaveOut.jsx';
 import { useJourneys } from './Journeys.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
+import { Marked } from '../components/Marks.jsx';
 
 // Yesterday is one whole day, set against the same weekday a week before.
 const weekday = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
@@ -224,7 +225,7 @@ function Sources({ site, rows, changes, range }) {
         <div class="nx-tr nx-th" role="row"><span role="columnheader">Source</span><span role="columnheader">Visits</span><span role="columnheader">Change</span><span role="columnheader" aria-hidden="true" /></div>
         {rows.map((r) => (
           <div class="nx-tr" role="row" key={r.key}>
-            <span role="cell"><b>{r.key}</b></span>
+            <span role="cell"><Marked kind="source" name={r.key}><b>{r.key}</b></Marked></span>
             <span role="cell" class="nx-num">{fmt(r.value)}</span>
             <span role="cell"><Change value={r.value} previous={r.previous} /></span>
             <span role="cell" class="nx-bar" aria-hidden="true"><span style={{ width: `${(r.value / max) * 100}%` }} /></span>

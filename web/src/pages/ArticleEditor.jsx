@@ -107,7 +107,7 @@ export function ArticleEditor({ site, range, path, onClose }) {
   }
 
   if (d.error) return <ErrorState error={d.error} onRetry={d.reload} />;
-  if (!data) return <><Loading height={60} /><Loading height={420} /></>;
+  if (!data) return <><Loading height={60} /><Loading height={420} label="Reading this page from Search Console, GitHub and the live site…" /></>;
 
   const a = data.article;
   const s = data.search;
@@ -325,7 +325,7 @@ export function ArticleEditor({ site, range, path, onClose }) {
 function PageJourney({ site, path, range }) {
   const d = useAsync(() => api.get(`/sites/${site.id}/page-journey${qs({ path, range })}`), [site.id, path, range]);
   if (d.error) return <ErrorState error={d.error} onRetry={d.reload} />;
-  if (!d.data) return <><p class="note">Reading the sessions that started on this page…</p><Loading height={260} /></>;
+  if (!d.data) return <Loading height={260} label="Reading the sessions that started on this page…" />;
   const j = d.data;
   if (!j.source) return <p class="note">{j.note}</p>;
   if (!j.landed) return <p class="note">No sessions started on this page in {j.period || `the last ${j.days} days`}.</p>;

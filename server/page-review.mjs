@@ -142,7 +142,7 @@ export function siteRateOf(conversions) {
   return visitors >= 50 ? Math.min(1, users / visitors) : null;
 }
 
-export function createPageReview({ articles, bing, store, outcomes = null, cacheDb = null, today = () => new Date().toLocaleDateString('en-CA') }) {
+export function createPageReview({ articles, bing, store, outcomes = null, cacheDb = null, today = () => new Date().toLocaleDateString('en-CA'), onGoalSet = null }) {
   const cache = createCache({ db: cacheDb, name: 'page-review', staleFor: cacheDb ? 7 * 86_400_000 : 0 });
 
   // Suggestions and goals are always judged on 90 days (a page shouldn't look
@@ -187,7 +187,7 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
       const conversion = conv.get(r.path) || null;
       const goal = nextGoal(r, { days, today: today(), conversion, siteRate: base.siteRate ?? null, siteEngagement, outcome: base.outcome || 'converted', purpose: mine.purpose || '' });
       const target = mine.target || null;
-      return { ...r, goal: { ...goal, days, ...(target ? { target, progress: progress(target, currentValue(target, r, conversion)) } : {}) } };
+      return { ...r, goal: { ...goal, days, ...(target ? { target, progress: progress(target, currentValue(target, r, conversion)) } : {}), ...(mine.past?.length ? { past: mine.past } : {}) } };
     });
   }
 
@@ -197,6 +197,7 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
     if (!p.startsWith('/')) throw new ValidationError('Give the page’s path, e.g. /blog/post.');
     if (purpose !== undefined && purpose !== '' && !PURPOSES[purpose]) throw new ValidationError(`A purpose is one of: ${Object.keys(PURPOSES).join(', ')}.`);
     let target;
+    let previous = null;
     if (set === 'next') {
       // Saved from the goal as computed now, so it starts from today's numbers.
       const purposeNow = purpose !== undefined ? purpose : (await store.get()).pageGoals?.[site.id]?.[p]?.purpose || '';
@@ -207,24 +208,45 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
       });
       const row = (await review(site, '90d')).rows.find((r) => r.path === p);
       if (!row) throw new ValidationError('That page isn’t in the review.');
+      // The goal it replaces, and whether it was reached, as of now.
+      if (row.goal.target && row.goal.target.key !== row.goal.next.key) previous = { target: row.goal.target, progress: row.goal.progress || null };
       const n = row.goal.next;
       target = { key: n.key, title: n.title, metric: n.metric, from: n.from, to: n.to, ...(n.query ? { query: n.query } : {}), checkBy: n.checkBy, setAt: today() };
+    } else if (clear) {
+      const row = (await review(site, '90d')).rows.find((r) => r.path === p);
+      if (row?.goal?.target) previous = { target: row.goal.target, progress: row.goal.progress || null };
     }
+    // The goal whose to-do moves on: the one replaced now, or the last one
+    // dropped (Drop it, then a new goal: its to-do still moves on).
+    let carryFrom = previous ? { ...previous.target, reached: Boolean(previous.progress?.reached), now: previous.progress?.now ?? null } : null;
     await store.update((s) => {
       const all = { ...(s.pageGoals || {}) };
       const mine = { ...(all[site.id] || {}) };
       const entry = { ...(mine[p] || {}) };
+      if (target && !previous && !entry.target) {
+        const last = (entry.past || []).at(-1);
+        if (last && last.key !== target.key) carryFrom = { ...last, reached: false, dropped: true };
+      }
       if (purpose !== undefined) {
         if (purpose) entry.purpose = purpose;
         else delete entry.purpose;
       }
       if (target) entry.target = target;
+      // Every goal this page had, newest last, and how it ended: the goal card
+      // and the page's to-do list them.
+      if (previous) {
+        const t = previous.target;
+        const ended = previous.progress?.reached ? 'reached' : clear ? 'dropped' : 'replaced';
+        entry.past = [...(entry.past || []), { key: t.key, title: t.title, metric: t.metric, from: t.from, to: t.to, now: previous.progress?.now ?? null, setAt: t.setAt, ended, endedAt: today() }].slice(-20);
+      }
       if (clear) delete entry.target;
-      if (entry.purpose || entry.target) mine[p] = entry;
+      if (entry.purpose || entry.target || entry.past) mine[p] = entry;
       else delete mine[p];
       all[site.id] = mine;
       s.pageGoals = all;
     });
+    // The page's to-do moves on to the new goal, instead of a second one piling up.
+    if (carryFrom && target) await onGoalSet?.({ site: site.id, path: p, previous: carryFrom, reached: carryFrom.reached, now: carryFrom.dropped ? null : carryFrom.now, target });
     return { path: p, goal: (await review(site, '90d')).rows.find((r) => r.path === p)?.goal || null };
   }
 

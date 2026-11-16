@@ -71,10 +71,20 @@ const BENTO = [
 
 const SOURCES = ['Google Analytics', 'Search Console', 'Bing', 'BigQuery', 'GitHub', 'Chrome Web Store', 'Reddit', 'Hacker News'];
 
+// "Works with what you have": what a tracker shows, and what Kauzl adds to it.
+// Sample numbers, the same story as the hero card.
+const LEDGER = [
+  ['548 visits, up 32%.', '<b>Reddit sent 18 more</b>, the day after your launch post.'],
+  ['61 visits on Wednesday.', '<b>4× a normal Wednesday</b>, and nothing you shipped explains it. Don’t guess.'],
+  ['“Raycast alternative” shown 927 times.', '<b>Rewrite that title</b>: position 4.7, only 1.5% click. Added to your to-dos.'],
+  ['Sign-ups: 41.', '<b>Up 18% since the pricing change</b>, more than a normal week moves.'],
+];
+
 const GUIDES = [
   ['track-chatgpt-traffic-google-analytics', 'Track ChatGPT and AI traffic in GA4', 'Where AI visits hide in Google Analytics, and a regex to group them.'],
   ['did-a-website-change-work', 'How to tell if a website change worked', 'A fair before/after method for redesigns, launches and pricing changes.'],
   ['search-console-vs-google-analytics', 'Search Console vs Google Analytics', 'Eight reasons clicks and sessions never match.'],
+  ['kauzl-vs-plausible', 'Kauzl vs Plausible', 'One counts visits, one explains them. When to use which.'],
 ];
 
 const FREE_TOOLS = [
@@ -199,6 +209,18 @@ p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px
 .v-term { margin: 0; font: 13px/1.7 ui-monospace, "SF Mono", Menlo, monospace; color: #D8DBE5; white-space: pre; overflow-x: auto; }
 .v-term .you { color: var(--amber); font-weight: 700; } .v-term .tool { color: #8FB3FF; } .v-term .ai { color: #7EE2A8; font-weight: 700; }
 
+/* Works with what you have: tracker vs Kauzl, row by row */
+.ledger { background: var(--surface); border: 1px solid var(--line); border-radius: 20px; overflow: hidden; }
+.l-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); }
+.l-row > span { padding: 16px 22px; font-size: 15px; }
+.l-row > span:first-child { color: var(--muted); border-right: 1px solid var(--line); }
+.l-row > span:last-child { color: var(--text-2); }
+.l-row + .l-row { border-top: 1px solid var(--line); }
+.l-row b { color: var(--text); }
+.l-head > span { padding-block: 12px; font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); background: var(--sunk); }
+.l-head > span:last-child { color: var(--ink); background: var(--amber); }
+.l-foot { margin: 14px 0 0; color: var(--muted); font-size: 14px; } .l-foot a { color: var(--link); font-weight: 600; }
+
 .steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; position: relative; }
 .steps .card::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--amber); color: var(--ink); font: 800 17px var(--head); }
 .steps .card h3 { margin-top: 14px; }
@@ -251,6 +273,7 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
   .hero { padding: 44px 0 100px; }
   .grid, .steps, .tiles, .bento { grid-template-columns: minmax(0, 1fr); }
   .b-card.wide, .b-card.full { grid-column: auto; }
+  .l-row { grid-template-columns: minmax(0, 1fr); } .l-row > span:first-child { border-right: 0; padding-bottom: 0; } .l-head > span:first-child { display: none; }
   .b-card.full { grid-template-columns: minmax(0, 1fr); } .b-card.full .b-vis { grid-row: auto; grid-column: auto; }
   nav.links a:not(.keep) { display: none; }
   .sec-head { flex-direction: column; align-items: flex-start; } .sec-head .all { margin: -16px 0 24px; }
@@ -329,6 +352,16 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
         <div class="b-vis">${b.visual}</div>
       </a>`).join('\n      ')}
     </div>
+  </div></section>
+
+  <section id="works-with"><div class="wrap">
+    <p class="kicker">Works with what you have</p><h2 class="title">Keep your analytics. Add the why.</h2>
+    <p class="sub">You already have something counting visits. Kauzl doesn’t replace it. It reads it, lines it up with what you shipped and posted, and says which work paid off.</p>
+    <div class="ledger" role="table" aria-label="Example: what your tracker says, and what Kauzl adds">
+      <div class="l-row l-head" role="row"><span role="columnheader">Your analytics says</span><span role="columnheader">Kauzl adds</span></div>
+      ${LEDGER.map(([says, adds]) => `<div class="l-row" role="row"><span role="cell">${says}</span><span role="cell">${adds}</span></div>`).join('\n      ')}
+    </div>
+    <p class="l-foot">Sample numbers. Comparing tools? <a href="/guides/kauzl-vs-plausible/">Kauzl vs Plausible</a>, honestly.</p>
   </div></section>
 
   <section id="how"><div class="wrap">

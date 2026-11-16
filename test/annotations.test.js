@@ -135,3 +135,17 @@ test('placeAnnotations: groups by matching chart date; hourly charts use the fir
   assert.deepEqual(placeAnnotations([a], ['20261002', '20261002']), [{ i: 0, items: [a] }]);
   assert.deepEqual(placeAnnotations([a], []), []);
 });
+
+test('addNote: keeps an http(s) link with the note, refuses anything else', async () => {
+  const dir = await tempDir();
+  try {
+    const store = createStore(dir);
+    const notes = createAnnotations({ store });
+    const note = await notes.addNote({ date: '2026-11-14', label: 'Sent the newsletter', url: 'https://buttondown.com/kauzl/archive/1', scope: 'site:abc' });
+    assert.equal(note.url, 'https://buttondown.com/kauzl/archive/1');
+    assert.equal((await notes.list({ scopes: ['site:abc'] }))[0].url, note.url);
+    await assert.rejects(notes.addNote({ date: '2026-11-14', label: 'x', url: 'javascript:alert(1)' }), /http/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});

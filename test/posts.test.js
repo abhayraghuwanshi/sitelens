@@ -272,3 +272,18 @@ test('posts service: one post’s traffic, landing pages and referrers', async (
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('addToTimeline: a known post link becomes a post, anything else a note with its link', async () => {
+  const { addToTimeline } = await import('../server/posts.mjs');
+  const calls = [];
+  const posts = { addManual: async (input) => { calls.push(['post', input]); return { id: 'manual:x', platform: 'reddit' }; } };
+  const annotations = { addNote: async (input) => { calls.push(['note', input]); return { id: 'note-1' }; } };
+  const post = await addToTimeline({ posts, annotations }, { url: 'https://www.reddit.com/r/SaaS/comments/abc/x/', text: 'Launch post', date: '2026-11-15', site: 's1' });
+  assert.deepEqual(post, { kind: 'post', platform: 'reddit', id: 'manual:x' });
+  assert.deepEqual(calls[0], ['post', { url: 'https://www.reddit.com/r/SaaS/comments/abc/x/', title: 'Launch post', date: '2026-11-15', site: 's1' }]);
+  const note = await addToTimeline({ posts, annotations }, { url: 'https://example.com/pricing/', date: '2026-11-15', site: 's1', body: 'New tiers' });
+  assert.equal(note.kind, 'note');
+  assert.deepEqual(calls[1], ['note', { date: '2026-11-15', label: 'example.com/pricing', url: 'https://example.com/pricing/', body: 'New tiers', scope: 'site:s1' }]);
+  await addToTimeline({ posts, annotations }, { text: 'Changed pricing', date: '2026-11-15' });
+  assert.deepEqual(calls[2][1], { date: '2026-11-15', label: 'Changed pricing', url: '', body: undefined, scope: '' });
+});
