@@ -29,7 +29,7 @@
 
 import { createServer } from 'node:http';
 import { BlockList, isIP } from 'node:net';
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -52,7 +52,7 @@ const DEMO_HOURS = 12;
 const DEMO_USER = { id: 'demo', email: 'demo@kauzl.invalid' };
 const DEMO_START = '/#/site/demo/story';
 // /demo?to=<view> opens that part of the sample site (the home page links them).
-const DEMO_VIEWS = new Set(['story', 'timeline', 'todos', 'alerts', 'campaigns', 'ai', 'journeys', 'outcomes', 'funnels', 'pages', 'overview']);
+const DEMO_VIEWS = new Set(['story', 'timeline', 'todos', 'alerts', 'campaigns', 'cycles', 'ai', 'journeys', 'outcomes', 'funnels', 'pages', 'overview']);
 const SESSION_DAYS = 30;
 // How long a new MCP token lasts; 0 is never (until revoked). The default limits
 // what a token copied out of someone's Claude config is good for.
@@ -87,6 +87,8 @@ const SECURITY_HEADERS = {
 // repo, which live on their own static host and are shown at /tools/ so links
 // they earn count for this domain) use the brand's Google Fonts; still no
 // inline JS.
+const HOME_PLAY_JS = readFileSync(new URL('./home-play.js', import.meta.url), 'utf8');
+
 const PUBLIC_CSP = [
   "default-src 'self'",
   // Google Tag Manager / Analytics on the public pages only (tools/assets/ga.js).
@@ -652,6 +654,10 @@ export function createGateway({
     }
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
 
+    // The home page hero's script (server/home-play.js, also imported by home.mjs).
+    if (url.pathname === '/home-play.js') {
+      return res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(HOME_PLAY_JS);
+    }
     if (url.pathname === '/robots.txt') {
       return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(robotsTxt(origin, { tools: Boolean(toolsOrigin) }));
     }

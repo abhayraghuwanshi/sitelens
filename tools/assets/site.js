@@ -154,7 +154,7 @@ document.addEventListener('click', (e) => {
   if (u.host !== location.host && !/(^|\.)kauzl\.com$/.test(u.host)) return;
   const path = u.pathname;
   if (!/^\/($|demo|login|tools\/|guides\/|home)/.test(path) || u.href === location.href) return;
-  const where = a.closest('.cta, .top, .band, .hero, footer, .tile, .b-card, .grid, .content, nav')?.className.split(' ')[0] || 'page';
+  const where = a.closest('.cta, .top, .band, .hero, footer, .tile, .qa, .grid, .content, nav')?.className.split(' ')[0] || 'page';
   track('cta_click', { location: where, detail: path + (u.search || '') });
 });
 // Guides: read to (most of) the end.
