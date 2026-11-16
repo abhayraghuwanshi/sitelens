@@ -434,6 +434,7 @@ export function createMentions({ dbPath, store, env = process.env, siteConfig = 
       return [{
         id: `mention:${m.id}`,
         date: isoDay(m.createdAt),
+        at: m.createdAt,
         label: `${SOURCES[m.source]}: ${m.title}${m.points ? ` (${m.points})` : ''}`,
         kind: 'mention',
         source: 'mentions',

@@ -23,13 +23,14 @@ import { Story } from './Story.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
 import { ExploreFrame, EXPLORE_TABS } from './Explore.jsx';
 import { TodosPage, useTodos } from '../components/Todos.jsx';
+import { LivePage, LiveAll, useLiveCounts } from './Live.jsx';
 import './next.css';
 
 // The story-first layout: Sites → one site's Story, its Timeline, and Explore for
 // every full report. A site is set up on its Edit page (Account → Sites & products),
 // which also holds sharing, left-out visits and what Studio measures. It is Studio's
 // only layout, and reuses the report pages in pages/.
-// Routes: #/ · #/site/<id>[/story|todos|outcomes|timeline|explore|<explore view>]
+// Routes: #/ · #/site/<id>[/story|live|todos|outcomes|timeline|explore|<explore view>] · #/live
 // (#/site/<id>/setup, from older links, opens that site's Edit page) · #/todos · #/account
 // Older routes (#/calendar, #/settings, #/outcomes…) still open here.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
@@ -55,12 +56,15 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
 
   const todos = useTodos({ status: 'open' });
   const alertCounts = useUnreadAlerts();
+  const live = useLiveCounts(sites);
+  const liveFor = (id) => live.bySite[id];
   const openFor = (id) => (todos.data?.todos || []).filter((t) => t.site === id).length;
   const story = current ? { href: `#/site/${current.id}${route.params.get('range') ? `?range=${route.params.get('range')}` : ''}`, label: `${current.label} story` } : null;
 
   const tab = !section ? 'sites'
     : section === 'todos' ? 'todos'
-    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'todos', 'alerts', 'timeline'].includes(view) ? view : 'explore')
+    : section === 'live' ? 'live'
+    : section === 'site' ? (view === 'journeys' || view === 'outcomes' ? 'story' : ['story', 'live', 'todos', 'alerts', 'timeline'].includes(view) ? view : 'explore')
     : section === 'calendar' ? 'timeline'
     : section === 'alerts' ? 'alerts'
     : (section === 'settings' || section === 'account') && (route.params.get('tab') === 'mcp' || route.params.get('i') === 'mcp') ? 'mcp'
@@ -71,6 +75,8 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   if (!section) body = <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (section === 'site' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (section === 'site' && view === 'story') body = <Story key={site.id} site={site} params={route.params} />;
+  else if (section === 'site' && view === 'live') body = <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>;
+  else if (section === 'live') body = <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
   else if (section === 'site' && view === 'journeys') body = <JourneysPage key={site.id} site={site} params={route.params} />;
   else if (section === 'site' && view === 'todos') body = <Page title="To-dos" sub={`Changes to make on ${site.label}`}><TodosPage key={site.id} site={site} sites={sites} /></Page>;
   else if (section === 'site' && view === 'alerts') body = <Page title="Alerts" sub={`What moved on ${site.label}`}><AlertsPage key={site.id} site={site} sites={sites} /></Page>;
@@ -110,6 +116,11 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
             <Logo size={26} title="" />
             <span>Kauzl</span>
           </a>
+          {current && liveFor(current.id) != null && (
+            <a class="nx-live-pill" href={`#/site/${current.id}/live`} aria-label={`${liveFor(current.id)} on ${current.label} now`}>
+              <span class={`nx-live-dot${liveFor(current.id) ? ' on' : ''}`} aria-hidden="true" />{liveFor(current.id)} now
+            </a>
+          )}
           <button type="button" class="nx-icon-btn nx-menu-btn" onClick={() => setMenu(!menu)}
             aria-expanded={menu} aria-controls="nx-side-body" aria-label={menu ? 'Close menu' : 'Open menu'}>
             <Icon name={menu ? 'x' : 'menu'} />
@@ -120,6 +131,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           <NavItem href="#/" icon="grid" active={tab === 'sites'}>Sites <span class="nx-count">{sites.length}</span></NavItem>
           <NavItem href="#/todos" icon="check" active={section === 'todos'}>All to-dos {todos.data?.open ? <span class="nx-count">{todos.data.open}</span> : null}</NavItem>
           <NavItem href="#/alerts" icon="bell" active={section === 'alerts'}>All alerts {alertCounts.unread ? <span class="nx-count">{alertCounts.unread}</span> : null}</NavItem>
+          <NavItem href="#/live" icon="pulse" active={section === 'live'}>Live now <LiveCount n={live.total} /></NavItem>
           {!state.viewer && <NavItem href={ADD_SITE} icon="plus" active={section === 'account' && route.params.get('edit') === 'new'}>Add a site</NavItem>}
         </nav>
         {current && (
@@ -132,6 +144,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
             {current.shared && <p class="nx-shared" title={`Shared by ${current.shared.by}`}><Icon name="eye" size={13} /> View only · shared by {current.shared.by}</p>}
             <nav class="nx-nav" aria-label={current.label}>
               <NavItem href={href('story')} icon="sparkles" active={tab === 'story'}>Story</NavItem>
+              <NavItem href={href('live')} icon="pulse" active={tab === 'live' && section === 'site'}>Live <LiveCount n={liveFor(current.id)} /></NavItem>
               <NavItem href={href('todos')} icon="check" active={tab === 'todos' && section === 'site'}>To-dos {openFor(current.id) ? <span class="nx-count">{openFor(current.id)}</span> : null}</NavItem>
               <NavItem href={href('alerts')} icon="bell" active={tab === 'alerts' && section === 'site'}>Alerts {alertCounts.bySite[current.id] ? <span class="nx-count">{alertCounts.bySite[current.id]}</span> : null}</NavItem>
               <NavItem href={href('timeline')} icon="calendar" active={tab === 'timeline'}>Timeline</NavItem>
@@ -177,6 +190,12 @@ function DemoBanner({ site }) {
       </div>
     </div>
   );
+}
+
+// A sidebar count with a pulsing dot while anyone is on (nothing until the first answer).
+function LiveCount({ n }) {
+  if (n == null) return null;
+  return <span class="nx-count nx-live-count-nav"><span class={`nx-live-dot${n ? ' on' : ''}`} aria-hidden="true" />{n}</span>;
 }
 
 function NavItem({ href, icon, active, children }) {

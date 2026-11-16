@@ -2,10 +2,10 @@
 // (shared/sitelens); the warehouse engine runs sql.mjs on BigQuery, or the
 // demo warehouse for the demo site. Both normalize to the same shapes.
 
-import { fetchSiteReports, fetchRealtime, fetchAiReferrals, fetchTrend, fetchOverview, getRange, RANGE_OPTIONS } from '../shared/sitelens/reports.js';
+import { fetchSiteReports, fetchRealtime, fetchRealtimeDetail, fetchAiReferrals, fetchTrend, fetchOverview, getRange, RANGE_OPTIONS } from '../shared/sitelens/reports.js';
 import { fetchSearchReports } from '../shared/sitelens/gsc.js';
 import { buildInsights } from '../shared/sitelens/insights.js';
-import { demoSiteReports, demoLive, demoAiTraffic, demoPageTrend, demoSearch } from '../shared/sitelens/demo.js';
+import { demoSiteReports, demoLive, demoLiveDetail, demoAiTraffic, demoPageTrend, demoSearch } from '../shared/sitelens/demo.js';
 import * as sql from './sql.mjs';
 import * as demo from './demo-warehouse.mjs';
 import { createCache } from './cache.mjs';
@@ -65,9 +65,23 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
 
   async function live(site) {
     return liveCache.wrap(`live:${site.id}`, LIVE_TTL, false, async () => {
-      if (site.demo) return demoLive('Home', site.host);
+      // The sample site's count matches its Live view.
+      if (site.demo) {
+        const d = demoLiveDetail(site.host);
+        return { total: d.now, rows: d.pages, top: d.pages.slice(0, 5), scopedByStream: true };
+      }
       const token = await auth.token();
-      return fetchRealtime({ token, propertyId: site.propertyId, streamName: site.streamName });
+      return fetchRealtime({ token, propertyId: site.propertyId, streamName: site.streamName, minutes: 5 });
+    });
+  }
+
+  // The Live view: now, the last 30 minutes by minute, pages, countries, devices, sources.
+  async function liveDetail(site) {
+    return liveCache.wrap(`live-detail:${site.id}`, LIVE_TTL, false, async () => {
+      if (site.demo) return demoLiveDetail(site.host);
+      if (!site.propertyId) throw new EngineError('Link a GA4 property to this site to see who is on it.', { kind: 'needs-property' });
+      const token = await auth.token();
+      return fetchRealtimeDetail({ token, propertyId: site.propertyId, streamName: site.streamName });
     });
   }
 
@@ -438,6 +452,7 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     getRange,
     dashboard,
     live,
+    liveDetail,
     pageTrend,
     search,
     portfolio,

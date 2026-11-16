@@ -481,12 +481,14 @@ export async function fetchTransitions({ token, propertyId, host, includeSubdoma
   }));
 }
 
-export async function fetchRealtime({ token, propertyId, streamName = '' }) {
+// `minutes`: how far back counts as "on the site" (GA4 realtime goes back 30).
+export async function fetchRealtime({ token, propertyId, streamName = '', minutes = 30 }) {
   const body = {
     dimensions: [dim('unifiedScreenName')],
     metrics: [metric('activeUsers')],
     limit: 25,
     metricAggregations: ['TOTAL'],
+    ...(minutes < 30 ? { minuteRanges: [{ startMinutesAgo: minutes - 1, endMinutesAgo: 0 }] } : {}),
   };
   if (streamName) {
     body.dimensionFilter = {
@@ -503,6 +505,55 @@ export async function fetchRealtime({ token, propertyId, streamName = '' }) {
     .sort((a, b) => b.users - a.users);
   const total = Number(report.totals?.[0]?.activeUsers) || rows.reduce((acc, row) => acc + row.users, 0);
   return { total, rows, top: rows.slice(0, 5), scopedByStream: Boolean(streamName) };
+}
+
+// The Live view: who is on the site now (last 5 minutes) and over the last 30,
+// minute by minute, with what they read, where they are and on what. Sources
+// come from GA4's realtime first-user source when the property offers it;
+// otherwise that part is left out (sources: null) and the rest still loads.
+export async function fetchRealtimeDetail({ token, propertyId, streamName = '' }) {
+  const scoped = streamName
+    ? { dimensionFilter: { filter: { fieldName: 'streamName', stringFilter: { matchType: 'EXACT', value: streamName, caseSensitive: false } } } }
+    : {};
+  const run = (name, minutes, limit) => runRealtimeReport({
+    token,
+    propertyId,
+    body: {
+      dimensions: [dim(name)],
+      metrics: [metric('activeUsers')],
+      limit,
+      metricAggregations: ['TOTAL'],
+      minuteRanges: [{ startMinutesAgo: minutes - 1, endMinutesAgo: 0 }],
+      ...scoped,
+    },
+  });
+  const list = (report, key) => (report?.rows || [])
+    .map((row) => ({ name: row[key] || '(not set)', users: Number(row.activeUsers) || 0 }))
+    .filter((row) => row.users > 0)
+    .sort((a, b) => b.users - a.users);
+  const total = (report) => Number(report?.totals?.[0]?.activeUsers) || 0;
+  const [now, minutes, countries, devices, sources] = await Promise.all([
+    run('unifiedScreenName', 5, 25),
+    run('minutesAgo', 30, 30),
+    run('country', 30, 8),
+    run('deviceCategory', 30, 5),
+    run('firstUserSource', 30, 8).catch(() => null),
+  ]);
+  const perMinute = Array.from({ length: 30 }, () => 0);
+  for (const row of minutes.rows || []) {
+    const ago = Number(row.minutesAgo);
+    if (ago >= 0 && ago < 30) perMinute[29 - ago] = Number(row.activeUsers) || 0;
+  }
+  return {
+    now: total(now),
+    last30: total(minutes),
+    perMinute, // oldest first, the last entry is this minute
+    pages: list(now, 'unifiedScreenName').map(({ name, users }) => ({ title: name, users })),
+    countries: list(countries, 'country'),
+    devices: list(devices, 'deviceCategory'),
+    sources: sources ? list(sources, 'firstUserSource') : null,
+    scopedByStream: Boolean(streamName),
+  };
 }
 
 export function livePageCount(live, title) {

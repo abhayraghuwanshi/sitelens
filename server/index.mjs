@@ -189,6 +189,19 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return github.dbPath;
   }
 
+  // Releases, deploys, posts and mentions for a site from the last 24 hours,
+  // newest first (those that know their time; the rest count as today).
+  async function recentEvents(site) {
+    const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const since = Date.now() - 86_400_000;
+    const items = await annotations.list({ from: day(since), to: day(Date.now()), scopes: [`site:${site.id}`] });
+    return items
+      .filter((a) => a.scope === `site:${site.id}` && (a.at ? a.at >= since : a.date === day(Date.now())))
+      .map(({ id, label, kind, url, at, date }) => ({ id, label, kind, url, at: at || null, date }))
+      .sort((a, b) => (b.at || 0) - (a.at || 0))
+      .slice(0, 6);
+  }
+
   async function siteOr404(id) {
     const site = await store.site(id);
     if (!site) throw new EngineError('Unknown site.', { status: 404, kind: 'notfound' });
@@ -439,6 +452,26 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ['GET', /^\/api\/sites\/([\w-]+)\/dashboard$/, async ({ match, query }) =>
       engines.dashboard(await siteOr404(match[1]), query.get('range') || '28d', { fresh: query.has('fresh') })],
     ['GET', /^\/api\/sites\/([\w-]+)\/live$/, async ({ match }) => engines.live(await siteOr404(match[1]))],
+    // Live: one site in detail, with what shipped or was posted in the last day.
+    ['GET', /^\/api\/sites\/([\w-]+)\/live\/detail$/, async ({ match }) => {
+      const site = await siteOr404(match[1]);
+      const [detail, recent] = await Promise.all([engines.liveDetail(site), site.demo ? null : recentEvents(site).catch(() => [])]);
+      return { ...detail, recent: recent || detail.recent || [] };
+    }],
+    // Live: every site's count right now, busiest first. A site that fails says why.
+    ['GET', /^\/api\/live$/, async () => {
+      const sites = (await store.sites()).filter((s) => s.demo || s.propertyId);
+      const rows = await Promise.all(sites.map(async (s) => {
+        try {
+          const live = await engines.live(s);
+          return { id: s.id, label: s.label, host: s.host, now: live.total, top: live.top?.[0]?.title || '' };
+        } catch (err) {
+          return { id: s.id, label: s.label, host: s.host, now: null, error: err.message };
+        }
+      }));
+      rows.sort((a, b) => (b.now ?? -1) - (a.now ?? -1));
+      return { sites: rows, total: rows.reduce((n, r) => n + (r.now || 0), 0), at: Date.now() };
+    }],
     ['GET', /^\/api\/sites\/([\w-]+)\/page-trend$/, async ({ match, query }) =>
       engines.pageTrend(await siteOr404(match[1]), query.get('path') || '/', query.get('range') || '28d')],
     ['GET', /^\/api\/sites\/([\w-]+)\/search$/, async ({ match, query }) =>

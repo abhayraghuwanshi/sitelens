@@ -765,6 +765,7 @@ export function createPosts({ dbPath, store, mentions, auth, history = null, cac
       return [{
         id: `post:${r.id}`,
         date: isoDay(r.created_at),
+        at: r.created_at,
         label: `Your ${PLATFORMS[r.platform]?.label || r.platform} post: ${r.title}`,
         kind: 'post',
         source: 'posts',
