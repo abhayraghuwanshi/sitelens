@@ -84,7 +84,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (view === 'live') body = site
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
-  else if (view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} params={site ? withSite(route.params, site.id) : route.params} /></Page>;
+  else if (view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} scoped params={site ? withSite(route.params, site.id) : withSite(route.params, 'all')} /></Page>;
   else if (view === 'story') body = site ? <Story key={site.id} site={site} params={route.params} /> : <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;

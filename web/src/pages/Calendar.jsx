@@ -8,6 +8,7 @@ import { Icon } from '../components/icons.jsx';
 import { LineChart, kindColor } from '../charts/LineChart.jsx';
 import { postHref } from './Posts.jsx';
 import { Marked } from '../components/Marks.jsx';
+import { Drawer } from '../next/Drawer.jsx';
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const METRICS = [
@@ -18,10 +19,12 @@ const LINE_ICONS = { site: 'grid', source: 'flow', page: 'pages', search: 'searc
 
 // Month grid of daily traffic vs a typical same weekday, with each day's events
 // and alerts; picking a day shows its story. Month, site and day live in the URL.
-export function Calendar({ sites, params }) {
+// `scoped`: the app's scope switcher picks the site, so the calendar shows no
+// site picker of its own. A picked day (?day=) opens in the drawer.
+export function Calendar({ sites, params, scoped = false }) {
   const [savedSite, setSavedSite] = usePersistent('calendar-site', 'all');
   const [metric, setMetric] = usePersistent('calendar-metric', 'sessions');
-  const site = params.get('site') || (savedSite === 'all' || sites.some((s) => s.id === savedSite) ? savedSite : 'all');
+  const site = params.get('site') || (scoped ? 'all' : savedSite === 'all' || sites.some((s) => s.id === savedSite) ? savedSite : 'all');
   const month = params.get('month') || '';
   const [adding, setAdding] = useState(false);
   const [added, setAdded] = useState('');
@@ -57,11 +60,15 @@ export function Calendar({ sites, params }) {
         <span class="grow" />
         {added && !adding && <span class="small text-good" role="status">{added}</span>}
         {!adding && <button type="button" class="btn primary" onClick={() => { setAdding(true); setAdded(''); }}><Icon name="plus" size={13} /> Add post or note</button>}
-        <label class="sr-only" for="calendar-site">Site</label>
-        <select id="calendar-site" value={site} onChange={(e) => pickSite(e.currentTarget.value)} style={{ width: 'auto' }}>
-          <option value="all">All sites</option>
-          {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (demo)' : ''}</option>)}
-        </select>
+        {!scoped && (
+          <>
+            <label class="sr-only" for="calendar-site">Site</label>
+            <select id="calendar-site" value={site} onChange={(e) => pickSite(e.currentTarget.value)} style={{ width: 'auto' }}>
+              <option value="all">All sites</option>
+              {sites.map((s) => <option key={s.id} value={s.id}>{s.label}{s.demo ? ' (demo)' : ''}</option>)}
+            </select>
+          </>
+        )}
         {m.hasSearch && <Segmented label="Cell metric" value={useMetric} options={METRICS} onChange={setMetric} />}
         <button class="btn icon-btn" type="button" title="Reload from Google" aria-label="Reload from Google" onClick={() => data.reload({ fresh: true })}>
           <Icon name="refresh" size={14} />
@@ -90,6 +97,20 @@ export function Calendar({ sites, params }) {
         { label: 'Events', value: formatNumber(t.events), meta: `${t.alerts} alert${t.alerts === 1 ? '' : 's'}${t.stars ? ` · +${t.stars} stars` : ''}` },
       ]} />
 
+      {scoped ? (
+        <>
+          <Card title="Month" sub={`${useMetric === 'clicks' ? 'Search clicks' : 'Sessions'} vs a typical same weekday · pick a day to see what happened`} flush class="cal-month">
+            <MonthGrid m={m} metric={useMetric} selected={params.get('day') || ''} />
+            <Legend />
+          </Card>
+          {params.get('day') && (
+            <Drawer title={dayTitle(params.get('day'))} wide onClose={() => navigate(withParam('day', ''))}>
+              <DayStory key={`${site}:${selected}:${t.events}`} date={selected} site={site} today={m.today} onChange={data.reload} />
+              <ClaudeComments key={`claude:${site}:${selected}`} siteId={site} date={selected} onChange={data.reload} />
+            </Drawer>
+          )}
+        </>
+      ) : (
       <div class="grid cols-2-1">
         {/* Claude sits under the month so the two columns end at about the same height. */}
         <div class="stack cal-left" style={{ gap: '16px', minWidth: 0 }}>
@@ -101,6 +122,7 @@ export function Calendar({ sites, params }) {
         </div>
         <DayStory key={`${site}:${selected}:${t.events}`} date={selected} site={site} today={m.today} onChange={data.reload} />
       </div>
+      )}
     </>
   );
 }
@@ -406,6 +428,10 @@ function monthLabel(month) {
 
 function formatLong(iso) {
   return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', timeZone: 'UTC' });
+}
+
+function dayTitle(iso) {
+  return new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'UTC' });
 }
 
 function dayLabel(iso) {

@@ -775,3 +775,7 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
 .nx-conn-row small.bad { color: var(--critical-ink); }
 .nx-conn-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 820px) { .nx .nx-conn-row { grid-template-columns: 28px minmax(0, 1fr) auto; } .nx-conn-desc { display: none; } }
+/* The drawer takes focus to read from its top; it needs no ring. Cards inside it lose their frame. */
+.nx .nx-drawer:focus, .nx .nx-drawer:focus-visible { outline: none; }
+.nx-drawer-body > .card { border: 0; background: none; box-shadow: none; }
+.nx-drawer-body > .card > .card-head, .nx-drawer-body > .card > .card-body { padding-left: 0; padding-right: 0; }
