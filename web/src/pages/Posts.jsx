@@ -143,7 +143,7 @@ function PostList({ range }) {
   );
 }
 
-function Accounts({ data, open, onSaved }) {
+export function Accounts({ data, open, onSaved, bare = false }) {
   const fetchable = data.platforms.filter((p) => p.fetch);
   const [rows, setRows] = useState(() => (data.accounts.length ? data.accounts : [{ platform: 'reddit', handle: '' }]));
   const [error, setError] = useState('');
@@ -183,14 +183,8 @@ function Accounts({ data, open, onSaved }) {
     );
   }
 
-  return (
-    <details class="card posts-panel" open={open}>
-      <summary class="card-head">
-        <h2>Your accounts</h2>
-        <span class="sub">{data.accounts.map((a) => `${labelOf(a.platform)} · ${a.handle}`).join(', ') || 'none yet'}</span>
-        <Icon name="chevron" size={14} class="chev" />
-      </summary>
-      <form class="card-body stack gap-8" onSubmit={save}>
+  const body = (
+      <form class={bare ? 'stack gap-8' : 'card-body stack gap-8'} onSubmit={save}>
         {rows.map((r, i) => {
           const p = fetchable.find((x) => x.key === r.platform);
           return (
@@ -209,14 +203,24 @@ function Accounts({ data, open, onSaved }) {
           <button class="btn primary" type="submit" disabled={busy}>{busy ? 'Saving…' : 'Save and sync'}</button>
           {error && <span class="small text-bad">{error}</span>}
         </div>
-        <p class="note m-0">No login needed: Kauzl reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL below.</p>
+        <p class="note m-0">No login needed: Kauzl reads public profiles. LinkedIn and X can’t be read that way (their APIs need partner approval or a paid plan), so add those by URL{bare ? '' : ' below'}.</p>
       </form>
+  );
+  if (bare) return body;
+  return (
+    <details class="card posts-panel" open={open}>
+      <summary class="card-head">
+        <h2>Your accounts</h2>
+        <span class="sub">{data.accounts.map((a) => `${labelOf(a.platform)} · ${a.handle}`).join(', ') || 'none yet'}</span>
+        <Icon name="chevron" size={14} class="chev" />
+      </summary>
+      {body}
     </details>
   );
 }
 
-function AddByUrl({ products, onAdded }) {
-  const empty = { url: '', title: '', date: new Date().toISOString().slice(0, 10), points: '', comments: '', product: '' };
+export function AddByUrl({ products, onAdded, bare = false, product = '' }) {
+  const empty = { url: '', title: '', date: new Date().toISOString().slice(0, 10), points: '', comments: '', product };
   const [form, setForm] = useState(empty);
   const [error, setError] = useState('');
   const set = (patch) => setForm({ ...form, ...patch });
@@ -226,19 +230,15 @@ function AddByUrl({ products, onAdded }) {
     try {
       await api.post('/posts/manual', form);
       setForm(empty);
+      setDone(true);
       onAdded();
     } catch (err) {
       setError(err.message);
     }
   }
-  return (
-    <details class="card posts-panel">
-      <summary class="card-head">
-        <h2>Add a post by URL</h2>
-        <span class="sub">LinkedIn, X, Indie Hackers, a blog: anything without an API</span>
-        <Icon name="chevron" size={14} class="chev" />
-      </summary>
-      <form class="card-body stack gap-12" onSubmit={add}>
+  const [done, setDone] = useState(false);
+  const body = (
+      <form class={bare ? 'stack gap-12' : 'card-body stack gap-12'} onSubmit={add}>
         <div class="post-form">
           <label class="field">Post URL<input required type="url" value={form.url} placeholder="https://www.linkedin.com/posts/…" onInput={(e) => set({ url: e.currentTarget.value })} /></label>
           <label class="field">Posted on<input type="date" value={form.date} onInput={(e) => set({ date: e.currentTarget.value })} /></label>
@@ -255,14 +255,25 @@ function AddByUrl({ products, onAdded }) {
         <div class="row">
           <button class="btn primary" type="submit"><Icon name="plus" size={13} /> Add post</button>
           {error && <span class="small text-bad">{error}</span>}
+          {done && !error && <span class="small text-good">Added.</span>}
         </div>
       </form>
+  );
+  if (bare) return body;
+  return (
+    <details class="card posts-panel">
+      <summary class="card-head">
+        <h2>Add a post by URL</h2>
+        <span class="sub">LinkedIn, X, Indie Hackers, a blog: anything without an API</span>
+        <Icon name="chevron" size={14} class="chev" />
+      </summary>
+      {body}
     </details>
   );
 }
 
 // A link to your page with utm_* tags, so GA4 counts the visits a post brings exactly.
-function LinkBuilder({ data }) {
+export function LinkBuilder({ data, bare = false }) {
   const withSite = data.products.filter((p) => p.url);
   const [form, setForm] = useState(() => ({ url: withSite[0]?.url || '', platform: 'reddit', source: '', campaign: '', content: '' }));
   const [copied, setCopied] = useState(false);
@@ -283,14 +294,8 @@ function LinkBuilder({ data }) {
       setCopied(false);
     }
   }
-  return (
-    <details class="card posts-panel">
-      <summary class="card-head">
-        <h2>Make a tagged link</h2>
-        <span class="sub">Share this instead of the bare URL, and the sessions it brings are counted exactly</span>
-        <Icon name="chevron" size={14} class="chev" />
-      </summary>
-      <div class="card-body stack gap-12">
+  const body = (
+      <div class={bare ? 'stack gap-12' : 'card-body stack gap-12'}>
         <div class="post-form">
           <label class="field">Page
             <input type="url" list="link-builder-sites" value={form.url} placeholder="https://your-site.com/blog/post" onInput={(e) => set({ url: e.currentTarget.value })} />
@@ -314,6 +319,16 @@ function LinkBuilder({ data }) {
           <p class="small muted m-0">{error || 'Pick the page and name the campaign; one campaign per post keeps the numbers apart.'}</p>
         )}
       </div>
+  );
+  if (bare) return body;
+  return (
+    <details class="card posts-panel">
+      <summary class="card-head">
+        <h2>Make a tagged link</h2>
+        <span class="sub">Share this instead of the bare URL, and the sessions it brings are counted exactly</span>
+        <Icon name="chevron" size={14} class="chev" />
+      </summary>
+      {body}
     </details>
   );
 }

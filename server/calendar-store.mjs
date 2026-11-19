@@ -36,6 +36,7 @@ const CHUNK_DAYS = 31;
 export const DIMS = {
   source: { engine: 'ga4', field: 'sessionSource', settle: GA_SETTLE },
   page: { engine: 'ga4', field: 'landingPage', settle: GA_SETTLE },
+  country: { engine: 'ga4', field: 'country', settle: GA_SETTLE },
   query: { engine: 'gsc', field: 'query', settle: SC_SETTLE },
 };
 
@@ -403,9 +404,36 @@ export function createCalendarStore({ dbPath, auth, report = runReport, search =
     return { path: dbPath, sites: rows };
   }
 
+  // Sessions per hour for one day (0–23), from GA4. Not stored: settled days are
+  // kept in memory, the last few for 30 minutes.
+  const hourCache = new Map();
+  async function hours(site, date) {
+    const key = `${site.id}:${date}`;
+    const hit = hourCache.get(key);
+    const settled = date < addDays(localDay(now()), -GA_SETTLE);
+    if (hit && (settled || now() - hit.at < FRESH_MS)) return hit.rows;
+    const res = await report({
+      token: await auth.token(),
+      propertyId: site.propertyId,
+      body: {
+        dateRanges: [{ startDate: date, endDate: date }],
+        dimensions: [{ name: 'hour' }],
+        metrics: [{ name: 'sessions' }],
+        dimensionFilter: hostFilter(site.host, { includeSubdomains: site.includeSubdomains }),
+        limit: 24,
+      },
+    });
+    const rows = Array(24).fill(0);
+    for (const r of res.rows) rows[Number(r.hour)] = r.sessions || 0;
+    if (hourCache.size > 500) hourCache.clear();
+    hourCache.set(key, { at: now(), rows });
+    return rows;
+  }
+
   return {
     series,
     breakdown,
+    hours,
     syncTraffic,
     syncSearch,
     ensureBreakdown,

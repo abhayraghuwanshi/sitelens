@@ -2,6 +2,7 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { Spark } from './Timeline.jsx';
 import { formatNumber } from '@shared/format.js';
 
 // Goals: every number you're trying to move, as the same card whatever it
@@ -76,10 +77,7 @@ export function GoalsView({ site, range }) {
 // One metric, the same card whatever its source.
 function MetricCard({ m }) {
   const change = m.previous ? m.total / m.previous - 1 : null;
-  const vals = (m.values || []).map((v) => v ?? 0);
-  const mx = Math.max(...vals, 0);
-  const mn = Math.min(...vals, 0);
-  const pts = vals.map((v, i) => `${((i / Math.max(1, vals.length - 1)) * 100).toFixed(1)},${(23 - ((v - mn) / Math.max(1e-9, mx - mn)) * 19).toFixed(1)}`).join(' ');
+  const vals = m.values || [];
   return (
     <div class="nx-mcard">
       <span class="nx-mch">
@@ -92,11 +90,7 @@ function MetricCard({ m }) {
       ) : (
         <>
           <span class="nx-mval"><b>{fmt(m.total)}</b>{change !== null && <span class={change >= 0 ? 'good' : 'bad'}>{change >= 0 ? '+' : '−'}{Math.round(Math.abs(change) * 100)}%</span>}</span>
-          {vals.length > 1 && (
-            <svg class="nx-spark" viewBox="0 0 100 26" preserveAspectRatio="none" aria-hidden="true">
-              <polyline points={pts} fill="none" stroke="var(--accent)" stroke-width="1.6" vector-effect="non-scaling-stroke" />
-            </svg>
-          )}
+          {vals.length > 1 && <Spark vals={vals} dates={m.dates || m.range?.dates || []} unit={(m.unit || '').toLowerCase()} cls="goal" />}
           <small class="muted">{m.unit ? `${m.unit} · ` : ''}{{ sum: 'total', average: 'daily average', latest: 'latest day' }[m.summary || 'sum']} for the period</small>
         </>
       )}

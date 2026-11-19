@@ -1,10 +1,9 @@
 import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
-import { useAsync } from '../hooks.js';
+import { useAsync, usePersistent } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { AddTodo } from '../components/Todos.jsx';
-import { SearchHub } from '../pages/SearchHub.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
 
 // Search: the short answer, then a ladder (one row per search, from Top 3 to
@@ -63,6 +62,8 @@ export function EngineSwitch({ params }) {
 export function SearchView({ site, range, params }) {
   const hub = useAsync(() => api.get(`/sites/${site.id}/search-hub${qs({ range })}`), [site.id, range]);
   const ai = useAsync(() => api.get(`/ai-search/sites/${site.id}/checks`).catch(() => null), [site.id]);
+  // Page titles for the Next-moves cards (paths are hard to read); paths until they arrive.
+  const review = useAsync(() => api.get(`/sites/${site.id}/page-review${qs({ range })}`).catch(() => null), [site.id, range]);
   const eng = engineOf(params);
   const [all, setAll] = useState(false);
   const [list, setList] = useState(false);
@@ -89,6 +90,7 @@ export function SearchView({ site, range, params }) {
   const shown = all ? ladder : ladder.slice(0, 10);
   const open = params.get('q') || '';
   const opened = rows.find((r) => r.key === open);
+  const titleOf = (path) => review.data?.rows?.find((x) => x.path === path)?.title || pageName(path);
   const engName = eng === 'google' ? 'Google' : eng === 'bing' ? 'Bing' : 'Google and Bing';
   const errors = [h.google?.error && ['Google', h.google.error], h.bing?.error && ['Bing', h.bing.error]].filter(Boolean);
 
@@ -150,38 +152,154 @@ export function SearchView({ site, range, params }) {
 
       {close.length > 0 && (
         <section class="nx-block" aria-label="Next moves">
-          <h2 class="nx-h2">Next moves <span class="muted small">· the searches closest to paying off</span></h2>
+          <h2 class="nx-h2">Next moves <span class="muted small">· the {Math.min(3, close.length) === 1 ? 'search' : `${Math.min(3, close.length)} searches`} closest to paying off</span></h2>
           <div class="nx-moves">
             {close.slice(0, 3).map((r) => (
               <a key={r.key} class="nx-move" href={hrefWith('q', r.key)}>
-                <small>{r.page ? pageName(r.page) : 'No page tied to it'} · {rank(r.pos)} now</small>
+                <small class="nx-mvp"><span>{r.page ? titleOf(r.page) : 'No page tied to it'}</span><span>· {rank(r.pos)} now</span></small>
                 <b>“{r.key}”</b>
-                <span class="nx-mg"><b class="good">+{fmt(r.s.gain)}</b><small>visits in the top 3</small></span>
+                <span class="nx-mg"><b class="good">+{fmt(r.s.gain)}</b><small>visits {range === '28d' ? 'a month ' : ''}in the top 3</small></span>
               </a>
             ))}
           </div>
         </section>
       )}
 
+      <Gaps site={site} />
+
+      <button type="button" class="todo-link nx-listlink" aria-expanded={list} onClick={() => setList(!list)}>{list ? 'Hide the list' : 'See every search as a list'}</button>
+      {list && <SearchList rows={rows} eng={eng} both={both} titleOf={titleOf} open={open} moveOf={moveOf} />}
+
       <div class="nx-cards2">
         <a class="card card-plain nx-linkcard" href={`#/site/${site.id}/search?tab=ai`}>
-          <span class="nx-label-sm">AI answers</span>
+          <b class="nx-lc-h">AI answers</b>
           <span>{aiLine(ai.data, site)}</span>
           <span class="nx-go">See the questions →</span>
         </a>
         <a class="card card-plain nx-linkcard" href={`#/site/${site.id}/pages?tab=health`}>
-          <span class="nx-label-sm">Indexing</span>
-          <span>{h.bing?.crawl ? <>Bing hit <b>{fmt(h.bing.crawl.errorsInRange)}</b> crawl errors in this period{h.bing.crawl.errorsBefore != null ? `, against ${fmt(h.bing.crawl.errorsBefore)} the period before` : ''}. Whether Google and Bing can show each page is in Pages · Health.</> : 'Whether Google and Bing can show each page is in Pages · Health. Connect Bing Webmaster Tools to see how Bing crawls the site.'}</span>
+          <b class="nx-lc-h">Indexing</b>
+          <span>{h.bing?.crawl ? <>Bing hit <b>{fmt(h.bing.crawl.errorsInRange)}</b> crawl errors in this period{h.bing.crawl.errorsBefore != null ? `, against ${fmt(h.bing.crawl.errorsBefore)} the period before` : ''}.</> : 'Connect Bing Webmaster Tools to see how Bing crawls the site.'}</span>
           <span class="nx-go">Check each page →</span>
         </a>
       </div>
 
-      <button type="button" class="todo-link" aria-expanded={list} onClick={() => setList(!list)}>{list ? 'Hide the lists' : 'See every search as a list'}</button>
-      {list && <SearchHub site={site} range={range} part="details" />}
-      <p class="muted small m-0">Extra visits are an estimate from a usual click-rate curve, to rank searches, not a forecast.</p>
+      <p class="muted small m-0">Click a search for the full detail. Extra visits are an estimate from a usual click-rate curve, to rank searches, not a forecast.</p>
 
       {opened && <QueryPanel site={site} r={opened} eng={eng} onClose={() => { location.hash = hrefWith('q', '').slice(1); }} />}
     </div>
+  );
+}
+
+// Every search as one short list: what the ladder above leaves out (clicks,
+// each engine's rank, the move), with quick filters. A row opens the drawer.
+const LIST_FILTERS = [['all', 'All'], ['close', 'Close to the top 3'], ['down', 'Slipped'], ['bing', 'Missing on Bing'], ['new', 'New']];
+function SearchList({ rows, eng, both, titleOf, open, moveOf }) {
+  const [f, setF] = useState('all');
+  const [all, setAll] = useState(false);
+  const [as, setAs] = usePersistent('searchListAs', 'graph');
+  const test = {
+    all: () => true,
+    close: (r) => (r.s.k === 'p1' || r.s.k === 'p2') && r.s.gain > 0,
+    down: (r) => moveOf(r) === 'down',
+    bing: (r) => both && r.google && !r.bing,
+    new: (r) => r.pos != null && r.was == null,
+  };
+  const filters = LIST_FILTERS.map(([k, l]) => [k, l, rows.filter(test[k]).length]).filter(([k, , n]) => k === 'all' || n > 0);
+  const byClicks = (a, b) => clicksOf(b, eng) - clicksOf(a, eng) || seenOf(b, eng) - seenOf(a, eng);
+  const bySeen = (a, b) => seenOf(b, eng) - seenOf(a, eng) || clicksOf(b, eng) - clicksOf(a, eng);
+  const list = rows.filter(test[f] || test.all).sort(as === 'graph' ? bySeen : byClicks);
+  const shown = all ? list : list.slice(0, 15);
+  const showEngines = eng === 'both';
+  return (
+    <section class="nx-block" aria-label="Every search">
+      <div class="nx-slbar">
+        <div class="nx-chips" role="group" aria-label="Show">
+          {filters.map(([k, l, n]) => <button key={k} type="button" class={`nx-chip${f === k ? ' on' : ''}`} onClick={() => { setF(k); setAll(false); }}>{l} <span>{n}</span></button>)}
+        </div>
+        <Segmented label="Show as" value={as} options={[{ key: 'graph', label: 'Graph' }, { key: 'table', label: 'Table' }]} onChange={setAs} />
+      </div>
+      {as === 'graph' ? <SearchBars list={shown} eng={eng} titleOf={titleOf} open={open} more={list.length > 15 && <button type="button" class="todo-link nx-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${list.length}`}</button>} /> : (
+      <div class="card card-plain nx-tight">
+        <div class={`nx-srow nx-thead${showEngines ? '' : ' one'}`} aria-hidden="true"><span>Search</span><span class="nx-num">Clicks</span>{showEngines ? <><span class="nx-num">Google</span><span class="nx-num">Bing</span></> : <span class="nx-num">Rank</span>}<span class="nx-num">Move</span></div>
+        {shown.map((r) => {
+          const m = moveOf(r);
+          return (
+            <a key={r.key} class={`nx-srow${showEngines ? '' : ' one'}${open === r.key ? ' on' : ''}`} href={hrefWith('q', r.key)}>
+              <span class="nx-ob"><b>“{r.key}”</b><small class="muted">{r.page ? titleOf(r.page) : 'No page tied to it'}</small></span>
+              <span class="nx-num">{fmt(clicksOf(r, eng))}</span>
+              {showEngines ? <>
+                <span class="nx-num">{rank(r.google?.position)}</span>
+                <span class={`nx-num${both && r.google && !r.bing ? ' bad' : ''}`}>{rank(r.bing?.position)}</span>
+              </> : <span class="nx-num">{rank(r.pos)}</span>}
+              <span class={`nx-num ${m === 'up' ? 'good' : m === 'down' ? 'bad' : 'muted'}`}>{r.pos != null && r.was == null ? 'new' : m ? `${m === 'up' ? '↑' : '↓'} ${Math.round(Math.abs(r.was - r.pos))}` : '—'}</span>
+            </a>
+          );
+        })}
+        {list.length > 15 && <button type="button" class="todo-link nx-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${list.length}`}</button>}
+      </div>
+      )}
+    </section>
+  );
+}
+
+// The same searches as bars: how often each showed the site (the light bar) and
+// how many of those clicked (the dark part), with its rank at the end. Numbers on hover.
+function SearchBars({ list, eng, titleOf, open, more }) {
+  const max = Math.max(1, ...list.map((r) => seenOf(r, eng)));
+  return (
+    <div class="card card-plain nx-tight">
+      <p class="nx-sbkey muted small m-0"><i class="seen" /> Seen in results <i class="clicked" /> Clicked <span>· rank at the end</span></p>
+      {list.map((r) => {
+        const seen = seenOf(r, eng);
+        const clicks = clicksOf(r, eng);
+        const w = (seen / max) * 100;
+        return (
+          <a key={r.key} class={`nx-sb${open === r.key ? ' on' : ''}`} href={hrefWith('q', r.key)}>
+            <span class="nx-sbl"><b>“{r.key}”</b><small class="muted">{r.page ? titleOf(r.page) : 'No page tied to it'}</small></span>
+            <span class="nx-sbt">
+              <span class="nx-sbs" style={`width:${Math.max(0.5, w)}%`}><span class={`nx-sbc${clicks ? ' some' : ''}`} style={`width:${seen ? (clicks / seen) * 100 : 0}%`} /></span>
+              <span class="nx-sbr">{rank(r.pos)}</span>
+              <span class="nx-sbtip">Seen <b>{fmt(seen)}</b> times · <b>{fmt(clicks)}</b> click{clicks === 1 ? '' : 's'}{seen ? ` (${((clicks / seen) * 100).toFixed(1)}%)` : ''}{eng === 'both' ? ` · Google ${rank(r.google?.position)} · Bing ${rank(r.bing?.position)}` : ''}</span>
+            </span>
+          </a>
+        );
+      })}
+      {more}
+    </div>
+  );
+}
+
+// Gaps: the target searches in .sitelens.yml (search.topics[].targets) that
+// neither Google nor Bing shows the site for, sized by Bing's monthly volume.
+function Gaps({ site }) {
+  const topics = useAsync(() => api.get(`/sites/${site.id}/search-topics${qs({ range: '90d' })}`).catch(() => null), [site.id]);
+  const unseen = (topics.data?.topics || []).flatMap((t) => (t.targets || []).filter((x) => x.status === 'unseen').map((x) => ({ q: x.query, topic: t.name })));
+  const key = unseen.map((x) => x.q).join('|');
+  const vol = useAsync(async () => {
+    if (!unseen.length) return {};
+    const out = {};
+    for (let i = 0; i < unseen.length; i += 10) {
+      const r = await api.get(`/search/keywords${qs({ q: unseen.slice(i, i + 10).map((x) => x.q).join(',') })}`).catch(() => null);
+      for (const k of r?.keywords || []) out[k.keyword] = k.last4Weeks;
+    }
+    return out;
+  }, [key]);
+  if (!unseen.length) return null;
+  const v = vol.data || {};
+  const list = [...unseen].sort((a, b) => (v[b.q] || 0) - (v[a.q] || 0));
+  const max = Math.max(1, ...list.map((x) => v[x.q] || 0));
+  const size = (n) => (n ? 0.95 + 0.55 * Math.sqrt(n / max) : 0.95);
+  return (
+    <section class="nx-block" aria-label="Gaps">
+      <h2 class="nx-h2">Gaps <span class="muted small">· searches you aim for that nothing on your site shows up for{vol.data && Object.values(v).some(Boolean) ? ', sized by how often people search them' : ''}</span></h2>
+      <div class="nx-gaps">
+        {list.map((x) => (
+          <span key={x.q} class="nx-gap" style={`font-size:${size(v[x.q]).toFixed(2)}rem`} title={`${x.topic} · neither Google nor Bing shows ${site.label} for it yet${v[x.q] ? ` · about ${fmt(v[x.q])} Bing searches a month` : ''}`}>
+            “{x.q}”{v[x.q] ? <small>{fmt(v[x.q])}</small> : null}
+          </span>
+        ))}
+      </div>
+    </section>
   );
 }
 

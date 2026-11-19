@@ -150,6 +150,7 @@ test('syncAll: deltas and the past week of breakdowns for real sites only', asyn
     assert.deepEqual(google.calls.filter((c) => c.dims.includes(',')).map((c) => [c.dims, c.from, c.to]), [
       ['date,sessionSource', '2026-10-26', '2026-11-01'],
       ['date,landingPage', '2026-10-26', '2026-11-01'],
+      ['date,country', '2026-10-26', '2026-11-01'],
       ['date,query', '2026-10-26', '2026-11-01'],
     ]);
   } finally {

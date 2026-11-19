@@ -420,7 +420,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const out = [];
     for (let d = from; d <= to; d = addDays(d, 1)) {
       const day = demoDay(site.id, d);
-      const rows = dim === 'source' ? day.sources : dim === 'page' ? day.pages : day.queries.map((q) => ({ key: q.query, value: q.clicks }));
+      const rows = dim === 'source' ? day.sources : dim === 'page' ? day.pages : dim === 'country' ? day.countries || [] : day.queries.map((q) => ({ key: q.query, value: q.clicks }));
       out.push(...rows.map((r) => ({ date: d, key: r.key, value: r.value })));
     }
     return out;
@@ -441,7 +441,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
   async function siteDay(site, date, today, { detail }) {
     const days = monthDays(date.slice(0, 7));
     const from = addDays(days[0], -7 * WEEKS);
-    const out = { id: site.id, label: site.label, sessions: null, baseline: null, sources: [], pages: [], search: null };
+    const out = { id: site.id, label: site.label, sessions: null, baseline: null, sources: [], pages: [], countries: [], hours: null, search: null };
     try {
       const { ga, sc } = await siteSeries(site, from, days.at(-1) < today ? days.at(-1) : today);
       if (ga) {
@@ -452,10 +452,16 @@ export function createCalendar({ store, history, annotations, extensions = null,
         out.trend = [...Array(29)].map((_, i) => addDays(date, i - 28)).map((d) => ({ date: d, sessions: series.get(d) || 0 }));
         if (detail && out.sessions + (out.baseline || 0) > 0) {
           const before = (rows) => rows.reduce((a, r) => a + r.value, 0);
-          const [src, land] = await Promise.all([breakdown(site, date, 'source'), breakdown(site, date, 'page')]);
+          const [src, land, ctry, hrs] = await Promise.all([
+            breakdown(site, date, 'source'), breakdown(site, date, 'page'),
+            breakdown(site, date, 'country').catch(() => null),
+            site.demo ? null : history.hours(site, date).catch(() => null),
+          ]);
           const scale = (rows) => (before(rows) ? (out.baseline || 0) / before(rows) : 0);
           out.sources = shiftRows(src.current, src.previous, { key: (r) => sourceFamily(r.key), scale: scale(src.previous) });
           out.pages = shiftRows(land.current, land.previous, { scale: scale(land.previous) });
+          out.countries = ctry ? shiftRows(ctry.current, ctry.previous, { scale: scale(ctry.previous) }) : [];
+          out.hours = hrs;
         }
       }
       if (sc?.error) out.search = { error: sc.error };
@@ -608,7 +614,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
   // `key`: only that row (one page's days, for its own view).
   async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false, key: only = '' } = {}) {
-    if (!['source', 'page', 'query'].includes(by)) throw new ValidationError('by must be source, page or query.');
+    if (!['source', 'page', 'query', 'country'].includes(by)) throw new ValidationError('by must be source, page, query or country.');
     const r = span(from, to);
     const sc = await scope(site);
     const shift = Math.max(r.days, Math.min(366, Number(back) || 0));

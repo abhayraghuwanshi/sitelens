@@ -7,8 +7,7 @@ import { AddTodo } from '../components/Todos.jsx';
 import { Campaigns } from './Campaigns.jsx';
 import { family } from './Journeys.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
-import { Posts } from '../pages/Posts.jsx';
-import { Mentions } from '../pages/Mentions.jsx';
+import { Accounts, AddByUrl, LinkBuilder } from '../pages/Posts.jsx';
 
 // Traffic: where visits come from and whether they're worth it, as one page
 // (docs/redesign/README.md): the answer, the mix, the sources by kind, what you
@@ -86,7 +85,6 @@ export function TrafficView({ site, range, params }) {
   const top = kinds[0];
   const growing = kinds.filter((k) => k.previous && k.sessions >= 10).sort((a, b) => b.sessions / b.previous - a.sessions / a.previous)[0];
   const bestRate = avg ? kinds.filter((k) => k.sessions >= 20).sort((a, b) => b.keyEvents / b.sessions - a.keyEvents / a.sessions)[0] : null;
-  const tagged = (d.campaigns || []).slice(0, 5);
 
   if (!total) return <p class="nx-empty">No visits in this period yet.</p>;
   return (
@@ -147,50 +145,190 @@ export function TrafficView({ site, range, params }) {
         </div>
       </section>
 
-      {(tagged.length > 0 || d.ads?.linked) && (
-        <section class="nx-block" aria-label="Tagged links and ads">
-          <h2 class="nx-h2">Tagged links and ads <span class="muted small">· campaigns{d.ads?.linked ? ' and Google Ads' : ''}</span></h2>
-          <div class="card card-plain nx-tight">
-            {tagged.map((c) => {
-              const cc = change(c.sessions, c.previous);
-              return (
-                <div key={c.campaign} class="nx-orow">
-                  <span class="nx-hk"><Icon name="megaphone" size={14} /></span>
-                  <span class="nx-ob"><b>{c.campaign}</b><small class="muted">{c.parts?.slice(0, 2).map((p) => `${p.source} / ${p.medium}`).join(', ')}</small></span>
-                  <span class="nx-num">{fmt(c.sessions)}<small>visits</small></span>
-                  <span class={`nx-num ${cc.tone}`}>{cc.text}<small>change</small></span>
-                  <span class="nx-num">{fmt(c.keyEvents)}<small>key events</small></span>
-                </div>
-              );
-            })}
-            {d.ads?.linked && (d.ads.campaigns || []).slice(0, 3).map((a) => (
-              <div key={a.campaign} class="nx-orow">
-                <span class="nx-hk"><Icon name="target" size={14} /></span>
-                <span class="nx-ob"><b>{a.campaign}</b><small class="muted">Google Ads · ${fmt(a.cost)} spent</small></span>
-                <span class="nx-num">{fmt(a.sessions)}<small>visits</small></span>
-                <span class="nx-num">{a.keyEvents ? `$${fmt(a.cost / a.keyEvents)}` : '—'}<small>per key event</small></span>
-                <span class="nx-num">{fmt(a.keyEvents)}<small>key events</small></span>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-
-      <section class="nx-block" aria-label="What you put out">
-        <h2 class="nx-h2">What you put out <span class="muted small">· posts, newsletters and links, and what they brought</span></h2>
-        <Posts range={range} id={params.get('post') || undefined} />
-      </section>
-
-      <section class="nx-block" aria-label="Who talked about you">
-        <h2 class="nx-h2">Who talked about you <span class="muted small">· mentions elsewhere</span></h2>
-        <Mentions range={range} />
-      </section>
+      <PutOut site={site} host={host} range={range} campaigns={d.campaigns || []} ads={d.ads} open={params.get('post') || ''} />
+      <TalkedAbout site={site} range={range} />
 
       <button type="button" class="todo-link" aria-expanded={full} onClick={() => setFull(!full)}>{full ? 'Hide the full report' : 'Every campaign and source / medium, and the tagged-link builder'}</button>
       {full && <Campaigns site={site} range={range} />}
 
       {opened && <SourcePanel site={site} s={opened} avg={avg} total={total} campaigns={d.campaigns || []} onClose={() => { location.hash = hrefWith('src', '').slice(1); }} />}
     </div>
+  );
+}
+
+const day = (t) => new Date(t).toLocaleDateString('en-US', { day: 'numeric', month: 'short' });
+const hostOf = (u) => String(u || '').replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+
+// What you put out: your posts (newest first), then tagged links and ad
+// campaigns, as one short list. Managing accounts, adding posts and building
+// tagged links happen in the drawer (AddPanel).
+function PutOut({ site, host, range, campaigns, ads, open }) {
+  const data = useAsync(() => api.get(`/posts${qs({ range })}`), [range]);
+  const [all, setAll] = useState(false);
+  const d = data.data;
+  const mine = d?.products.find((p) => hostOf(p.url) === host);
+  const posts = (d?.items || []).filter((p) => !mine || p.product === mine.id);
+  const brought = posts.map((p) => p.sessions || 0).filter(Boolean).sort((x, y) => x - y);
+  const usual = brought.length >= 3 ? brought[Math.floor(brought.length / 2)] : 0;
+  const verdict = (n) => {
+    if (!n) return ['No visits measured', 'muted'];
+    if (!usual) return ['', ''];
+    const x = n / usual;
+    return x >= 1.8 ? [`${Math.round(x * 10) / 10}× a usual post`, 'good'] : x <= 0.55 ? ['Below a usual post', 'muted'] : ['About a usual post', ''];
+  };
+  const platform = (k) => d?.platforms.find((x) => x.key === k)?.label || k;
+  const rows = [
+    ...posts.map((p) => ({
+      key: p.id, id: p.id, when: day(p.createdAt), icon: 'megaphone',
+      title: p.title || p.link, sub: [platform(p.platform), p.community].filter(Boolean).join(' · '),
+      visits: p.sessions ? `${p.attribution === 'timing' ? '~' : ''}${fmt(p.sessions)}` : '—', v: verdict(p.sessions),
+    })),
+    ...campaigns.map((c) => ({
+      key: `c:${c.campaign}`, when: 'Link', icon: 'out', title: c.campaign,
+      sub: `Tagged link · ${c.parts?.slice(0, 2).map((x) => `${x.source} / ${x.medium}`).join(', ') || ''}`, visits: fmt(c.sessions),
+      v: c.keyEvents ? [`${fmt(c.keyEvents)} key event${c.keyEvents === 1 ? '' : 's'}`, 'good'] : ['No key events', 'muted'],
+    })),
+    ...(ads?.linked ? ads.campaigns || [] : []).map((a) => ({
+      key: `a:${a.campaign}`, when: 'Ad', icon: 'target', title: a.campaign, sub: `Google Ads · $${fmt(a.cost)} spent`, visits: fmt(a.sessions),
+      v: a.keyEvents ? [`$${fmt(a.cost / a.keyEvents)} per key event`, ''] : ['No key events', 'bad'],
+    })),
+  ];
+  const shown = all ? rows : rows.slice(0, 4);
+  const opened = open && posts.find((p) => p.id === open);
+  const [adding, setAdding] = useState(false);
+  return (
+    <section class="nx-block" aria-label="What you put out">
+      <h2 class="nx-h2">What you put out <span class="muted small">· posts, tagged links and ads, with what they brought in the 3 days after</span></h2>
+      <div class="card card-plain nx-tight">
+        {data.error ? <p class="muted small m-0">Couldn’t read your posts: {data.error.message}</p>
+          : !d ? <Loading height={120} />
+          : !rows.length ? <p class="muted small m-0">Nothing yet. Add your accounts and Kauzl picks up your posts and what they brought.</p>
+          : shown.map((r) => {
+            const cells = (
+              <>
+                <span class="muted small">{r.when}</span>
+                <span class="nx-hk"><Icon name={r.icon} size={14} /></span>
+                <span class="nx-ob"><b>{r.title}</b><small class="muted">{r.sub}</small></span>
+                <span class="nx-num">{r.visits}<small>visits</small></span>
+                <span class={`nx-ov ${r.v[1]}`}>{r.v[0]}</span>
+              </>
+            );
+            return r.id
+              ? <a key={r.key} class={`nx-orow nx-orow-out nx-oclick${open === r.id ? ' on' : ''}`} href={hrefWith('post', r.id)}>{cells}</a>
+              : <div key={r.key} class="nx-orow nx-orow-out">{cells}</div>;
+          })}
+        <div class="nx-cardfoot">
+          {rows.length > 4 ? <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${rows.length}`}</button> : <span />}
+          <button type="button" class="btn" onClick={() => setAdding(true)}><Icon name="plus" size={12} /> Add a post</button>
+        </div>
+      </div>
+      {adding && d && <AddPanel d={d} product={mine?.id || ''} onChanged={data.reload} onClose={() => setAdding(false)} />}
+      {opened && <PostPanel post={opened} platform={platform(opened.platform)} usual={usual} onClose={() => { location.hash = hrefWith('post', '').slice(1); }} />}
+    </section>
+  );
+}
+
+// Adding a post, making a tagged link, or naming your accounts: in the drawer,
+// so the Traffic page stays where it was.
+function AddPanel({ d, product, onChanged, onClose }) {
+  const [tab, setTab] = useState('add');
+  const tabs = [['add', 'Add a post'], ['link', 'Make a tagged link'], ['accounts', 'Your accounts']];
+  return (
+    <Drawer title="Add a post" onClose={onClose}>
+      <div class="tabs" role="tablist">
+        {tabs.map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={tab === k} class={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{label}</button>)}
+      </div>
+      {tab === 'add' && <>
+        <p class="muted small m-0">For LinkedIn, X, a blog or anything else Kauzl can’t read. Posts from your accounts come in by themselves.</p>
+        <AddByUrl bare products={d.products} product={product} onAdded={onChanged} />
+      </>}
+      {tab === 'link' && <>
+        <p class="muted small m-0">Share this instead of the bare address and the visits it brings are counted exactly.</p>
+        <LinkBuilder bare data={d} />
+      </>}
+      {tab === 'accounts' && <Accounts bare data={d} onSaved={onChanged} />}
+    </Drawer>
+  );
+}
+
+// One post in the drawer: what it brought, where those visits landed, the post itself.
+function PostPanel({ post, platform, usual, onClose }) {
+  const data = useAsync(() => api.get(`/posts/item${qs({ id: post.id })}`), [post.id]);
+  const d = data.data;
+  const w = d?.window;
+  const n = d?.sessions ?? post.sessions;
+  const approx = (d?.attribution || post.attribution) === 'timing';
+  return (
+    <Drawer title={<>{platform}{post.community ? <span class="muted"> · {post.community}</span> : null}</>} onClose={onClose}>
+      <h3 class="nx-post-t">{post.title}</h3>
+      <p class="nx-big">
+        {n ? <><b>{approx ? '~' : ''}{fmt(n)}</b> visits in the 3 days after {day(post.createdAt)}</> : <>No visits measured after {day(post.createdAt)}</>}
+        {usual && n ? <>, {n >= usual * 1.8 ? <span class="good">{Math.round((n / usual) * 10) / 10}× a usual post</span> : n <= usual * 0.55 ? 'below a usual post' : 'about a usual post'}</> : null}.
+        {w?.sessions ? <> {Math.round((w.engaged / w.sessions) * 100)}% stayed to read, {fmt(w.keyEvents)} reached a key event.</> : null}
+      </p>
+      {approx && n ? <p class="muted small m-0">~ means counted from timing: {platform} visits around the post. A tagged link gives exact numbers.</p> : null}
+      {data.error ? <p class="muted small">Couldn’t read the details: {data.error.message}</p> : !d ? <Loading height={100} /> : d.landing?.length > 0 && (
+        <div class="nx-drawer-sec">
+          <h3 class="nx-label-sm">Where they landed</h3>
+          <ul class="nx-plain-list">{d.landing.slice(0, 5).map((r) => <li key={r.label}><b>{r.label === '/' ? 'Home' : r.label}</b> <span class="muted">· {fmt(r.sessions)} visits</span></li>)}</ul>
+        </div>
+      )}
+      {d?.post?.text && (
+        <div class="nx-drawer-sec">
+          <h3 class="nx-label-sm">The post</h3>
+          <p class="nx-post-x">{d.post.text.slice(0, 360)}{d.post.text.length > 360 ? '…' : ''}</p>
+        </div>
+      )}
+      <div class="nx-btns">
+        <a class="btn" href={post.permalink} target="_blank" rel="noreferrer"><Icon name="external" size={13} /> Open on {platform}</a>
+      </div>
+    </Drawer>
+  );
+}
+
+// Who talked about you: mentions of this site elsewhere, newest first.
+function TalkedAbout({ site, range }) {
+  const data = useAsync(() => api.get(`/mentions${qs({ range })}`), [range]);
+  const [all, setAll] = useState(false);
+  const label = { hn: 'Hacker News', reddit: 'Reddit', ph: 'Product Hunt' };
+  const items = (data.data?.items || []).filter((m) => !m.scopes?.length || m.scopes.includes(`site:${site.id}`));
+  const shown = all ? items : items.slice(0, 3);
+  const [sync, setSync] = useState('');
+  async function syncNow() {
+    setSync('Syncing…');
+    try {
+      const r = await api.post('/mentions/sync');
+      const added = Object.values(r.added || {}).reduce((a, b) => a + b, 0);
+      setSync(added ? `${added} new` : 'Up to date');
+      data.reload();
+    } catch (err) {
+      setSync(err.message);
+    }
+  }
+  return (
+    <section class="nx-block" aria-label="Who talked about you">
+      <h2 class="nx-h2">Who talked about you <span class="muted small">· mentions elsewhere</span></h2>
+      <div class="card card-plain nx-tight">
+        {data.error ? <p class="muted small m-0">Couldn’t read mentions: {data.error.message}</p>
+          : !data.data ? <Loading height={90} />
+          : !items.length ? <p class="muted small m-0">No mentions in this period.</p>
+          : shown.map((m) => (
+            <div key={m.id} class="nx-orow nx-orow-out">
+              <span class="muted small">{day(m.createdAt)}</span>
+              <span class="nx-hk"><Icon name="chat" size={14} /></span>
+              <a class="nx-olink" href={m.permalink || m.url} target="_blank" rel="noreferrer"><span class="nx-ob"><b>{m.title}</b><small class="muted">{[label[m.source] || m.source, m.community, m.author].filter(Boolean).join(' · ')}</small></span></a>
+              {m.points ? <span class="nx-num">{fmt(m.points)}<small>points</small></span> : <span />}
+            </div>
+          ))}
+        <div class="nx-cardfoot">
+          {items.length > 3 ? <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${items.length}`}</button> : <span />}
+          <span class="row gap-6 items-center">
+            {sync && <span class="muted small">{sync}</span>}
+            <button type="button" class="todo-link" disabled={sync === 'Syncing…'} onClick={syncNow}>Sync now</button>
+          </span>
+        </div>
+      </div>
+    </section>
   );
 }
 

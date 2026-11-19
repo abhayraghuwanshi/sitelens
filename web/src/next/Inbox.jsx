@@ -217,7 +217,7 @@ function Row({ item, labels, site, on }) {
   const last = t.entries?.at(-1);
   return (
     <a class={`nx-msg${on ? ' on' : ''}${item.done ? ' read' : ''}`} href={hrefWith('open', item.id)}>
-      <span class="nx-k todo"><Icon name="check" size={14} /></span>
+      <span class="nx-k k-todo"><Icon name="check" size={14} /></span>
       <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}{t.title} <span class={`nx-pill ${tone}`}>{stage}</span></span>
       <small>{last ? `${agentOf(last).name} · ${day(last.at)}` : `To-do · added ${day(t.createdAt)}`}{t.entries?.length > 1 ? ` · ${t.entries.length} write-ups` : ''}</small>
     </a>
