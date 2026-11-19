@@ -4,7 +4,6 @@ import { Overview } from '../pages/Overview.jsx';
 import { PageReview } from '../pages/PageReview.jsx';
 import { Articles } from '../pages/Articles.jsx';
 import { ContentCycles } from '../pages/ContentCycles.jsx';
-import { SearchHub } from '../pages/SearchHub.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
 import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
@@ -17,6 +16,7 @@ import { CustomMetricsCard } from '../pages/CustomMetrics.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page, SectionTabs } from './Page.jsx';
 import { Campaigns } from './Campaigns.jsx';
+import { SearchView } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
 import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
@@ -32,7 +32,7 @@ const TABS = {
     health: { component: HealthTab, period: false },
   },
   search: {
-    queries: { mode: 'api', component: SearchTab },
+    queries: { mode: 'api', component: SearchView },
     ai: { mode: 'api', component: AiSearch },
   },
   traffic: {
@@ -150,10 +150,6 @@ function PagesTab({ site, range, params }) {
     return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages`; }} />;
   }
   return <div class="pages-one"><PageReview site={site} range={range} /></div>;
-}
-
-function SearchTab({ site, range }) {
-  return <SearchHub site={site} range={range} part="all" />;
 }
 
 // Uptime and speed for this site only.
