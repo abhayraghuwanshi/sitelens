@@ -29,6 +29,14 @@ npm run tools:dev        # build + serve at http://localhost:3000/tools/
 Code layout: `pages/*.mjs` holds each page's copy, FAQ and form; `assets/*.js` the
 browser code; `assets/lib/` the logic shared with `test/free-tools.test.js`.
 
+## SEO and GEO rules
+
+The build refuses to finish if a page breaks a rule in `tools/seo-rules.mjs`.
+That covers title and description length, one h1, canonical, link previews,
+structured data, answer-first guides, quotable FAQs, honest comparisons, and
+every page being in the sitemap and `llms.txt`. The error names the page, the
+rule and the fix. Read `docs/seo-rules.md` before writing a guide.
+
 ## Deploy
 
 ```sh

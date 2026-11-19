@@ -5,7 +5,7 @@ export default {
   order: 7,
   kicker: 'Measuring changes',
   short: 'Did a website change work?',
-  title: 'How to Tell if a Website Change Worked: Before/After Analysis in GA4 | Kauzl',
+  title: 'Did a Website Change Work? Before/After in GA4 | Kauzl',
   h1: 'How to tell if a website change actually worked',
   description: 'A before/after method for redesigns, pricing changes and launches: pick the metric, compare fair periods, rule out coincidences, test if it’s real.',
   blurb: 'A fair before/after method for redesigns, launches and pricing changes.',

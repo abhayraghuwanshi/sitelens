@@ -5,7 +5,7 @@ export default {
   order: 3,
   kicker: 'AI search',
   short: 'Track ChatGPT traffic in GA4',
-  title: 'How to Track ChatGPT and AI Traffic in Google Analytics 4 | Kauzl',
+  title: 'Track ChatGPT and AI Traffic in GA4 | Kauzl',
   h1: 'How to track ChatGPT and AI traffic in Google Analytics 4',
   description: 'See how many visitors ChatGPT, Perplexity, Claude and Gemini send you in GA4: where AI visits hide, a copy-paste regex, and why GA4 undercounts.',
   blurb: 'Where AI visits show up in GA4, a regex for an AI channel, and what GA4 still misses.',

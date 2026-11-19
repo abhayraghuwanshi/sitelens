@@ -5,7 +5,7 @@ export default {
   order: 6,
   kicker: 'Experiments',
   short: 'Statistical significance, explained',
-  title: 'What Does Statistically Significant Mean? A/B Testing in Plain English | Kauzl',
+  title: 'Statistical Significance in A/B Tests, Explained | Kauzl',
   h1: 'What does “statistically significant” mean in an A/B test?',
   description: 'Statistical significance without the maths degree: what 95% confidence means, a worked A/B example, and four mistakes that make fake winners.',
   blurb: 'p-values and 95% confidence in plain English, with a worked example and common traps.',
@@ -60,7 +60,7 @@ export default {
 `,
   faq: [
     ['What p-value is considered significant?', 'Below 0.05 is the common convention (95% confidence). Use 0.01 for expensive, hard-to-reverse decisions or when comparing many variants.'],
-    ['Is 90% confidence good enough?', 'It can be, if you test often and accept more false winners in exchange for faster decisions. Be consistent: pick the level before the test.'],
+    ['Is 90% confidence good enough?', '90% confidence can be enough if you test often and accept more false winners in exchange for faster decisions. Be consistent: pick the level before the test.'],
     ['How long should an A/B test run?', 'Until it reaches the sample size you planned, in whole weeks, usually at least one or two full weeks.'],
     ['What is statistical power?', 'The chance your test detects a real effect of the size you planned for. 80% is the common target.'],
   ],

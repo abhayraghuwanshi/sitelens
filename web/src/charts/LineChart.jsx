@@ -12,9 +12,13 @@ export { kindColor };
 // vertical markers at the matching entry of `dates` (aligned with labels;
 // 'YYYY-MM-DD', 'YYYYMMDD' or 'YYYYMMDDHH' — hourly charts mark the day's first hour).
 // onSelect (optional): called with the hovered index on click, e.g. to explain that day.
-export function LineChart({ series, labels, height = 240, format = String, area = true, tooltipTitle, annotations = [], dates = [], onSelect }) {
+// onRange (optional): called with (from, to) indexes when the pointer drags across
+// days; `selected` ([from, to]) shades a stretch that's open. With onSelect, the
+// chart takes focus and ← → move between days, Enter opens one.
+export function LineChart({ series, labels, height = 240, format = String, area = true, tooltipTitle, annotations = [], dates = [], onSelect, onRange, selected, hint }) {
   const [ref, width] = useElementWidth();
   const [hover, setHover] = useState(null);
+  const [drag, setDrag] = useState(null); // [start, current] while the pointer is down
   const pad = { top: 12, right: 12, bottom: 26, left: 44 };
   const w = Math.max(0, width - pad.left - pad.right);
   const h = height - pad.top - pad.bottom;
@@ -36,12 +40,39 @@ export function LineChart({ series, labels, height = 240, format = String, area 
   const line = (values) =>
     values.map((v, i) => (Number.isFinite(v) ? `${i === 0 || !Number.isFinite(values[i - 1]) ? 'M' : 'L'}${x(i).toFixed(1)},${y(v).toFixed(1)}` : '')).join('');
 
-  function onMove(event) {
+  const indexAt = (event) => {
     const rect = event.currentTarget.getBoundingClientRect();
     const px = event.clientX - rect.left - pad.left;
-    const i = Math.max(0, Math.min(n - 1, Math.round(n <= 1 ? 0 : (px / w) * (n - 1))));
+    return Math.max(0, Math.min(n - 1, Math.round(n <= 1 ? 0 : (px / w) * (n - 1))));
+  };
+  function onMove(event) {
+    const i = indexAt(event);
     setHover(i);
+    if (drag) setDrag([drag[0], i]);
   }
+  function onDown(event) {
+    if (!onRange || event.button > 0) return;
+    const i = indexAt(event);
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    setDrag([i, i]);
+  }
+  function onUp(event) {
+    const i = indexAt(event);
+    if (drag && onRange && drag[0] !== i) onRange(Math.min(drag[0], i), Math.max(drag[0], i));
+    else if (onSelect) onSelect(i);
+    setDrag(null);
+  }
+  function onKey(event) {
+    if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+      event.preventDefault();
+      setHover((h) => Math.max(0, Math.min(n - 1, h === null ? n - 1 : h + (event.key === 'ArrowLeft' ? -1 : 1))));
+    } else if (event.key === 'Enter' && hover !== null && onSelect) {
+      event.preventDefault();
+      onSelect(hover);
+    } else if (event.key === 'Escape') setHover(null);
+  }
+  const shade = drag && drag[0] !== drag[1] ? [Math.min(...drag), Math.max(...drag)] : !drag && selected ? selected : null;
+  const clickable = onSelect || onRange;
 
   const primary = series[0];
   const colorOf = (s, k) => s.color || (k === 0 ? 'var(--series-1)' : 'var(--series-muted)');
@@ -50,10 +81,13 @@ export function LineChart({ series, labels, height = 240, format = String, area 
   return (
     <div class="chart" ref={ref}>
       {width > 0 && (
-        <svg height={height} role="img" aria-label={`${primary?.label || 'Trend'} over time`}
-          onMouseMove={onMove} onMouseLeave={() => setHover(null)}
-          onClick={onSelect ? () => hover !== null && onSelect(hover) : undefined} style={onSelect ? { cursor: 'pointer' } : undefined}>
+        <svg height={height} role="img" aria-label={`${primary?.label || 'Trend'} over time${onSelect ? '. Left and right arrows move between days, Enter opens one.' : ''}`}
+          tabIndex={onSelect ? 0 : undefined} onKeyDown={onSelect ? onKey : undefined} onBlur={() => !drag && setHover(null)}
+          onPointerMove={onMove} onPointerLeave={() => !drag && setHover(null)}
+          onPointerDown={clickable ? onDown : undefined} onPointerUp={clickable ? onUp : undefined}
+          style={clickable ? { cursor: 'pointer', touchAction: onRange ? 'pan-y' : undefined, userSelect: 'none' } : undefined}>
           <g transform={`translate(${pad.left},${pad.top})`}>
+            {shade && n > 1 && <rect class="chart-sel" x={x(shade[0])} y={0} width={Math.max(1, x(shade[1]) - x(shade[0]))} height={h} fill="var(--series-1)" opacity="0.1" />}
             <g class="grid">
               {ticks.map((t) => (
                 <line key={t} x1={0} x2={w} y1={y(t)} y2={y(t)} stroke-dasharray={t === 0 ? undefined : '2 3'} class={t === 0 ? 'baseline' : ''} />
@@ -123,7 +157,7 @@ export function LineChart({ series, labels, height = 240, format = String, area 
               <span class="tt-key"><i style={{ background: kindColor(a.kind), borderRadius: '50%' }} />{a.label}</span>
             </div>
           ))}
-          {onSelect && <div class="tt-hint">Click to see what happened</div>}
+          {onSelect && <div class="tt-hint">{hint || 'Click to see what happened'}</div>}
         </div>
       )}
       {series.length > 1 && (

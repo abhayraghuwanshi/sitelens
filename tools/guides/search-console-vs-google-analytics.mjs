@@ -5,7 +5,7 @@ export default {
   order: 5,
   kicker: 'Search',
   short: 'Search Console vs Google Analytics',
-  title: 'Search Console vs Google Analytics: Why Clicks and Sessions Don’t Match | Kauzl',
+  title: 'Search Console vs Google Analytics: Why They Differ | Kauzl',
   h1: 'Search Console vs Google Analytics: why the numbers never match',
   description: 'Search Console clicks and GA4 organic sessions never match. The eight reasons, how to compare them fairly, and which to trust for what.',
   blurb: 'Eight reasons GSC clicks and GA4 sessions differ, and how to compare them fairly.',

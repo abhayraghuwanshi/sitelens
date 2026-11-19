@@ -4,7 +4,7 @@ export default {
   order: 2,
   kicker: 'Google Analytics 4',
   short: 'Set up Google Analytics 4',
-  title: 'How to Set Up Google Analytics 4: Tracking Setup Step by Step | Kauzl',
+  title: 'How to Set Up Google Analytics 4, Step by Step | Kauzl',
   h1: 'How to set up Google Analytics 4, step by step',
   description: 'A plain-English GA4 setup: create the property, install and test the tag, keep 14 months of data, filter your visits, link Search Console.',
   blurb: 'Create the property, install the tag, and the five settings most sites forget.',

@@ -93,7 +93,8 @@ input:hover, textarea:hover, select:hover { border-color: var(--before); }
 input:focus, textarea:focus, select:focus { outline: none; background: var(--surface); border-color: var(--amber); box-shadow: 0 0 0 3px color-mix(in srgb, var(--amber) 28%, transparent); }
 input[type=checkbox] { accent-color: var(--amber); width: 17px; height: 17px; }
 .row { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
-.check { display: flex; gap: 9px; align-items: center; font-size: 14px; margin: 6px 0; }
+.check { display: flex; gap: 9px; align-items: flex-start; font-size: 14px; margin: 6px 0; }
+.check input[type=checkbox] { flex: none; margin: 3px 0 0; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; font: 600 14px var(--font); min-height: 40px; padding: 8px 16px; border-radius: 10px; border: 1px solid var(--line); background: var(--surface); color: var(--text); cursor: pointer; text-decoration: none; transition: transform .1s, border-color .15s, filter .15s; }
 .btn:hover { border-color: var(--before); }
 .btn:active { transform: translateY(1px); }
@@ -192,7 +193,7 @@ svg.series text { fill: var(--muted); font: 600 11px var(--font); }
 .content p, .content li { color: var(--text-2); }
 .content li { margin-bottom: 6px; }
 .content li::marker { color: var(--amber); }
-.content code, .panel code, .hint code { font-family: var(--mono); font-size: .88em; background: var(--sunk); padding: 1px 5px; border-radius: 5px; }
+.content code, .panel code, .hint code { font-family: var(--mono); font-size: .88em; background: var(--sunk); padding: 1px 5px; border-radius: 5px; overflow-wrap: anywhere; }
 .faq details { border-bottom: 1px solid var(--line); padding: 14px 0; }
 .faq summary { font-weight: 600; cursor: pointer; list-style: none; display: flex; justify-content: space-between; gap: 16px; }
 .faq summary::-webkit-details-marker { display: none; }
@@ -268,12 +269,12 @@ footer.foot .small { grid-column: 1 / -1; margin: 0; font-size: 13px; }
 .col .col-sub { margin: 2px 0 12px; font-size: 14px; color: var(--muted); }
 .col ul { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
 .col li { border-bottom: 1px solid var(--line); }
-.row { display: flex; gap: 12px; align-items: flex-start; padding: 14px 6px; text-decoration: none; color: var(--text); border-radius: 10px; transition: background .15s; }
-.row:hover { background: var(--surface); }
-.row .ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--label); background: var(--amber-soft); }
-.row .ic svg { width: 18px; height: 18px; }
-.row b { display: block; font-size: 15px; font-weight: 600; } .row:hover b { color: var(--link); }
-.row small { display: block; font-size: 13px; line-height: 1.45; color: var(--muted); margin-top: 2px; }
+.col .row { display: flex; gap: 12px; align-items: flex-start; padding: 14px 6px; text-decoration: none; color: var(--text); border-radius: 10px; transition: background .15s; }
+.col .row:hover { background: var(--surface); }
+.col .row .ic { flex: none; width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center; color: var(--label); background: var(--amber-soft); }
+.col .row .ic svg { width: 18px; height: 18px; }
+.col .row b { display: block; font-size: 15px; font-weight: 600; } .col .row:hover b { color: var(--link); }
+.col .row small { display: block; font-size: 13px; line-height: 1.45; color: var(--muted); margin-top: 2px; }
 @media (max-width: 900px) { .features, .cols { grid-template-columns: minmax(0, 1fr); } .cols { gap: 28px; } }
 .tile.guide .kick { font-size: 12px; font-weight: 600; letter-spacing: .05em; text-transform: uppercase; color: var(--label); }
 .tile.guide h3 { margin-top: 8px; }
@@ -286,7 +287,7 @@ footer.foot .small { grid-column: 1 / -1; margin: 0; font-size: 13px; }
   .band-in { grid-template-columns: minmax(0, 1fr); }
   .perch { position: absolute; right: 0; top: 6px; padding: 0; }
   .perch .hero-owl { width: 64px; height: 64px; }
-  .perch .branch { width: 84px; height: 5px; margin-top: -3px; }
+  .perch .branch, .band.home .perch .branch { width: 84px; height: 5px; margin-top: -3px; }
   .band .crumbs, .band .eyebrow { padding-right: 90px; }
   .band { padding-bottom: 84px; }
   .cta { grid-template-columns: minmax(0, 1fr); padding: 28px; }

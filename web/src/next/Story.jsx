@@ -1,27 +1,43 @@
+import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
 import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
+import { CommentBody } from '../components/ClaudeComments.jsx';
 import { Page } from './Page.jsx';
+import { Drawer, hrefWith } from './Drawer.jsx';
+import { DayPanel, usualOf } from './Timeline.jsx';
 import { LeftOutLine } from './LeaveOut.jsx';
-import { useJourneys } from './Journeys.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
 import { Marked } from '../components/Marks.jsx';
 
 // Yesterday is one whole day, set against the same weekday a week before.
 const weekday = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'long', timeZone: 'UTC' });
 
-// One site's period as a story: what's failing, what happened, who brought the
-// visits, where they landed, and what to do next. Each part is one sentence and
-// a short list; "Explore" opens the full report behind it.
+// One site's period as a story: ask Claude, what's waiting on you, what happened
+// (a sentence and the days, each one opening beside the page), who brought the
+// visits, what it led to and what to do next.
 const RANGES = [{ key: 'today', label: 'Today' }, { key: 'yesterday', label: 'Yesterday' }, { key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const short = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+const long = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+const DAY = 86_400_000;
+const addD = (d, n) => new Date(Date.parse(`${d}T00:00:00Z`) + n * DAY).toISOString().slice(0, 10);
+const pct = (c) => (c === null || !Number.isFinite(c) ? '—' : `${c >= 0 ? '+' : '−'}${Math.round(Math.abs(c) * 100)}%`);
 const KIND_ICON = { deploy: 'rocket', release: 'github', post: 'megaphone', extension: 'puzzle', mention: 'chat', note: 'star', claude: 'sparkles' };
 
-export function Story({ site, params }) {
-  const [saved, setSaved] = usePersistent('storyRange', '28d');
+// The address with some params changed ('' removes one), for this Story.
+const storyHref = (site, params, patch) => {
+  const p = new URLSearchParams(params);
+  for (const [k, v] of Object.entries(patch)) (v ? p.set(k, v) : p.delete(k));
+  const q = p.toString();
+  return `#/site/${site.id}${q ? `?${q}` : ''}`;
+};
+
+export function Story({ site, params, waiting }) {
+  // One period for the whole app: the Story and the reports share it.
+  const [saved, setSaved] = usePersistent('range', '28d');
   const wanted = params.get('range') || saved;
   const range = RANGES.some((r) => r.key === wanted) ? wanted : '28d';
   const pick = (key) => {
@@ -34,28 +50,119 @@ export function Story({ site, params }) {
   const story = useAsync(() => (isToday ? null : api.get(`/sites/${site.id}/story${qs({ range })}`)), [site.id, range]);
   const r = story.data?.range;
   const span = r ? { site: site.id, from: r.from, to: r.to } : null;
-  const metrics = useAsync(() => (span ? api.get(`/calendar/metrics${qs(span)}`) : null), [span?.from, span?.to, site.id]);
+  // A few weeks before the period too: a usual weekday, and the days before a dragged stretch.
+  const metrics = useAsync(() => (span ? api.get(`/calendar/metrics${qs({ ...span, from: addD(span.from, -Math.max(28, daysIn(span))) })}`) : null), [span?.from, span?.to, site.id]);
   const sources = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'source', limit: 6, back })}`) : null), [span?.from, span?.to, site.id]);
-  const pages = useAsync(() => (span ? api.get(`/calendar/breakdown${qs({ ...span, by: 'page', limit: 5, back })}`) : null), [span?.from, span?.to, site.id]);
   const marks = useAsync(() => (span ? api.get(`/annotations${qs({ from: span.from, to: span.to, scope: `site:${site.id}` })}`) : null), [span?.from, span?.to, site.id]);
 
   return (
     <Page title={site.label}
       sub={isToday ? 'Today so far, against a usual day like it' : r && back ? `${weekday(r.from)} ${short(r.from)}, against the ${weekday(r.from)} before` : r ? `${short(r.from)} – ${short(r.to)}, against the ${range.replace('d', '')} days before · whole days only` : site.host}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
-      <NeedsYou site={site} />
+      <Ask site={site} span={span} />
+      <Waiting site={site} waiting={waiting} />
+      <SetupNote site={site} />
       {!isToday && <LeftOutLine site={site} range={range} />}
       {isToday ? <><Today site={site} onYesterday={() => pick('yesterday')} /><NextSteps site={site} range="7d" /></> : story.error ? <ErrorState error={story.error} onRetry={story.reload} /> : !story.data ? <Loading height={260} /> : (
         <>
-          <Traffic site={site} story={story.data} metrics={metrics.data} marks={marks.data?.annotations || []} />
+          <Traffic site={site} params={params} story={story.data} span={span} metrics={metrics.data} marks={marks.data?.annotations || []} />
           <Sources site={site} rows={sources.data?.rows} changes={story.data.changes} range={range} />
-          {site.modes?.warehouse ? <HowTheyCome site={site} range={range} /> : <Landing site={site} rows={pages.data?.rows} range={range} />}
-          {site.modes?.warehouse && <Leavers site={site} range={range} />}
-          <Results site={site} range={range} />
+          <Results site={site} range={range} n="" />
           <NextSteps site={site} range={range} />
         </>
       )}
     </Page>
+  );
+}
+
+const daysIn = (span) => Math.round((Date.parse(span.to) - Date.parse(span.from)) / DAY) + 1;
+
+// Ask Claude: a question about this site, answered on the page by the analyst
+// (the same tools the MCP server gives Claude Code). The answer is also kept as a
+// Claude note on the day it's about, so it shows on the Timeline.
+const ASKS = ['Why did visits change in this period?', 'Which page should I improve next?', 'Is traffic from AI tools worth it?'];
+
+function Ask({ site, span }) {
+  const status = useAsync(() => api.get('/claude/status').catch(() => null), []);
+  const [q, setQ] = useState('');
+  const [state, setState] = useState(null); // { q, busy } | { q, answer } | { q, error }
+  const hasKey = Boolean(status.data?.source);
+  const today = new Date().toISOString().slice(0, 10);
+  const from = span?.from || addD(today, -28);
+  const to = span?.to || addD(today, -1);
+
+  async function ask(question) {
+    const text = question.trim();
+    if (!text || state?.busy) return;
+    setState({ q: text, busy: true });
+    try {
+      const out = await api.post(`/sites/${site.id}/claude/analyze`, { from, to, question: text });
+      setState({ q: text, answer: out.comment });
+      setQ('');
+    } catch (err) {
+      setState({ q: text, error: err.hint ? `${err.message} ${err.hint}` : err.message });
+    }
+  }
+
+  return (
+    <section class="card card-plain nx-ask" aria-label="Ask Claude">
+      <form class="nx-askin" onSubmit={(e) => { e.preventDefault(); ask(q); }}>
+        <Icon name="chat" size={16} />
+        <label class="sr-only" for="nx-ask-q">Ask Claude about {site.label}</label>
+        <input id="nx-ask-q" type="text" maxLength={500} value={q} disabled={!hasKey || state?.busy}
+          placeholder={`Ask anything about ${site.label}…`} onInput={(e) => setQ(e.currentTarget.value)} />
+        {hasKey && q.trim() && <button type="submit" class="btn primary" disabled={state?.busy}>Ask</button>}
+        {state && !state.busy && <button type="button" class="nx-link" onClick={() => setState(null)}>Clear</button>}
+      </form>
+      {!status.data ? null : !hasKey ? (
+        <p class="muted small m-0">Claude answers here using the Anthropic key saved for AI answer checks. <a href="#/account?i=anthropic">Add a key</a></p>
+      ) : state?.busy ? (
+        <p class="nx-ask-answer"><b>{state.q}</b><span class="muted"> Claude is reading your numbers. This usually takes 20–60 seconds.</span></p>
+      ) : state?.error ? (
+        <p class="nx-ask-answer"><b>{state.q}</b> <span class="bad">{state.error}</span></p>
+      ) : state?.answer ? (
+        <div class="nx-ask-answer">
+          <b>{state.answer.label}</b>
+          {state.answer.body && <CommentBody text={state.answer.body} />}
+          <a class="muted small" href={`#/site/${site.id}/timeline?month=${state.answer.date.slice(0, 7)}&day=${state.answer.date}`}>Kept as a Claude note on {short(state.answer.date)} →</a>
+        </div>
+      ) : (
+        <div class="nx-chips">
+          {ASKS.map((x) => <button key={x} type="button" class="nx-chip" onClick={() => ask(x)}>{x}</button>)}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// One line for everything waiting on you here: alerts, to-dos and goals behind.
+function Waiting({ site, waiting }) {
+  if (!waiting) return null;
+  const n = waiting.alerts + waiting.todos + waiting.goals;
+  if (!n) return null;
+  const parts = [
+    waiting.alerts && `${waiting.alerts} alert${waiting.alerts === 1 ? '' : 's'}`,
+    waiting.todos && `${waiting.todos} to-do${waiting.todos === 1 ? '' : 's'}`,
+    waiting.goals && `${waiting.goals} goal${waiting.goals === 1 ? '' : 's'} behind`,
+  ].filter(Boolean);
+  return (
+    <a class="nx-needs" href={`#/site/${site.id}/inbox`}>
+      <Icon name="inbox" size={16} />
+      <span><b>{n} waiting on you</b> · {parts.join(', ')}</span>
+      <span class="nx-needs-go">Inbox →</span>
+    </a>
+  );
+}
+
+// Setup that stops a part of the story from being told (not an alert, so not in the Inbox).
+function SetupNote({ site }) {
+  const ai = useAsync(() => api.get(`/ai-search/sites/${site.id}/checks`).catch(() => null), [site.id]);
+  if (!ai.data || ai.data.lastRun || !ai.data.prompts?.length) return null;
+  return (
+    <a class="nx-callout" href={`#/site/${site.id}/search?tab=ai`}>
+      <Icon name="triangle" size={14} />
+      <span><b>AI answer checks have never run.</b> {ai.data.prompts.length} questions are set up{ai.data.keySource ? '' : ' but no Anthropic key is set'}, so Kauzl can’t say whether assistants name you.</span>
+    </a>
   );
 }
 
@@ -86,7 +193,7 @@ function Today({ site, onYesterday }) {
 
   return (
     <section class="card card-plain" aria-label="Today">
-      <SectionHead n="1" title="Today so far" more={{ href: `#/site/${site.id}/pages?range=today`, label: 'Today’s pages' }} />
+      <SectionHead title="Today so far" more={{ href: `#/site/${site.id}/pages?range=today`, label: 'Today’s pages' }} />
       <p class="nx-headline">{headline}</p>
       <p class="nx-lede">
         {Math.round((now.engagementRate || 0) * 100)}% engaged.
@@ -122,80 +229,177 @@ function Today({ site, onYesterday }) {
   );
 }
 
-// Shown only while something is wrong: this site's unread alerts, and setup that
-// stops a part of the story from being told.
-function NeedsYou({ site }) {
-  const alerts = useAsync(() => api.get('/alerts?limit=100'), []);
-  const ai = useAsync(() => api.get(`/ai-search/sites/${site.id}/checks`).catch(() => null), [site.id]);
-  const weekAgo = Date.now() - 7 * 86_400_000;
-  const items = (alerts.data?.alerts || [])
-    .filter((a) => !a.read && a.at >= weekAgo && a.subject?.type === 'site' && a.subject.id === site.id)
-    .slice(0, 4)
-    .map((a) => ({ key: a.id, title: a.title, detail: a.detail, href: a.link }));
-  if (ai.data && !ai.data.lastRun && ai.data.prompts?.length) {
-    items.push({ key: 'ai', title: 'AI answer checks have never run.', detail: `${ai.data.prompts.length} questions are set up${ai.data.keySource ? '' : ' but no Anthropic key is set'}, so Kauzl can’t say whether assistants name you.`, href: `#/site/${site.id}/ai` });
-  }
-  if (!items.length) return null;
+// What happened: the period in a sentence, then the days. Hover reads a day,
+// click opens it beside the page, drag across days sums them against the days
+// before; Table shows every number, sortable, with Copy as CSV.
+function Traffic({ site, params, story, span, metrics, marks }) {
+  const [mode, setMode] = usePersistent('story-chart', 'chart');
+  const all = metrics?.days || [];
+  const map = new Map(all.map((d) => [d.date, d]));
+  const days = all.filter((d) => d.date >= span.from && d.date <= span.to);
+  const traffic = story.metric === 'sessions';
+  const key = traffic ? 'sessions' : 'clicks';
+  const usual = (d, k = key) => usualOf(map, d, k);
+  const go = (patch) => { location.hash = storyHref(site, params, patch); };
+  const open = params.get('day') || '';
+  const [selA, selB] = (params.get('sel') || '').split('~');
+  const sel = selA && selB && days.some((d) => d.date === selA) ? [days.findIndex((d) => d.date === selA), days.findIndex((d) => d.date === selB)] : null;
+  const lead = story.changes[0];
+  const ctx = { map, usual, last: span.to, L: null, lens: 'change', go, today: new Date().toISOString().slice(0, 10) };
+  const marksOn = (date) => marks.filter((m) => m.date === date);
+
   return (
-    <section class="card card-plain nx-warn" aria-label="Needs you">
-      <h2 class="nx-h2"><Icon name="triangle" size={16} /> {items.length === 1 ? '1 thing needs you' : `${items.length} things need you`}</h2>
-      <ul class="nx-list">
-        {items.map((i) => (
-          <li key={i.key}><a href={i.href}><b>{i.title}</b> <span class="muted">{i.detail}</span></a></li>
-        ))}
-      </ul>
+    <section class="card card-plain" aria-label="What happened">
+      <SectionHead title="What happened" more={{ href: `#/site/${site.id}/timeline`, label: 'Timeline' }} />
+      <p class={`nx-headline tone-${story.tone}`}>{story.headline}</p>
+      {lead && (
+        <p class="nx-lede">
+          <a href={`#/site/${site.id}/${lead.kind === 'query' ? 'search' : lead.kind === 'source' ? 'traffic' : 'pages'}`}>{lead.text}</a>
+          {lead.cause && <> <Cause e={lead.cause} lead="Around then" /></>}
+        </p>
+      )}
+      {days.length > 1 && (
+        <>
+          <div class="nx-chhead">
+            <span class="nx-label-sm">{traffic ? 'Visits each day' : 'Search clicks each day'}{traffic && <span class="muted"> · dashed is a usual day</span>}</span>
+            <span class="tl-seg small" role="group" aria-label="Show as">
+              {[['chart', 'Chart'], ['table', 'Table']].map(([k, l]) => (
+                <button key={k} type="button" class={mode === k ? 'on' : ''} aria-pressed={mode === k} onClick={() => setMode(k)}>{l}</button>
+              ))}
+            </span>
+          </div>
+          {mode === 'table' ? <DayTable site={site} days={days} usual={usual} marksOn={marksOn} onOpen={(date) => go({ day: date, sel: '' })} /> : (
+            <>
+              <LineChart height={200}
+                labels={days.map((d) => short(d.date))} dates={days.map((d) => d.date)}
+                tooltipTitle={(i) => long(days[i].date)}
+                series={traffic
+                  ? [{ label: 'Visits', values: days.map((d) => d.sessions ?? NaN) }, { label: 'A usual day', values: days.map((d) => usual(d.date) ?? NaN) }]
+                  : [{ label: 'Search clicks', values: days.map((d) => d.clicks ?? NaN) }]}
+                annotations={marks} selected={sel}
+                hint="Click to open this day"
+                onSelect={(i) => go({ day: days[i].date, sel: '' })}
+                onRange={(a, b) => go({ sel: `${days[a].date}~${days[b].date}`, day: '' })} />
+              <p class="muted small m-0">Hover to read a day · click to open it · drag across days to sum them up · ← → keys work too</p>
+            </>
+          )}
+        </>
+      )}
+      {open && (
+        <Drawer title="Day" onClose={() => go({ day: '' })}>
+          <DayPanel scope={site.id} date={open} ctx={ctx} />
+        </Drawer>
+      )}
+      {sel && (
+        <Drawer title={`${short(selA)} – ${short(selB)} · ${sel[1] - sel[0] + 1} days`} onClose={() => go({ sel: '' })}>
+          <StretchPanel site={site} from={selA} to={selB} map={map} marks={marks.filter((m) => m.date >= selA && m.date <= selB)} onDay={(date) => go({ day: date, sel: '' })} />
+        </Drawer>
+      )}
     </section>
   );
 }
 
-function Traffic({ site, story, metrics, marks }) {
-  const days = metrics?.days || [];
-  const traffic = story.metric === 'sessions';
+// Every day of the period as a row: sortable, each row opens its day.
+const TABLE_COLS = [['date', 'Day'], ['sessions', 'Visits'], ['chg', 'vs usual'], ['clicks', 'Search clicks'], ['marks', 'What happened']];
+
+function DayTable({ days, usual, marksOn, onOpen }) {
+  const [sort, setSort] = useState(['date', 'desc']);
+  const [copied, setCopied] = useState(false);
+  const rows = days.map((d) => {
+    const u = usual(d.date, 'sessions');
+    return { date: d.date, sessions: d.sessions, chg: Number.isFinite(d.sessions) && u ? d.sessions / u - 1 : null, clicks: d.clicks, marks: marksOn(d.date).map((m) => m.label).join(', ') };
+  });
+  const [sk, sd] = sort;
+  rows.sort((a, b) => {
+    const x = a[sk] ?? -Infinity, y = b[sk] ?? -Infinity;
+    return (x > y ? 1 : x < y ? -1 : 0) * (sd === 'asc' ? 1 : -1);
+  });
+  const by = (k) => setSort(([k0, d0]) => [k, k0 === k && d0 === 'desc' ? 'asc' : 'desc']);
+  const num = (v) => (v === null || v === undefined || !Number.isFinite(v) ? '' : String(v));
+  async function copy() {
+    const csv = [TABLE_COLS.map(([, l]) => l).join(','), ...rows.map((r) => [r.date, num(r.sessions), r.chg === null ? '' : (r.chg * 100).toFixed(0) + '%', num(r.clicks), `"${r.marks.replaceAll('"', '""')}"`].join(','))].join('\n');
+    try { await navigator.clipboard.writeText(csv); setCopied(true); setTimeout(() => setCopied(false), 1600); } catch { /* clipboard refused */ }
+  }
   return (
-    <section class="card card-plain" aria-label="Traffic">
-      <SectionHead n="1" title="What happened" more={{ href: `#/site/${site.id}/timeline`, label: 'Timeline' }} />
-      <p class={`nx-headline tone-${story.tone}`}>{story.headline}</p>
-      {days.length > 1 && (
-        <LineChart height={200}
-          labels={days.map((d) => short(d.date))} dates={days.map((d) => d.date)}
-          series={traffic
-            ? [{ label: 'Visits', values: days.map((d) => d.sessions ?? NaN) }, { label: 'A usual day', values: days.map((d) => d.baseline ?? NaN) }]
-            : [{ label: 'Search clicks', values: days.map((d) => d.clicks ?? NaN) }]}
-          annotations={marks}
-          onSelect={(i) => { location.hash = `/site/${site.id}/timeline?month=${days[i].date.slice(0, 7)}&day=${days[i].date}`; }} />
-      )}
-      <div class="nx-cols">
-        <div>
-          <div class="nx-label-sm">What moved it</div>
-          {story.changes.length ? (
-            <ul class="nx-list">
-              {story.changes.map((c) => (
-                <li key={c.kind + c.key}>
-                  <a href={`#/site/${site.id}/${c.kind === 'query' ? 'search' : 'pages'}`}>{c.text}</a>
-                  {c.cause && <Cause e={c.cause} lead="Around then" />}
-                </li>
-              ))}
-            </ul>
-          ) : <p class="muted">No single source or page moved much.</p>}
-        </div>
-        <div>
-          <div class="nx-label-sm">{days.length === 1 ? `Against a usual ${days[0].weekday}` : 'Days that stood out'}</div>
-          {days.length === 1 ? (
-            <p class="nx-lede">{usualDay(days[0])}</p>
-          ) : story.days.length ? (
-            <ul class="nx-list">
-              {story.days.map((d) => (
-                <li key={d.date}>
-                  <a href={`#/site/${site.id}/timeline?month=${d.date.slice(0, 7)}&day=${d.date}`}>{d.text}</a>
-                  {d.events.map((e) => <Cause key={e.label + e.date} e={e} lead={e.date === d.date ? 'Same day' : 'Day before'} />)}
-                  {!d.events.length && <span class="nx-cause muted">Nothing you shipped around then.</span>}
-                </li>
-              ))}
-            </ul>
-          ) : <p class="muted">Every day was close to a usual one for its weekday.</p>}
+    <>
+      <div class="nx-dtable-wrap">
+        <table class="nx-dtable">
+          <thead><tr>{TABLE_COLS.map(([k, l]) => (
+            <th key={k} class={k !== 'date' && k !== 'marks' ? 'num' : ''} aria-sort={sk === k ? (sd === 'asc' ? 'ascending' : 'descending') : undefined}>
+              <button type="button" onClick={() => by(k)}>{l}{sk === k ? (sd === 'asc' ? ' ↑' : ' ↓') : ''}</button>
+            </th>
+          ))}</tr></thead>
+          <tbody>{rows.map((r) => (
+            <tr key={r.date} tabIndex={0} onClick={() => onOpen(r.date)} onKeyDown={(e) => e.key === 'Enter' && onOpen(r.date)}>
+              <td>{long(r.date)}</td>
+              <td class="num">{Number.isFinite(r.sessions) ? fmt(r.sessions) : '—'}</td>
+              <td class={`num ${r.chg === null ? 'muted' : r.chg >= 0 ? 'good' : 'bad'}`}>{pct(r.chg)}</td>
+              <td class="num">{Number.isFinite(r.clicks) ? fmt(r.clicks) : '—'}</td>
+              <td class="nx-dtable-mk">{r.marks || <span class="muted">—</span>}</td>
+            </tr>
+          ))}</tbody>
+        </table>
+      </div>
+      <div class="nx-chhead">
+        <span class="muted small">Click a row to open that day. Click a heading to sort.</span>
+        <button type="button" class="nx-chip" onClick={copy}>{copied ? 'Copied' : 'Copy as CSV'}</button>
+      </div>
+    </>
+  );
+}
+
+// A dragged stretch of days: its totals against as many days before it, the
+// sources and pages that changed most, and what happened in it.
+const STRETCH = [['sessions', 'Visits'], ['users', 'People'], ['views', 'Page views'], ['clicks', 'Search clicks']];
+
+function StretchPanel({ site, from, to, map, marks, onDay }) {
+  const n = Math.round((Date.parse(to) - Date.parse(from)) / DAY) + 1;
+  const span = { site: site.id, from, to };
+  const sources = useAsync(() => api.get(`/calendar/breakdown${qs({ ...span, by: 'source', limit: 12 })}`), [site.id, from, to]);
+  const pages = useAsync(() => api.get(`/calendar/breakdown${qs({ ...span, by: 'page', limit: 12 })}`), [site.id, from, to]);
+  const sum = (a, b, k) => {
+    let t = 0, any = false;
+    for (let d = a; d <= b; d = addD(d, 1)) { const v = map.get(d)?.[k]; if (Number.isFinite(v)) { t += v; any = true; } }
+    return any ? t : null;
+  };
+  const moved = (rows) => (rows || []).map((r) => ({ ...r, d: r.value - (r.previous || 0) })).sort((a, b) => Math.abs(b.d) - Math.abs(a.d)).slice(0, 3);
+  const List = ({ title, q, name }) => (
+    <div class="tl-sec">
+      <h3 class="nx-label-sm">{title}</h3>
+      {q.error ? <ErrorState error={q.error} onRetry={q.reload} /> : !q.data ? <Loading height={80} /> : moved(q.data.rows).map((r) => (
+        <div key={r.key} class="tl-num"><span>{name(r.key)}</span><b>{fmt(r.value)}</b><span class="muted">{fmt(r.previous)}</span><span class={r.d >= 0 ? 'good' : 'bad'}>{r.d >= 0 ? '+' : '−'}{fmt(Math.abs(r.d))}</span></div>
+      ))}
+    </div>
+  );
+  return (
+    <div class="tl-in">
+      <div class="tl-sec">
+        <h3 class="nx-label-sm">Against the {n} days before</h3>
+        <div class="tl-nums">
+          {STRETCH.map(([k, l]) => {
+            const v = sum(from, to, k);
+            if (v === null) return null;
+            const p = sum(addD(from, -n), addD(from, -1), k);
+            const c = p ? v / p - 1 : null;
+            return <div key={k} class="tl-num"><span>{l}</span><b>{fmt(v)}</b><span class="muted">{p === null ? '—' : fmt(p)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span></div>;
+          })}
         </div>
       </div>
-    </section>
+      <List title="Sources that changed most" q={sources} name={(k) => k} />
+      <List title="Pages that changed most" q={pages} name={(k) => (k === '/' ? 'Home page' : k)} />
+      {marks.length > 0 && (
+        <div class="tl-sec">
+          <h3 class="nx-label-sm">What happened</h3>
+          {marks.map((m, i) => (
+            <button key={m.id || i} type="button" class="tl-erow" onClick={() => onDay(m.date)}>
+              <span class="muted">{short(m.date)}</span>
+              <span class="tl-et">{m.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+      <span class="nx-chips"><a class="nx-chip" href={`#/site/${site.id}/timeline?z=28d&end=${to}`}>Open in Timeline →</a></span>
+    </div>
   );
 }
 
@@ -218,8 +422,8 @@ function Sources({ site, rows, changes, range }) {
   const max = Math.max(1, ...rows.map((r) => r.value || 0));
   const lead = changes.find((c) => c.kind === 'source');
   return (
-    <section class="card card-plain" aria-label="Who brings it">
-      <SectionHead n="2" title="Who brings the visits" more={{ href: `#/site/${site.id}/pages?range=${range}`, label: 'All sources' }} />
+    <section class="card card-plain" aria-label="Who brought them">
+      <SectionHead title="Who brought them" more={{ href: `#/site/${site.id}/traffic?range=${range}`, label: 'Full report in Traffic' }} />
       {lead && <p class="nx-lede">{lead.text}</p>}
       <div class="nx-table" role="table" aria-label="Visits by source">
         <div class="nx-tr nx-th" role="row"><span role="columnheader">Source</span><span role="columnheader">Visits</span><span role="columnheader">Change</span><span role="columnheader" aria-hidden="true" /></div>
@@ -233,139 +437,6 @@ function Sources({ site, rows, changes, range }) {
         ))}
       </div>
       <p class="note">“Direct” is every visit without a referrer: typed links, app links and likely bots.</p>
-    </section>
-  );
-}
-
-function Landing({ site, rows, range }) {
-  const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
-  if (!rows) return <section class="card card-plain"><Loading height={160} /></section>;
-  const top = search.data?.opportunities?.[0];
-  return (
-    <section class="card card-plain" aria-label="Where they land">
-      <SectionHead n="3" title="Where they land" more={{ href: `#/site/${site.id}/pages?range=${range}`, label: 'All pages' }} />
-      <ul class="nx-rows">
-        {rows.map((r) => (
-          <li key={r.key}>
-            <a href={`#/site/${site.id}/pages?range=${range}`}>
-              <span class="nx-path">{capital(pageName(r.key))}</span>
-              <span class="nx-num">{fmt(r.value)}</span>
-              <Change value={r.value} previous={r.previous} />
-            </a>
-          </li>
-        ))}
-      </ul>
-      {top && (
-        <a class="nx-callout" href={`#/site/${site.id}/search`}>
-          <Icon name="search" size={14} />
-          <span>“{top.query}” is shown {fmt(top.impressions)} times at position {top.position.toFixed(1)}, but {(top.ctr * 100).toFixed(1)}% click. Last 28 days, from Search Console.</span>
-        </a>
-      )}
-    </section>
-  );
-}
-
-// The top journeys: where visits came from × where they landed × how many
-// converted, with the biggest search opportunity under them.
-function HowTheyCome({ site, range }) {
-  const j = useJourneys(site, range);
-  const search = useAsync(() => (site.modes?.search ? api.get(`/sites/${site.id}/search${qs({ range: '28d' })}`).catch(() => null) : null), [site.id]);
-  if (j.config.data && !j.outcome) return null;
-  if (j.data.error) return <section class="card card-plain"><ErrorState error={j.data.error} onRetry={j.data.reload} /></section>;
-  if (!j.data.data) return <section class="card card-plain"><Loading height={180} /></section>;
-  const top = j.journeys.filter((x) => x.name !== 'Your own site').slice(0, 4);
-  const best = j.journeys.find((x) => x.converted);
-  const opp = search.data?.opportunities?.[0];
-  return (
-    <section class="card card-plain" aria-label="How they come">
-      <SectionHead n="3" title="How they come" more={{ href: `#/site/${site.id}/journeys?range=${range}`, label: `All ${j.journeys.length} journeys` }} />
-      {best && <p class="nx-lede">The strongest way in is {best.name} → {pageTitle(best.landing).replace(/^The/, 'the')}: {fmt(best.converted)} of its {fmt(best.sessions)} visits reached “{j.outcome.label}”.</p>}
-      <ul class="nx-jlinks">
-        {top.map((x) => (
-          <li key={x.key}>
-            <a href={`#/site/${site.id}/journeys?range=${range}&open=${encodeURIComponent(x.key)}`}>
-              <span class="nx-jwho">
-                <b>{x.name} <span class="muted">→</span> {pageTitle(x.landing)}</b>
-                <span class="muted small">{x.landing === '/' ? site.host : x.landing}</span>
-              </span>
-              <span class="nx-stat"><b>{fmt(x.sessions)}</b><span class="muted small">visits</span></span>
-              <span class="nx-stat"><b class={x.converted ? 'good' : ''}>{fmt(x.converted)}</b><span class="muted small">{x.sessions ? `${Math.round((x.converted / x.sessions) * 100)}% ` : ''}{j.outcome.label.toLowerCase()}</span></span>
-              <Icon name="chevron" size={14} />
-            </a>
-          </li>
-        ))}
-      </ul>
-      {opp && (
-        <a class="nx-callout" href={`#/site/${site.id}/search`}>
-          <Icon name="search" size={14} />
-          <span>“{opp.query}” is shown {fmt(opp.impressions)} times at position {opp.position.toFixed(1)}, but {(opp.ctr * 100).toFixed(1)}% click. Last 28 days, from Search Console.</span>
-        </a>
-      )}
-    </section>
-  );
-}
-
-// Who reached the site's goal steps and left without the outcome, by device and
-// system (BigQuery). The steps and outcome are the site's own goals (its Edit page).
-const GROUP_COLOR = { 'Phones and tablets': 'var(--series-muted)', Chromebooks: 'var(--series-5)', Mac: 'var(--series-4)', Windows: 'var(--series-1)', Linux: 'var(--series-7)', Other: 'var(--border-strong)' };
-
-function Leavers({ site, range }) {
-  const config = useAsync(() => api.get(`/sites/${site.id}/config`).catch(() => null), [site.id]);
-  const goals = config.data?.config?.goals || [];
-  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
-  const steps = goals.filter((g) => g.source === 'event' && g.role === 'step');
-  const ready = Boolean(outcome && steps.length);
-  const data = useAsync(() => (ready ? api.get(`/sites/${site.id}/warehouse/leavers${qs({ range, steps: steps.map((g) => g.match).join(','), outcome: outcome.match })}`) : null),
-    [site.id, range, ready && outcome.match, steps.map((g) => g.match).join()]);
-  if (!config.data || !ready) return null;
-  if (data.error) return <section class="card card-plain"><ErrorState error={data.error} onRetry={data.reload} /></section>;
-  if (!data.data) return <section class="card card-plain"><Loading height={180} /></section>;
-
-  const groups = data.data.groups;
-  const left = groups.reduce((n, g) => n + g.left, 0);
-  const converted = groups.reduce((n, g) => n + g.converted, 0);
-  if (!left) return null;
-  const desktop = config.data.config.kind === 'desktop';
-  const cannot = desktop ? groups.filter((g) => g.group === 'Phones and tablets' || g.group === 'Chromebooks') : [];
-  const cannotN = cannot.reduce((n, g) => n + g.left, 0);
-  const biggest = groups.find((g) => !cannot.includes(g));
-  // The step most leavers fired is "reaching"; the others are what they did next.
-  const reach = steps.map((g) => ({ g, n: groups.reduce((t, x) => t + (x.steps[g.match] || 0), 0) })).sort((a, b) => b.n - a.n);
-  const after = reach.slice(1).map((r) => r.g);
-  const r = data.data.range;
-  const since = r.firstDay && r.firstDay > r.start ? ` Since ${short(`${r.firstDay.slice(0, 4)}-${r.firstDay.slice(4, 6)}-${r.firstDay.slice(6)}`)}, when the BigQuery export starts.` : '';
-
-  const reason = (g) => {
-    const bits = [];
-    if (desktop && g.group === 'Phones and tablets') bits.push('A desktop app can’t be installed here.');
-    else if (desktop && g.group === 'Chromebooks') bits.push('A Chromebook can’t run a desktop app.');
-    if (g.quick) bits.push(`${fmt(g.quick)} left within 10 seconds.`);
-    for (const s of after) bits.push(`${fmt(g.steps[s.match] || 0)} ${s.label.charAt(0).toLowerCase() + s.label.slice(1)}.`);
-    return bits.join(' ');
-  };
-
-  return (
-    <section class="card card-plain" aria-label="Why they don’t convert">
-      <SectionHead n="4" title="Why they leave without converting" more={{ href: `#/site/${site.id}/sessions?range=${range}`, label: 'Sessions' }} />
-      <p class="nx-lede">
-        {fmt(left)} visits reached “{reach[0].g.label}” and left without “{outcome.label}”; {fmt(converted)} went on to it.
-        {cannotN > 0 && ` ${fmt(cannotN)} were on phones, tablets or Chromebooks, where the app doesn’t run.`}
-        {biggest && ` The biggest group that could have is ${biggest.group}: ${fmt(biggest.left)}, and ${fmt(biggest.quick)} of them left within 10 seconds.`}
-      </p>
-      <div class="nx-stack" role="img" aria-label={groups.map((g) => `${g.group} ${g.left}`).join(', ')}>
-        {groups.map((g) => <span key={g.group} style={{ flex: `${g.left} 1 0`, background: GROUP_COLOR[g.group] }} />)}
-      </div>
-      <ul class="nx-leavers">
-        {groups.map((g) => (
-          <li key={g.group}>
-            <span class="nx-swatch" style={{ background: GROUP_COLOR[g.group] }} aria-hidden="true" />
-            <b class="nx-num">{fmt(g.left)}</b>
-            <b>{g.group}</b>
-            <span class="muted">{reason(g)}</span>
-          </li>
-        ))}
-      </ul>
-      <p class="note">From the site’s goals: “{reach[0].g.label}” counts as reaching, “{outcome.label}” as the outcome.{since}</p>
     </section>
   );
 }
@@ -508,13 +579,6 @@ function NextSteps({ site, range }) {
   );
 }
 
-// A path as a reader would name it: "/blog/best-dock-apps-windows" → "Best dock apps windows".
-const pageTitle = (path) => {
-  if (path === '/') return 'The home page';
-  if (!path || path === '(not set)') return 'No page recorded';
-  const slug = path.replace(/\/$/, '').split('/').pop().replace(/[-_]+/g, ' ').trim();
-  return slug ? slug.charAt(0).toUpperCase() + slug.slice(1) : path;
-};
 const capital = (text) => text.charAt(0).toUpperCase() + text.slice(1);
 const pageName = (path) => (path === '/' ? 'the home page' : !path || path === '(not set)' ? 'no page recorded' : path);
 

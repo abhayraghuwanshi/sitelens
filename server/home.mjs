@@ -23,6 +23,14 @@ import { SCENARIOS, scene, chartSvg } from './home-play.js';
 // The hero's first scenario, drawn finished into the HTML; /home-play.js makes it playable.
 const FIRST = scene(SCENARIOS[0]);
 
+// What Kauzl is, for search engines and AI assistants (tools/seo-rules.mjs checks it).
+const LD = JSON.stringify([
+  { '@context': 'https://schema.org', '@type': 'Organization', name: 'Kauzl', url: 'https://kauzl.com/', logo: 'https://kauzl.com/tools/assets/og.png' },
+  { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Kauzl', url: 'https://kauzl.com/' },
+  { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Kauzl', applicationCategory: 'BusinessApplication', operatingSystem: 'Web',
+    url: 'https://kauzl.com/', description: 'Analytics for people who ship: Kauzl reads Google Analytics 4, Search Console and Bing, puts releases, posts and campaigns on the same timeline, and says what changed and why.' },
+]).replace(/</g, '\\u003c');
+
 const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
 
 // What's inside: the questions people ask after they ship, each answered the
@@ -489,6 +497,10 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
 <meta name="description" content="Did what you shipped work? Kauzl puts releases, posts and campaigns on the same timeline as traffic, search and AI answers.">
 <link rel="canonical" href="https://kauzl.com/">
 <meta property="og:title" content="Kauzl · You shipped it. Did it work?"><meta property="og:description" content="Kauzl lines up every change you ship with what happened next: traffic, search, mentions and AI answers."><meta property="og:type" content="website">
+<meta property="og:url" content="https://kauzl.com/"><meta property="og:site_name" content="Kauzl">
+<meta property="og:image" content="https://kauzl.com/tools/assets/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Kauzl: you shipped it. Did it work? An owl over a before-and-after chart.">
+<meta name="twitter:card" content="summary_large_image">
+<script type="application/ld+json">${LD}</script>
 <meta name="theme-color" content="#121522">
 <!-- Site ownership: Google Search Console and Bing Webmaster Tools -->
 <meta name="google-site-verification" content="qnLsBOH7W_9FmBJnJ5bKtOJWl1kb0Xk0DHUlPoOr2cs">

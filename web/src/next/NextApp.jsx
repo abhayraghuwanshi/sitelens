@@ -89,7 +89,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
   else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} />;
-  else if (view === 'story') body = site ? <Story key={site.id} site={site} params={route.params} /> : <Sites sites={sites} auth={auth} viewer={state.viewer} />;
+  else if (view === 'story') body = site ? <Story key={site.id} site={site} params={route.params} waiting={{ alerts: unread(site.id), todos: openTodos(site.id), goals: behindFor(site.id) }} /> : <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
   else if (view === 'setup' && site) body = <Page title="What Kauzl measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;

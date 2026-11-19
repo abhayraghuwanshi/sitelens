@@ -6,7 +6,7 @@ export default {
   order: 2.5,
   kicker: 'Google Analytics 4',
   short: 'A simpler GA4 dashboard',
-  title: 'GA4 Too Complicated? 5 Ways to a Simple Dashboard (Without Leaving GA4) | Kauzl',
+  title: 'GA4 Too Complicated? 5 Simpler Dashboards | Kauzl',
   h1: 'GA4 too complicated? Five ways to a simple dashboard',
   description: 'Get a GA4 view you can read in ten seconds without switching tools: trim GA4’s reports, save one Exploration, use Looker Studio, or a tool on top.',
   blurb: 'Keep GA4’s data, lose the maze. Five ways, from free to done-for-you.',

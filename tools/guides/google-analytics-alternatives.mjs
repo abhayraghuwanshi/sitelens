@@ -7,7 +7,7 @@ export default {
   order: 5.5,
   kicker: 'Compare',
   short: 'Google Analytics alternatives',
-  title: 'Google Analytics Alternatives (2026): 9 Options, by Why You’re Leaving | Kauzl',
+  title: 'Google Analytics Alternatives (2026), Compared | Kauzl',
   h1: 'Google Analytics alternatives: pick by why you’re leaving',
   description: 'Plausible, Fathom, Umami, Matomo, PostHog, Looker Studio and more, grouped by why you’re leaving GA4: privacy, simplicity, self-hosting or the UI.',
   blurb: 'Nine options, grouped by the reason you want out of GA4.',
@@ -72,7 +72,7 @@ export default {
 <p>Whatever you pick, tag the links you share (<a href="/tools/utm-builder/">UTM builder</a>) so every tool can tell your newsletter from your Reddit post.</p>
 `,
   faq: [
-    ['What is the best Google Analytics alternative?', 'It depends on why you are leaving. For privacy and simplicity, Plausible or Fathom. For free self-hosting, Umami, or Matomo for more depth. For product analytics, PostHog. If you only dislike GA4’s interface, keep GA4 and use Looker Studio or a tool that reads it.'],
+    ['What is the best Google Analytics alternative?', 'The best Google Analytics alternative depends on why you are leaving. For privacy and simplicity, Plausible or Fathom. For free self-hosting, Umami, or Matomo for more depth. For product analytics, PostHog. If you only dislike GA4’s interface, keep GA4 and use Looker Studio or a tool that reads it.'],
     ['Is there a free Google Analytics alternative?', 'Umami and Matomo are free if you host them yourself, and PostHog has a free tier. Looker Studio is free but reads GA4 rather than replacing it.'],
     ['Do privacy-first analytics tools need a cookie banner?', 'Cookieless tools like Plausible, Fathom and Simple Analytics are usually used without one, but whether you need consent depends on your setup and your jurisdiction, so check with your own advisor.'],
     ['Can I move my old GA4 data to another tool?', 'Mostly no. Matomo has a Google Analytics importer; most others start fresh. Export the reports you care about, and run both tools side by side for a few weeks.'],

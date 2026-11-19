@@ -37,7 +37,7 @@ const pageName = (p) => (p === '/' ? 'Home page' : p);
 
 // A usual day: the same weekday over the four weeks before (the median, like the
 // server's own baseline, which visits use directly so every sentence agrees).
-function usualOf(map, date, k) {
+export function usualOf(map, date, k) {
   if (k === 'sessions' && map.get(date)?.baseline != null) return map.get(date).baseline;
   const vals = [7, 14, 21, 28].map((n) => map.get(addD(date, -n))?.[k]).filter((v) => v !== null && v !== undefined).sort((a, b) => a - b);
   if (!vals.length) return null;
@@ -551,7 +551,7 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
 
 // One day: what happened in a sentence, its numbers against a usual (or last) same weekday,
 // where visits came from and landed, and what was marked that day.
-function DayPanel({ scope, date, ctx, onClose, inline }) {
+export function DayPanel({ scope, date, ctx, onClose, inline }) {
   const d = useAsync(() => api.get(`/calendar/day${qs({ site: scope, date })}`), [scope, date]);
   const [cmp, setCmp] = usePersistent('tl-cmp', 'usual');
   const [tab, setTab] = useState(ctx.L ? ctx.lens : 'page');

@@ -1,6 +1,6 @@
 export default {
   name: 'AI robots.txt Generator',
-  title: 'AI robots.txt Generator: Block GPTBot & ClaudeBot, Keep AI Search Traffic | Kauzl',
+  title: 'AI robots.txt Generator: Block AI Training Bots | Kauzl',
   description: 'Make a robots.txt for AI crawlers like GPTBot, ClaudeBot and Google-Extended. Block model training but stay visible in ChatGPT and Perplexity.',
   blurb: 'Block AI training crawlers but stay visible in ChatGPT, Claude and Perplexity search.',
   related: ['ai-crawler-log-analyzer', 'llms-txt-generator', 'schema-generator'],

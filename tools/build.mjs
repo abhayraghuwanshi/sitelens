@@ -13,6 +13,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
+import { checkPage, checkGuide, checkSite, describe } from './seo-rules.mjs';
 import { owl } from './assets/lib/owl.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -76,6 +77,8 @@ async function loadGuides() {
   const files = (await readdir(dir)).filter((f) => f.endsWith('.mjs'));
   const guides = await Promise.all(files.map(async (f) => ({ slug: f.replace(/\.mjs$/, ''), ...(await import(pathToFileURL(path.join(dir, f)))).default })));
   for (const g of guides) g.minutes = Math.max(3, Math.round(strip([g.body, ...(g.inShort || []), ...(g.faq || []).flat()].join(' ')).split(' ').length / 200));
+  const bad = guides.map((g) => describe(`guides/${g.slug}`, checkGuide(g))).filter(Boolean);
+  if (bad.length) throw new Error(`Guides break the GEO rules (tools/seo-rules.mjs, docs/seo-rules.md):\n${bad.join('\n')}`);
   return guides.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
 }
 
@@ -89,17 +92,15 @@ async function loadPages() {
 
 let footer = '';
 
-// Search engines show about 160 characters of a description, and Bing Webmaster
-// Tools flags anything outside 25-160, so a page outside that range doesn't build.
-export const DESCRIPTION = { min: 25, max: 160 };
-function checkDescription(where, description) {
-  const n = [...String(description || '')].length;
-  if (n < DESCRIPTION.min || n > DESCRIPTION.max) throw new Error(`${where}: the meta description is ${n} characters; keep it between ${DESCRIPTION.min} and ${DESCRIPTION.max}.`);
-}
+// Every page the build writes, so tools/seo-rules.mjs can check it (and the
+// site as a whole) before the build counts as done.
+const BUILT = [];
+// The link preview image for every page (Reddit, X, LinkedIn, Slack).
+const OG_IMAGE = `${SITE}${BASE}/assets/og.png`;
+const OG_ALT = 'Kauzl: you shipped it. Did it work? An owl over a before-and-after chart.';
 
 function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website', skip = 'Skip to the tool', title, description, band, body, ld = [], scripts = [] }) {
-  checkDescription(canonical, description);
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)}</title>
@@ -107,7 +108,8 @@ function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website
 <link rel="canonical" href="${canonical}">
 <meta property="og:type" content="${ogType}"><meta property="og:site_name" content="Kauzl">
 <meta property="og:title" content="${esc(title)}"><meta property="og:description" content="${esc(description)}"><meta property="og:url" content="${canonical}">
-<meta name="twitter:card" content="summary">
+<meta property="og:image" content="${OG_IMAGE}"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="${esc(OG_ALT)}">
+<meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#121522">
 <link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -128,6 +130,8 @@ ${GA ? `<script defer src="${BASE}/assets/ga.js?v=${ASSET_V}" data-ga="${GA}"></
 ${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}?v=${ASSET_V}"></script>`).join('\n')}
 </body></html>
 `;
+  BUILT.push({ url: canonical, html });
+  return html;
 }
 
 function cta(c = {}) {
@@ -224,7 +228,7 @@ function guidesIndex(guides) {
 <div class="grid">${guides.map(guideTile).join('')}</div></section>
 ${cta()}`;
   return layout({
-    canonical: gurl(''), page: 'index:guides', skip: 'Skip to the guides', title: 'Analytics Guides: GA4, UTM Tracking, AI Traffic and A/B Testing | Kauzl',
+    canonical: gurl(''), page: 'index:guides', skip: 'Skip to the guides', title: 'Analytics Guides: GA4, UTMs, AI Traffic, A/B Tests | Kauzl',
     description: 'Plain-English guides to Google Analytics 4, UTM parameters, ChatGPT and AI traffic, AI crawlers, Search Console and A/B testing, each with a free tool.',
     band, body, ld: [{ '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Kauzl guides', url: gurl(''), hasPart: guides.map((g) => ({ '@type': 'Article', headline: g.h1 || g.title, url: gurl(g.slug) })) }],
   });
@@ -275,7 +279,7 @@ function indexPage(pages) {
 ${rest.length ? `<div class="col"><h3>More</h3><ul>${rest.map(row).join('')}</ul></div>` : ''}</div></section>
 ${cta()}`;
   return layout({
-    slug: '', page: 'index:tools', title: 'Free Marketing & Analytics Tools: UTM Builder, A/B Test Calculator, AI robots.txt | Kauzl',
+    slug: '', page: 'index:tools', title: 'Free Marketing & Analytics Tools | Kauzl',
     description: 'Free browser tools for marketers and founders: UTM builder, A/B test calculators, launch checker, AI robots.txt and llms.txt, SERP and OG previews.',
     band, body, ld: [{ '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Kauzl free tools', url: url(''), hasPart: pages.map((p) => ({ '@type': 'WebApplication', name: p.name, url: url(p.slug) })) }],
   });
@@ -293,6 +297,8 @@ footer = `<footer class="foot"><div class="wrap">
 await rm(path.join(here, 'dist'), { recursive: true, force: true });
 await mkdir(OUT, { recursive: true });
 await cp(path.join(here, 'assets'), path.join(OUT, 'assets'), { recursive: true });
+// Every page's link preview points here; a missing file is a broken preview everywhere.
+await readFile(path.join(OUT, 'assets', 'og.png')).catch(() => { throw new Error('tools/assets/og.png is missing: every page uses it as og:image (1200×630).'); });
 await writeFile(path.join(OUT, 'index.html'), indexPage(pages));
 for (const p of pages) {
   await mkdir(path.join(OUT, p.slug), { recursive: true });
@@ -316,6 +322,38 @@ await writeFile(path.join(here, 'dist', 'sitemap.xml'), `<?xml version="1.0" enc
 ${entries.map(([loc, mod]) => `  <url><loc>${loc}</loc><lastmod>${mod}</lastmod></url>`).join('\n')}
 </urlset>
 `);
+// llms.txt (llmstxt.org): a Markdown map of the site for AI assistants, served
+// at kauzl.com/llms.txt. Every guide and tool, with its one-line description.
+const llms = `# Kauzl
+
+> Kauzl is analytics for people who ship. It reads Google Analytics 4, Search Console and Bing, puts your releases, posts and campaigns on the same timeline, and says what changed, why, and whether it is real. These are its free guides and browser tools.
+
+## Guides
+
+${guides.map((g) => `- [${g.short || g.h1}](${gurl(g.slug)}): ${g.description}`).join('\n')}
+
+## Free tools
+
+${pages.map((p) => `- [${p.name}](${url(p.slug)}): ${p.description}`).join('\n')}
+
+## Kauzl
+
+- [Home](${SITE}/): what Kauzl does
+- [Live demo](${SITE}/demo): a real site's analytics, view only
+`;
+await writeFile(path.join(here, 'dist', 'llms.txt'), llms);
+
+// The SEO and GEO rules, on every page and on the site as a whole.
+const sitemapXml = await readFile(path.join(here, 'dist', 'sitemap.xml'), 'utf8');
+const failures = [
+  ...BUILT.map((p) => describe(p.url.replace(SITE, ''), checkPage(p.html, { url: p.url }))),
+  describe('site', checkSite({ pages: BUILT.map((p) => ({ ...p, inLlms: p.url !== url('') && p.url !== gurl('') })), sitemap: sitemapXml, llms })),
+].filter(Boolean);
+if (failures.length) {
+  console.error(`The site breaks the SEO/GEO rules (tools/seo-rules.mjs, docs/seo-rules.md):\n${failures.join('\n')}`);
+  process.exit(1);
+}
+
 // Only meaningful when the tools are the site root; otherwise add the
 // sitemap line to the main site's robots.txt.
 if (!BASE) await writeFile(path.join(OUT, 'robots.txt'), `User-agent: *\nAllow: /\n\nSitemap: ${SITE}/sitemap.xml\n`);

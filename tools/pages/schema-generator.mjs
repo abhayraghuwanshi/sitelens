@@ -1,6 +1,6 @@
 export default {
   name: 'Schema Markup Generator',
-  title: 'Schema Markup Generator: Free JSON-LD for FAQ, Article, Product & More | Kauzl',
+  title: 'Schema Markup Generator: Free JSON-LD | Kauzl',
   description: 'Generate JSON-LD for Article, FAQ, Product, SoftwareApplication, Organization and Breadcrumb, for rich results and clearer AI search.',
   blurb: 'JSON-LD for Article, FAQ, Product, Software and more, ready to paste.',
   related: ['serp-preview', 'llms-txt-generator', 'open-graph-preview'],

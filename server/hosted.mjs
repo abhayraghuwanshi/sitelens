@@ -661,8 +661,8 @@ export function createGateway({
     if (url.pathname === '/robots.txt') {
       return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(robotsTxt(origin, { tools: Boolean(toolsOrigin) }));
     }
-    // The free tools, the guides, and the sitemap for all of kauzl.com come from the static host.
-    if (toolsOrigin && (STATIC_PREFIX.test(url.pathname) || url.pathname === '/sitemap.xml')) return proxyTools(req, res, url);
+    // The free tools, the guides, the sitemap and llms.txt for all of kauzl.com come from the static host.
+    if (toolsOrigin && (STATIC_PREFIX.test(url.pathname) || url.pathname === '/sitemap.xml' || url.pathname === '/llms.txt')) return proxyTools(req, res, url);
 
     // Agents, not browsers: a token instead of a session (checked inside).
     if (url.pathname === '/mcp') return handleMcp(req, res);

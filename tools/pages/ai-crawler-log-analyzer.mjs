@@ -1,6 +1,6 @@
 export default {
   name: 'AI Crawler Log Analyzer',
-  title: 'AI Crawler Log Analyzer: See GPTBot, ClaudeBot & Perplexity Visits | Kauzl',
+  title: 'AI Crawler Log Analyzer: GPTBot & ClaudeBot | Kauzl',
   description: 'Drop in server or CDN logs to see which AI crawlers visit, how often, which pages they read and where they fail. Logs never leave your browser.',
   blurb: 'Drop in access logs and see which AI bots read your site, and which pages.',
   related: ['ai-robots-txt-generator', 'llms-txt-generator', 'serp-preview'],

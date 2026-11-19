@@ -4,7 +4,7 @@ export default {
   order: 8,
   kicker: 'Google Analytics 4',
   short: 'Connect GA4 to BigQuery',
-  title: 'How to Connect GA4 to BigQuery: The Free Export, Step by Step | Kauzl',
+  title: 'How to Connect GA4 to BigQuery (Free Export) | Kauzl',
   h1: 'How to connect GA4 to BigQuery, step by step',
   description: 'Turn on the free GA4 BigQuery export: the Cloud project, the GA4 link, which settings to pick, what it costs, and using raw events for funnels.',
   blurb: 'The free export that gives you every raw event: link it once, and funnels, paths and retention work on your own data.',

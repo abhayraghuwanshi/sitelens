@@ -4,7 +4,7 @@ export default {
   order: 1,
   kicker: 'Campaign tracking',
   short: 'What is a UTM code?',
-  title: 'What Is a UTM Code? Meaning, the 5 Parameters and Examples | Kauzl',
+  title: 'What Is a UTM Code? Parameters and Examples | Kauzl',
   h1: 'What is a UTM code? Meaning, parameters and examples',
   description: 'UTM codes explained: what UTM means, the five utm_ parameters, examples for email, Reddit and ads, GA4 naming rules, and common mistakes.',
   blurb: 'What UTM stands for, the five parameters, examples, and the naming rules that keep GA4 clean.',

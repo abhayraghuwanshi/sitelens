@@ -1046,3 +1046,38 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
   .nx .hv-srow { grid-template-columns: minmax(0, 1fr) 56px; row-gap: 6px; }
   .hv-tr, .hv-trh { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* Story: Ask Claude, what's waiting, the day chart and its table */
+.card.nx-ask { gap: 10px; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 28%, var(--border)); }
+.nx-askin { display: flex; align-items: center; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 4px 6px 4px 10px; color: var(--accent); }
+.nx-askin:focus-within { border-color: var(--accent); }
+.nx-askin input { flex: 1; min-width: 0; border: 0; background: none; padding: 6px 0; font: inherit; color: var(--text); outline: none; box-shadow: none; }
+.nx-askin .btn { min-height: 0; padding: 4px 12px; }
+.nx-ask-answer { display: grid; gap: 6px; margin: 0; line-height: 1.5; }
+.nx-ask-answer > a { justify-self: start; }
+a.nx-needs { display: flex; align-items: center; gap: 10px; padding: 10px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--warning) 14%, var(--surface)); color: var(--text); text-decoration: none; }
+a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surface)); }
+.nx-needs-go { margin-left: auto; color: var(--accent); font-weight: 600; white-space: nowrap; }
+.nx-chhead { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.chart svg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: var(--radius-sm); }
+.nx-dtable-wrap { overflow-x: auto; max-height: 420px; overflow-y: auto; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.nx-dtable { width: 100%; border-collapse: collapse; font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.nx-dtable th { position: sticky; top: 0; background: var(--surface); text-align: left; border-bottom: 1px solid var(--border); padding: 0; }
+.nx-dtable th button { border: 0; background: none; font: inherit; font-weight: 600; color: var(--text-2); padding: 7px 10px; cursor: pointer; width: 100%; text-align: inherit; white-space: nowrap; }
+.nx-dtable th.num, .nx-dtable td.num { text-align: right; }
+.nx-dtable td { padding: 6px 10px; border-top: 1px solid var(--border); white-space: nowrap; }
+.nx-dtable td.nx-dtable-mk { white-space: normal; color: var(--text-2); min-width: 180px; }
+.nx-dtable tbody tr { cursor: pointer; }
+.nx-dtable tbody tr:hover, .nx-dtable tbody tr:focus-visible { background: var(--surface-hover); outline: none; }
+
+/* Search: engine switch beside the period, and each search's move since the period before */
+.nx-head-ctl { display: inline-flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.nx-larr { position: absolute; top: 50%; height: 2px; margin-top: -1px; }
+.nx-larr.up { background: var(--good); }
+.nx-larr.down { background: var(--critical-ink); }
+.nx-larr i { position: absolute; top: -4px; width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; }
+.nx-larr.up i { left: 7px; border-right: 7px solid var(--good); }
+.nx-larr.down i { right: 7px; border-left: 7px solid var(--critical-ink); }
+.nx-legend i.ar { width: 14px; height: 2px; border-radius: 0; }
+.nx-legend i.ar.up { background: var(--good); }
+.nx-legend i.ar.down { background: var(--critical-ink); }

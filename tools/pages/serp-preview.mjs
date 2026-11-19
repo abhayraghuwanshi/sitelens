@@ -1,6 +1,6 @@
 export default {
   name: 'SERP Snippet Preview',
-  title: 'SERP Preview Tool: Google Title & Meta Description Length Checker | Kauzl',
+  title: 'SERP Preview: Title & Description Length Checker | Kauzl',
   description: 'See how your page looks in Google results on desktop and mobile. Checks title and description length in pixels, so nothing gets cut off.',
   blurb: 'See your Google result before you publish. Pixel-accurate title and description checks.',
   related: ['open-graph-preview', 'schema-generator', 'utm-builder'],

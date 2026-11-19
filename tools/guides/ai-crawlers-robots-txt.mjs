@@ -4,7 +4,7 @@ export default {
   order: 4,
   kicker: 'AI search',
   short: 'Which AI crawlers to block',
-  title: 'GPTBot vs OAI-SearchBot vs ClaudeBot: Which AI Crawlers to Block in robots.txt | Kauzl',
+  title: 'Which AI Crawlers to Block in robots.txt | Kauzl',
   h1: 'GPTBot, OAI-SearchBot, ClaudeBot: which AI crawlers should you block?',
   description: 'Every major AI crawler explained, training vs search, with copy-paste robots.txt rules to block training and stay visible in AI search.',
   blurb: 'Training crawlers vs AI search crawlers, and robots.txt rules that keep you citable.',

@@ -6,7 +6,7 @@ export default {
   order: 6,
   kicker: 'Compare',
   short: 'Kauzl vs Plausible',
-  title: 'Kauzl vs Plausible: Which One Do You Need? (Honest Comparison) | Kauzl',
+  title: 'Kauzl vs Plausible: An Honest Comparison | Kauzl',
   h1: 'Kauzl vs Plausible: one counts visits, one explains them',
   description: 'Plausible is a privacy-first Google Analytics replacement. Kauzl reads the analytics you have and says why numbers moved. When to use which.',
   blurb: 'One counts visits, one explains them. When to use which.',

@@ -14,6 +14,7 @@
 
 import { EngineError } from './engines.mjs';
 import { createCache } from './cache.mjs';
+import { querySearchAnalytics, hostPageFilter } from '../shared/sitelens/gsc.js';
 
 const INSPECT = 'https://searchconsole.googleapis.com/v1/urlInspection/index:inspect';
 const HOUR = 3_600_000;
@@ -26,8 +27,10 @@ const pathOf = (url) => {
 };
 const side = (r) => (r ? { clicks: r.clicks || 0, impressions: r.impressions || 0, ctr: r.ctr ?? null, position: r.position ?? null } : null);
 
-// Rows keyed by `key(row)` from both engines → [{ key, google, bing, impressions }], most seen first. Pure.
-export function mergeRows(google = [], bing = [], key, limit = 50) {
+// Rows keyed by `key(row)` from both engines → [{ key, google, bing, impressions }], most seen first.
+// `before` (optional): { google, bing } rows of the period before; each side then
+// carries `before`, its position then (null when it didn't show). Pure.
+export function mergeRows(google = [], bing = [], key, limit = 50, before = null) {
   const out = new Map();
   for (const [engine, rows] of [['google', google], ['bing', bing]]) {
     for (const r of rows) {
@@ -43,6 +46,12 @@ export function mergeRows(google = [], bing = [], key, limit = 50) {
         position: prev.position !== null && next.position !== null ? (prev.position * prev.impressions + next.position * next.impressions) / Math.max(1, prev.impressions + next.impressions) : prev.position ?? next.position,
       } : next;
       out.set(k, row);
+    }
+  }
+  if (before) {
+    for (const engine of ['google', 'bing']) {
+      const then = new Map((before[engine] || []).map((r) => [key(r, engine), r.position ?? null]));
+      for (const row of out.values()) if (row[engine]) row[engine].before = then.get(row.key) ?? null;
     }
   }
   return [...out.values()]
@@ -65,16 +74,31 @@ export function createSearchHub({ engines, bing, auth, fetchImpl = fetch }) {
     if (google.error && b.error && !['needs-bing', 'bing-site'].includes(b.error.kind)) throw google.error;
     const g = google.data;
     const bd = b.data;
+    const gBefore = g ? await googleBefore(site, g.range) : [];
     const problem = (e) => (e ? { message: e.message, kind: e.kind || '', hint: e.hint || '' } : null);
     return {
       google: g ? { range: g.range, current: g.current, previous: g.previous, trend: g.trend, warnings: g.warnings || [] } : { error: problem(google.error) },
       bing: bd ? { siteUrl: bd.siteUrl, range: bd.range, current: bd.current, previous: bd.previous, series: bd.series, crawl: bd.crawl, quota: bd.quota } : { error: problem(b.error) },
       opportunities: g?.opportunities || [],
-      queries: mergeRows(g?.queries || [], bd?.queries || [], (r) => (r.query || '').toLowerCase(), 100),
+      queries: mergeRows(g?.queries || [], bd?.queries || [], (r) => (r.query || '').toLowerCase(), 100, { google: gBefore, bing: bd?.prevQueries || [] }),
       pages: mergeRows(g?.pages || [], bd?.pages || [], (r, engine) => (engine === 'google' ? r.path : pathOf(r.page)), 100),
       // Which pages each search lands on (Google only: Bing doesn't split query × page).
       queryPages: (g?.queryPages || []).map((q) => ({ query: q.query.toLowerCase(), path: q.path, clicks: q.clicks, impressions: q.impressions, ctr: q.ctr, position: q.position })),
     };
+  }
+
+  // Google's searches in the period before, for how each one moved. Missing is fine.
+  async function googleBefore(site, range) {
+    if (site.demo || !site.searchSite || !range?.previous) return [];
+    return cache.wrap(`before:${site.id}:${range.previous.startDate}`, 6 * HOUR, false, async () => {
+      const filter = hostPageFilter(site.searchSite, site.host, { includeSubdomains: site.includeSubdomains });
+      const rows = await querySearchAnalytics({
+        token: await auth.token(),
+        siteUrl: site.searchSite,
+        body: { ...range.previous, dimensions: ['query'], rowLimit: 500, ...(filter ? { dimensionFilterGroups: [{ groupType: 'and', filters: [filter] }] } : {}) },
+      });
+      return rows.map((r) => ({ query: r.key, position: r.position }));
+    }).catch(() => []);
   }
 
   // Google's verdict on one URL, or why it couldn't say.

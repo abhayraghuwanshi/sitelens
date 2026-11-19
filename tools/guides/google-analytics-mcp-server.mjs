@@ -7,7 +7,7 @@ export default {
   order: 3.5,
   kicker: 'AI search',
   short: 'Google Analytics MCP',
-  title: 'Google Analytics MCP: Ask Claude About Your GA4 Data (Setup + Prompts) | Kauzl',
+  title: 'Google Analytics MCP Server: Ask Claude | Kauzl',
   h1: 'Google Analytics MCP: ask Claude why your traffic moved',
   description: 'Connect GA4 to Claude or Cursor with an MCP server: setup, prompts worth asking, and why the agent also needs to know what you shipped.',
   blurb: 'Connect GA4 to Claude or Cursor, and the prompts worth asking.',

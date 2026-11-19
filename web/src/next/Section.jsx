@@ -17,7 +17,7 @@ import { GoalsView } from './GoalsView.jsx';
 import { PagesList } from './PagesList.jsx';
 import { PageView } from './PageView.jsx';
 import { HealthView } from './HealthView.jsx';
-import { SearchView } from './SearchView.jsx';
+import { SearchView, EngineSwitch, engineOf, engineSub } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
 import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
@@ -113,9 +113,13 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
     }} />
   );
 
+  // Search's searches: which engine sits in the header beside the period.
+  const searchTab = view === 'search' && tab === 'queries';
   return (
     <SectionTabs.Provider value={nav}>
-      <Page title={sec.label} sub={`${sec.q} · ${site.label}`} actions={period || null}
+      <Page title={sec.label}
+        sub={searchTab ? `${engineSub(engineOf(params))}, plus AI answers · ${site.label}` : `${sec.q} · ${site.label}`}
+        actions={searchTab ? <span class="nx-head-ctl"><EngineSwitch params={params} />{period}</span> : period || null}
         back={view === 'raw' ? { href: hrefFor(site.id, 'journeys'), label: 'Journeys' } : null}>
         <SectionTabs.Provider value={null}>
           <div class="nx-explore-body">

@@ -21,6 +21,12 @@ const posOf = (r, eng) => {
   const b = r.bing?.position ?? null;
   return eng === 'google' ? g : eng === 'bing' ? b : g == null ? b : b == null ? g : Math.min(g, b);
 };
+// Where it ranked in the period before (null when it didn't show then).
+const beforeOf = (r, eng) => {
+  const g = r.google ? r.google.before ?? null : null;
+  const b = r.bing ? r.bing.before ?? null : null;
+  return eng === 'google' ? g : eng === 'bing' ? b : g == null ? b : b == null ? g : Math.min(g, b);
+};
 const clicksOf = (r, eng) => (eng === 'google' ? r.google?.clicks || 0 : eng === 'bing' ? r.bing?.clicks || 0 : (r.google?.clicks || 0) + (r.bing?.clicks || 0));
 const seenOf = (r, eng) => (eng === 'google' ? r.google?.impressions || 0 : eng === 'bing' ? r.bing?.impressions || 0 : r.impressions || 0);
 // The engines disagree: only one shows it, or they're 5+ places apart.
@@ -46,12 +52,20 @@ function stateOf(r, eng) {
 const xOf = (p) => (p == null ? 91 : p <= 3 ? 2 + ((p - 1) / 2) * 14 : p <= 10 ? 20 + ((p - 4) / 6) * 28 : p <= 20 ? 52 + ((p - 11) / 9) * 26 : 80 + Math.min(p - 21, 6));
 const pageName = (path) => (path === '/' ? 'Home page' : path);
 
+// The engine switch, in the page header next to the period (Section puts it there).
+export const engineOf = (params) => (ENGINES.some((e) => e.key === params.get('eng')) ? params.get('eng') : 'both');
+export const engineSub = (eng) => (eng === 'google' ? 'Google only' : eng === 'bing' ? 'Bing only' : 'Google and Bing together');
+export function EngineSwitch({ params }) {
+  const set = (key) => { location.hash = hrefWith('eng', key === 'both' ? '' : key).slice(1); };
+  return <Segmented label="Search engine" value={engineOf(params)} options={ENGINES} onChange={set} />;
+}
+
 export function SearchView({ site, range, params }) {
   const hub = useAsync(() => api.get(`/sites/${site.id}/search-hub${qs({ range })}`), [site.id, range]);
-  const eng = ENGINES.some((e) => e.key === params.get('eng')) ? params.get('eng') : 'both';
+  const ai = useAsync(() => api.get(`/ai-search/sites/${site.id}/checks`).catch(() => null), [site.id]);
+  const eng = engineOf(params);
   const [all, setAll] = useState(false);
   const [list, setList] = useState(false);
-  const setEng = (key) => { location.hash = hrefWith('eng', key === 'both' ? '' : key).slice(1); };
 
   if (hub.error) return <ErrorState error={hub.error} onRetry={hub.reload} />;
   if (!hub.data) return <Loading height={320} owl label="Reading Google and Bing…" />;
@@ -61,13 +75,16 @@ export function SearchView({ site, range, params }) {
   // Comparing engines only means something when both answered.
   const both = !h.google?.error && !h.bing?.error;
   const rows = h.queries
-    .map((r) => ({ ...r, pos: posOf(r, eng), s: stateOf(r, eng), d: eng === 'both' && both ? disagree(r) : null, page: pageFor.get(r.key)?.path || '' }))
+    .map((r) => ({ ...r, pos: posOf(r, eng), was: beforeOf(r, eng), s: stateOf(r, eng), d: eng === 'both' && both ? disagree(r) : null, page: pageFor.get(r.key)?.path || '' }))
     .filter((r) => eng === 'both' || (eng === 'google' ? r.google : r.bing));
   const total = rows.reduce((n, r) => n + clicksOf(r, eng), 0);
   const close = rows.filter((r) => (r.s.k === 'p1' || r.s.k === 'p2') && r.s.gain > 0).sort((a, b) => b.s.gain - a.s.gain);
   const best = [...rows].sort((a, b) => clicksOf(b, eng) - clicksOf(a, eng))[0];
   const gain = close.reduce((n, r) => n + r.s.gain, 0);
   const split = rows.filter((r) => r.d).sort((a, b) => b.impressions - a.impressions);
+  // Moved: a whole place or more since the period before.
+  const moveOf = (r) => (r.pos == null || r.was == null || Math.abs(r.was - r.pos) < 1 ? null : r.was > r.pos ? 'up' : 'down');
+  const moved = rows.some((r) => moveOf(r));
   const ladder = [...rows].sort((a, b) => seenOf(b, eng) - seenOf(a, eng));
   const shown = all ? ladder : ladder.slice(0, 10);
   const open = params.get('q') || '';
@@ -77,10 +94,7 @@ export function SearchView({ site, range, params }) {
 
   return (
     <div class="nx-search">
-      <div class="nx-row-between">
-        <Segmented label="Search engine" value={eng} options={ENGINES} onChange={setEng} />
-        {errors.map(([name, e]) => <span key={name} class="muted small">{name}: {e.message}</span>)}
-      </div>
+      {errors.length > 0 && <p class="nx-note-line warn">{errors.map(([name, e]) => `${name}: ${e.message}`).join(' · ')}</p>}
       {rows.length ? (
         <p class="nx-answer">
           <b>{fmt(total)}</b> search clicks from {engName} in this period{best && clicksOf(best, eng) ? <>, most from “{best.key}” ({rank(best.pos)})</> : null}.
@@ -91,7 +105,7 @@ export function SearchView({ site, range, params }) {
 
       {rows.length > 0 && (
         <section class="card card-plain nx-ladder" aria-label="Where each search ranks">
-          <h2 class="nx-h2">Where each search ranks <span class="muted small">· further left is better</span></h2>
+          <h2 class="nx-h2">Where each search ranks <span class="muted small">· further left is better{moved ? ' · arrows show the move since the period before' : ''}</span></h2>
           <div class="nx-lrow nx-lhead" aria-hidden="true">
             <span />
             <span class="nx-ltrack-h"><span style="left:1%">Top 3</span><span style="left:19%">Page 1</span><span style="left:51%">Page 2</span><span style="left:79%">Not showing</span></span>
@@ -100,17 +114,18 @@ export function SearchView({ site, range, params }) {
           {shown.map((r) => (
             <a key={r.key} class={`nx-lrow${open === r.key ? ' on' : ''}`} href={hrefWith('q', r.key)}>
               <span class="nx-lname"><b>“{r.key}”</b>
-                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), r.d && <span class="bad">{r.d.word.toLowerCase()}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
+                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), moveOf(r) && <span class={moveOf(r) === 'up' ? 'good' : 'bad'}>{moveOf(r)} from {rank(r.was)}</span>, r.d && <span class="bad">{r.d.word.toLowerCase()}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
               </span>
-              <span class="nx-ltrack" title={r.pos == null ? 'Not in the results yet' : `${rank(r.pos)} now`}>
+              <span class="nx-ltrack" title={r.pos == null ? 'Not in the results yet' : `${rank(r.pos)} now${r.was != null ? `, ${rank(r.was)} the period before` : ''}`}>
                 <span class="nx-lz" style="left:0;width:18%" /><span class="nx-lz alt" style="left:18%;width:32%" /><span class="nx-lz" style="left:50%;width:28%" /><span class="nx-lz alt" style="left:78%;width:22%" />
+                {moveOf(r) && <span class={`nx-larr ${moveOf(r)}`} style={`left:${Math.min(xOf(r.was), xOf(r.pos))}%;width:${Math.abs(xOf(r.was) - xOf(r.pos))}%`}><i /></span>}
                 <span class={`nx-ldot${r.pos == null ? ' gap' : ''}${r.d ? ' dis' : ''}`} style={`left:${xOf(r.pos)}%`} />
               </span>
               <span class="nx-num">{fmt(seenOf(r, eng))}</span>
             </a>
           ))}
           <div class="nx-lfoot">
-            <span class="nx-legend"><span><i class="dot" />Now</span>{eng === 'both' && both && <span><i class="ring" />Google and Bing disagree</span>}<span class="muted">Seen: times shown in results</span></span>
+            <span class="nx-legend"><span><i class="dot" />Now</span>{moved && <><span><i class="ar up" />Moved up</span><span><i class="ar down" />Slipped</span></>}{eng === 'both' && both && <span><i class="ring" />Google and Bing disagree</span>}<span class="muted">Seen: times shown in results</span></span>
             {ladder.length > 10 && <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${ladder.length}`}</button>}
           </div>
         </section>
@@ -151,23 +166,33 @@ export function SearchView({ site, range, params }) {
       <div class="nx-cards2">
         <a class="card card-plain nx-linkcard" href={`#/site/${site.id}/search?tab=ai`}>
           <span class="nx-label-sm">AI answers</span>
-          <span>Whether ChatGPT, Perplexity and the rest mention {site.label} for the questions you track.</span>
+          <span>{aiLine(ai.data, site)}</span>
           <span class="nx-go">See the questions →</span>
         </a>
-        <div class="card card-plain nx-linkcard">
-          <span class="nx-label-sm">Bing crawl</span>
-          <span>{h.bing?.crawl ? <>{fmt(h.bing.crawl.errorsInRange)} crawl errors in this period{h.bing.crawl.errorsBefore != null ? `, ${fmt(h.bing.crawl.errorsBefore)} the period before` : ''}.</> : 'Connect Bing Webmaster Tools to see how Bing crawls the site.'}</span>
-          <button type="button" class="todo-link nx-go" onClick={() => setList(true)}>Every search, demand and crawl →</button>
-        </div>
+        <a class="card card-plain nx-linkcard" href={`#/site/${site.id}/pages?tab=health`}>
+          <span class="nx-label-sm">Indexing</span>
+          <span>{h.bing?.crawl ? <>Bing hit <b>{fmt(h.bing.crawl.errorsInRange)}</b> crawl errors in this period{h.bing.crawl.errorsBefore != null ? `, against ${fmt(h.bing.crawl.errorsBefore)} the period before` : ''}. Whether Google and Bing can show each page is in Pages · Health.</> : 'Whether Google and Bing can show each page is in Pages · Health. Connect Bing Webmaster Tools to see how Bing crawls the site.'}</span>
+          <span class="nx-go">Check each page →</span>
+        </a>
       </div>
 
-      <button type="button" class="todo-link" aria-expanded={list} onClick={() => setList(!list)}>{list ? 'Hide the full lists' : 'See every search as a list, plus what people search for'}</button>
+      <button type="button" class="todo-link" aria-expanded={list} onClick={() => setList(!list)}>{list ? 'Hide the lists' : 'See every search as a list'}</button>
       {list && <SearchHub site={site} range={range} part="details" />}
       <p class="muted small m-0">Extra visits are an estimate from a usual click-rate curve, to rank searches, not a forecast.</p>
 
       {opened && <QueryPanel site={site} r={opened} eng={eng} onClose={() => { location.hash = hrefWith('q', '').slice(1); }} />}
     </div>
   );
+}
+
+// The AI answers card: how often assistants name the site for the questions tracked.
+function aiLine(d, site) {
+  if (!d) return `Whether ChatGPT, Perplexity and the rest mention ${site.label} for the questions you track.`;
+  const asked = (d.results || []).filter((r) => r.askedBy > 0);
+  if (!d.prompts?.length) return 'No questions tracked yet. Add the questions people ask assistants, and Kauzl checks whether they name you.';
+  if (!asked.length) return `${d.prompts.length} questions are set up, but the checks haven’t run yet.`;
+  const named = asked.filter((r) => r.namedBy > 0).length;
+  return <>{site.label} is named in <b>{named} of {asked.length}</b> questions you track.</>;
 }
 
 function QueryPanel({ site, r, eng, onClose }) {
