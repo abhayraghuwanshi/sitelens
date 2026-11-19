@@ -12,10 +12,10 @@ import { Sessions } from '../pages/Sessions.jsx';
 import { Health } from '../pages/Health.jsx';
 import { Posts } from '../pages/Posts.jsx';
 import { Mentions } from '../pages/Mentions.jsx';
-import { CustomMetricsCard } from '../pages/CustomMetrics.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page, SectionTabs } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
+import { GoalsView } from './GoalsView.jsx';
 import { SearchView } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
@@ -47,8 +47,8 @@ const TABS = {
     retention: { mode: 'warehouse', component: Retention },
   },
   goals: {
+    numbers: { mode: 'api', component: GoalsView },
     results: { own: OutcomesPage },
-    numbers: { mode: 'api', component: CustomMetricsCard },
   },
   raw: {
     events: { mode: 'warehouse', component: Events },

@@ -23,7 +23,7 @@ export const SECTIONS = {
   search: { label: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['ai', 'AI answers']] },
   traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources'], ['posts', 'Posts & mentions'], ['overview', 'GA4 summary']] },
   journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys'], ['paths', 'Paths'], ['funnels', 'Funnels'], ['retention', 'Retention']] },
-  goals: { label: 'Goals', q: 'Is it working', tabs: [['results', 'Results'], ['numbers', 'Your numbers']] },
+  goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals'], ['results', 'Results']] },
   raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['sql', 'SQL']] },
 };
 
