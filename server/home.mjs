@@ -35,8 +35,8 @@ const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" strok
 
 // What's inside: the questions people ask after they ship, each answered the
 // way Kauzl answers it (a verdict and a sentence), with a small picture of the
-// real screen as the proof, linked to that part of the demo
-// (/demo?to=<view>, server/hosted.mjs). Sample numbers.
+// real screen as the proof, linked to that screen in the tour
+// (/tour/?to=<view>, built from the design by scripts/build-tour.mjs). Sample numbers.
 const QA = [
   { key: 'cycles', feature: 'Content cycles', to: 'cycles',
     q: 'Which articles are worth writing more of?',
@@ -276,6 +276,11 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .b-vis { background: var(--sunk); border-radius: 14px; padding: 16px; font-size: 13px; min-width: 0; }
 .qa-go { display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--link); text-decoration: none; }
 .qa-go:hover { text-decoration: underline; }
+.tour-frame { margin-top: 24px; border: 1px solid var(--border, rgba(0,0,0,.12)); border-radius: 16px; overflow: hidden; box-shadow: 0 18px 50px rgba(18,21,34,.14); background: #fff; }
+.tour-frame iframe { display: block; width: 100%; height: 780px; border: 0; }
+.tour-full { margin-top: 10px; font-size: 14px; }
+.tour-full a { color: var(--link); font-weight: 600; text-decoration: none; }
+@media (max-width: 760px) { .tour-frame iframe { height: 720px; } }
 .qa-claude { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px 56px; align-items: center; margin-top: 40px; background: var(--ink); color: #F6F7F9; border: 1px solid var(--ink-line); border-radius: 24px; padding: 36px; }
 .qa-claude h3 { margin: 0 0 10px; font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.035em; color: #F6F7F9; }
 .qa-claude h3 em { font-style: normal; color: var(--amber); }
@@ -512,7 +517,7 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
 <body data-page="home:">
 <header class="top"><div class="wrap">
   <a class="brand" href="/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a>
-  <nav class="links" aria-label="Sections"><a href="/demo">Demo</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a class="keep" href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}</nav>
+  <nav class="links" aria-label="Sections"><a href="#inside">Look inside</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a class="keep" href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}</nav>
   <a class="btn amber small" href="${enter}">Open Kauzl</a>
 </div></header>
 
@@ -523,10 +528,10 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
       <h1>You shipped it.<br><em>Did it work?</em></h1>
       <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
-        <a class="btn amber" href="/demo">See the live demo</a>
+        <a class="btn amber" href="#inside">Look inside</a>
         ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="/waitlist">Get early access</a>'}
       </div>
-      <ul class="perks"><li>${CHECK}Demo needs no sign-up</li><li>${CHECK}No tracking script</li></ul>
+      <ul class="perks"><li>${CHECK}Look around, no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>
 
     <div class="play-wrap">
@@ -547,6 +552,13 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
     </div>
   </div></div>
 
+  <section id="inside"><div class="wrap">
+    <p class="kicker">Look inside</p><h2 class="title">This is Kauzl</h2>
+    <p class="sub">Click around: the Story, a day on the Timeline, a search, a source. Sample data from a made-up site; nothing here is anyone’s.</p>
+    <div class="tour-frame"><iframe src="/tour/?embed=1" title="Kauzl, with sample data" loading="lazy"></iframe></div>
+    <p class="tour-full"><a href="/tour/">Open it full screen →</a></p>
+  </div></section>
+
   <section id="features"><div class="wrap">
     <p class="kicker">What’s inside</p><h2 class="title">Answers, not dashboards</h2>
     <p class="sub">Every part of Kauzl ends in a decision, not a chart to read: which articles to grow, which subreddits to keep, which link brought sign-ups, whether your fix helped. The proof sits underneath.</p>
@@ -560,7 +572,7 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
           <div class="qa-head"><span class="who">${owl(24, { variant: 'paper' })}</span><span class="name">kauzl</span><span class="verdict ${x.verdict[1]}">${x.verdict[0]}</span></div>
           <p class="qa-text">${x.a}</p>
           <div class="b-vis">${x.visual}</div>
-          <a class="qa-go" href="/demo?to=${x.to}">See it in the demo →</a>
+          <a class="qa-go" href="/tour/?to=${x.to}">See it in Kauzl →</a>
         </div>`).join('\n        ')}
       </div>
     </div>
@@ -589,7 +601,7 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
       </div>
       <div class="hub-core" aria-hidden="true"><span class="hub-ring">${owl(64, { variant: 'paper' })}</span><span class="hub-word">kauzl</span></div>
       <ol class="hub-out">
-        ${HUB_OUT.map(([title, text, to]) => `<li><a href="/demo${to ? `?to=${to}` : ''}"><b>${title}</b><span>${text}</span></a></li>`).join('\n        ')}
+        ${HUB_OUT.map(([title, text, to]) => `<li><a href="/tour/${to ? `?to=${to}` : ''}"><b>${title}</b><span>${text}</span></a></li>`).join('\n        ')}
       </ol>
     </div>
   </div></section>
@@ -621,7 +633,7 @@ ${tools ? `  <section id="tools"><div class="wrap">
       <div>${owl(56, { variant: 'paper' })}
         ${signedIn ? `<h2>See your site’s Story</h2>
         <p>Connect a site and find out what last month’s releases, posts and articles actually did.</p>
-        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="/demo">See the demo first</a></div>` : `<h2>Get early access</h2>
+        <div class="ctas"><a class="btn amber" href="${enter}">Open Kauzl</a><a class="btn ghost" href="#inside">Look inside first</a></div>` : `<h2>Get early access</h2>
         <p>Kauzl is opening to a few teams at a time. Leave your email and we’ll invite you, with a link to sign in.</p>
         <form class="join" method="post" action="/waitlist">
           <input type="hidden" name="from" value="home">
@@ -629,7 +641,7 @@ ${tools ? `  <section id="tools"><div class="wrap">
           <input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" aria-label="Your email">
           <button class="btn amber" type="submit">Get early access</button>
         </form>
-        <p class="fine">Already invited? <a href="/login">Sign in</a> · or <a href="/demo">look around the demo</a></p>`}
+        <p class="fine">Already invited? <a href="/login">Sign in</a> · or <a href="#inside">look inside first</a></p>`}
       </div>
     </div>
   </div></section>

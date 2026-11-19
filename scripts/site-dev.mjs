@@ -1,5 +1,5 @@
 // Runs the public website locally: the free tools (tools/dist on :3000) and
-// the hosted server (home, sign-in, demo, /tools/ proxied) on :8080 with --watch.
+// the hosted server (home, sign-in, tour, /tools/ proxied) on :8080 with --watch.
 // Settings come from real env vars, then .env, then local-only defaults, so
 // the pages render without any setup. Google sign-in needs real credentials.
 import { spawn, execFileSync } from 'node:child_process';

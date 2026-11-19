@@ -20,6 +20,7 @@
     "leads": "node scripts/reddit-leads.mjs",
     "post": "node scripts/post.mjs",
     "screenshot": "node scripts/screenshot.mjs",
+    "tour:build": "node scripts/build-tour.mjs",
     "trailer": "node scripts/record-trailer.mjs",
     "trailer:video": "node scripts/record-video.mjs",
     "desktop:stage": "vite build && node scripts/stage-desktop.mjs",

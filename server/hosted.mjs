@@ -45,14 +45,10 @@ import { loginPage, waitlistPage, adminPage, waitlistCsv, signedInPage } from '.
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
 
 const COOKIE = '__Host-sitelens';
-// The public demo (kauzl.com/demo): anyone can look around the Studio with
-// the sample site, no sign-in. One shared, read-only app answers them.
+// The public tour (kauzl.com/tour): the design prototype with sample data,
+// built by scripts/build-tour.mjs. No app, no data, nothing to sign in to.
+// The old live demo (/demo) redirects there and clears its old cookie.
 const DEMO_COOKIE = '__Host-kauzl-demo';
-const DEMO_HOURS = 12;
-const DEMO_USER = { id: 'demo', email: 'demo@kauzl.invalid' };
-const DEMO_START = '/#/site/demo/story';
-// /demo?to=<view> opens that part of the sample site (the home page links them).
-const DEMO_VIEWS = new Set(['story', 'timeline', 'todos', 'alerts', 'campaigns', 'cycles', 'ai', 'journeys', 'outcomes', 'funnels', 'pages', 'overview']);
 const SESSION_DAYS = 30;
 // How long a new MCP token lasts; 0 is never (until revoked). The default limits
 // what a token copied out of someone's Claude config is good for.
@@ -88,6 +84,8 @@ const SECURITY_HEADERS = {
 // they earn count for this domain) use the brand's Google Fonts; still no
 // inline JS.
 const HOME_PLAY_JS = readFileSync(new URL('./home-play.js', import.meta.url), 'utf8');
+const TOUR_HTML = readFileSync(new URL('./tour/index.html', import.meta.url), 'utf8');
+const TOUR_JS = readFileSync(new URL('./tour/tour.js', import.meta.url), 'utf8');
 
 const PUBLIC_CSP = [
   "default-src 'self'",
@@ -196,53 +194,7 @@ export function createGateway({
     return app;
   }
 
-  // The demo's app: only the sample site, no background jobs, never written to.
-  let demoApp = null;
-  const demoAppFor = () => (demoApp ||= createUserApp(DEMO_USER));
-  const DEMO_ONLY = { error: 'This is the demo, so nothing can be changed. Sign in to use Kauzl on your own sites.', kind: 'demo' };
   const DEMO_CLEAR = `${DEMO_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
-
-  // The showcase: one real site shown in the demo instead of the sample
-  // (DEMO_SITE = "owner@email/siteId", e.g. kauzl.com in the owner's Kauzl).
-  // Visitors see it exactly as someone it was shared with would: the same
-  // view-only allowlist (sharing.mjs), and nothing else from that account.
-  function showcase() {
-    const [showcaseEmail, showcaseSite] = String(env.DEMO_SITE || '').split('/').map((x) => x.trim());
-    if (!showcaseSite || !allowedEmails.has(cleanEmail(showcaseEmail))) return null;
-    const owner = db.prepare('SELECT id, email FROM users WHERE email = ?').get(cleanEmail(showcaseEmail));
-    return owner ? { owner, site: showcaseSite } : null;
-  }
-  async function showcaseSiteState(show) {
-    const theirs = await (await selfFetch(appFor(show.owner).handle, `${origin}/api/state`)).json().catch(() => ({ sites: [] }));
-    const site = (theirs.sites || []).find((x) => x.id === show.site && !x.demo);
-    return site ? { ...site, shared: { by: 'Kauzl' }, showcase: true } : null;
-  }
-  const demoStart = async (to) => {
-    const show = showcase();
-    const id = show && (await showcaseSiteState(show)) ? show.site : 'demo';
-    return `/#/site/${id}/${DEMO_VIEWS.has(to) ? to : 'story'}`;
-  };
-
-  async function demoRoutes(req, res, url) {
-    if (url.pathname === '/api/me') return jsonOut(res, 200, { email: null, hosted: true, viewer: true, demo: true });
-    const show = showcase();
-    const target = show && siteRequest(req.method, url);
-    // The showcase site's reads go to its owner's app, as for a viewer.
-    if (target && target.site === show.site) return forwardShared(req, res, url, target, show.owner);
-    if (target) return jsonOut(res, 403, DEMO_ONLY);
-    const read = req.method === 'GET' || req.method === 'HEAD';
-    // Nothing that changes data, signs in to other services, or belongs to an account.
-    const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|mcp|bing\/auth|extensions|shares)(\/|$)/.test(url.pathname);
-    if (!read || reaching) return jsonOut(res, 403, DEMO_ONLY);
-    if (url.pathname === '/api/state') {
-      const state = await (await selfFetch(demoAppFor().handle, `${origin}/api/state`)).json();
-      const real = show && (await showcaseSiteState(show));
-      // The real site when there is one; the sample site otherwise.
-      state.sites = real ? [real] : (state.sites || []).filter((s) => s.demo);
-      return jsonOut(res, 200, { ...state, viewer: true, demo: true });
-    }
-    return demoAppFor().handle(req, res);
-  }
 
   function sessionUser(req) {
     const id = cookies(req)[COOKIE];
@@ -725,31 +677,35 @@ export function createGateway({
         return redirectLogin(res, err.message);
       }
     }
+    // The tour, and the old live demo's address pointing to it (?to=<screen> carries over).
     if (url.pathname === '/demo') {
-      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
-      // Signed-in people already have the sample site in their own Kauzl.
-      if (!sessionUser(req)) res.setHeader('Set-Cookie', `${DEMO_COOKIE}=1; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${DEMO_HOURS * 3600}`);
       const to = url.searchParams.get('to');
-      // Visitors get the showcase site when one is set; signed-in people their own sample.
-      const location = sessionUser(req) ? (DEMO_VIEWS.has(to) ? `/#/site/demo/${to}` : DEMO_START) : await demoStart(to);
-      return res.writeHead(302, { Location: location, 'Cache-Control': 'no-store' }).end();
+      res.setHeader('Set-Cookie', DEMO_CLEAR);
+      return res.writeHead(301, { Location: `/tour/${to ? `?to=${encodeURIComponent(to)}` : ''}` }).end();
+    }
+    if (url.pathname === '/tour') return res.writeHead(301, { Location: `/tour/${url.search}` }).end();
+    if (url.pathname === '/tour/' || url.pathname === '/tour/tour.js') {
+      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      const js = url.pathname.endsWith('.js');
+      // Framed by the home page (same origin), so frame-ancestors is 'self' here.
+      return res.writeHead(200, {
+        'Content-Type': js ? 'text/javascript; charset=utf-8' : 'text/html; charset=utf-8',
+        'Cache-Control': 'public, max-age=300',
+        'Content-Security-Policy': PUBLIC_CSP.replace("frame-ancestors 'none'", "frame-ancestors 'self'"),
+      }).end(js ? TOUR_JS : TOUR_HTML);
     }
     if (url.pathname === '/logout' && req.method === 'POST') {
-      // Leaving the demo goes back to the home page; signing out, to sign-in.
-      const leavingDemo = !sessionUser(req) && cookies(req)[DEMO_COOKIE] === '1';
       endSession(req, res);
       res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie'), DEMO_CLEAR].flat().filter(Boolean));
-      return res.writeHead(303, { Location: leavingDemo ? '/home' : '/login' }).end();
+      return res.writeHead(303, { Location: '/login' }).end();
     }
 
     const user = sessionUser(req);
-    const demo = !user && cookies(req)[DEMO_COOKIE] === '1';
-    // The public home page: at /home for everyone, at / for visitors without a session or the demo.
-    if (url.pathname === '/home' || (!user && !demo && url.pathname === '/')) {
+    // The public home page: at /home for everyone, at / for visitors without a session.
+    if (url.pathname === '/home' || (!user && url.pathname === '/')) {
       if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
       return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(homePage({ signedIn: Boolean(user), tools: Boolean(toolsOrigin), ga: env.GOOGLE_TAG_ID, v: await assetVersion() }));
     }
-    if (demo) return demoRoutes(req, res, url);
     if (!user) {
       if (url.pathname.startsWith('/api/')) {
         return res.writeHead(401, { 'Content-Type': 'application/json; charset=utf-8' }).end(JSON.stringify({ error: 'Sign in to continue.', kind: 'login' }));
