@@ -134,10 +134,10 @@ function Answer({ steps, goals, outcome }) {
 }
 
 // Steps down the goal, with the drop between each one.
-function Stairs({ steps, goals, site, range, outcome }) {
+export function Stairs({ steps, goals, site, range, outcome, bare }) {
   const first = steps[0]?.sessions || 0;
-  return (
-    <section class="card card-plain" aria-label="Steps to the goal">
+  const content = (
+    <>
       <div class="nx-stairs">
         {steps.map((s, i) => {
           const next = steps[i + 1];
@@ -163,6 +163,12 @@ function Stairs({ steps, goals, site, range, outcome }) {
         }).flat()}
       </div>
       <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}`}>Edit steps</a></p>
+    </>
+  );
+  if (bare) return <>{content}</>;
+  return (
+    <section class="card card-plain" aria-label="Steps to the goal">
+      {content}
     </section>
   );
 }

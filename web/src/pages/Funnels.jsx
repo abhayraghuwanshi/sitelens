@@ -4,6 +4,7 @@ import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
 import { Loading, ErrorState, WarehouseMeta } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { Stairs } from '../next/Journeys.jsx';
 
 const DEFAULT_STEPS = [
   { kind: 'page', value: '/pricing' },
@@ -26,6 +27,7 @@ export function Funnels({ site, range }) {
   const config = useAsync(() => api.get(`/sites/${site.id}/config`), [site.id]);
   const declared = config.data?.config?.funnels || [];
   const goals = config.data?.config?.goals || [];
+  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
   const events = useAsync(() => api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`), [site.id, range]);
   const result = useAsync(() => (run ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }) : null), [site.id, range, JSON.stringify(run)]);
   const suggestions = useAsync(() => api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`), [site.id, range]);
@@ -87,7 +89,7 @@ export function Funnels({ site, range }) {
       <section class="card card-plain" aria-label="Funnel">
         {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
           : !result.data ? <Loading height={340} />
-          : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} />}
+          : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} goals={goals} site={site} range={range} outcome={outcome} bare />}
       </section>
     </div>
   );
@@ -105,7 +107,7 @@ function labeller(goals) {
   };
 }
 
-function FunnelView({ data, name, label }) {
+function FunnelView({ data, name, label, goals, site, range, outcome }) {
   const steps = data.steps;
   const first = steps[0]?.sessions || 0;
   if (!first) return <p class="muted">No visits reached the first step in this period.</p>;
@@ -128,37 +130,7 @@ function FunnelView({ data, name, label }) {
         {leak && <div><b class="bad">−{formatPercent(1 - leak.s.stepRate, 0)}</b><span class="muted small">biggest drop · before step {leak.i + 1}</span></div>}
       </div>
 
-      <div class="nx-fn-flow" role="list">
-        {steps.map((s, i) => {
-          const prev = i ? steps[i - 1] : null;
-          const isLeak = leak && leak.i === i;
-          return (
-            <>
-              {prev && (
-                <div class={`nx-fn-drop${isLeak ? ' leak' : ''}`} key={`d${i}`} aria-label={`${formatPercent(1 - s.stepRate, 0)} dropped`}>
-                  <span class="nx-fn-arrow" aria-hidden="true">→</span>
-                  {prev.sessions > s.sessions
-                    ? <><b>−{formatPercent(1 - s.stepRate, 0)}</b><span class="small">{formatNumber(prev.sessions - s.sessions)} left</span></>
-                    : <b class="good">none lost</b>}
-                  {s.avgSeconds !== null && <span class="small muted">~{formatDuration(s.avgSeconds)}</span>}
-                </div>
-              )}
-              <div class="nx-fn-step" role="listitem" key={`s${i}`}>
-                <div class="nx-fn-head">
-                  <span class="nx-fn-n">{i + 1}</span>
-                  <span class="nx-fn-name" title={s.value}>{label.title(s)}</span>
-                  <code class="nx-fn-raw" title={s.value}>{label.raw(s)}</code>
-                </div>
-                <div class="nx-fn-bararea">
-                  {prev && <span class="nx-fn-ghost" style={{ height: `${Math.max(1, (prev.sessions / first) * 100)}%` }} />}
-                  <span class={`nx-fn-bar${i === steps.length - 1 ? ' last' : ''}`} style={{ height: `${Math.max(1, (s.sessions / first) * 100)}%` }} />
-                </div>
-                <div class="nx-fn-count"><b>{formatNumber(s.sessions)}</b> <span class="muted small">{formatPercent(s.rate, s.rate < 0.1 ? 1 : 0)}</span></div>
-              </div>
-            </>
-          );
-        })}
-      </div>
+      {first > 0 && <Stairs steps={steps} goals={goals} site={site} range={range} outcome={outcome} bare />}
 
       {notes.length > 0 && (
         <div>
