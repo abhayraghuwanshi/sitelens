@@ -64,6 +64,7 @@ export function JourneysPage({ site, params }) {
   const [pickKey, setPickKey] = useState(null);
   const viewing = pickKey ? picks.find((p) => p.key === pickKey) || null : null;
   const steps = viewing?.steps || chosen?.steps || [];
+  const activeKey = viewing?.key || picks.find((p) => JSON.stringify(p.steps) === JSON.stringify(steps))?.key;
   const [draft, setDraft] = useState(null);
   const [editing, setEditing] = useState(false);
   const edit = params?.get('edit') === '1';
@@ -103,7 +104,7 @@ export function JourneysPage({ site, params }) {
         {picks.length > 1 && (
           <nav class="nx-fn-picker" aria-label="Funnels">
             {picks.map((p) => (
-              <button key={p.key} type="button" class={`nx-fn-chip${JSON.stringify(p.steps) === JSON.stringify(steps) ? ' active' : ''}`} title={p.why}
+              <button key={p.key} type="button" class={`nx-fn-chip${p.key === activeKey ? ' active' : ''}`} title={p.why}
                 onClick={() => setPickKey(pickKey === p.key ? null : p.key)}>
                 {p.name}{p.from === 'suggested' && <span class="nx-fn-tag">suggested</span>}
               </button>
