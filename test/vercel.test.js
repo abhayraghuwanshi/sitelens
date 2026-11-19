@@ -128,7 +128,7 @@ test('annotations: ready production deploys of matched sites, scoped per site', 
   try {
     const items = await vercel.annotations({ from: '2026-10-01', to: '2026-10-30' });
     assert.deepEqual(items, [{
-      id: 'vercel-dpl_one', date: '2026-10-20', label: 'Deploy: Ship it', kind: 'deploy', source: 'vercel', url: 'https://vercel.com/x/1', scope: 'site:tradify',
+      id: 'vercel-dpl_one', date: '2026-10-20', at: 1792486800000, label: 'Deploy: Ship it', kind: 'deploy', source: 'vercel', url: 'https://vercel.com/x/1', scope: 'site:tradify',
     }]);
     assert.deepEqual(await vercel.annotations({ scopes: ['site:desk'] }), []);
   } finally {

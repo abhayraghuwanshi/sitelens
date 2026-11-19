@@ -27,6 +27,7 @@ export function guessHosting(dns) {
   if (/netlify/.test(cname) || a.includes('75.2.60.5')) return 'netlify';
   if (/github\.io/.test(cname) || a.some((ip) => /^185\.199\.1(08|09|10|11)\.153$/.test(ip))) return 'github-pages';
   if (/pages\.dev/.test(cname)) return 'cloudflare-pages';
+  if (/\.fly\.dev\.?(\s|$)/.test(cname)) return 'fly';
   if (/web\.app|firebaseapp\.com|hosted\.app/.test(cname) || a.some((ip) => /^35\.219\.200\.|^199\.36\.158\.100$/.test(ip))) return 'firebase';
   return '';
 }

@@ -29,6 +29,14 @@ npm run tools:dev        # build + serve at http://localhost:3000/tools/
 Code layout: `pages/*.mjs` holds each page's copy, FAQ and form; `assets/*.js` the
 browser code; `assets/lib/` the logic shared with `test/free-tools.test.js`.
 
+## SEO and GEO rules
+
+The build refuses to finish if a page breaks a rule in `tools/seo-rules.mjs`.
+That covers title and description length, one h1, canonical, link previews,
+structured data, answer-first guides, quotable FAQs, honest comparisons, and
+every page being in the sitemap and `llms.txt`. The error names the page, the
+rule and the fix. Read `docs/seo-rules.md` before writing a guide.
+
 ## Deploy
 
 ```sh
@@ -40,7 +48,7 @@ The tools live on Vercel (https://kauzl-tools.vercel.app/tools/) and appear at
 `/tools/*` there, set by `TOOLS_ORIGIN` in `fly.toml`. So a tools change needs
 only `npm run tools:deploy`, no `fly deploy`; kauzl.com caches pages for 5
 minutes and assets for an hour. The Fly app also serves `/robots.txt` with the
-tools sitemap. Submit `https://kauzl.com/tools/sitemap.xml` in Search Console
+sitemap. Submit `https://kauzl.com/sitemap.xml` (tools and guides) in Search Console
 and Bing Webmaster Tools.
 
 ## Usage analytics
@@ -58,10 +66,12 @@ is ever sent.
 | `tool_example`, `tool_option` | Example loaded; preset, view or type picked | `tool`, `detail` |
 | `cta_click` | Link to Kauzl, the demo, sign-in, a tool or a guide | `location`, `detail` (path) |
 | `guide_read` | 75% of a guide scrolled into view | `guide` |
+| `waitlist_join` | Early-access form sent (home, sign-in, /waitlist), or a sign-in by someone not invited | `detail` (where) |
+| `sign_up`, `login` | First / later Google sign-in, sent from the short /signed-in page | `detail` (`google`) |
 
 To send them to GA4 from Tag Manager: create Data Layer Variables `tool`,
 `guide`, `detail` and `location`; a Custom Event trigger with event name
-`^(tool_|cta_|guide_)` (regex); and a **GA4 Event** tag with event name
+`^(tool_|cta_|guide_|waitlist_join$|sign_up$|login$)` (regex); and a **GA4 Event** tag with event name
 `{{Event}}`, those four as parameters, fired by that trigger. Then register
 `tool`, `guide`, `detail` and `location` as event-scoped custom dimensions in GA4.
 

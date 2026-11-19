@@ -22,9 +22,9 @@ const PUBLIC_SAMPLE = {
 };
 
 const TABS = [
-  { key: 'integrations', label: 'Integrations' },
-  { key: 'mcp', label: 'MCP' },
   { key: 'sites', label: 'Sites & products' },
+  { key: 'integrations', label: 'Connections' },
+  { key: 'mcp', label: 'Claude & agents' },
 ];
 
 const PANELS = {
@@ -42,14 +42,14 @@ const PANELS = {
 };
 
 // Settings: #/settings?tab=<tab> · #/settings?i=<integration> opens one integration's panel.
-export function Settings({ state, params, onChange, siteExtras }) {
+export function Settings({ state, params, onChange, siteExtras, siteMeasures }) {
   const flashError = params.get('error');
   const connected = params.get('connected');
   // MCP has its own tab so it's easy to find; old ?i=mcp links land there.
   const panel = params.get('i') !== 'mcp' && PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
   // Sites and products share one tab: old ?tab=products links (with ?edit=<product id>) land there.
   const asked = params.get('tab') === 'products' ? 'sites' : params.get('tab');
-  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'integrations';
+  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'sites';
 
   // Alert settings moved to the Alerts page; old ?tab=alerts links land there.
   useEffect(() => {
@@ -68,18 +68,23 @@ export function Settings({ state, params, onChange, siteExtras }) {
     <>
       <nav class="tabs" aria-label="Settings sections">
         {TABS.map((t) => (
-          <a key={t.key} href={`#/settings?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
+          <a key={t.key} href={`#/account?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
         ))}
       </nav>
+      {state.auth?.broken && panel !== 'google' && (
+        <a class="nx-note-line bad" href="#/account?i=google">
+          <Icon name="triangle" size={15} /><span><b>Google needs you.</b> {state.auth.broken}</span><span class="nx-go">Sign in again →</span>
+        </a>
+      )}
       {flashError && <ErrorState error={{ message: flashError }} />}
       {tab === 'integrations' && (panel ? (
         <>
-          <a class="back-link" href="#/settings?tab=integrations">← All integrations</a>
+          <a class="back-link" href="#/account?tab=integrations">← All connections</a>
           {PANELS[panel].render({ state, params, onChange })}
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
       {tab === 'mcp' && <McpSettings hosted={state.hosted} />}
-      {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} siteExtras={siteExtras} />}
+      {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} siteExtras={siteExtras} siteMeasures={siteMeasures} />}
     </>
   );
 }
@@ -91,9 +96,10 @@ export function Settings({ state, params, onChange, siteExtras }) {
 //   ?tab=sites&edit=new|<site>    add / edit a site (and what it runs on)
 //   ?tab=sites&product=new|<id>   add / edit a product without a website
 //   ?tab=products&edit=<id>       older product links, sent to the right form
-// siteExtras(site): what the new layout shows under an existing site's form
-// (sharing, left-out visits, what Studio measures), so a site is set up in one place.
-function SitesSettings({ state, params, onChange, siteExtras }) {
+// siteMeasures(site): what Studio measures, shown inside an existing site's form.
+// siteExtras(site): what the new layout shows under it (sharing, left-out visits),
+// so a site is set up in one place.
+function SitesSettings({ state, params, onChange, siteExtras, siteMeasures }) {
   const { auth, sites } = state;
   const setup = useAsync(() => api.get('/products/setup'), []);
   const base = location.hash.startsWith('#/account') ? '/account' : '/settings';
@@ -118,6 +124,7 @@ function SitesSettings({ state, params, onChange, siteExtras }) {
       <>
         {back}
         <SiteForm key={site.id || 'new'} initial={site} auth={auth} focus={params.get('focus') || ''}
+          measures={site.id ? siteMeasures?.(site) : null}
           onCancel={() => go()}
           onSaved={(saved) => { onChange(); navigate(`/site/${saved.id}`); }} />
         {site.id && siteExtras?.(site)}
@@ -379,12 +386,13 @@ function BqExportStatus({ propertyId, live, result }) {
       <span class="row gap-8">
         <a class="btn ghost" href="https://analytics.google.com/analytics/web/" target="_blank" rel="noopener noreferrer">Open GA4 Admin</a>
         <button class="btn ghost" type="button" onClick={() => result.reload()}>Check again</button>
+        <a class="btn ghost" href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">Step-by-step guide</a>
       </span>
     </div>
   );
 }
 
-function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
+function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({
     id: initial.id || '',
     label: initial.label || '',
@@ -458,7 +466,14 @@ function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
 
   return (
     <form class="stack" onSubmit={save}>
-      <Card title={initial.id ? `Edit ${initial.label}` : 'Add a site'} sub="The site’s analytics first, then everything it runs on. Skip what doesn’t apply."
+      {/* Save stays in reach: pinned at the top while the form scrolls. */}
+      <div class="form-bar">
+        <b class="form-bar-title">{initial.id ? `Edit ${initial.label}` : 'Add a site'}</b>
+        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save site'}</button>
+        <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+      </div>
+      {error && <ErrorState error={error} />}
+      <Card title="Analytics" sub="The site’s analytics first, then everything it runs on. Skip what doesn’t apply."
         actions={!initial.id && (
           <button class="btn ghost" type="button" onClick={() => setForm((f) => ({ ...f, label: PUBLIC_SAMPLE.label, host: PUBLIC_SAMPLE.host, useBq: true, bq: { ...f.bq, ...PUBLIC_SAMPLE.bq } }))}>
             <Icon name="database" size={13} /> Use Google’s public GA4 sample
@@ -506,7 +521,7 @@ function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
         </div>
 
         <div class="divider" />
-        <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL</label>
+        <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL · <a href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">How to set it up</a></label>
         {form.useBq && (
           <>
             <BqExportStatus propertyId={form.propertyId} live={live} result={bqExport} />
@@ -547,11 +562,7 @@ function SiteForm({ initial, auth, focus, onCancel, onSaved }) {
         ? <ProductStages form={{ ...product, siteId: initial.id || '' }} set={setProductPatch} setup={setup.data} inSite />
         : setup.error ? <ErrorState error={setup.error} onRetry={setup.reload} /> : <Loading height={120} />}
 
-      {error && <ErrorState error={error} />}
-      <div class="row">
-        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save site'}</button>
-        <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
-      </div>
+      {measures}
     </form>
   );
 }

@@ -2,14 +2,17 @@ import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
-import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
+import { Marked } from '../components/Marks.jsx';
+import { Editor, labeller } from '../pages/Funnels.jsx';
 
-// Journeys: where a visit came from × the page it landed on × what it did,
-// from BigQuery (so the site's leave-out rule applies). Steps and the outcome
-// are the site's own goals (set on its Edit page).
+// Journeys: one goal at a time. The steps down it, who gets there, and the
+// routes that bring people in or lose them — all from BigQuery, so a site's
+// leave-out rule applies. Steps are the site's own funnels, or a suggestion
+// while it has none; Paths and the raw events sit under Raw data.
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
+const share = (x) => (x == null || Number.isNaN(x) ? '–' : `${Math.round(x * 100)}%`);
 const RANGES = [{ key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
 
 // A referrer host or utm_source, as a person would name it.
@@ -22,9 +25,6 @@ const FAMILIES = [
   [/chatgpt|openai/, 'ChatGPT'], [/perplexity/, 'Perplexity'], [/gemini\.google|bard\.google/, 'Gemini'], [/claude\.ai/, 'Claude'], [/copilot/, 'Copilot'],
   [/chromewebstore/, 'Chrome Web Store'], [/github/, 'GitHub'], [/^t\.co$|twitter|x\.com/, 'X'], [/linkedin/, 'LinkedIn'], [/youtube/, 'YouTube'],
 ];
-const SEARCH = new Set(['Google', 'Bing', 'DuckDuckGo', 'Baidu', 'Yandex', 'Ecosia']);
-const AI = new Set(['ChatGPT', 'Perplexity', 'Gemini', 'Claude', 'Copilot']);
-
 export function family(source, host) {
   const s = String(source || '').toLowerCase();
   if (host && (s === host || s.endsWith(`.${host}`)) || s === 'localhost') return 'Your own site';
@@ -32,286 +32,311 @@ export function family(source, host) {
   return s.replace(/^www\./, '') || 'No referrer';
 }
 
-const kindOf = (name) => (SEARCH.has(name) ? 'search' : AI.has(name) ? 'AI assistant' : name === 'No referrer' ? '' : name === 'Your own site' ? 'a new visit while on the site' : 'link');
 export const pageName = (path) => (path === '/' ? 'The home page' : !path || path === '(not set)' ? 'No page recorded' : path);
 
-// The site's goals and its journeys, grouped by source family × landing page.
-export function useJourneys(site, range) {
-  const config = useAsync(() => api.get(`/sites/${site.id}/config`).catch(() => null), [site.id]);
-  const goals = config.data?.config?.goals || [];
-  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
-  const steps = goals.filter((g) => g.source === 'event' && g.role === 'step');
-  const ready = Boolean(site.modes?.warehouse && outcome);
-  const data = useAsync(() => (ready ? api.get(`/sites/${site.id}/warehouse/journeys${qs({ range, steps: steps.map((g) => g.match).join(','), outcome: outcome.match, min: 3 })}`) : null),
-    [site.id, range, ready && outcome.match, steps.map((g) => g.match).join()]);
+const shortPage = (path) => (path === '/' ? 'Home' : !path || path === '(not set)' ? 'No page' : path);
+const lower = (s) => String(s || '').toLowerCase();
 
-  const groups = new Map();
-  for (const j of data.data?.journeys || []) {
-    const name = family(j.source, site.host);
-    const key = `${name}|${j.landing}`;
-    const g = groups.get(key) || { key, name, landing: j.landing, sessions: 0, engaged: 0, converted: 0, steps: {}, sources: new Set(), first: {}, systems: {}, systemsConverted: {}, browsers: {}, browsersConverted: {} };
-    g.sessions += j.sessions;
-    g.engaged += j.engaged;
-    g.converted += j.converted;
-    for (const [k, v] of Object.entries(j.steps)) g.steps[k] = (g.steps[k] || 0) + v;
-    g.sources.add(j.source);
-    for (const [k, v] of Object.entries(j.systems || {})) g.systems[k] = (g.systems[k] || 0) + v;
-    for (const [k, v] of Object.entries(j.systemsConverted || {})) g.systemsConverted[k] = (g.systemsConverted[k] || 0) + v;
-    for (const [k, v] of Object.entries(j.browsers || {})) g.browsers[k] = (g.browsers[k] || 0) + v;
-    for (const [k, v] of Object.entries(j.browsersConverted || {})) g.browsersConverted[k] = (g.browsersConverted[k] || 0) + v;
-    // No-referrer visits: where each visitor first came from, by family.
-    for (const f of j.firstSources || []) {
-      const fam = family(f.source, site.host);
-      g.first[fam] = (g.first[fam] || 0) + f.n;
-    }
-    groups.set(key, g);
-  }
-  const journeys = [...groups.values()].sort((a, b) => b.converted - a.converted || b.sessions - a.sessions);
-  // Steps in the order visitors reach them: the most common first.
-  const order = steps.map((g) => ({ ...g, total: journeys.reduce((n, j) => n + (j.steps[g.match] || 0), 0) })).sort((a, b) => b.total - a.total);
-  return { config, data, ready, outcome, steps: order, journeys, systems: data.data?.systems || [] };
+// A step's name: the site's goal label for an event, the page for a page.
+function stepLabel(step, goals) {
+  if (step.kind === 'page') return shortPage(step.value);
+  return goals.find((g) => g.source === 'event' && g.match === step.value)?.label || step.value.replace(/_/g, ' ');
 }
+const stepKind = (step) => `${step.kind === 'event' ? 'event' : 'page'} ${step.value}`;
+
+const WHO = [{ key: 'source', label: 'Source' }, { key: 'system', label: 'Device' }, { key: 'browser', label: 'Browser' }, { key: 'country', label: 'Country' }];
 
 export function JourneysPage({ site, params }) {
   const wanted = params.get('range') || '28d';
   const range = RANGES.some((r) => r.key === wanted) ? wanted : '28d';
-  const j = useJourneys(site, range);
-  const [open, setOpen] = useState(params.get('open') || '');
+  const config = useAsync(() => api.get(`/sites/${site.id}/config`).catch(() => null), [site.id]);
+  const goals = config.data?.config?.goals || [];
+  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
+  const declared = config.data?.config?.funnels || [];
+  const suggestions = useAsync(() => (site.modes?.warehouse ? api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`).catch(() => null) : null), [site.id, range, site.modes?.warehouse]);
+  // The site's own funnel for this outcome first; a suggestion while it has none.
+  const wantedFunnel = (list) => list.find((f) => f.steps?.at(-1)?.kind === 'event' && f.steps.at(-1).value === outcome?.match);
+  const chosen = wantedFunnel(declared) || wantedFunnel(suggestions.data?.funnels || []) || declared[0] || suggestions.data?.funnels?.[0];
+  const picks = [
+    ...(declared || []).map((f) => ({ key: `yours:${f.name}`, name: f.name, steps: f.steps, from: 'yours' })),
+    ...((suggestions.data?.funnels) || []).map((f) => ({ key: `suggested:${f.name}:${f.goal}`, name: f.name, steps: f.steps, from: 'suggested', why: f.why })),
+  ];
+  const [pickKey, setPickKey] = useState(null);
+  const viewing = pickKey ? picks.find((p) => p.key === pickKey) || null : null;
+  const steps = viewing?.steps || chosen?.steps || [];
+  const activeKey = viewing?.key || picks.find((p) => JSON.stringify(p.steps) === JSON.stringify(steps))?.key;
+  const [draft, setDraft] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const edit = params?.get('edit') === '1';
+  const editingMode = editing || edit;
+  const effSteps = draft || steps;
+  const stepsKey = effSteps.map((s) => `${s.kind}:${s.value}`).join(',');
+
+  const funnel = useAsync(() => (outcome && effSteps.length ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: effSteps }) : null),
+    [site.id, range, stepsKey, outcome?.match]);
+
+  const [who, setWho] = useState('source');
+  const segments = useAsync(() => (outcome && effSteps.length
+    ? api.get(`/sites/${site.id}/warehouse/segments${qs({ range, by: who, outcome: outcome.match, steps: stepsKey })}`)
+    : null), [site.id, range, who, stepsKey, outcome?.match]);
+
+  const routes = useAsync(() => (outcome
+    ? api.get(`/sites/${site.id}/warehouse/routes${qs({ range, outcome: outcome.match, limit: 60 })}`)
+    : null), [site.id, range, outcome?.match]);
+
+  const events = useAsync(() => (site.modes?.warehouse ? api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`).catch(() => null) : null), [site.id, range, site.modes?.warehouse]);
 
   let body;
-  if (!site.modes?.warehouse) body = <p class="muted">Journeys need the site’s GA4 BigQuery export. Connect it in the site’s settings.</p>;
-  else if (j.config.data && !j.outcome) body = <p class="muted">Journeys need an outcome to count: add a goal event in the site’s settings (for example a download or a sign-up).</p>;
-  else if (j.data.error) body = <ErrorState error={j.data.error} onRetry={j.data.reload} />;
-  else if (!j.data.data) body = <Loading height={320} />;
+  if (!site.modes?.warehouse) body = <p class="muted">Journeys read each visit from the site’s GA4 BigQuery export. Connect it in the site’s settings to see them.</p>;
+  else if (config.error) body = <ErrorState error={config.error} onRetry={config.reload} />;
+  else if (!config.data) body = <Loading height={300} />;
+  else if (!outcome) body = <NoOutcome site={site} />;
+  else if (!steps.length && !suggestions.data && !suggestions.error) body = <Loading height={240} />;
+  else if (!steps.length) body = <NoSteps site={site} range={range} />;
+  else if (funnel.error) body = <ErrorState error={funnel.error} onRetry={funnel.reload} />;
+  else if (!funnel.data) body = <Loading height={320} />;
   else {
-    const first = j.journeys[0] ? `${j.journeys[0].key}` : '';
-    const current = open === '' ? first : open;
+    const first = funnel.data.steps?.[0]?.sessions || 0;
+    const last = funnel.data.steps?.at(-1)?.sessions || 0;
+    const average = first ? last / first : 0;
     body = (
-      <div class="nx-journeys">
-        <div class="nx-jrow nx-jhead" aria-hidden="true"><span>Came from</span><span>Landed on</span><span class="nx-num">Visits</span><span class="nx-num">{j.outcome.label}</span><span /></div>
-        {j.journeys.map((x) => (
-          <JourneyRow key={x.key} site={site} j={x} steps={j.steps} outcome={j.outcome} range={range}
-            open={current === x.key} onToggle={() => setOpen(current === x.key ? '-' : x.key)} />
-        ))}
-        <p class="note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
+      <div class="nx-jpage">
+        {picks.length > 1 && (
+          <nav class="nx-fn-picker" aria-label="Funnels">
+            {picks.map((p) => (
+              <button key={p.key} type="button" class={`nx-fn-chip${p.key === activeKey ? ' active' : ''}`} title={p.why}
+                onClick={() => setPickKey(pickKey === p.key ? null : p.key)}>
+                {p.name}{p.from === 'suggested' && <span class="nx-fn-tag">suggested</span>}
+              </button>
+            ))}
+          </nav>
+        )}
+        {first > 0
+          ? <p class="nx-lede"><Answer steps={funnel.data.steps} goals={goals} outcome={outcome} /></p>
+          : <p class="muted">No visits reached the first step in this period. Try a longer range, or edit the steps.</p>}
+        {first > 0 && <Stairs steps={funnel.data.steps} goals={goals} site={site} range={range} outcome={outcome} onEdit={() => setEditing(true)} />}
+        <WhoGetsThere site={site} who={who} setWho={setWho} data={segments} steps={funnel.data.steps} goals={goals} outcome={outcome} average={average} />
+        <RoutesCard site={site} data={routes} outcome={outcome} average={average} range={range} />
+        <p class="nx-rawlink muted small">
+          Also: <a href={`#/site/${site.id}/journeys?tab=retention&range=${range}`}>Retention</a> · Raw data:{' '}
+          <a href={`#/site/${site.id}/raw?tab=events&range=${range}`}>Events</a> ·{' '}
+          <a href={`#/site/${site.id}/raw?tab=paths&range=${range}`}>Sessions</a> ·{' '}
+          <a href={`#/site/${site.id}/raw?tab=sql&range=${range}`}>SQL</a>
+        </p>
       </div>
     );
   }
 
   return (
-    <Page title="Journeys" sub="How people come: where from, the page they land on, and what they do next"
-      actions={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />}>
-      <a class="nx-more" href={`#/site/${site.id}?range=${range}`}>← Story</a>
-      {j.data.data && j.outcome && <Summary j={j} />}
-      <section class="card card-plain">{body}</section>
+    <Page title="Journeys" sub="How people get to your goal, and where they stop"
+      actions={
+        <span class="nx-head-ctl">
+          {outcome && <span class="chip" title="The site’s outcome goal">{outcome.label}</span>}
+          <button class="btn" type="button" onClick={() => setEditing(true)}>Edit steps</button>
+          <Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />
+        </span>
+      }>
+      {editingMode ? (
+        <Editor
+          site={site}
+          steps={effSteps}
+          setSteps={setDraft}
+          apply={() => { setEditing(false); }}
+          declared={declared}
+          eventNames={(events.data?.events || []).map((e) => e.name)}
+          run={effSteps}
+          label={labeller(goals)}
+        />
+      ) : body}
     </Page>
   );
 }
 
-function JourneyRow({ site, j, steps, outcome, range, open, onToggle }) {
-  const rate = j.sessions ? j.converted / j.sessions : 0;
-  const kind = kindOf(j.name);
-  // For “No referrer”: the known first-ever sources of these visitors, biggest first.
-  const first = j.name === 'No referrer'
-    ? Object.entries(j.first || {}).filter(([name]) => name !== 'No referrer').sort((a, b) => b[1] - a[1])
-    : [];
-  const firstKnown = first.reduce((n, [, v]) => n + v, 0);
-  const chain = [
-    { label: 'Landed', n: j.sessions },
-    ...steps.map((s) => ({ label: s.label, n: j.steps[s.match] || 0 })),
-    { label: outcome.label, n: j.converted, last: true },
-  ];
+// The answer first: how many get there, and the one place most are lost.
+function Answer({ steps, goals, outcome }) {
+  const first = steps[0]?.sessions || 0;
+  const last = steps.at(-1)?.sessions || 0;
+  const gaps = steps.slice(1).map((s, i) => ({ i, lost: (steps[i].sessions || 0) - (s.sessions || 0) }));
+  const worst = gaps.reduce((a, b) => (b.lost > a.lost ? b : a), gaps[0] || { i: 0, lost: 0 });
+  const before = steps[worst.i + 1];
+  const oneIn = Math.round(first / Math.max(1, last));
+  const rate = pct(last, first);
   return (
-    <div class={`nx-journey${open ? ' open' : ''}`}>
-      <button type="button" class="nx-jrow" onClick={onToggle} aria-expanded={open}>
-        <span><b>{j.name}</b>{kind && <span class="muted small"> · {kind}</span>}
-          {first.length > 0 && <span class="muted small nx-jfirst">first came from {first.slice(0, 2).map(([name]) => name).join(', ')}</span>}</span>
-        <span class="nx-path">{pageName(j.landing)}</span>
-        <span class="nx-num">{fmt(j.sessions)}</span>
-        <span class="nx-num"><b class={j.converted ? 'good' : ''}>{fmt(j.converted)}</b> <span class="muted small">{pct(j.converted, j.sessions)}</span></span>
-        <Icon name="chevron" size={14} />
-      </button>
-      {open && (
-        <div class="nx-jbody">
-          <div class="nx-funnel">
-            {chain.map((s, i) => {
-              const prev = i ? chain[i - 1].n : s.n;
-              const lost = prev ? Math.round((1 - s.n / prev) * 100) : 0;
-              return (
-                <div class="nx-fstep" key={s.label}>
-                  <span class="muted">{s.label}</span>
-                  <span class="nx-bar"><span class={s.last ? 'last' : ''} style={{ width: `${Math.max(1.5, (s.n / Math.max(1, j.sessions)) * 100)}%` }} /></span>
-                  <b class="nx-num">{fmt(s.n)}</b>
-                  <span class={`small ${i && lost >= 50 ? 'bad' : 'muted'}`}>{i === 0 ? '' : lost > 0 ? `${lost}% dropped` : 'none dropped'}</span>
-                </div>
-              );
-            })}
-          </div>
-          <p class="nx-lede">{read(j, rate, steps)}</p>
-          <SystemSplit j={j} outcome={outcome} />
-          {j.name === 'No referrer' && (
-            <p class="muted small">
-              {first.length
-                ? <>Where these visitors first came from: {first.map(([name, n]) => `${name} ${fmt(n)}`).join(' · ')}. The other {fmt(Math.max(0, j.sessions - firstKnown))} have no known source: links opened from apps, email or bookmarks, typed addresses, or bots.</>
-                : <>None of these visitors has a known first source: links opened from apps, email or bookmarks, typed addresses, or bots. Tag links you share (and links your app opens) with utm_source to see them here.</>}
-            </p>
-          )}
-          <div class="nx-action-row">
-            <a class="btn" href={`#/site/${site.id}/sessions?range=${range}&path=${encodeURIComponent(j.landing)}`}>Sessions that landed here</a>
-            <a class="btn" href={`#/site/${site.id}/sessions?range=${range}&start=${encodeURIComponent(j.landing)}`}>Where they went next</a>
-            {SEARCH.has(j.name) && <a class="btn" href={`#/site/${site.id}/search`}>Searches behind it</a>}
-          </div>
-        </div>
-      )}
-    </div>
+    <>
+      <b>{oneIn > 1 ? `1 in ${oneIn}` : rate}</b> visitors reach “{lower(outcome.label)}” ({rate}).
+      {before && worst.lost > 0 && <> You lose the most before “{stepLabel(before, goals)}”: <b>{pct(worst.lost, steps[worst.i].sessions)}</b> never get there.</>}
+    </>
   );
 }
 
-// One plain reading of the journey, from its own numbers only.
-function read(j, rate, steps) {
-  const engaged = j.sessions ? j.engaged / j.sessions : 0;
-  const reach = steps[0] ? (j.steps[steps[0].match] || 0) / Math.max(1, j.sessions) : null;
-  if (rate >= 0.15) return `A strong way in: ${pct(j.converted, j.sessions)} of these visits convert.`;
-  if (reach !== null && reach < 0.25 && engaged >= 0.5) return `Visitors stay (${pct(j.engaged, j.sessions)} engaged) but few reach “${steps[0].label}”: the page doesn’t lead them there.`;
-  if (engaged < 0.25) return `Most leave without engaging (${pct(j.engaged, j.sessions)} engaged): check whether these are real visitors, or whether the page answers what they came for.`;
-  if (!j.converted) return `Visitors look around (${pct(j.engaged, j.sessions)} engaged) but none converted in this period.`;
-  return `${pct(j.converted, j.sessions)} convert and ${pct(j.engaged, j.sessions)} engage.`;
-}
-
-// Summary rows come back per system × browser; roll them up by one of the two.
-// Browsers under 2% of visits fold into “Other”.
-const BROWSER = (b) => (!b || b === '(not set)' ? 'Unknown' : b);
-function rollUp(rows, by, total) {
-  const m = new Map();
-  for (const r of rows) {
-    const name = by === 'browser' ? BROWSER(r.browser) : r.name;
-    const g = m.get(name) || { name, sessions: 0, converted: 0 };
-    g.sessions += r.sessions;
-    g.converted += r.converted;
-    m.set(name, g);
-  }
-  let list = [...m.values()].sort((a, b) => b.sessions - a.sessions);
-  if (by === 'browser') {
-    const small = list.filter((x) => x.sessions / total < 0.02 || x.name === 'Unknown');
-    list = list.filter((x) => !small.includes(x));
-    const rest = small.reduce((acc, x) => ({ ...acc, sessions: acc.sessions + x.sessions, converted: acc.converted + x.converted }), { name: 'Other', sessions: 0, converted: 0 });
-    if (rest.sessions) list.push(rest);
-  }
-  return list;
-}
-
-// The period at a glance: every visit (not only the listed journeys), split by
-// system or browser, and what stands out — each a short headline with one line under it.
-function Summary({ j }) {
-  const [by, setBy] = useState('system');
-  const total = j.systems.reduce((acc, x) => ({
-    sessions: acc.sessions + x.sessions, converted: acc.converted + x.converted, noReferrer: acc.noReferrer + x.noReferrer,
-  }), { sessions: 0, converted: 0, noReferrer: 0 });
-  if (!total.sessions) return null;
-  const label = j.outcome.label;
-  const hasBrowser = j.systems.some((x) => BROWSER(x.browser) !== 'Unknown');
-  const rows = rollUp(j.systems, hasBrowser ? by : 'system', total.sessions);
-  const max = Math.max(...rows.map((x) => x.sessions));
-  const notes = findings(j, total, label).slice(0, 5);
-  return (
-    <section class="card card-plain nx-jsum" aria-label="Summary">
-      <div class="nx-jsum-stats">
-        <div><b>{fmt(total.sessions)}</b><span class="muted small">visits</span></div>
-        <div><b class={total.converted ? 'good' : ''}>{fmt(total.converted)}</b><span class="muted small">{label.toLowerCase()}</span></div>
-        <div><b>{pct(total.converted, total.sessions)}</b><span class="muted small">of visits convert</span></div>
-        <div><b>{pct(total.noReferrer, total.sessions)}</b><span class="muted small">came with no referrer</span></div>
-      </div>
-      <div class="nx-jsum-grid">
-        <div>
-          <div class="nx-jsum-bar">
-            <h3 class="nx-jsum-h">By {hasBrowser ? by : 'system'}</h3>
-            {hasBrowser && <Segmented label="Split by" value={by} options={[{ key: 'system', label: 'System' }, { key: 'browser', label: 'Browser' }]} onChange={setBy} />}
-          </div>
-          <div class="nx-jsys" role="table" aria-label={`Visits and ${label.toLowerCase()} by ${by}`}>
-            <div class="nx-jsys-row nx-jsys-head" role="row"><span role="columnheader" /><span role="columnheader" /><span class="nx-num" role="columnheader">Visits</span><span class="nx-num" role="columnheader" title={label}>Converted</span></div>
-            {rows.map((x) => (
-              <div class="nx-jsys-row" role="row" key={x.name}>
-                <span role="cell">{x.name}</span>
-                <span class="nx-bar" role="cell"><span style={{ width: `${Math.max(1.5, (x.sessions / max) * 100)}%` }} /></span>
-                <span class="nx-num" role="cell">{fmt(x.sessions)}</span>
-                <span class="nx-num" role="cell"><b class={x.converted ? 'good' : 'muted'}>{fmt(x.converted)}</b> <span class="muted small nx-jsys-pct">{pct(x.converted, x.sessions)}</span></span>
+// Steps down the goal, with the drop between each one.
+export function Stairs({ steps, goals, site, range, outcome, bare, onEdit }) {
+  const first = steps[0]?.sessions || 0;
+  const content = (
+    <>
+      <div class="nx-stairs">
+        {steps.map((s, i) => {
+          const next = steps[i + 1];
+          const lost = next ? s.sessions - next.sessions : 0;
+          return [
+            <div class="nx-stair" key={`s${i}`}>
+              <span class="nx-stair-name"><b>{stepLabel(s, goals)}</b><span class="nx-stair-kind">{stepKind(s)}</span></span>
+              <span class="nx-stair-bar"><span style={{ width: `${Math.max(0.6, (s.sessions / Math.max(1, first)) * 100)}%` }} /></span>
+              <span class="nx-stair-num">
+                <b>{fmt(s.sessions)}</b>
+                <small>{i ? `${pct(s.sessions, first)} of all · ${share(s.stepRate)} of the step before` : 'everyone'}</small>
+              </span>
+            </div>,
+            next && (
+              <div class="nx-leakrow" key={`l${i}`}>
+                <span />
+                <a class="nx-leak" href={stopHref(site, range, s)}>
+                  <b>{fmt(lost)} stopped here</b> ({pct(lost, s.sessions)}) <span>see where they went →</span>
+                </a>
               </div>
-            ))}
-          </div>
-        </div>
-        {notes.length > 0 && (
-          <div>
-            <h3 class="nx-jsum-h nx-jsum-bar">What stands out</h3>
-            <ul class="nx-jfind">
-              {notes.map((n) => (
-                <li key={n.title} class={`tone-${n.tone}`}>
-                  <b>{n.title}</b>
-                  <span class="muted small">{n.detail}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
+            ),
+          ];
+        }).flat()}
       </div>
+      <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. {onEdit ? (
+        <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`} onClick={(e) => { e.preventDefault(); onEdit(); }}>Edit steps</a>
+      ) : (
+        <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a>
+      )}</p>
+    </>
+  );
+  if (bare) return <>{content}</>;
+  return (
+    <section class="card card-plain" aria-label="Steps to the goal">
+      {content}
     </section>
   );
 }
 
-// What stands out, from the period's own numbers only: the best way in, the
-// biggest leak, and systems that don't convert. Systems under 5% of visits are
-// too small to read into.
-function findings(j, total, label) {
-  const out = [];
-  const what = label.toLowerCase();
-  const overall = total.converted / total.sessions;
-  const rate = (x) => (x.sessions ? x.converted / x.sessions : 0);
-  const share = (x) => x.sessions / total.sessions;
-  const ways = j.journeys.filter((x) => x.name !== 'Your own site');
-  const best = ways.filter((x) => x.converted).sort((a, b) => b.converted - a.converted || rate(b) - rate(a))[0];
-  if (best) out.push({ tone: 'good', title: `Best way in: ${best.name} → ${pageName(best.landing)}`, detail: `${fmt(best.converted)} of ${fmt(best.sessions)} visits (${pct(best.converted, best.sessions)}) ${what}.` });
-  const leak = ways.filter((x) => rate(x) < overall / 2).sort((a, b) => b.sessions - a.sessions)[0];
-  if (leak) out.push({ tone: 'bad', title: `Biggest leak: ${leak.name} → ${pageName(leak.landing)}`, detail: `${fmt(leak.sessions)} visits, ${leak.converted ? `only ${fmt(leak.converted)}` : 'none'} converted.` });
-  const systems = rollUp(j.systems, 'system', total.sessions);
-  const big = systems.filter((x) => share(x) >= 0.05);
-  const phones = big.find((x) => x.name === 'Phones and tablets');
-  if (phones && share(phones) >= 0.1 && rate(phones) < overall / 3) {
-    out.push({ tone: 'warn', title: `Phones: ${pct(phones.sessions, total.sessions)} of visits, ${pct(phones.converted, phones.sessions)} convert`, detail: 'If it needs a computer, let phone visitors send themselves the link for later.' });
-  }
-  for (const x of big.filter((x) => x !== phones && !x.converted && x.sessions >= 20)) {
-    out.push({ tone: 'bad', title: `${x.name}: ${fmt(x.sessions)} visits, none converted`, detail: `Is there a ${x.name} version, and does the page say so?` });
-  }
-  const ranked = big.filter((x) => x !== phones && x.converted).sort((a, b) => rate(b) - rate(a));
-  if (ranked.length >= 2 && rate(ranked[0]) >= rate(ranked.at(-1)) * 2) {
-    const low = ranked.at(-1);
-    out.push({ tone: 'warn', title: `${low.name} converts at ${pct(low.converted, low.sessions)}, ${ranked[0].name} at ${pct(ranked[0].converted, ranked[0].sessions)}`, detail: `Check that the page and “${label}” work on ${low.name}.` });
-  }
-  // Browsers on computers only, so phone visits don't hide a browser that's broken.
-  const desk = j.systems.filter((x) => x.name !== 'Phones and tablets');
-  const deskTotal = desk.reduce((n, x) => n + x.sessions, 0);
-  const deskConv = desk.reduce((n, x) => n + x.converted, 0);
-  if (deskTotal && deskConv) {
-    const browsers = rollUp(desk, 'browser', deskTotal).filter((x) => x.name !== 'Other' && x.sessions / deskTotal >= 0.05 && x.sessions >= 20);
-    const deskRate = deskConv / deskTotal;
-    for (const x of browsers.filter((b) => rate(b) < deskRate / 3)) {
-      out.push({ tone: 'warn', title: `${x.name} on computers: ${fmt(x.sessions)} visits, ${x.converted ? `only ${pct(x.converted, x.sessions)}` : 'none'} converted`, detail: `Other browsers convert at ${pct(deskConv - x.converted, deskTotal - x.sessions)}. Check that “${label}” works in ${x.name}.` });
-    }
-  }
-  return out;
+// Where a leak go: page steps open the Sessions flow from that page; event
+// steps open the sessions that fired it.
+function stopHref(site, range, step) {
+  const filter = step.kind === 'page' ? `path=${encodeURIComponent(step.value)}` : `converted=${encodeURIComponent(step.value)}`;
+  return `#/site/${site.id}/raw?tab=paths&range=${range}&${filter}`;
 }
 
-// One journey's visits and outcome by system and by browser.
-function SystemSplit({ j, outcome }) {
-  const line = (title, counts, conv) => {
-    const rows = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
-    if (!rows.length) return null;
-    return (
-      <p class="muted small nx-jsplit">
-        {title}: {rows.map(([name, n], i) => (
-          <span key={name}>{i ? ' · ' : ''}{name} {fmt(n)}{conv?.[name] ? <> (<span class="good">{fmt(conv[name])}</span> {outcome.label.toLowerCase()})</> : ''}</span>
-        ))}
-      </p>
-    );
-  };
-  const browsers = Object.fromEntries(Object.entries(j.browsers || {}).filter(([k]) => k !== '(not set)'));
-  return <>{line('By system', j.systems, j.systemsConverted)}{line('By browser', browsers, j.browsersConverted)}</>;
+// One row per source / device / browser / country: the same steps, counted for
+// that segment, beside the average.
+function WhoGetsThere({ site, who, setWho, data, steps, goals, outcome, average }) {
+  const rows = mergeSegments(data.data?.segments || [], who, site, steps.length);
+  return (
+    <section class="card card-plain" aria-label="Who gets there">
+      <div class="nx-jsum-bar">
+        <h2 class="nx-h2">Who gets there <span class="muted small">· {share(average)} on average</span></h2>
+        <Segmented label="Compare by" value={who} options={WHO} onChange={setWho} />
+      </div>
+      {data.error ? <ErrorState error={data.error} onRetry={data.reload} />
+        : !data.data ? <Loading height={160} />
+        : !rows.length ? <p class="muted">No visits in this period.</p>
+        : (
+          <div class="nx-who" role="table" aria-label={`Visits and ${outcome.label} by ${who}`}>
+            <div class="nx-who-row nx-who-head" role="row">
+              <span role="columnheader" /><span role="columnheader">Each step</span>
+              <span class="nx-num" role="columnheader">Visits</span>
+              <span class="nx-num" role="columnheader">Get there</span>
+              <span role="columnheader" />
+            </div>
+            {rows.map((x) => {
+              const rate = x.sessions ? x.converted / x.sessions : 0;
+              const better = rate >= average * 1.1;
+              const worse = rate <= average * 0.9;
+              const tip = steps.map((s, i) => `${stepLabel(s, goals)} ${fmt(x.steps[i])}`).join(' · ');
+              return (
+                <div class="nx-who-row" role="row" key={x.name}>
+                  <span role="cell"><Marked kind={who === 'source' ? 'source' : who === 'country' ? 'country' : 'browser'} name={x.name}>{x.name}</Marked></span>
+                  <span class="nx-who-bars" role="cell" title={tip} aria-label={tip}>
+                    {x.steps.map((n, i) => <i key={i} style={{ height: `${Math.max(3, (n / Math.max(1, x.sessions)) * 22)}px` }} />)}
+                  </span>
+                  <span class="nx-num" role="cell">{fmt(x.sessions)}</span>
+                  <b class="nx-num" role="cell">{pct(x.converted, x.sessions)}</b>
+                  <span class={`nx-num ${better ? 'good' : worse ? 'bad' : 'muted'}`} role="cell">{better ? 'better' : worse ? 'worse' : 'average'}</span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+    </section>
+  );
 }
+
+// Sources arrive as exact hosts; roll them up by the family people recognise.
+function mergeSegments(list, who, site, stepCount) {
+  const map = new Map();
+  for (const x of list) {
+    const name = who === 'source' ? family(x.name, site.host) : x.name;
+    const row = map.get(name) || { name, sessions: 0, converted: 0, steps: Array.from({ length: stepCount }, () => 0) };
+    row.sessions += x.sessions || 0;
+    row.converted += x.converted || 0;
+    (x.steps || []).forEach((n, i) => { row.steps[i] = (row.steps[i] || 0) + n; });
+    map.set(name, row);
+  }
+  return [...map.values()].sort((a, b) => b.sessions - a.sessions).slice(0, 8);
+}
+
+// Where they came from › where they landed › where they went, and how often
+// that route turned into the goal.
+function RoutesCard({ site, data, outcome, average }) {
+  const [sort, setSort] = useState('best');
+  const all = (data.data?.routes || []).map((r) => ({ ...r, rate: r.sessions ? r.converted / r.sessions : 0 })).filter((r) => r.sessions >= 3);
+  const rows = all
+    .sort(sort === 'best'
+      ? (a, b) => b.converted - a.converted || b.rate - a.rate || b.sessions - a.sessions
+      : (a, b) => a.rate - b.rate || b.sessions - a.sessions)
+    .slice(0, 5);
+  return (
+    <section class="card card-plain" aria-label="Routes">
+      <div class="nx-jsum-bar">
+        <h2 class="nx-h2">Routes <span class="muted small">· where they came from › where they landed › where they went</span></h2>
+        <Segmented label="Routes" value={sort} options={[{ key: 'best', label: 'Bring the most' }, { key: 'leaky', label: 'Lose the most' }]} onChange={setSort} />
+      </div>
+      {data.error ? <ErrorState error={data.error} onRetry={data.reload} />
+        : !data.data ? <Loading height={160} />
+        : !rows.length ? <p class="muted">No routes with enough visits in this period.</p>
+        : (
+          <div class="nx-routes" role="table" aria-label="Routes">
+            <div class="nx-route nx-route-head" role="row">
+              <span role="columnheader" /><span class="nx-num" role="columnheader">Visits</span>
+              <span class="nx-num" role="columnheader">{outcome.label}</span><span class="nx-num" role="columnheader">Rate</span>
+            </div>
+            {rows.map((r, i) => (
+              <div class="nx-route" role="row" key={i}>
+                <span class="nx-rpath" role="cell">
+                  {[family(r.source, site.host), ...r.path].map((p, j) => [j > 0 && <span class="nx-sep" key={`p${j}`}>›</span>, <span class="nx-rc" key={`c${j}`}>{j === 0 ? p : shortPage(p)}</span>]).flat()}
+                  <span class="nx-sep">›</span>
+                  <span class={`nx-rc ${r.rate >= average ? 'ok' : 'no'}`}>{r.rate >= average ? outcome.label : 'mostly left'}</span>
+                </span>
+                <span class="nx-num" role="cell">{fmt(r.sessions)}</span>
+                <span class="nx-num" role="cell">{fmt(r.converted)}</span>
+                <b class={`nx-num ${r.rate >= average ? 'good' : 'bad'}`} role="cell">{(r.rate * 100).toFixed(1)}%</b>
+              </div>
+            ))}
+          </div>
+        )}
+    </section>
+  );
+}
+
+function NoOutcome({ site }) {
+  return (
+    <p class="muted">
+      Journeys need an outcome to count.{' '}
+      <a href={`#/account?tab=sites&edit=${encodeURIComponent(site.id)}`}>Add a goal event</a> in the site’s settings, like a download or a sign-up.
+    </p>
+  );
+}
+
+function NoSteps({ site, range }) {
+  return (
+    <p class="muted">
+      This site has no funnel steps for its outcome yet.{' '}
+      <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Set the steps</a> — paste the pages people pass through, or name the events.
+    </p>
+  );
+}
+
+

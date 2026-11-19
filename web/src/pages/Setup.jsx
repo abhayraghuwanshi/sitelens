@@ -36,6 +36,8 @@ export function Setup({ site, connections = true }) {
         actions={!site.demo && <button class="btn ghost" type="button" disabled={data.loading} onClick={() => setFresh(fresh + 1)}><Icon name="refresh" size={13} /> Reload</button>}>
         <div class="stack gap-10">
           <p class="note m-0"><FileLine site={site} file={file} target={target} /></p>
+          {!site.demo && <FileLink site={site} file={file} onSaved={() => setFresh(fresh + 1)} />}
+          {!file.found && file.notes?.length > 0 && <Messages list={file.notes} />}
           {file.errors?.length > 0 && <Messages list={['The file has errors, so none of it applies until they’re fixed:', ...file.errors]} tone="bad" />}
           {file.warnings?.length > 0 && <Messages list={file.warnings} />}
           {sections.map((s) => <Section key={s.key} site={site} section={s} target={target} onSaved={() => setFresh(fresh + 1)} />)}
@@ -76,6 +78,44 @@ function FileLine({ site, file, target }) {
   return target.type === 'repo'
     ? <>All set here in Kauzl. Any part can move into <code>{target.repo}</code> as <code>{target.path}</code>, so it changes with the code.</>
     : 'All set here in Kauzl.';
+}
+
+// Read the file from a GitHub link instead of the default branch: paste the
+// link from the file's page on GitHub, on any branch (a deploy branch, say).
+function FileLink({ site, file, onSaved }) {
+  const [link, setLink] = useState(file.link || '');
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState(null);
+  async function save(next) {
+    setBusy(true);
+    setMsg(null);
+    try {
+      const out = await api.post(`/sites/${site.id}/config/link`, { link: next });
+      setLink(next);
+      setMsg(!next ? { ok: true, text: 'Back to the repo’s default branch.' } : out.found ? { ok: true, text: 'Read the linked file.' } : { ok: false, text: out.notes?.[0] || 'Couldn’t read that file.' });
+      onSaved();
+    } catch (err) {
+      setMsg({ ok: false, text: err.message });
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div class="stack gap-6">
+      {/* A row, not a form: this sits inside the site's Edit form, and Enter here must not save the site. */}
+      <div class="row">
+        <input type="url" style={{ flex: '1', minWidth: '240px', maxWidth: '560px' }} placeholder="https://github.com/you/repo/blob/branch/.sitelens.yml"
+          value={link} onInput={(e) => setLink(e.currentTarget.value)} aria-label="Link to the .sitelens.yml on GitHub"
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); if (link.trim() && link.trim() !== file.link) save(link.trim()); } }} />
+        <button class="btn primary" type="button" disabled={busy || !link.trim() || link.trim() === file.link} onClick={() => save(link.trim())}>Use this file</button>
+        {file.link && <button class="btn ghost" type="button" disabled={busy} onClick={() => save('')}>Use the default branch</button>}
+      </div>
+      <p class="note m-0">{file.link
+        ? 'Reading the file at this link. Changes made here open a pull request into its branch.'
+        : 'Kauzl reads the file from the default branch of the site’s repo. To use another branch, paste the file’s link from GitHub.'}</p>
+      {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
+    </div>
+  );
 }
 
 function Section({ site, section, target, onSaved }) {
@@ -168,7 +208,7 @@ function Section({ site, section, target, onSaved }) {
 }
 
 function SourceLink({ source }) {
-  const text = source.type === 'repo' ? `${source.repo}/${source.path}` : source.type === 'demo' ? 'the built-in demo file' : source.path;
+  const text = source.type === 'repo' ? `${source.repo}/${source.path}${source.ref ? ` (${source.ref})` : ''}` : source.type === 'demo' ? 'the built-in demo file' : source.path;
   return source.url ? <a href={source.url} target="_blank" rel="noreferrer"><code>{text}</code></a> : <code>{text}</code>;
 }
 

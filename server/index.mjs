@@ -43,6 +43,7 @@ import { createTodos, todoRoutes } from './todos.mjs';
 import { createTodoContext } from './todo-context.mjs';
 import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
+import { createSiteHealth, siteHealthRoutes } from './site-health.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
 import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
 import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
@@ -159,7 +160,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
   const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig, cacheDb });
   const campaigns = createCampaigns({ auth, siteConfig });
-  const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb });
+  // Setting a page's next goal moves its to-do on (todos is created below).
+  const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
+  const siteHealth = createSiteHealth({ pageReview, hub: searchHub, vitals });
   const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });
   const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
@@ -188,6 +191,19 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return github.dbPath;
   }
 
+  // Releases, deploys, posts and mentions for a site from the last 24 hours,
+  // newest first (those that know their time; the rest count as today).
+  async function recentEvents(site) {
+    const day = (ms) => new Date(ms).toISOString().slice(0, 10);
+    const since = Date.now() - 86_400_000;
+    const items = await annotations.list({ from: day(since), to: day(Date.now()), scopes: [`site:${site.id}`] });
+    return items
+      .filter((a) => a.scope === `site:${site.id}` && (a.at ? a.at >= since : a.date === day(Date.now())))
+      .map(({ id, label, kind, url, at, date }) => ({ id, label, kind, url, at: at || null, date }))
+      .sort((a, b) => (b.at || 0) - (a.at || 0))
+      .slice(0, 6);
+  }
+
   async function siteOr404(id) {
     const site = await store.site(id);
     if (!site) throw new EngineError('Unknown site.', { status: 404, kind: 'notfound' });
@@ -199,9 +215,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...vitalsRoutes({ vitals, store, siteOr404, fetchImpl }),
     ...alertRoutes(alerts),
     ...mentionRoutes({ mentions }),
-    ...postRoutes({ posts }),
+    ...postRoutes({ posts, annotations }),
     ...bingRoutes({ bing, siteOr404 }),
     ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
+    ...siteHealthRoutes({ health: siteHealth, siteOr404 }),
     ...pageReviewRoutes({ review: pageReview, siteOr404 }),
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
@@ -221,6 +238,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...siteConfigRoutes({
       siteConfig,
       siteOr404,
+      async saveLink(site, link) {
+        await store.update((s) => {
+          const saved = s.sites.find((x) => x.id === site.id);
+          if (!saved) return;
+          if (link) saved.configLink = link;
+          else delete saved.configLink;
+        });
+      },
       // What the site really sent, to flag config names that never fire.
       async firedEvents(site) {
         if (site.propertyId) return outcomes.eventNames(site);
@@ -271,6 +296,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       },
       async onChange(site) {
         for (const p of (await store.get()).products || []) if (p.siteId === site.id) outcomes.clear(p.id);
+        // The site's own goals (no product) are cached separately too.
+        outcomes.clear(site.id);
       },
     }),
     ['GET', /^\/api\/state$/, async () => {
@@ -430,6 +457,28 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ['GET', /^\/api\/sites\/([\w-]+)\/dashboard$/, async ({ match, query }) =>
       engines.dashboard(await siteOr404(match[1]), query.get('range') || '28d', { fresh: query.has('fresh') })],
     ['GET', /^\/api\/sites\/([\w-]+)\/live$/, async ({ match }) => engines.live(await siteOr404(match[1]))],
+    // Live: one site in detail, with what shipped or was posted in the last day.
+    ['GET', /^\/api\/sites\/([\w-]+)\/live\/detail$/, async ({ match }) => {
+      const site = await siteOr404(match[1]);
+      const [detail, recent] = await Promise.all([engines.liveDetail(site), site.demo ? null : recentEvents(site).catch(() => [])]);
+      return { ...detail, recent: recent || detail.recent || [] };
+    }],
+    // Live, one row per visitor, for sites with the GA4 streaming export in BigQuery.
+    ['GET', /^\/api\/sites\/([\w-]+)\/live\/people$/, async ({ match }) => engines.livePeople(await siteOr404(match[1]))],
+    // Live: every site's count right now, busiest first. A site that fails says why.
+    ['GET', /^\/api\/live$/, async () => {
+      const sites = (await store.sites()).filter((s) => s.demo || s.propertyId);
+      const rows = await Promise.all(sites.map(async (s) => {
+        try {
+          const live = await engines.live(s);
+          return { id: s.id, label: s.label, host: s.host, now: live.total, top: live.top?.[0]?.title || '' };
+        } catch (err) {
+          return { id: s.id, label: s.label, host: s.host, now: null, error: err.message };
+        }
+      }));
+      rows.sort((a, b) => (b.now ?? -1) - (a.now ?? -1));
+      return { sites: rows, total: rows.reduce((n, r) => n + (r.now || 0), 0), at: Date.now() };
+    }],
     ['GET', /^\/api\/sites\/([\w-]+)\/page-trend$/, async ({ match, query }) =>
       engines.pageTrend(await siteOr404(match[1]), query.get('path') || '/', query.get('range') || '28d')],
     ['GET', /^\/api\/sites\/([\w-]+)\/search$/, async ({ match, query }) =>
@@ -501,6 +550,21 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         outcome: query.get('outcome') || '',
         min: Number(query.get('min')) || 3,
       }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/routes$/, async ({ match, query }) =>
+      engines.routes(await siteOr404(match[1]), query.get('range'), {
+        outcome: query.get('outcome') || '',
+        limit: Number(query.get('limit')) || 40,
+      }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/segments$/, async ({ match, query }) =>
+      engines.segments(await siteOr404(match[1]), query.get('range'), {
+        by: query.get('by') || 'source',
+        outcome: query.get('outcome') || '',
+        steps: (query.get('steps') || '').split(',').filter(Boolean).map((s) => {
+          const i = s.indexOf(':');
+          const kind = i > 0 ? s.slice(0, i) : 'page';
+          return { kind: kind === 'event' ? 'event' : 'page', value: i > 0 ? s.slice(i + 1) : s };
+        }),
+      }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/left-out$/, async ({ match, query }) =>
       engines.leftOut(await siteOr404(match[1]), query.get('range'), flags(query))],
     ['POST', /^\/api\/sites\/([\w-]+)\/leave-out$/, async ({ match, body }) => {
@@ -528,7 +592,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const result = await engines.rollup(site, body.range || '90d');
       // Never point a site at an empty rollup: every session view would go blank.
       result.linked = Boolean(body.use && result.sessions > 0);
-      if (result.linked) await store.saveSite({ ...site, bq: { ...site.bq, sessionsTable: result.table } });
+      if (result.linked) await store.saveSite({ ...site, bq: { ...site.bq, sessionsTable: result.table, systemTable: result.table } });
       return result;
     }],
   ];

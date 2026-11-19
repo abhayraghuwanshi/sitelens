@@ -765,6 +765,7 @@ export function createPosts({ dbPath, store, mentions, auth, history = null, cac
       return [{
         id: `post:${r.id}`,
         date: isoDay(r.created_at),
+        at: r.created_at,
         label: `Your ${PLATFORMS[r.platform]?.label || r.platform} post: ${r.title}`,
         kind: 'post',
         source: 'posts',
@@ -806,8 +807,26 @@ export function createPosts({ dbPath, store, mentions, auth, history = null, cac
   };
 }
 
-export function postRoutes({ posts }) {
+// One box on the Timeline: a link to a post on a platform Kauzl knows becomes a
+// post (so its visits are attributed); anything else is a note, with its link.
+export async function addToTimeline({ posts, annotations }, input = {}) {
+  const url = String(input.url || '').trim();
+  const text = String(input.text || '').trim();
+  const site = String(input.site || '').trim();
+  const date = String(input.date || '').trim();
+  const platform = url ? platformOf(url) : '';
+  if (platform && platform !== 'other') {
+    const post = await posts.addManual({ url, title: text, date, site });
+    return { kind: 'post', platform: post.platform, id: post.id };
+  }
+  const label = text || (url ? url.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') : '');
+  const note = await annotations.addNote({ date, label, url, body: input.body, scope: site ? `site:${site}` : '' });
+  return { kind: 'note', id: note.id };
+}
+
+export function postRoutes({ posts, annotations = null }) {
   return [
+    ...(annotations ? [['POST', /^\/api\/timeline$/, async ({ body }) => addToTimeline({ posts, annotations }, body)]] : []),
     ['GET', /^\/api\/posts$/, async ({ query }) => posts.overview({ rangeKey: query.get('range') || '90d', product: query.get('product') || '', platform: query.get('platform') || '' })],
     ['GET', /^\/api\/posts\/item$/, async ({ query }) => posts.detail(query.get('id') || '')],
     ['POST', /^\/api\/posts\/sync$/, async () => posts.sync()],

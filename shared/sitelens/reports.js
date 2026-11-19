@@ -481,12 +481,14 @@ export async function fetchTransitions({ token, propertyId, host, includeSubdoma
   }));
 }
 
-export async function fetchRealtime({ token, propertyId, streamName = '' }) {
+// `minutes`: how far back counts as "on the site" (GA4 realtime goes back 30).
+export async function fetchRealtime({ token, propertyId, streamName = '', minutes = 30 }) {
   const body = {
     dimensions: [dim('unifiedScreenName')],
     metrics: [metric('activeUsers')],
     limit: 25,
     metricAggregations: ['TOTAL'],
+    ...(minutes < 30 ? { minuteRanges: [{ startMinutesAgo: minutes - 1, endMinutesAgo: 0 }] } : {}),
   };
   if (streamName) {
     body.dimensionFilter = {
@@ -503,6 +505,116 @@ export async function fetchRealtime({ token, propertyId, streamName = '' }) {
     .sort((a, b) => b.users - a.users);
   const total = Number(report.totals?.[0]?.activeUsers) || rows.reduce((acc, row) => acc + row.users, 0);
   return { total, rows, top: rows.slice(0, 5), scopedByStream: Boolean(streamName) };
+}
+
+// The Live view: who is on the site now (last 5 minutes) and over the last 30,
+// minute by minute, with what they read, where they are and on what. Sources
+// come from GA4's realtime first-user source when the property offers it;
+// otherwise that part is left out (sources: null) and the rest still loads.
+export async function fetchRealtimeDetail({ token, propertyId, streamName = '' }) {
+  const scoped = streamName
+    ? { dimensionFilter: { filter: { fieldName: 'streamName', stringFilter: { matchType: 'EXACT', value: streamName, caseSensitive: false } } } }
+    : {};
+  const run = (name, minutes, limit) => runRealtimeReport({
+    token,
+    propertyId,
+    body: {
+      dimensions: [dim(name)],
+      metrics: [metric('activeUsers')],
+      limit,
+      metricAggregations: ['TOTAL'],
+      minuteRanges: [{ startMinutesAgo: minutes - 1, endMinutesAgo: 0 }],
+      ...scoped,
+    },
+  });
+  const list = (report, key) => (report?.rows || [])
+    .map((row) => ({ name: row[key] || '(not set)', users: Number(row.activeUsers) || 0 }))
+    .filter((row) => row.users > 0)
+    .sort((a, b) => b.users - a.users);
+  const total = (report) => Number(report?.totals?.[0]?.activeUsers) || 0;
+  // Several fields at once: Google gives counts per combination, never single
+  // visitors, so a feed row is "2 people in Berlin on /pricing, 3 min ago".
+  // A live report takes at most 4 fields, a stream filter counting as one, so
+  // a site scoped to one stream asks for streamName as a field and drops the
+  // other streams' rows here instead.
+  const runMany = async (names, metricName, minutes, limit) => {
+    const report = await runRealtimeReport({
+      token,
+      propertyId,
+      body: {
+        dimensions: [...(streamName ? ['streamName'] : []), ...names].map(dim),
+        metrics: [metric(metricName)],
+        limit,
+        minuteRanges: [{ startMinutesAgo: minutes - 1, endMinutesAgo: 0 }],
+      },
+    });
+    if (!streamName) return report;
+    const want = streamName.toLowerCase();
+    return { ...report, rows: (report.rows || []).filter((row) => String(row.streamName || '').toLowerCase() === want) };
+  };
+  // Place + page from one report; country, device and source joined on (minute, city).
+  const KEY = ['minutesAgo', 'city'];
+  const [now, minutes, countries, devices, sources, feedReport, countryReport, deviceReport, sourceReport, winsReport] = await Promise.all([
+    run('unifiedScreenName', 5, 25),
+    run('minutesAgo', 30, 30),
+    run('country', 30, 8),
+    run('deviceCategory', 30, 5),
+    run('firstUserSource', 30, 8).catch(() => null),
+    runMany([...KEY, 'unifiedScreenName'], 'activeUsers', 30, 100).catch(() => null),
+    runMany([...KEY, 'countryId'], 'activeUsers', 30, 100).catch(() => null),
+    runMany([...KEY, 'deviceCategory'], 'activeUsers', 30, 100).catch(() => null),
+    runMany([...KEY, 'firstUserSource'], 'activeUsers', 30, 100).catch(() => null),
+    runMany(['minutesAgo', 'eventName'], 'keyEvents', 30, 40).catch(() => null),
+  ]);
+  const keyOf = (row) => `${row.minutesAgo}|${row.city}`;
+  const joined = (report, field) => {
+    const m = new Map();
+    for (const row of report?.rows || []) {
+      if (!(Number(row.activeUsers) > 0) || !row[field] || row[field] === '(not set)') continue;
+      const list = m.get(keyOf(row)) || [];
+      list.push([row[field], Number(row.activeUsers)]);
+      m.set(keyOf(row), list);
+    }
+    // The group's values, most common first.
+    return (row) => (m.get(keyOf(row)) || []).sort((a, b) => b[1] - a[1]).map(([v]) => v);
+  };
+  const countryOf = joined(countryReport, 'countryId');
+  const deviceOf = joined(deviceReport, 'deviceCategory');
+  const sourceOf = joined(sourceReport, 'firstUserSource');
+  const names = typeof Intl.DisplayNames === 'function' ? new Intl.DisplayNames(['en'], { type: 'region' }) : null;
+  const countryName = (code) => { try { return (code && names?.of(code)) || '(not set)'; } catch { return code || '(not set)'; } };
+  const feed = (feedReport?.rows || []).map((row) => {
+    const code = countryOf(row)[0] || '';
+    return {
+      ago: Number(row.minutesAgo) || 0,
+      code,
+      country: countryName(code),
+      city: row.city && row.city !== '(not set)' ? row.city : '',
+      page: row.unifiedScreenName || '(not set)',
+      device: deviceOf(row).join(', '),
+      source: sourceOf(row)[0] || null,
+      users: Number(row.activeUsers) || 0,
+    };
+  }).filter((r) => r.users > 0).sort((a, b) => a.ago - b.ago || b.users - a.users);
+  const wins = (winsReport?.rows || []).map((row) => ({ ago: Number(row.minutesAgo) || 0, event: row.eventName, count: Number(row.keyEvents) || 0 }))
+    .filter((w) => w.count > 0).sort((a, b) => a.ago - b.ago);
+  const perMinute = Array.from({ length: 30 }, () => 0);
+  for (const row of minutes.rows || []) {
+    const ago = Number(row.minutesAgo);
+    if (ago >= 0 && ago < 30) perMinute[29 - ago] = Number(row.activeUsers) || 0;
+  }
+  return {
+    now: total(now),
+    last30: total(minutes),
+    perMinute, // oldest first, the last entry is this minute
+    pages: list(now, 'unifiedScreenName').map(({ name, users }) => ({ title: name, users })),
+    countries: list(countries, 'country'),
+    devices: list(devices, 'deviceCategory'),
+    sources: sources ? list(sources, 'firstUserSource') : null,
+    feed: feedReport ? feed : null,
+    wins: winsReport ? wins : null,
+    scopedByStream: Boolean(streamName),
+  };
 }
 
 export function livePageCount(live, title) {

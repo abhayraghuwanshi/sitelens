@@ -58,10 +58,20 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
       }),
     });
     const payload = await res.json().catch(() => ({}));
-    if (!res.ok) throw new AuthError(`Google refused to refresh the session (${payload.error || res.status}). Sign in again.`);
+    if (!res.ok) {
+      const message = `Google refused to refresh the session (${payload.error || res.status}). Sign in again.`;
+      // A refused refresh token won't recover by itself: remember it, so the app can ask for a new sign-in.
+      if (res.status === 400 || res.status === 401) {
+        await store.update((s) => {
+          if (s.auth && s.auth.refreshToken === auth.refreshToken) s.auth = { ...s.auth, broken: { message, at: Date.now() } };
+        });
+      }
+      throw new AuthError(message);
+    }
     await store.update((s) => {
+      const { broken, ...rest } = s.auth || {};
       s.auth = {
-        ...s.auth,
+        ...rest,
         accessToken: payload.access_token,
         expiresAt: Date.now() + (Number(payload.expires_in) || 3600) * 1000,
       };
@@ -82,6 +92,8 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
         scopes: auth.scopes || [],
         expiresAt: auth.mode === 'oauth' ? null : auth.expiresAt,
         expired: auth.mode !== 'oauth' && auth.expiresAt < Date.now(),
+        // Google refused the saved sign-in: it needs signing in again.
+        ...(auth.broken ? { broken: auth.broken.message } : {}),
         oauthAvailable: this.oauthAvailable,
       };
     },

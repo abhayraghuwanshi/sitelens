@@ -285,6 +285,7 @@ export function createVercel({ store, env = process.env, cacheDb = null, fetchIm
         .map((d) => ({
           id: `vercel-${d.id}`,
           date: isoDay(d.created),
+          at: d.created,
           label: d.commit ? `Deploy: ${d.commit}` : `Deploy ${d.id.slice(-6)}`,
           kind: 'deploy',
           source: 'vercel',

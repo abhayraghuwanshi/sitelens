@@ -442,81 +442,43 @@ test('home and sign-in pages may load the brand fonts; both link the free tools'
   assert.match(login.body, /href="\/home">← Back to home/);
 });
 
-test('the public demo: no sign-in, only the sample site, nothing can change', async () => {
-  const start = await call('/demo');
-  assert.equal(start.status, 302);
-  assert.equal(start.headers.location, '/#/site/demo/story');
-  const cookie = String(start.headers['set-cookie']).split(';')[0];
-  assert.equal(cookie, '__Host-kauzl-demo=1');
-  assert.equal((await call('/demo?to=timeline')).headers.location, '/#/site/demo/timeline');
-  assert.equal((await call('/demo?to=../../evil')).headers.location, '/#/site/demo/story');
-
-  // Without the cookie, / is still the home page; with it, the Studio.
-  assert.match((await call('/')).body, /Why an owl/);
-  assert.doesNotMatch((await call('/', { cookie })).body, /Why an owl/);
-  assert.match((await call('/home', { cookie })).body, /Why an owl/);
-
-  const me = JSON.parse((await call('/api/me', { cookie })).body);
-  assert.deepEqual(me, { email: null, hosted: true, viewer: true, demo: true });
-  const state = JSON.parse((await call('/api/state', { cookie })).body);
-  assert.equal(state.demo, true);
-  assert.equal(state.viewer, true);
-  assert.ok(state.sites.length >= 1);
-  assert.ok(state.sites.every((s) => s.demo));
-
-  const write = await call('/api/todos', { method: 'POST', cookie, headers: { origin: ORIGIN, 'x-studio': '1' }, body: { site: 'demo', title: 'x' } });
-  assert.equal(write.status, 403);
-  assert.equal(JSON.parse(write.body).kind, 'demo');
-  assert.equal((await call('/api/auth/start', { cookie })).status, 403);
-  assert.equal((await call('/api/mcp/tokens', { cookie })).status, 403);
-  assert.equal((await call('/api/shares', { cookie })).status, 403);
-
-  const out = await call('/logout', { method: 'POST', cookie, headers: { origin: ORIGIN } });
-  assert.equal(out.headers.location, '/home');
-  assert.ok([out.headers['set-cookie']].flat().some((c) => c.startsWith('__Host-kauzl-demo=;') && /Max-Age=0/.test(c)));
+test('the tour is public: the design with sample data, frameable only by the home page, no inline script', async () => {
+  const r = await call('/tour/');
+  assert.equal(r.status, 200);
+  assert.match(r.headers['content-type'], /text\/html/);
+  assert.match(r.body, /<div id="stage"/);
+  assert.match(r.body, /<script src="\/tour\/tour\.js"><\/script>/);
+  assert.doesNotMatch(r.body, /<script>/, 'the CSP allows no inline JS');
+  const csp = r.headers['content-security-policy'];
+  assert.match(csp, /frame-ancestors 'self'/);
+  assert.doesNotMatch(csp, /unsafe-eval/);
+  const js = await call('/tour/tour.js');
+  assert.equal(js.status, 200);
+  assert.match(js.headers['content-type'], /javascript/);
+  assert.match(js.body, /tour start/);
+  assert.doesNotMatch(js.body, /onchange=/);
+  assert.equal((await call('/tour?to=search')).headers.location, '/tour/?to=search');
+  // The home page frames it.
+  assert.match((await call('/')).body, /<iframe src="\/tour\/\?embed=1"/);
 });
 
-test('a signed-in person going to /demo just opens the sample site in their own Kauzl', async () => {
-  const { cookie } = await signIn('alice@example.com');
-  const r = await call('/demo', { cookie });
-  assert.equal(r.headers.location, '/#/site/demo/story');
-  assert.equal(r.headers['set-cookie'], undefined);
-});
-
-test('the demo can show a real site instead of the sample: view only, and nothing else of the owner’s', async () => {
-  const { cookie: alice } = await signIn('alice@example.com');
-  const write = (path, body, c) => call(path, { method: 'POST', cookie: c, body, headers: { origin: ORIGIN, 'x-studio': '1' } });
-  await write('/api/sites', { host: 'showcase.example' }, alice);
-  await write('/api/sites', { host: 'secret.example' }, alice);
-  const mine = JSON.parse((await call('/api/state', { cookie: alice })).body).sites;
-  const site = mine.find((s) => s.host === 'showcase.example');
-  const secret = mine.find((s) => s.host === 'secret.example');
-  gatewayEnv.DEMO_SITE = `alice@example.com/${site.id}`;
+test('the old live demo is gone: /demo goes to the tour, and its old cookie opens nothing', async () => {
+  const r = await call('/demo?to=timeline');
+  assert.equal(r.status, 301);
+  assert.equal(r.headers.location, '/tour/?to=timeline');
+  assert.ok([r.headers['set-cookie']].flat().some((c) => c.startsWith('__Host-kauzl-demo=;') && /Max-Age=0/.test(c)));
+  assert.equal((await call('/demo')).headers.location, '/tour/');
+  const cookie = '__Host-kauzl-demo=1';
+  assert.match((await call('/', { cookie })).body, /Why an owl/);
+  assert.equal((await call('/api/state', { cookie })).status, 401);
+  // A real site set as DEMO_SITE is never shown to visitors any more.
+  gatewayEnv.DEMO_SITE = 'alice@example.com/anything';
   try {
-    const start = await call('/demo?to=timeline');
-    assert.equal(start.headers.location, `/#/site/${site.id}/timeline`);
-    const demo = String(start.headers['set-cookie']).split(';')[0];
-
-    const state = JSON.parse((await call('/api/state', { cookie: demo })).body);
-    assert.deepEqual(state.sites.map((s) => s.id), [site.id]);
-    assert.equal(state.sites[0].showcase, true);
-    assert.equal(state.demo, true);
-    assert.ok(!JSON.stringify(state).includes('alice@example.com'), 'the owner stays anonymous');
-
-    // Reads about that site come from the owner's app; anything else is refused.
-    assert.equal((await call(`/api/sites/${site.id}/config`, { cookie: demo })).status, 200);
-    assert.equal((await call(`/api/sites/${secret.id}/config`, { cookie: demo })).status, 403);
-    assert.equal((await call(`/api/todos?site=${secret.id}`, { cookie: demo })).status, 403);
-    assert.equal((await call(`/api/sites/${site.id}/setup`, { cookie: demo })).status, 403);
-    assert.equal((await call(`/api/sites/${site.id}`, { method: 'DELETE', cookie: demo, headers: { origin: ORIGIN, 'x-studio': '1' } })).status, 403);
-    // The owner's account-wide lists stay out of reach.
-    const todos = JSON.parse((await call('/api/todos', { cookie: demo })).body);
-    assert.ok(!JSON.stringify(todos).includes(secret.id));
+    assert.equal((await call('/api/state', { cookie })).status, 401);
+    assert.equal((await call('/demo')).headers.location, '/tour/');
   } finally {
     delete gatewayEnv.DEMO_SITE;
   }
-  // Unset again: the sample site.
-  assert.equal((await call('/demo')).headers.location, '/#/site/demo/story');
 });
 
 /* ---------- Early access: waitlist, invites, admin ---------- */

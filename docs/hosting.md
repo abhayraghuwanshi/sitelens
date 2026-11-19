@@ -67,21 +67,14 @@ Copy the client ID (`oac_…`) and secret, then run:
 fly secrets set --app sitelens-studio VERCEL_CLIENT_ID="oac_…" VERCEL_CLIENT_SECRET="…" VERCEL_INTEGRATION_SLUG="sitelens-studio"
 ```
 
-## Optional: the public demo shows a real site
+## The public tour
 
-`kauzl.com/demo` lets anyone look around Kauzl without signing in. By default it
-shows the built-in sample site. To show a real one instead (kauzl.com itself, so
-visitors see its live traffic, searches, sitemap pages and AI answers), add the
-site in your own Kauzl, then:
-
-```sh
-fly secrets set DEMO_SITE="you@example.com/<site id>"
-```
-
-The email must be on `ALLOWED_EMAILS`; the site id is in the site's URL
-(`#/site/<id>/story`). Visitors get exactly what someone it was shared with
-gets: the read-only allowlist in `server/sharing.mjs`, and nothing else from
-your account. Unset it (`fly secrets unset DEMO_SITE`) to go back to the sample.
+`kauzl.com/tour/` (and the "Look inside" frame on the home page) is the design
+prototype (`docs/redesign/prototype.html`) with its sample data: no app, no
+account, nothing real. `npm run tour:build` regenerates `server/tour/` from the
+prototype; rerun it and deploy whenever the prototype changes. The old live
+demo is gone: `/demo?to=<screen>` redirects to `/tour/?to=<screen>`, and the
+`DEMO_SITE` secret is no longer read (`fly secrets unset DEMO_SITE` to tidy up).
 
 For traffic to show, kauzl.com's public pages carry a Google tag: a Tag
 Manager container (`GTM-…`) or a GA4 ID (`G-…`), in `GOOGLE_TAG_ID` (fly.toml

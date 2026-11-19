@@ -571,6 +571,29 @@ export function replaceSection(text, key, sectionYaml, { host = '' } = {}) {
 
 /* ---------- loading ---------- */
 
+// A link to a .sitelens.yml on GitHub, on any branch, as copied from the
+// browser: github.com/<owner>/<repo>/blob/<branch>/<path> (or raw.githubusercontent.com/<owner>/<repo>/<branch>/<path>).
+// A branch name can hold slashes, so every split is a candidate, shortest branch first.
+export function parseConfigLink(input) {
+  let url;
+  try {
+    url = new URL(String(input || '').trim());
+  } catch {
+    return null;
+  }
+  const parts = url.pathname.split('/').filter(Boolean).map(decodeURIComponent);
+  let owner, repo, rest;
+  if (url.hostname === 'github.com' && parts[2] === 'blob') [owner, repo, , ...rest] = parts;
+  else if (url.hostname === 'raw.githubusercontent.com') [owner, repo, ...rest] = parts;
+  else return null;
+  const NAME = /^[\w.-]{1,100}$/;
+  if (!NAME.test(owner || '') || !NAME.test(repo || '') || rest.length < 2 || !/\.ya?ml$/i.test(rest[rest.length - 1])) return null;
+  if (rest.some((x) => x === '..' || x === '.')) return null;
+  const candidates = [];
+  for (let i = 1; i < rest.length; i++) candidates.push({ ref: rest.slice(0, i).join('/'), path: rest.slice(i).join('/') });
+  return { repo: `${owner}/${repo}`, candidates };
+}
+
 // The `site:` a file names, or '' when it names none or doesn't parse (the full
 // parse reports that).
 function declaredHost(text) {
@@ -600,8 +623,8 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
     return null;
   }
 
-  async function readRepoFile(repo, path, token) {
-    const res = await fetchImpl(`${API}/repos/${repo}/contents/${path}`, {
+  async function readRepoFile(repo, path, token, ref = '') {
+    const res = await fetchImpl(`${API}/repos/${repo}/contents/${path.split('/').map(encodeURIComponent).join('/')}${ref ? `?ref=${encodeURIComponent(ref)}` : ''}`, {
       headers: { Accept: 'application/vnd.github+json', Authorization: `Bearer ${token}`, 'X-GitHub-Api-Version': '2022-11-28' },
     });
     if (res.status === 404) return null;
@@ -610,8 +633,28 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
     if (Array.isArray(body) || body.type !== 'file') return null;
     return {
       text: Buffer.from(body.content || '', body.encoding === 'base64' ? 'base64' : 'utf8').toString('utf8'),
-      source: { type: 'repo', repo, path, sha: body.sha, url: body.html_url },
+      source: { type: 'repo', repo, path, sha: body.sha, url: body.html_url, ...(ref ? { ref } : {}) },
     };
+  }
+
+  // The file a pasted link points at (Setup → File on GitHub), on whatever branch.
+  async function readLink(link, token, notes) {
+    const parsed = parseConfigLink(link);
+    if (!parsed) {
+      notes.push(`The linked file (${link}) isn’t a GitHub link to a .yml file. Copy it from the file’s page on GitHub.`);
+      return { failed: false, hit: null };
+    }
+    try {
+      for (const { ref, path } of parsed.candidates) {
+        const hit = await readRepoFile(parsed.repo, path, token, ref);
+        if (hit) return { failed: false, hit: { ...hit, source: { ...hit.source, link } } };
+      }
+    } catch (err) {
+      notes.push(`Couldn’t read the linked file: ${err.message}`);
+      return { failed: true, hit: null };
+    }
+    notes.push(`The linked file isn’t on GitHub: ${link}. Check the branch is pushed and the GitHub token can read ${parsed.repo}.`);
+    return { failed: false, hit: null };
   }
 
   async function load(site) {
@@ -620,6 +663,17 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
     let failed = false; // a read failed, so "no file" may not be true
     let found = await readLocal(host);
     if (!found && site.demo) found = { text: await readFile(DEMO_FILE, 'utf8'), source: { type: 'demo', path: 'server/demo-sitelens.yml' } };
+    if (!found && !site.demo && site.configLink) {
+      // A pasted link wins over looking through the repos' default branches.
+      const token = await getToken();
+      if (!token) notes.push('Add a GitHub token in Settings → GitHub so Kauzl can read the linked .sitelens.yml.');
+      else {
+        const read = await readLink(site.configLink, token, notes);
+        failed = read.failed;
+        found = read.hit;
+      }
+      if (!found) return { found: false, failed, source: null, config: null, errors: [], warnings: [], notes, checkedAt: now() };
+    }
     if (!found && !site.demo) {
       const token = await getToken();
       const names = token ? await repos(site).catch((err) => {
@@ -715,7 +769,7 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
   // new one in its first repo, or a local file when it has no repo to write to.
   async function target(site, current) {
     if (current?.source?.type === 'local') return { type: 'local', path: current.source.path };
-    if (current?.source?.type === 'repo') return { type: 'repo', repo: current.source.repo, path: current.source.path, sha: current.source.sha, url: current.source.url };
+    if (current?.source?.type === 'repo') return { type: 'repo', repo: current.source.repo, path: current.source.path, sha: current.source.sha, url: current.source.url, ref: current.source.ref || '' };
     const host = cleanHost(site.host);
     const token = await getToken();
     const names = token ? await repos(site).catch(() => []) : [];
@@ -728,7 +782,8 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
   async function openPr(site, to, text, key) {
     const token = await getToken();
     if (!token) throw new ValidationError('Add a GitHub token in Settings → GitHub first.');
-    const base = (await gh('GET', `/repos/${to.repo}`, token)).default_branch;
+    // Into the branch the file was read from (a linked file), else the default one.
+    const base = to.ref || (await gh('GET', `/repos/${to.repo}`, token)).default_branch;
     const head = await gh('GET', `/repos/${to.repo}/git/ref/heads/${encodeURIComponent(base)}`, token);
     const stamp = new Date(now()).toISOString().replace(/[-:]/g, '').slice(0, 13).replace('T', '-');
     const branch = `sitelens/config-${key}-${stamp}`;
@@ -808,7 +863,7 @@ export function describeSection(key, value) {
 // `draftInputs(site)` → { goals, funnels, guessed } for a starting file.
 // `studioSetup(site)` → per section, what Studio uses when the file doesn't set
 // it: { from: 'studio' | 'auto', items, edit } (edit: where it's changed in Studio).
-export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInputs, studioSetup = async () => ({}), onChange = () => {} }) {
+export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInputs, studioSetup = async () => ({}), onChange = () => {}, saveLink = async () => {} }) {
   const withUnseen = async (site, result) => {
     if (!result.config) return result;
     const fired = await firedEvents(site).catch(() => null);
@@ -844,7 +899,7 @@ export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInpu
         : { key, from: 'auto', items: [], ...studio[key] }));
       const to = site.demo ? { type: 'demo' } : await siteConfig.target(site, current);
       return {
-        file: { found: current.found, source: current.source, applied: Boolean(current.config), errors: current.errors, warnings: current.warnings, notes: current.notes },
+        file: { found: current.found, source: current.source, link: site.configLink || '', applied: Boolean(current.config), errors: current.errors, warnings: current.warnings, notes: current.notes },
         target: { type: to.type, repo: to.repo || '', path: to.path || '', create: Boolean(to.create) },
         sections,
       };
@@ -863,6 +918,18 @@ export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInpu
       const site = await siteOr404(match[1]);
       const result = await siteConfig.saveSection(site, String(body.key || ''), String(body.yaml ?? ''));
       if (result.saved === 'local') onChange(site);
+      return result;
+    }],
+    // Read the file from a pasted GitHub link (any branch); an empty link goes back to the repos.
+    ['POST', /^\/api\/sites\/([\w-]+)\/config\/link$/, async ({ match, body }) => {
+      const site = await siteOr404(match[1]);
+      if (site.demo) throw new ValidationError('The demo site’s config can’t be changed.');
+      const link = String(body.link || '').trim();
+      if (link && !parseConfigLink(link)) throw new ValidationError('Paste the GitHub link to the file, like https://github.com/you/repo/blob/main/.sitelens.yml.');
+      await saveLink(site, link);
+      siteConfig.forget(site.id);
+      const result = await siteConfig.get({ ...site, configLink: link || undefined }, { fresh: true });
+      onChange(site);
       return result;
     }],
     ['POST', /^\/api\/sites\/([\w-]+)\/config\/local$/, async ({ match, body }) => {

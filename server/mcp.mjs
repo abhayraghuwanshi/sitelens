@@ -281,12 +281,14 @@ export const TOOLS = [
         changes: { type: 'string', maxLength: 3000, description: 'What was changed (or is proposed): files, PR links, the old and new text.' },
         expected: { type: 'string', maxLength: 3000, description: 'What should happen, by how much and when to look again.' },
         status: { type: 'string', enum: ['done'], description: 'Tick the to-do off: only when the change is live.' },
+        model: { type: 'string', maxLength: 60, description: 'Your model, e.g. "Claude Opus 5.5" (optional; shown with the write-up).' },
       },
       required: ['id'],
     },
     method: 'POST',
     path: (a) => `/api/todos/${encodeURIComponent(a.id)}/entries`,
-    body: (a) => ({ summary: a.summary, changes: a.changes, expected: a.expected, author: 'claude', ...(a.status ? { status: a.status } : {}) }),
+    // The MCP client (Claude Code, Cursor…) and model go with it, so the to-do says who did the work.
+    body: (a, ctx) => ({ summary: a.summary, changes: a.changes, expected: a.expected, author: 'claude', ...(ctx?.client ? { client: ctx.client } : {}), ...(a.model ? { model: a.model } : {}), ...(a.status ? { status: a.status } : {}) }),
   },
   {
     name: 'site_config',
@@ -463,7 +465,7 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
     const tool = TOOLS.find((t) => t.name === name);
     if (!tool) return { content: [{ type: 'text', text: `Unknown tool: ${name}` }], isError: true };
     try {
-      const request = { method: tool.method, body: tool.body?.(args) };
+      const request = { method: tool.method, body: tool.body?.(args, ctx) };
       const get = (path, req) => studio(baseUrl, path, fetchImpl, req);
       const result = tool.local ? tool.local(args, ctx)
         : tool.run ? await tool.run(args, get)
@@ -484,6 +486,9 @@ export function createMcp({ baseUrl = 'http://127.0.0.1:4318', dataDir = join(RO
     switch (msg.method) {
       case 'initialize': {
         const asked = msg.params?.protocolVersion;
+        // Which app is talking (claude-code, cursor…), so write-ups can name it.
+        const client = String(msg.params?.clientInfo?.name || '').slice(0, 60);
+        if (client) ctx.client = client;
         return reply({
           protocolVersion: PROTOCOL_VERSIONS.includes(asked) ? asked : PROTOCOL_VERSIONS[0],
           capabilities: { tools: {}, prompts: {} },

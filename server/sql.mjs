@@ -170,6 +170,46 @@ function withSessions(bq, range, body, ctes = []) {
   return `WITH sessions AS (\n  ${source}\n)${extra}\n${body}`;
 }
 
+// Live: everyone with an event in the last `minutes` minutes, one row each,
+// from the streaming export's intraday tables (suffixes: intraday_YYYYMMDD,
+// today and yesterday so a day boundary in the property's time zone is covered).
+export function livePeopleSql(bq, suffixes, { minutes = 30, limit = 80 } = {}) {
+  if (!suffixes.length || !suffixes.every((x) => /^intraday_\d{8}$/.test(x))) throw new Error('Invalid intraday tables');
+  const left = leftOutWhere({ ...bq, sessionsTable: '' });
+  return {
+    sql: `WITH e AS (
+  SELECT user_pseudo_id AS visitor, event_timestamp AS t, event_name,
+    device.category AS device, device.web_info.browser AS browser, device.operating_system AS os,
+    geo.city AS city, geo.country AS country,
+    collected_traffic_source.manual_source AS src, traffic_source.source AS first_src,
+    ${PARAM('page_referrer')} AS referrer,
+    ${PATH_OF(PARAM('page_location'))} AS path, ${PARAM('page_title')} AS title,
+    ${PARAM('session_engaged')} = '1' AS engaged_event
+  FROM ${eventsTable(bq)}
+  WHERE _TABLE_SUFFIX IN (${suffixes.map((x) => `'${x}'`).join(', ')})${bq.streamId ? '\n    AND stream_id = @stream_id' : ''}
+    AND event_timestamp >= UNIX_MICROS(TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${Number(minutes)} MINUTE))
+    AND user_pseudo_id IS NOT NULL
+), p AS (
+  SELECT visitor, DIV(MIN(t), 1000) AS first_ms, DIV(MAX(t), 1000) AS last_ms,
+    ARRAY_AGG(device IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS device,
+    ARRAY_AGG(browser IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS browser,
+    ARRAY_AGG(os IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS os,
+    ARRAY_AGG(city IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS city,
+    ARRAY_AGG(country IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS country,
+    ARRAY_AGG(src IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS source,
+    ARRAY_AGG(referrer IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS referrer,
+    ARRAY_AGG(first_src IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS first_source,
+    LOGICAL_OR(IFNULL(engaged_event, FALSE)) AS engaged,
+    ARRAY_AGG(STRUCT(DIV(t, 1000) AS ms, event_name AS name, path, title) ORDER BY t LIMIT 60) AS events
+  FROM e GROUP BY visitor
+)
+SELECT * FROM p${left ? `\nWHERE NOT (${left})` : ''}
+ORDER BY last_ms DESC
+LIMIT ${Number(limit)}`,
+    params: baseParams(bq),
+  };
+}
+
 // The site's leave-out rule as a condition on a session's country and engaged
 // columns, or '' for none. A materialized table built before `engaged` existed
 // can only be filtered by country, so then the rule is country-only.
@@ -457,17 +497,90 @@ ORDER BY sessions DESC`,
   return { sql, params: sessionParams(bq) };
 }
 
-// A session's browser as GA4 names it. A rollup table built before `browser`
-// existed doesn't know it.
+// The routes people take: where they came from, the page they landed on, and
+// the pages they went to next (up to four), one row per route. `converted`
+// counts the sessions on that route that reached the site's outcome.
+export function routesSql(bq, range, { outcome = '', limit = 40 } = {}) {
+  if (!EVENT_NAME.test(outcome)) throw new Error('Routes need an outcome event from the site’s goals.');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT source, SPLIT(route, '|') AS path, COUNT(*) AS sessions, COUNTIF(converted) AS converted
+FROM (
+  SELECT IFNULL(visit_source, '(direct)') AS source,
+    ARRAY_TO_STRING(ARRAY(SELECT p FROM UNNEST(pages) AS p WITH OFFSET o WHERE o < 4 ORDER BY o), '|') AS route,
+    EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}') AS converted
+  FROM sessions
+  WHERE ARRAY_LENGTH(pages) > 0
+)
+GROUP BY source, route
+ORDER BY sessions DESC
+LIMIT @limit`,
+  );
+  return { sql, params: { ...sessionParams(bq), limit: clampInt(limit, 5, 200) } };
+}
+
+// Who gets there: the same ordered steps, counted per source / system / browser
+// / country, so one segment's route through the goal can be compared with the
+// average. Rows: { name, sessions, converted, steps: [n per step] }.
+export function segmentsSql(bq, range, { by = 'source', steps = [], outcome = '', limit = 12 } = {}) {
+  if (!EVENT_NAME.test(outcome)) throw new Error('Who gets there needs an outcome event from the site’s goals.');
+  const clean = (Array.isArray(steps) ? steps : [])
+    .map((s) => ({ kind: s.kind === 'event' ? 'event' : 'page', value: String(s.value || '').trim().slice(0, 200) }))
+    .filter((s) => s.value)
+    .slice(0, 8);
+  if (clean.length < 2) throw new Error('Who gets there needs at least two funnel steps.');
+  const dims = {
+    source: `IFNULL(visit_source, '(direct)')`,
+    system: systemGroup(bq),
+    browser: browserOf(bq),
+    country: `IFNULL(NULLIF(country, ''), '(not set)')`,
+  };
+  const dim = dims[by];
+  if (!dim) throw new Error('Pick source, system, browser or country.');
+  const params = { ...sessionParams(bq), limit: clampInt(limit, 3, 40) };
+  const ctes = [];
+  clean.forEach((step, i) => {
+    params[`k${i}`] = stepKey(step);
+    const after = i === 0 ? '' : ` AND ts > t${i - 1}`;
+    ctes.push(`f${i} AS (
+  SELECT *, (SELECT MIN(ts) FROM UNNEST(seq) WHERE k = @k${i}${after}) AS t${i}
+  FROM ${i === 0 ? 'sessions' : `f${i - 1}`}
+)`);
+  });
+  const cols = clean.map((_, i) => `,\n  COUNTIF(t${i} IS NOT NULL) AS step_${i}`).join('');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT ${dim} AS name,
+  COUNT(*) AS sessions,
+  COUNTIF(EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')) AS converted${cols}
+FROM f${clean.length - 1}
+GROUP BY name
+ORDER BY sessions DESC
+LIMIT @limit`,
+    ctes,
+  );
+  return { sql, params, steps: clean };
+}
+
+// Whether the sessions source has the `os` and `browser` columns. Raw events
+// always do; a rollup only when Studio built it after they were added (it
+// records the table in `systemTable`). An older or hand-entered table doesn't.
+function hasSystem(bq) {
+  return !bq.sessionsTable || bq.systemTable === bq.sessionsTable;
+}
+
+// A session's browser as GA4 names it.
 function browserOf(bq) {
-  return bq.sessionsTable ? `'(not set)'` : `IFNULL(NULLIF(browser, ''), '(not set)')`;
+  return hasSystem(bq) ? `IFNULL(NULLIF(browser, ''), '(not set)')` : `'(not set)'`;
 }
 
 // A session's system, named like the leavers' groups. A rollup table built
 // before `os` existed only knows the device category.
 function systemGroup(bq) {
   const phone = `IFNULL(device, '') IN ('mobile', 'tablet')`;
-  if (bq.sessionsTable) return `IF(${phone}, 'Phones and tablets', 'Computers')`;
+  if (!hasSystem(bq)) return `IF(${phone}, 'Phones and tablets', 'Computers')`;
   return `CASE
     WHEN ${phone} THEN 'Phones and tablets'
     WHEN os = 'Chrome OS' THEN 'Chromebooks'

@@ -247,3 +247,18 @@ test/                node:test — SQL builders, demo warehouse, server (BigQuer
 - Warehouse ranges end yesterday. The daily export lands the next day, and the intraday tables aren't used yet.
 - The Paths Sankey keeps the top 16 transitions per step and folds the rest into "(other pages)". Exit rates come from a separate, exact query.
 - The demo world is regenerated per process, deterministically.
+
+## To do: tests to write
+
+Not written yet; add these when there's time.
+
+- **Story chart drag** (`web/src/charts/LineChart.jsx`): dragging across days calls `onRange(from, to)` with the lower index first; a click without moving calls `onSelect`; ← → move the hover and Enter opens the day.
+- **Story stretch panel** (`StretchPanel` in `web/src/next/Story.jsx`): totals for the dragged days against the same number of days just before; the sources and pages that changed most come out sorted by the size of the change.
+- **Story day table** (`DayTable`): sorting by each column both ways; "vs usual" is empty when there's no usual day; Copy as CSV escapes quotes in "What happened".
+- **Story address**: `?day=` opens the day panel, `?sel=from~to` opens the stretch panel, and opening one closes the other.
+- **Waiting line**: the count is alerts + open to-dos + goals behind for that site, and it's hidden at 0.
+- **Ask Claude on the Story**: without a key it shows "Add a key"; with one it posts the period's `from`/`to` and the question, and shows the answer.
+- **Shared period**: the Story and the reports read and write the same saved `range`.
+- **Search: each search's earlier position** (`mergeRows` in `server/search-hub.mjs`): with `before`, each engine's side gets `before` (its position in the period before, null when it didn't show), matched case-insensitively; Bing's `prevQueries` come through; a failed Google call for the earlier period leaves `before` empty instead of failing the page.
+- **Search ladder arrows** (`SearchView.jsx`): an arrow and "up from #N" / "down from #N" only when a search moved a whole place or more; the legend shows Moved up / Slipped only when something moved.
+- **Search header**: the engine switch sits beside the period, and the subtitle follows it (Google and Bing together / Google only / Bing only).

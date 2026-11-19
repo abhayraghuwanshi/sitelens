@@ -461,8 +461,22 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
   async function build(id, rangeKey, fresh = false) {
     const product = (await products.list()).find((p) => p.id === id);
     if (!product) throw new SourceError('Unknown product.', { kind: 'notfound' });
-    const range = historyRange(rangeKey, now());
     const site = product.siteId ? (await store.sites()).find((s) => s.id === product.siteId) || null : null;
+    return buildFor(product, site, rangeKey, fresh);
+  }
+
+  // A site without a product still has an outcome: the goals in its .sitelens.yml,
+  // or the events it sends. Measure those, with no store listing or repo to add.
+  async function buildSite(siteId, rangeKey, fresh = false) {
+    const site = (await store.sites()).find((s) => s.id === siteId);
+    if (!site) throw new SourceError('Unknown site.', { kind: 'notfound' });
+    const product = { id: site.id, label: site.label, siteId: site.id, repos: [], extensionIds: [], siteOnly: true };
+    return buildFor(product, site, rangeKey, fresh);
+  }
+
+  async function buildFor(product, site, rangeKey, fresh = false) {
+    const id = product.id;
+    const range = historyRange(rangeKey, now());
     const live = site && !site.demo && site.propertyId;
     const errors = {};
     const scope = `${id}:${rangeKey}:${range.end}:`;
@@ -476,7 +490,7 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     };
 
     const [view, siteBase, listings] = await Promise.all([
-      safely('product', () => products.get(id, rangeKey)),
+      product.siteOnly ? null : safely('product', () => products.get(id, rangeKey)),
       live ? safely('site', () => siteEvents(site, range)) : null,
       Promise.all(product.extensionIds.map((ext) => safely(`listing:${ext}`, async () => listingAnalytics({ token: await auth.token(), propertyId: await listingProperty(ext), range })))),
     ]);
@@ -567,7 +581,7 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     const outs = measured.filter((g) => g.role === 'outcome');
     const rateLabel = rateGoals.length === 1 ? rateGoals[0].label : 'Converted';
     return {
-      product: { id: product.id, label: product.label },
+      product: { id: product.id, label: product.label, ...(product.siteOnly ? { siteOnly: true } : {}) },
       range,
       site: site ? { id: site.id, host: site.host, demo: Boolean(site.demo), propertyId: site.propertyId || '' } : null,
       headline: headline({ label: product.label, days: range.days, outcomes, trend, parts, funnel, list: all }),
@@ -611,6 +625,28 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     };
   }
 
+  // One key through the cache, retrying only the parts that failed. Results
+  // with failed parts aren't cached (or saved over a good one): they're
+  // answered from here until the retry window ends.
+  async function read(key, fresh, builder) {
+    const recent = partial.get(key);
+    if (recent && recent.at + RETRY_AFTER > now()) return recent.data;
+    partial.delete(key);
+    const load = async () => {
+      const data = await builder();
+      if (Object.keys(data.errors).length) throw Object.assign(new Error('partial'), { partial: data });
+      return data;
+    };
+    try {
+      return await cache.wrap(key, TTL, fresh, load);
+    } catch (err) {
+      if (!err.partial) throw err;
+      if (partial.size > 200) partial.clear();
+      partial.set(key, { at: now(), data: err.partial });
+      return err.partial;
+    }
+  }
+
   return {
     suggest,
     // Every event name the site sent in the range (GA4 API), or null without GA4.
@@ -621,29 +657,20 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     },
     clear(id) {
       cache.clear(`outcomes:${id}:`);
+      cache.clear(`site-outcomes:${id}:`);
       pieces.clear(`${id}:`);
-      for (const key of partial.keys()) if (key.startsWith(`outcomes:${id}:`)) partial.delete(key);
+      for (const key of partial.keys()) {
+        if (key.startsWith(`outcomes:${id}:`) || key.startsWith(`site-outcomes:${id}:`)) partial.delete(key);
+      }
     },
     async get(id, rangeKey, { fresh = false } = {}) {
       const key = `outcomes:${id}:${rangeKey}:${historyRange(rangeKey, now()).end}`;
-      const recent = partial.get(key);
-      if (recent && recent.at + RETRY_AFTER > now()) return recent.data;
-      partial.delete(key);
-      // A result with failed parts isn't cached (or saved over a good one): it's
-      // thrown past the cache and answered from here until the retry window ends.
-      const load = async () => {
-        const data = await build(id, rangeKey, fresh);
-        if (Object.keys(data.errors).length) throw Object.assign(new Error('partial'), { partial: data });
-        return data;
-      };
-      try {
-        return await cache.wrap(key, TTL, fresh, load);
-      } catch (err) {
-        if (!err.partial) throw err;
-        if (partial.size > 200) partial.clear();
-        partial.set(key, { at: now(), data: err.partial });
-        return err.partial;
-      }
+      return read(key, fresh, () => build(id, rangeKey, fresh));
+    },
+    // A site's own goals, when it has no product to hang them on.
+    async getSite(siteId, rangeKey, { fresh = false } = {}) {
+      const key = `site-outcomes:${siteId}:${rangeKey}:${historyRange(rangeKey, now()).end}`;
+      return read(key, fresh, () => buildSite(siteId, rangeKey, fresh));
     },
   };
 }
@@ -653,5 +680,8 @@ export function outcomeRoutes({ outcomes }) {
     // Before /api/outcomes/:id, which would otherwise match "goals".
     ['GET', /^\/api\/outcomes\/goals$/, async ({ query }) => outcomes.suggest({ siteId: query.get('site') || '', hasStore: query.get('store') === '1', hasRepos: query.get('repos') === '1' })],
     ['GET', /^\/api\/outcomes\/([\w-]+)$/, async ({ match, query }) => outcomes.get(match[1], query.get('range') || '28d', { fresh: query.has('fresh') })],
+    // A site with no product: its own goals, measured from .sitelens.yml or the
+    // events it sends. The Story reads this when there is no product to read.
+    ['GET', /^\/api\/sites\/([\w-]+)\/outcomes$/, async ({ match, query }) => outcomes.getSite(match[1], query.get('range') || '28d', { fresh: query.has('fresh') })],
   ];
 }

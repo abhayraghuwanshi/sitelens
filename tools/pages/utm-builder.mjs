@@ -1,7 +1,7 @@
 export default {
   name: 'UTM Builder',
   title: 'Free UTM Builder: Campaign URL Generator for GA4 | Kauzl',
-  description: 'Build UTM-tagged campaign links for Google Analytics 4 in seconds. Presets for Reddit, newsletters, X, LinkedIn and Google Ads, bulk links, GA4 channel checks and a tracking-link cleaner.',
+  description: 'Build UTM links for GA4 in seconds: presets for Reddit, newsletters, X, LinkedIn and Google Ads, bulk links, channel checks and a link cleaner.',
   blurb: 'Tag campaign links for GA4, in bulk, with naming checks so your reports stay clean.',
   related: ['did-it-work', 'ab-test-calculator', 'open-graph-preview'],
   h1: 'UTM Builder',

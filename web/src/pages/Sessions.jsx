@@ -5,6 +5,7 @@ import { useAsync } from '../hooks.js';
 import { Card, Loading, ErrorState, WarehouseMeta, PathChain, Segmented } from '../components/ui.jsx';
 import { family, pageName } from '../next/Journeys.jsx';
 import { Sankey } from '../charts/Sankey.jsx';
+import { Marked } from '../components/Marks.jsx';
 
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const pct = (n, d) => (d ? `${Math.round((n / d) * 100)}%` : '–');
@@ -67,9 +68,9 @@ export function Sessions({ site, range, params }) {
                       </div>
                     </td>
                     <td class="num">{formatDuration(s.durationSec)}</td>
-                    <td class="small">{s.visitSource ? family(s.visitSource, site.host) : <>{s.source} <span class="muted">/ {s.medium}</span></>}</td>
-                    <td class="small">{s.system ? <>{s.system}{s.browser && <span class="muted"> · {s.browser}</span>}</> : s.device}</td>
-                    <td class="small">{s.country}</td>
+                    <td class="small">{s.visitSource ? <Marked kind="source" name={family(s.visitSource, site.host)} /> : <><Marked kind="source" name={s.source} /> <span class="muted">/ {s.medium}</span></>}</td>
+                    <td class="small">{s.system ? <span class="nx-sys"><Marked kind="browser" name={s.system} />{s.browser && <span class="muted"><Marked kind="browser" name={s.browser} /></span>}</span> : <Marked kind="browser" name={s.device} />}</td>
+                    <td class="small"><Marked kind="country" name={s.country} /></td>
                   </tr>
                 ))}
               </tbody>
@@ -138,14 +139,14 @@ function Summary({ s, site, outcome, query, onPage, flow, depth, setDepth }) {
       <div class="nx-ssum-lists">
         <TopList title="Landed on" rows={s.landing} total={s.sessions} label={label} name={pageName} onPick={onPage} />
         <TopList title="Left from" rows={withExitRate(s.exit, flow.data?.exits)} total={s.sessions} label={label} name={pageName} onPick={onPage} />
-        <TopList title={MORE.find((m) => m.key === more).label} rows={lists[more]} total={s.sessions} label={label}
+        <TopList title={MORE.find((m) => m.key === more).label} rows={lists[more]} total={s.sessions} label={label} marks={more === 'system' ? 'browser' : more}
           head={<Segmented label="Show" value={more} options={MORE.map((m) => ({ ...m, label: m.label === 'Came from' ? 'Source' : m.label }))} onChange={setMore} />} />
       </div>
     </section>
   );
 }
 
-function TopList({ title, rows, total, label, name = (x) => x, onPick, head }) {
+function TopList({ title, rows, total, label, name = (x) => x, onPick, head, marks = '' }) {
   const max = Math.max(1, ...rows.map((x) => x.n));
   return (
     <div>
@@ -155,7 +156,7 @@ function TopList({ title, rows, total, label, name = (x) => x, onPick, head }) {
         {rows.slice(0, 6).map((x) => {
           const inner = (
             <>
-              <span class="nx-ssum-name" title={x.name}>{name(x.name)}</span>
+              <span class="nx-ssum-name" title={x.name}>{marks ? <Marked kind={marks} name={x.name}>{name(x.name)}</Marked> : name(x.name)}</span>
               <span class="nx-num">{fmt(x.n)} {x.exitRate != null
                 ? <span class={`small ${x.exitRate >= 0.7 ? 'bad' : 'muted'}`} title="Exit rate: the share of this page's views that were the last page of the session">{Math.round(x.exitRate * 100)}% exit</span>
                 : <span class="muted small">{pct(x.n, total)}</span>}</span>

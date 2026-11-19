@@ -436,6 +436,46 @@ export function demoLive(tabTitle = 'Home', host = 'example.com') {
   };
 }
 
+// The sample site's Live view. It drifts minute to minute so the page looks alive,
+// and is the same for everyone within a minute.
+export function demoLiveDetail(host = 'example.com', at = Date.now()) {
+  const minute = Math.floor(at / 60_000);
+  const wave = (i) => Math.max(0, Math.round(9 + 5 * Math.sin((minute - 29 + i) / 4) + (((minute - 29 + i) * 7919) % 5) - 2));
+  const perMinute = Array.from({ length: 30 }, (_, i) => wave(i));
+  const now = perMinute.slice(-5).reduce((a, b) => a + b, 0) - 6;
+  const split = (total, shares, names) => names.map((name, i) => ({ name, users: Math.max(1, Math.round(total * shares[i])) }));
+  const pages = split(now, [0.4, 0.25, 0.2, 0.15], ['Home', titleFor('/pricing', 'Pricing', host), titleFor('/blog/ga4-vs-plausible', 'GA4 vs Plausible', host), titleFor('/docs/getting-started', 'Getting started', host)])
+    .map(({ name, users }) => ({ title: name, users }));
+  const last30 = Math.round(perMinute.reduce((a, b) => a + b, 0) * 0.55);
+  return {
+    now,
+    last30,
+    perMinute,
+    pages,
+    countries: split(last30, [0.38, 0.17, 0.14, 0.11, 0.08], ['United States', 'India', 'Germany', 'United Kingdom', 'Brazil']),
+    devices: split(last30, [0.62, 0.34, 0.04], ['desktop', 'mobile', 'tablet']),
+    sources: split(last30, [0.34, 0.26, 0.18, 0.12, 0.1], ['google', '(direct)', 'reddit.com', 'chatgpt.com', 'news.ycombinator.com']),
+    feed: [
+      [0, 'DE', 'Germany', 'Berlin', pages[1].title, 'desktop', 'google', 2],
+      [1, 'US', 'United States', 'Austin', pages[2].title, 'desktop', 'chatgpt.com', 1],
+      [1, 'US', 'United States', 'Chicago', 'Home', 'mobile', '(direct)', 3],
+      [3, 'IN', 'India', 'Bengaluru', pages[1].title, 'mobile', '(direct)', 1],
+      [4, 'GB', 'United Kingdom', 'London', 'Home', 'desktop', 'google', 2],
+      [6, 'US', 'United States', 'Denver', pages[2].title, 'mobile', 'reddit.com', 1],
+      [11, 'BR', 'Brazil', 'São Paulo', pages[3].title, 'desktop', 'news.ycombinator.com', 1],
+      [17, 'DE', 'Germany', 'Munich', pages[3].title, 'desktop', 'github.com', 1],
+      [24, 'NL', 'Netherlands', 'Amsterdam', 'Home', 'desktop', 'google', 1],
+    ].map(([ago, code, country, city, page, device, source, users]) => ({ ago, code, country, city, page, device, source, users })),
+    wins: [{ ago: 3, event: 'sign_up', count: 1 }, { ago: 12, event: 'file_download', count: 2 }],
+    scopedByStream: true,
+    // What shipped or was posted just before, as the Timeline would show it.
+    recent: [
+      { id: 'demo-post', label: 'Your Reddit post: I built analytics that says whether a launch worked', kind: 'post', url: '', at: minute * 60_000 - 41 * 60_000, date: '' },
+      { id: 'demo-deploy', label: 'Deploy: pricing page copy', kind: 'deploy', url: '', at: minute * 60_000 - 3 * 3_600_000, date: '' },
+    ],
+  };
+}
+
 export function demoOpenTabs(host, currentPath, rangeKey = '28d') {
   const site = demoSiteReports(host, rangeKey);
   const paths = [...new Set([currentPath || '/', '/pricing', '/blog/ga4-vs-plausible', '/docs/getting-started'])];

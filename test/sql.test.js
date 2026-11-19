@@ -66,6 +66,19 @@ test('a materialized sessions table replaces the raw-event scan', () => {
   assert.ok(!('stream_id' in built.params), 'rollup was already built for one stream');
 });
 
+test('a rollup Studio built carries browser and OS; an older one does not', () => {
+  const table = 'pay-proj.sitelens_x.sessions';
+  const old = sql.sessionsListSql({ ...bq, sessionsTable: table }, range).sql;
+  assert.match(old, /'\(not set\)' AS browser/);
+  assert.ok(!old.includes("os = 'Windows'"));
+  const built = sql.sessionsListSql({ ...bq, sessionsTable: table, systemTable: table }, range).sql;
+  assert.match(built, /IFNULL\(NULLIF\(browser, ''\), '\(not set\)'\) AS browser/);
+  assert.ok(built.includes("os = 'Windows'"));
+  // Pointing the site at another table drops the marker's effect.
+  const swapped = sql.sessionsListSql({ ...bq, sessionsTable: 'p.d.other', systemTable: table }, range).sql;
+  assert.match(swapped, /'\(not set\)' AS browser/);
+});
+
 test('console placeholders expand; sessions placeholder wraps the session CTE', () => {
   const plain = sql.expandConsoleSql(bq, range, 'SELECT 1 FROM {{events}} WHERE _TABLE_SUFFIX BETWEEN {{start}} AND {{end}};');
   assert.match(plain.sql, /events_\*` WHERE _TABLE_SUFFIX BETWEEN '20210104' AND '20210131'$/);
@@ -161,6 +174,37 @@ test('journeys group sessions by source and landing page, counting goal steps', 
   assert.throws(() => sql.journeysSql(bq, range, { steps: [], outcome: "x' OR 1" }), /outcome/);
   // The leave-out rule reaches journeys through the sessions view.
   assert.match(sql.journeysSql({ ...bq, leaveOut: { countries: ['China'] } }, range, { outcome: 'done' }).sql, /WHERE NOT \(IFNULL\(country/);
+});
+
+test('routes keep the came-from and the pages; segments count ordered steps per group', () => {
+  const routes = sql.routesSql(bq, range, { outcome: 'done', limit: 25 });
+  assert.match(routes.sql, /ARRAY_TO_STRING\(ARRAY\(SELECT p FROM UNNEST\(pages\)/);
+  assert.match(routes.sql, /GROUP BY source, route/);
+  assert.match(routes.sql, /k = 'event:done'/);
+  assert.equal(routes.params.limit, 25);
+  // An outcome that isn't a plain event name is dropped, never inlined.
+  assert.throws(() => sql.routesSql(bq, range, { outcome: "x' OR 1" }), /outcome/);
+
+  const segments = sql.segmentsSql(bq, range, {
+    by: 'country',
+    steps: [{ kind: 'page', value: '/pricing' }, { kind: 'event', value: 'sign_up' }],
+    outcome: 'done',
+  });
+  assert.equal(segments.steps.length, 2);
+  assert.match(segments.sql, /IFNULL\(NULLIF\(country, ''\), '\(not set\)'\) AS name/);
+  assert.match(segments.sql, /COUNTIF\(t0 IS NOT NULL\) AS step_0/);
+  assert.match(segments.sql, /COUNTIF\(t1 IS NOT NULL\) AS step_1/);
+  assert.match(segments.sql, /COUNTIF\(EXISTS\(SELECT 1 FROM UNNEST\(seq\) WHERE k = 'event:done'\)\) AS converted/);
+  assert.match(segments.sql, /FROM f1/);
+  assert.equal(segments.params.k0, 'page:/pricing');
+  assert.equal(segments.params.k1, 'event:sign_up');
+  assert.throws(() => sql.segmentsSql(bq, range, { by: 'country', steps: [{ kind: 'page', value: '/' }], outcome: 'done' }), /two funnel steps/);
+  assert.throws(() => sql.segmentsSql(bq, range, {
+    by: 'nope', steps: [{ kind: 'page', value: '/' }, { kind: 'page', value: '/x' }], outcome: 'done',
+  }), /source, system, browser or country/);
+  assert.throws(() => sql.segmentsSql(bq, range, {
+    steps: [{ kind: 'page', value: '/' }, { kind: 'page', value: '/x' }], outcome: "x' OR 1",
+  }), /outcome/);
 });
 
 test('cohorts drop weeks with no new users and mark the week the data starts in', async () => {

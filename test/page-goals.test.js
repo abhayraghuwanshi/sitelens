@@ -55,3 +55,14 @@ test('progress toward a saved goal', () => {
   assert.deepEqual(progress({ metric: 'rate', from: 0.04, to: 0.08 }, 0.06), { now: 0.06, reached: false, share: 0.5 });
   assert.equal(progress(target, null), null);
 });
+
+test('goalStatus: reached, on track with time gone, behind, past its date, not measured', async () => {
+  const { goalStatus } = await import('../server/page-goals.mjs');
+  const t = { setAt: '2026-11-01', checkBy: '2026-12-01' };
+  assert.equal(goalStatus(t, { reached: true, share: 1 }, '2026-11-10'), 'reached');
+  assert.equal(goalStatus(t, { reached: false, share: 0.4 }, '2026-11-16'), 'on-track'); // half the time, 40% there
+  assert.equal(goalStatus(t, { reached: false, share: 0.1 }, '2026-11-25'), 'behind');
+  assert.equal(goalStatus(t, { reached: false, share: 0.9 }, '2026-12-05'), 'behind'); // past its date
+  assert.equal(goalStatus(t, null, '2026-11-05'), 'waiting');
+  assert.equal(goalStatus(null, null, '2026-11-05'), null);
+});

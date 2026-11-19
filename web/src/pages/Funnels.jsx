@@ -4,6 +4,7 @@ import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
 import { Loading, ErrorState, WarehouseMeta } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { Stairs } from '../next/Journeys.jsx';
 
 const DEFAULT_STEPS = [
   { kind: 'page', value: '/pricing' },
@@ -14,8 +15,9 @@ const CUSTOM = '__custom__';
 
 // Funnels: pick one (yours from .sitelens.yml, or a suggested one), see it left
 // to right with the drop between each step, read what it means, and edit the
-// steps only when you want to.
-export function Funnels({ site, range }) {
+// steps only when you want to. ?edit=1 opens the editor right away (the
+// Journeys page’s “Edit steps” links land here with it).
+export function Funnels({ site, range, params }) {
   const [saved, setSaved] = usePersistent(`funnel:${site.id}`, DEFAULT_STEPS);
   const [steps, setSteps] = useState(saved);
   const [editing, setEditing] = useState(false);
@@ -26,9 +28,12 @@ export function Funnels({ site, range }) {
   const config = useAsync(() => api.get(`/sites/${site.id}/config`), [site.id]);
   const declared = config.data?.config?.funnels || [];
   const goals = config.data?.config?.goals || [];
+  const outcome = goals.find((g) => g.source === 'event' && g.role === 'outcome');
   const events = useAsync(() => api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`), [site.id, range]);
   const result = useAsync(() => (run ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }) : null), [site.id, range, JSON.stringify(run)]);
   const suggestions = useAsync(() => api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`), [site.id, range]);
+  const edit = params?.get('edit') === '1';
+  useEffect(() => { if (edit) setEditing(true); }, [edit]);
 
   // With funnels in the file, edits here are for exploring and aren't kept.
   const keep = (next) => !declared.length && setSaved(next);
@@ -84,18 +89,20 @@ export function Funnels({ site, range }) {
           eventNames={(events.data?.events || []).map((e) => e.name)} run={run} label={label} />
       )}
 
-      <section class="card card-plain" aria-label="Funnel">
-        {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
-          : !result.data ? <Loading height={340} />
-          : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} />}
-      </section>
+      {!editing && (
+        <section class="card card-plain" aria-label="Funnel">
+          {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
+            : !result.data ? <Loading height={340} />
+            : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} goals={goals} site={site} range={range} outcome={outcome} bare />}
+        </section>
+      )}
     </div>
   );
 }
 
 // Steps named the way the site's goals name them (“Saw the downloads
 // section”), with the raw page or event underneath.
-function labeller(goals) {
+export function labeller(goals) {
   const byEvent = new Map(goals.filter((g) => g.source === 'event' && g.match).map((g) => [g.match, g.label]));
   const name = (s) => (s.kind === 'event' ? byEvent.get(s.value) || null : s.value === '/' ? 'Home page' : null);
   return {
@@ -105,7 +112,7 @@ function labeller(goals) {
   };
 }
 
-function FunnelView({ data, name, label }) {
+function FunnelView({ data, name, label, goals, site, range, outcome }) {
   const steps = data.steps;
   const first = steps[0]?.sessions || 0;
   if (!first) return <p class="muted">No visits reached the first step in this period.</p>;
@@ -128,37 +135,7 @@ function FunnelView({ data, name, label }) {
         {leak && <div><b class="bad">−{formatPercent(1 - leak.s.stepRate, 0)}</b><span class="muted small">biggest drop · before step {leak.i + 1}</span></div>}
       </div>
 
-      <div class="nx-fn-flow" role="list">
-        {steps.map((s, i) => {
-          const prev = i ? steps[i - 1] : null;
-          const isLeak = leak && leak.i === i;
-          return (
-            <>
-              {prev && (
-                <div class={`nx-fn-drop${isLeak ? ' leak' : ''}`} key={`d${i}`} aria-label={`${formatPercent(1 - s.stepRate, 0)} dropped`}>
-                  <span class="nx-fn-arrow" aria-hidden="true">→</span>
-                  {prev.sessions > s.sessions
-                    ? <><b>−{formatPercent(1 - s.stepRate, 0)}</b><span class="small">{formatNumber(prev.sessions - s.sessions)} left</span></>
-                    : <b class="good">none lost</b>}
-                  {s.avgSeconds !== null && <span class="small muted">~{formatDuration(s.avgSeconds)}</span>}
-                </div>
-              )}
-              <div class="nx-fn-step" role="listitem" key={`s${i}`}>
-                <div class="nx-fn-head">
-                  <span class="nx-fn-n">{i + 1}</span>
-                  <span class="nx-fn-name" title={s.value}>{label.title(s)}</span>
-                  <code class="nx-fn-raw" title={s.value}>{label.raw(s)}</code>
-                </div>
-                <div class="nx-fn-bararea">
-                  {prev && <span class="nx-fn-ghost" style={{ height: `${Math.max(1, (prev.sessions / first) * 100)}%` }} />}
-                  <span class={`nx-fn-bar${i === steps.length - 1 ? ' last' : ''}`} style={{ height: `${Math.max(1, (s.sessions / first) * 100)}%` }} />
-                </div>
-                <div class="nx-fn-count"><b>{formatNumber(s.sessions)}</b> <span class="muted small">{formatPercent(s.rate, s.rate < 0.1 ? 1 : 0)}</span></div>
-              </div>
-            </>
-          );
-        })}
-      </div>
+      {first > 0 && <Stairs steps={steps} goals={goals} site={site} range={range} outcome={outcome} bare />}
 
       {notes.length > 0 && (
         <div>
@@ -208,7 +185,7 @@ function findings(steps, leak, label) {
   return out.slice(0, 6);
 }
 
-function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label }) {
+export function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label }) {
   const update = (i, patch) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   return (
     <section class="card card-plain nx-fn-editor" aria-label="Edit funnel steps">

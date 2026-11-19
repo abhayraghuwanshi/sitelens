@@ -232,6 +232,52 @@ export function demoFunnel(range, steps) {
   return row;
 }
 
+// The routes people take: came from × landed on × the pages they saw next.
+export function demoRoutes(range, { outcome = '', limit = 40 } = {}) {
+  if (!outcome) return [];
+  const key = `event:${outcome}`;
+  const map = new Map();
+  for (const s of sessionsIn(range)) {
+    if (!s.pages.length) continue;
+    const path = s.pages.slice(0, 4);
+    const route = `${s.source}|${path.join('|')}`;
+    const row = map.get(route) || { source: s.source, path, sessions: 0, converted: 0 };
+    row.sessions += 1;
+    if (s.seq.some((e) => e.k === key)) row.converted += 1;
+    map.set(route, row);
+  }
+  return [...map.values()].sort((a, b) => b.sessions - a.sessions).slice(0, limit);
+}
+
+// The same ordered steps, counted per source / system / browser / country.
+export function demoSegments(range, { by = 'source', steps = [], outcome = '' } = {}) {
+  if (!outcome || steps.length < 2) return [];
+  const keys = steps.map(stepKey);
+  const goal = `event:${outcome}`;
+  const nameOf = (s) => {
+    if (by === 'country') return s.country;
+    if (by === 'system') return s.device === 'mobile' || s.device === 'tablet' ? 'Phones and tablets' : 'Computers';
+    if (by === 'browser') return '(not set)';
+    return s.source;
+  };
+  const map = new Map();
+  for (const s of sessionsIn(range)) {
+    const name = nameOf(s);
+    const row = map.get(name) || { name, sessions: 0, converted: 0, steps: keys.map(() => 0) };
+    row.sessions += 1;
+    if (s.seq.some((e) => e.k === goal)) row.converted += 1;
+    let prev = -Infinity;
+    for (let i = 0; i < keys.length; i++) {
+      const hit = s.seq.find((e) => e.k === keys[i] && e.ts > prev);
+      if (!hit) break;
+      row.steps[i] += 1;
+      prev = hit.ts;
+    }
+    map.set(name, row);
+  }
+  return [...map.values()].sort((a, b) => b.sessions - a.sessions);
+}
+
 function mondayOf(iso) {
   const d = new Date(`${iso}T12:00:00`);
   d.setDate(d.getDate() - ((d.getDay() + 6) % 7));

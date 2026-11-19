@@ -8,11 +8,15 @@
 //   from: what suggested it (e.g. 'search:/blog/x'), so a suggestion is only added once;
 //   subject: what it's about ({ kind: source|page|query|search|outcome|posts, key }), so its
 //     data can be shown with it (server/todo-context.mjs); baseline: the numbers when it was added;
-//   entries: write-ups by you or Claude: { id, at, author, summary?, changes?, expected? }
-//     (what was found, what was changed, what should happen).
+//   entries: write-ups by you or Claude: { id, at, author, client?, model?, summary?, changes?, expected? }
+//     (client: the MCP client that posted it, e.g. claude-code; model: what it said it was)
+//     (what was found, what was changed, what should happen);
+//   goals: for a page-goal to-do, the goals it went through before this one:
+//     { title, line, reached, at } (see carryGoal).
 
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './store.mjs';
+import { goalTodo, span, value as goalValue } from '../shared/goal-format.js';
 
 const TITLE_MAX = 200;
 const DETAIL_MAX = 2000;
@@ -45,7 +49,11 @@ export function normalizeEntry(input = {}) {
   }
   const author = String(input.author || 'you');
   if (!AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${AUTHORS.join(', ')}.`);
-  return { author, ...entry };
+  // The agent behind a Claude write-up: its MCP client name and, if it said, its model.
+  const label = (k) => String(input[k] || '').replace(/[^\w .:/()+-]/g, '').trim().slice(0, 60);
+  const client = author === 'claude' ? label('client') : '';
+  const model = author === 'claude' ? label('model') : '';
+  return { author, ...(client ? { client } : {}), ...(model ? { model } : {}), ...entry };
 }
 
 export function normalizeTodo(input = {}) {
@@ -186,7 +194,23 @@ export function createTodos({ store, annotations, context = async () => null, no
     return { ok: true };
   }
 
-  return { list, get, add, update, addEntry, remove };
+  // A page's goal was replaced by its next one (server/page-review.mjs setGoal).
+  // Its open to-do moves on to the new goal and keeps the old one in `goals`; a
+  // reached goal also goes on the Timeline that day.
+  async function carryGoal({ site, path, previous, reached = false, now: value = null, target }) {
+    const from = `goal:${path}:${previous.key}`;
+    const todo = ((await store.get()).todos || []).find((t) => t.from === from && t.site === site && t.status === 'open');
+    if (!todo) return null;
+    const line = `${span(previous.metric, previous.from, previous.to)}${value !== null ? `, ${reached ? 'reached' : 'got to'} ${goalValue(previous.metric, value)}` : ''}`;
+    if (reached) await annotations.addNote({ date: isoDay(now()), label: `Goal reached: ${previous.title} (${path})`.slice(0, 140), scope: `site:${site}`, body: line });
+    const next = { ...todo, ...goalTodo(target, path, site), goals: [...(todo.goals || []), { title: previous.title, line, reached, at: now() }].slice(-10) };
+    await store.update((s) => {
+      s.todos = (s.todos || []).map((t) => (t.id === todo.id ? next : t));
+    });
+    return next;
+  }
+
+  return { list, get, add, update, addEntry, remove, carryGoal };
 }
 
 export function todoRoutes({ todos }) {

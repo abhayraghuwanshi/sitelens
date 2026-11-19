@@ -4,12 +4,11 @@ import { useAsync, usePersistent } from '../hooks.js';
 import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
-import { AddTodo, useTodos } from '../components/Todos.jsx';
 import { Page } from './Page.jsx';
 import { Results, SectionHead } from './Story.jsx';
 
 // One site's outcomes (server/outcomes.mjs), in the order you'd act on them:
-// what it led to, what to do about it, where people drop off, and which
+// what it led to, what stands out, where people drop off, and which
 // channels and pages bring the people who convert. The goals behind it are
 // at the bottom, one link from the site's Edit page.
 const RANGES = [{ key: '7d', label: '7 days' }, { key: '28d', label: '28 days' }, { key: '90d', label: '90 days' }];
@@ -32,18 +31,11 @@ export function OutcomesPage({ site, params, back }) {
   let body;
   if (products.error) body = <ErrorState error={products.error} onRetry={products.reload} />;
   else if (!products.data) body = <Loading height={260} />;
-  else if (!product) {
-    body = (
-      <section class="card card-plain">
-        <p class="nx-lede">Outcomes are measured per product: this site plus its store listing or repos, and the goals that count as a result (a download, an install, a sign-up).</p>
-        <div class="nx-action-row"><a class="btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
-      </section>
-    );
-  } else body = <OutcomeBody key={`${product.id}:${range}`} site={site} product={product} range={range} />;
+  else body = <OutcomeBody key={`${product?.id || `site:${site.id}`}:${range}`} site={site} product={product} range={range} />;
 
   return (
-    <Page title="Outcomes" back={back}
-      sub={`What ${site.label}’s visits led to, what to do about it, and where people drop off`}
+    <Page title="Goals" back={back}
+      sub={`What ${site.label}’s visits led to, what stands out, and where people drop off`}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       {body}
     </Page>
@@ -51,7 +43,8 @@ export function OutcomesPage({ site, params, back }) {
 }
 
 function OutcomeBody({ site, product, range }) {
-  const data = useAsync((o) => api.get(`/outcomes/${product.id}${qs({ range, fresh: o?.fresh })}`), [product.id, range]);
+  const url = product ? `/outcomes/${product.id}` : `/sites/${site.id}/outcomes`;
+  const data = useAsync((o) => api.get(`${url}${qs({ range, fresh: o?.fresh })}`), [url, range]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!data.data) return <><Loading height={160} /><Loading height={260} /></>;
   const d = data.data;
@@ -68,72 +61,37 @@ function OutcomeBody({ site, product, range }) {
   );
 }
 
-// Findings as things to do. What's broken or leaking comes first and can go on
-// your to-dos (the same to-do Story's "What to do next" offers); what works and
-// what's only worth knowing sit under it, smaller.
-function Actions({ site, insights, range }) {
-  const todos = useTodos({ site: site.id });
-  const added = new Map((todos.data?.todos || []).filter((t) => t.from).map((t) => [t.from, t]));
-  const fix = insights.filter((i) => i.tone === 'bad' || i.tone === 'warn');
-  const keep = insights.filter((i) => i.tone === 'good');
-  const know = insights.filter((i) => i.tone === 'info');
+// What the numbers show, as a plain list: what's leaking first, then what
+// works, then what's only worth knowing. Acting on them happens in one place,
+// the Story's "What to do next" (it turns the leaks into to-dos), so there are
+// no buttons or advice here.
+const ORDER = { bad: 0, warn: 1, good: 2, info: 3 };
+const NOTE = { bad: 'Leaking', warn: 'Leaking', good: 'Working', info: 'Worth knowing' };
 
+function Actions({ site, insights, range }) {
+  const list = [...insights].sort((a, b) => (ORDER[a.tone] ?? 4) - (ORDER[b.tone] ?? 4));
   return (
-    <section class="card card-plain nx-next" aria-label="What to do">
-      <SectionHead n="2" title="What to do" more={{ href: `#/site/${site.id}/todos`, label: 'Your to-dos' }} />
-      {!insights.length && <p class="muted">Nothing stands out yet. Findings appear once there’s enough traffic and at least one goal event.</p>}
-      {fix.length > 0 && (
-        <div class="nx-step-group">
-          <div class="nx-label-sm"><Icon name="triangle" size={12} /> Fix first</div>
-          <div class="nx-actions">
-            {fix.map((i) => <Finding key={i.key} site={site} item={i} range={range} todo={added.get(`outcome:${i.key}`)} />)}
-          </div>
-        </div>
-      )}
-      {keep.length > 0 && (
-        <div class="nx-step-group">
-          <div class="nx-label-sm"><Icon name="trend" size={12} /> Working, do more of it</div>
-          <div class="nx-actions">
-            {keep.map((i) => <Finding key={i.key} site={site} item={i} range={range} todo={added.get(`outcome:${i.key}`)} />)}
-          </div>
-        </div>
-      )}
-      {know.length > 0 && (
-        <div class="nx-step-group">
-          <div class="nx-label-sm"><Icon name="star" size={12} /> Worth knowing</div>
-          <ul class="nx-list">
-            {know.map((i) => (
-              <li key={i.key}>
-                <b>{i.title}.</b> <span class="muted">{i.detail}{i.action && ` ${i.action}`}</span>
+    <section class="card card-plain nx-next" aria-label="What we noticed">
+      <SectionHead n="2" title="What we noticed" more={{ href: `#/site/${site.id}?range=${range}`, label: 'What to do next' }} />
+      {!list.length && <p class="muted m-0">Nothing stands out yet. Findings appear once there’s enough traffic and at least one goal event.</p>}
+      {list.length > 0 && (
+        <ul class="nx-nlist">
+          {list.map((i) => {
+            const link = i.link || (i.day ? `#/site/${site.id}/timeline${qs({ month: i.day.slice(0, 7), day: i.day })}` : '');
+            const Main = link ? 'a' : 'div';
+            return (
+              <li class="nx-nrow nx-nrow-2" key={i.key}>
+                <Main class="nx-nmain" {...(link ? { href: link, ...(link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {}) } : {})}>
+                  <b>{i.title}</b>
+                  {i.detail && <span>{i.detail}</span>}
+                </Main>
+                <span class="nx-nworth">{NOTE[i.tone] || ''}</span>
               </li>
-            ))}
-          </ul>
-        </div>
+            );
+          })}
+        </ul>
       )}
     </section>
-  );
-}
-
-function Finding({ site, item, range, todo }) {
-  const why = [item.detail, item.action && `Do: ${item.action}`].filter(Boolean).join(' ');
-  const link = item.link || (item.day ? `#/site/${site.id}/timeline${qs({ month: item.day.slice(0, 7), day: item.day })}` : '');
-  return (
-    <div class={`nx-action${todo ? ' started' : ''}${item.tone === 'bad' ? ' nx-action-bad' : ''}`}>
-      <b>{item.title}</b>
-      {item.detail && <span class="muted">{item.detail}</span>}
-      {item.action && <span><b class="nx-do">Do</b> {item.action}</span>}
-      {(item.action || link) && <div class="nx-action-row">
-        {link && (
-          <a class="btn" href={link} {...(link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>
-            {item.link ? <>Open GA4 <Icon name="external" size={11} /></> : 'See that day'}
-          </a>
-        )}
-        {item.action && (
-          <AddTodo site={site} added={todo} class="btn ghost"
-            todo={{ title: item.title, detail: why, link: item.link || `#/site/${site.id}/outcomes?range=${range}`, from: `outcome:${item.key}`, subject: { kind: 'outcome', key: item.key } }} />
-        )}
-      </div>}
-    </div>
   );
 }
 
@@ -239,7 +197,7 @@ function FileLink({ file, site }) {
 function Goals({ d, site, onRefresh, refreshing }) {
   const g = d.goals;
   const fromFile = g.from === 'file';
-  const edit = fromFile ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
+  const edit = fromFile || d.product?.siteOnly ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
   return (
     <details class="card card-plain nx-goals">
       <summary>

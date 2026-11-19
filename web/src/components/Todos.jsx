@@ -3,10 +3,11 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from './ui.jsx';
 import { Icon } from './icons.jsx';
+import { value, span } from '../../../shared/goal-format.js';
 
 // To-dos: changes you mean to make (server/todos.mjs). Anything that changes one
 // tells the rest of the page, so the sidebar count and other lists keep up.
-const CHANGED = 'studio:todos';
+export const CHANGED = 'studio:todos';
 const changed = () => dispatchEvent(new Event(CHANGED));
 const short = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const isoDay = (ms) => new Date(ms).toLocaleDateString('en-CA');
@@ -56,7 +57,7 @@ export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls
 }
 
 // A one-line form: what needs doing, plus optional details.
-export function NewTodo({ site, link = '', placeholder = 'What needs doing? e.g. Rewrite the intro of /blog/raycast-alternatives-windows' }) {
+export function NewTodo({ site, link = '', onAdded, placeholder = 'What needs doing? e.g. Rewrite the intro of /blog/raycast-alternatives-windows' }) {
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const [more, setMore] = useState(false);
@@ -68,7 +69,8 @@ export function NewTodo({ site, link = '', placeholder = 'What needs doing? e.g.
     setBusy(true);
     setError('');
     try {
-      await todoApi.add({ title, detail, site: site?.id || '', link });
+      const added = await todoApi.add({ title, detail, site: site?.id || '', link });
+      onAdded?.(added);
       setTitle('');
       setDetail('');
       setMore(false);
@@ -110,7 +112,7 @@ function TodoItem({ todo, sites, showSite }) {
       <li class="todo editing">
         <form class="todo-new" onSubmit={(e) => { e.preventDefault(); run(async () => { await todoApi.update(todo.id, { title, detail }); setEditing(false); }); }}>
           <input type="text" value={title} maxLength={200} aria-label="To-do" onInput={(e) => setTitle(e.currentTarget.value)} />
-          <textarea rows={3} value={detail} placeholder="Details" aria-label="Details" onInput={(e) => setDetail(e.currentTarget.value)} />
+          <textarea rows={Math.min(10, Math.max(4, Math.ceil(detail.length / 110) + 1))} value={detail} placeholder="Details" aria-label="Details" onInput={(e) => setDetail(e.currentTarget.value)} />
           <div class="todo-new-row">
             <button type="submit" class="btn primary">Save</button>
             <button type="button" class="btn" onClick={() => { setEditing(false); setTitle(todo.title); setDetail(todo.detail || ''); }}>Cancel</button>
@@ -129,6 +131,7 @@ function TodoItem({ todo, sites, showSite }) {
         {todo.detail && (
           <span class={`todo-detail${long ? '' : ' clamped'}`} title={long ? '' : 'Show all'} onClick={() => setLong(!long)}>{todo.detail}</span>
         )}
+        {!done && todo.from?.startsWith('goal:') && <TodoGoal todo={todo} />}
         <span class="todo-meta">
           {showSite && site && <span>{site.label}</span>}
           {done
@@ -142,15 +145,97 @@ function TodoItem({ todo, sites, showSite }) {
           <button type="button" class="todo-link" onClick={() => run(() => todoApi.remove(todo.id))}>Delete</button>
         </span>
         {error && <span class="nx-error small" role="alert">{error}</span>}
-        {open && <TodoDetails id={todo.id} site={todo.site} />}
+        {open && <TodoDetails id={todo.id} site={todo.site} goalPath={todo.from?.startsWith('goal:') ? goalParts(todo.from).path : ''} />}
       </div>
     </li>
   );
 }
 
+// from = goal:<path>:<goal key>; goal keys hold a colon too (help:engaged).
+function goalParts(from) {
+  const rest = from.slice('goal:'.length);
+  return { path: rest.slice(0, rest.indexOf(':')), key: rest.slice(rest.indexOf(':') + 1) };
+}
+
+// How each past goal ended: its tag, and its dot on the little timeline.
+const ENDED = {
+  now: ['Now', 'accent'], reached: ['Reached', 'good'], done: ['Done', 'good'],
+  replaced: ['Replaced', ''], dropped: ['Dropped', ''], open: ['Open to-do', ''],
+};
+const goalDay = (iso) => new Date(`${iso}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+
+// Every goal a page has had, newest first: the ones it went through (saved
+// with the page, server/page-review.mjs) and older ones known only from the
+// to-dos made for them. `withNow` adds the current goal on top (the to-do's
+// details; the goal card already shows it). `goal`: the page's goal, when loaded.
+export function GoalHistory({ siteId, path, goal: given = null, withNow = false }) {
+  const d = useAsync(() => (given ? Promise.resolve({ goal: given }) : api.get(`/sites/${siteId}/page-goal${qs({ path })}`)), [siteId, path, given]);
+  const todos = useTodos({ site: siteId });
+  const goal = d.data?.goal;
+  if (!goal || !todos.data) return null;
+  const t = goal.target;
+  const past = goal.past || [];
+  const known = new Set([t?.key, ...past.map((x) => x.key)]);
+  const rows = [
+    ...past.map((x) => ({
+      title: x.title, ended: x.ended, date: x.endedAt,
+      line: [span(x.metric, x.from, x.to), x.now !== null && x.now !== undefined && `got to ${value(x.metric, x.now)}`].filter(Boolean).join(', '),
+    })),
+    // Goals from before the page kept its own list: their to-dos remember them.
+    ...todos.data.todos.filter((x) => x.from?.startsWith(`goal:${path}:`) && !known.has(goalParts(x.from).key)).map((x) => ({
+      title: x.title.replace(` (${path})`, ''),
+      line: x.baseline?.metric ? span(x.baseline.metric, x.baseline.from, x.baseline.to) : '',
+      ended: x.status === 'done' ? 'done' : 'open',
+      date: isoDay(x.doneAt || x.createdAt),
+    })),
+  ].sort((a, b) => b.date.localeCompare(a.date));
+  const items = [...(withNow && t ? [{ title: t.title, line: span(t.metric, t.from, t.to), ended: 'now', date: t.setAt }] : []), ...rows];
+  if (!items.length) return <p class="muted small">No earlier goals for this page yet. When you set the next one, this one is kept here.</p>;
+  return (
+    <ol class="goal-history">
+      {items.map((r, i) => {
+        const [label, tone] = ENDED[r.ended];
+        return (
+          <li key={i} class={tone}>
+            <div class="goal-history-head">
+              <b>{r.title}</b>
+              <span class={`chip${tone ? ` ${tone}` : ''}`}>{label}</span>
+            </div>
+            <span class="goal-history-line">{[r.line, r.ended === 'now' ? `set ${goalDay(r.date)}` : goalDay(r.date)].filter(Boolean).join(' · ')}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+// A to-do made from a page goal: the goal's progress, read the same way as the
+// goal card in the article, or a line when the page has a newer goal now.
+export function TodoGoal({ todo }) {
+  const { path, key } = goalParts(todo.from);
+  const d = useAsync(() => api.get(`/sites/${todo.site}/page-goal${qs({ path })}`), [todo.site, path]);
+  const g = d.data?.goal;
+  const t = g?.target;
+  if (!t) return null;
+  if (t.key !== key) return <span class="goal-line muted">The page has a newer goal now: {t.title}. Tick this off if it’s done.</span>;
+  const p = g.progress;
+  if (!p) return <span class="goal-line muted">{span(t.metric, t.from, t.to, g.days)} · no numbers for it yet this period</span>;
+  return (
+    <span class="todo-goal">
+      <span class="goal-bar" role="progressbar" aria-valuenow={Math.round(p.share * 100)} aria-valuemin="0" aria-valuemax="100" aria-label="Progress toward the goal">
+        <span style={{ width: `${Math.round(p.share * 100)}%` }} />
+      </span>
+      <span class="goal-line">
+        {span(t.metric, t.from, t.to, g.days)} · now {value(t.metric, p.now)}
+        {p.reached ? <b class="good"> · reached, tick it off</b> : <span class="muted"> · {Math.round(p.share * 100)}% of the way</span>}
+      </span>
+    </span>
+  );
+}
+
 // The data behind a to-do (server/todo-context.mjs) and its write-ups, plus the
 // line to hand it to Claude in a terminal (the MCP server reads the same thing).
-function TodoDetails({ id, site }) {
+function TodoDetails({ id, site, goalPath = '' }) {
   // The site goes along so a to-do on a site shared with you opens too (hosted).
   const d = useAsync(() => api.get(`/todos/${id}${qs({ site })}`), [id, site]);
   useEffect(() => {
@@ -159,11 +244,17 @@ function TodoDetails({ id, site }) {
     return () => removeEventListener(CHANGED, reload);
   }, [d.reload]);
   if (d.error) return <ErrorState error={d.error} onRetry={d.reload} />;
-  if (!d.data) return <Loading height={80} />;
+  if (!d.data) return <Loading height={80} owl label="Reading the numbers behind this to-do…" />;
   const { todo, context: c } = d.data;
   const ask = `Work on Kauzl to-do ${todo.id}: read it with get_todo, and post what you found, changed and expect with report_todo.`;
   return (
     <div class="todo-details">
+      {goalPath && (
+        <div class="todo-section">
+          <span class="nx-label-sm">Goals for {goalPath}</span>
+          <GoalHistory siteId={site} path={goalPath} withNow />
+        </div>
+      )}
       {c && <TodoData c={c} />}
       <div class="todo-section">
         <span class="nx-label-sm">Write-ups</span>
@@ -215,7 +306,7 @@ function Rows({ title, note, rows, cols }) {
 const MOVED = [['', (r) => r.key], ['Now', (r) => num(r.value)], ['Before', (r) => num(r.previous)], ['Change', delta]];
 const SEARCHES = [['Search', (r) => r.query], ['Clicks', (r) => num(r.clicks)], ['Impressions', (r) => num(r.impressions)], ['CTR', (r) => `${r.ctr}%`], ['Position', (r) => r.position]];
 
-function TodoData({ c }) {
+export function TodoData({ c }) {
   if (c.note) return <p class="muted small">{c.note}</p>;
   const main = c.source || c.page || c.query;
   const t = c.searchTotals;
@@ -238,7 +329,7 @@ function TodoData({ c }) {
   );
 }
 
-function WriteUp({ id }) {
+export function WriteUp({ id }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ summary: '', changes: '', expected: '' });
   const [busy, setBusy] = useState(false);
@@ -295,24 +386,6 @@ export function TodoList({ todos, sites, showSite = false, empty }) {
   );
 }
 
-// The page: one site's to-dos (or every site's), with a form on top.
-export function TodosPage({ site, sites }) {
-  const list = useTodos(site ? { site: site.id } : {});
-  return (
-    <>
-      <section class="card card-plain">
-        <NewTodo site={site} />
-        <p class="note">Add them here, from “What to do next” on the Story, or from an article. Tick one off when the change is live: it goes on the Timeline that day, so the charts show whether it helped.</p>
-      </section>
-      <section class="card card-plain" aria-label="To-dos">
-        {list.error ? <ErrorState error={list.error} onRetry={list.reload} />
-          : !list.data ? <Loading height={120} />
-          : <TodoList todos={list.data.todos} sites={sites} showSite={!site} empty="Nothing to do yet." />}
-      </section>
-    </>
-  );
-}
-
 // For the article editor: this article's to-dos, and a quick way to add one.
 export function ArticleTodos({ site, path }) {
   const link = `#/site/${site.id}/articles?article=${encodeURIComponent(path)}`;
@@ -322,7 +395,7 @@ export function ArticleTodos({ site, path }) {
     <div class="todo-card">
       {list.data && <TodoList todos={mine} empty="Nothing to do on this article yet." />}
       <NewTodo site={site} link={link} placeholder="Add a change to make" />
-      <a class="nx-more" href={`#/site/${site.id}/todos`}>All to-dos for {site.label} <Icon name="chevron" size={12} /></a>
+      <a class="nx-more" href={`#/site/${site.id}/inbox?tab=todos`}>All to-dos for {site.label} <Icon name="chevron" size={12} /></a>
     </div>
   );
 }

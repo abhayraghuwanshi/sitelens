@@ -7,6 +7,7 @@
 //  - anything else via registerSource(name, fn) (e.g. Vercel deploys).
 //
 // Annotation: { id, date: 'YYYY-MM-DD', label, kind, source, url?, scope?, body?, author?, via?, model?, createdAt? }
+//   (a note's url is a link you added with it: a newsletter, a launch page…)
 //   kind: 'release' | 'extension' | 'deploy' | 'note' | 'claude' | 'alert'
 //   scope: 'site:<id>' | 'repo:<owner/name>' | 'ext:<id>'; no scope = global.
 
@@ -56,6 +57,8 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     const scope = String(input.scope || '').trim();
     const author = String(input.author || 'you');
     const body = String(input.body || '').trim();
+    const url = String(input.url || '').trim();
+    if (url && (!/^https?:\/\/\S+$/.test(url) || url.length > 500)) throw new ValidationError('Links must start with http:// or https://.');
     if (!NOTE_AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${NOTE_AUTHORS.join(', ')}.`);
     if (body.length > BODY_MAX) throw new ValidationError(`Keep the write-up under ${BODY_MAX} characters.`);
     if (!DATE.test(date) || Number.isNaN(Date.parse(date))) throw new ValidationError('Pick a date (YYYY-MM-DD).');
@@ -64,6 +67,7 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     const note = {
       id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: author === 'claude' ? 'claude' : 'note', source: 'notes',
       ...(scope ? { scope } : {}),
+      ...(url ? { url } : {}),
       ...(author === 'claude' ? { author, body, via: input.via === 'app' ? 'app' : 'mcp', createdAt: new Date().toISOString(), ...(input.model ? { model: String(input.model).slice(0, 60) } : {}) } : body ? { body } : {}),
     };
     await store.update((s) => {

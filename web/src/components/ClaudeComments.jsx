@@ -68,7 +68,9 @@ export function CommentBody({ text }) {
 // Claude's comments for a site (or every site) over a range or one day, plus
 // "Analyze with Claude" when there's a site and an API key.
 // siteId: a site id, or '' / 'all' for every site (comments only, no analysis).
-export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Claude' }) {
+// bare: no card around it, nothing when there are no comments, and the ask form
+// only while `asking` (the Timeline day panel opens it from a chip).
+export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Claude', bare = false, asking = true }) {
   const lo = date || from;
   const hi = date || to;
   const single = siteId && siteId !== 'all';
@@ -123,10 +125,13 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
     }
   }
 
+  const Wrap = bare ? 'div' : Card;
+  const wrapProps = bare ? { class: 'stack gap-8' } : { title, sub: date ? 'Comments on this day' : 'Comments in this range', class: 'claude-card' };
+  if (bare && !asking && !list.length) return null;
   return (
-    <Card title={title} sub={date ? 'Comments on this day' : 'Comments in this range'} class="claude-card">
+    <Wrap {...wrapProps}>
       <div class="stack">
-        {single && hasKey && (
+        {asking && single && hasKey && (
           <form class="row gap-6" onSubmit={analyze}>
             <label class="sr-only" for={inputId}>Question for Claude (optional)</label>
             <input id={inputId} type="text" maxLength={500} value={question} disabled={busy} style={{ flex: '1', minWidth: '200px' }}
@@ -155,13 +160,13 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
           </article>
         ))}
 
-        {comments.data && !list.length && (
+        {comments.data && !list.length && !bare && (
           <p class="muted small m-0">
             No comments from Claude {date ? 'on this day' : 'in this range'} yet.
             {!single && hasKey && ' Pick one site to analyze it here.'}
           </p>
         )}
-        {status.data && !hasKey && mcp.data && (codeConnected ? (
+        {asking && status.data && !hasKey && mcp.data && (codeConnected ? (
           <div class="stack gap-6">
             <p class="small m-0">Claude Code is connected. Ask it in any session and its comment shows up here:</p>
             <div class="snippet">
@@ -182,6 +187,6 @@ export function ClaudeComments({ siteId, from, to, date, onChange, title = 'Clau
           </p>
         ))}
       </div>
-    </Card>
+    </Wrap>
   );
 }

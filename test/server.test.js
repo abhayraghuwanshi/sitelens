@@ -67,6 +67,19 @@ test('demo site works with no Google connection', async () => {
   assert.ok(paths.body.edges.length > 0 && paths.body.exits.length > 0);
 });
 
+test('live: the demo site has a detail view and shows in the all-sites count', async () => {
+  const detail = await get('/sites/demo/live/detail');
+  assert.equal(detail.status, 200);
+  assert.equal(detail.body.perMinute.length, 30);
+  assert.ok(detail.body.now > 0 && detail.body.pages.length > 0 && detail.body.countries.length > 0);
+  assert.ok(Array.isArray(detail.body.recent));
+  const all = await get('/live');
+  assert.equal(all.status, 200);
+  const demo = all.body.sites.find((s) => s.id === 'demo');
+  assert.ok(demo && demo.now > 0 && demo.top);
+  assert.equal(all.body.total, all.body.sites.reduce((n, s) => n + (s.now || 0), 0));
+});
+
 test('state-changing requests need the X-Studio header', async () => {
   const res = await post('/sites', { host: 'example.org' }, {});
   assert.equal(res.status, 403);

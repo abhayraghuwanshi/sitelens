@@ -239,6 +239,8 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
       previous: prev.traffic.length ? { clicks: prevClicks, impressions: prevImpressions, ctr: prevImpressions ? prevClicks / prevImpressions : null, position: position(prevQueries) } : null,
       series,
       queries,
+      // Each search's position in the period before, to show how it moved.
+      prevQueries: prevQueries.map((q) => ({ query: q.query, position: q.position })),
       pages: aggregateQueries(pageRows || [], range.start, range.end, 30).map(({ query, ...p }) => ({ page: query, ...p })),
       crawl: {
         series: {
