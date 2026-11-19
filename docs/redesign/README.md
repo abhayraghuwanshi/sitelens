@@ -21,7 +21,7 @@ A design for a simpler, story-first Kauzl that works the same on desktop and pho
 - One **scope switcher** (a site, or All sites) replaces the site select and the global links.
 - **Sidebar:** Story · Inbox · Timeline, then **Reports:** Pages · Search · Traffic · Journeys · Goals. Account sits at the bottom.
 - **Live** is a link under the switcher ("3 on now").
-- **⌘K** jumps anywhere or asks a question. SQL and raw events are behind "Raw data" in Journeys; Ask Claude replaces most SQL.
+- **⌘K** jumps anywhere or asks a question. SQL and raw events are behind "Raw data" in Journeys (Events, Sessions, SQL); Ask Claude replaces most SQL.
 - Old URLs (`#/todos`, `#/alerts`, `#/site/<id>/<report>`) keep working and land in the right place.
 
 ## Screens
@@ -64,7 +64,7 @@ Both / Google / Bing switch. A ranking ladder ("further left is better", arrows 
 A mix bar (on phone a thin bar plus a list), sources grouped by kind and collapsed, *What you put out* and *Who talked about you*, each under its own heading. A source opens its detail in the drawer.
 
 ### Journeys
-One goal at a time. Step bars with "N stopped here · see where they went" between them (the gap opens where people went instead). *Who gets there* by source, device, browser or country, with a hover card of each step's count. Routes that bring the most or lose the most. Steps are set by pasting page links or naming events.
+One goal at a time. Step bars with "N stopped here · see where they went" between them (the gap opens where people went instead). *Who gets there* by source, device, browser or country, with a hover card of each step's count. Routes that bring the most or lose the most. Steps are set by pasting page links or naming events. Steps and Retention open as their own views from the page, and Paths live under Raw data.
 
 ### Goals
 - **Your numbers:** every custom metric as the same card (source tag, value, change, 28-day line, progress to target, where it comes from).

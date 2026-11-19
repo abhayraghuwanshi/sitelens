@@ -1,6 +1,5 @@
 import { usePersistent } from '../hooks.js';
 import { Segmented } from '../components/ui.jsx';
-import { Overview } from '../pages/Overview.jsx';
 import { Articles } from '../pages/Articles.jsx';
 import { ContentCycles } from '../pages/ContentCycles.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
@@ -8,8 +7,6 @@ import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
 import { Events } from '../pages/Events.jsx';
 import { Sessions } from '../pages/Sessions.jsx';
-import { Posts } from '../pages/Posts.jsx';
-import { Mentions } from '../pages/Mentions.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page, SectionTabs } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
@@ -38,13 +35,10 @@ const TABS = {
   },
   traffic: {
     sources: { mode: 'api', component: TrafficView },
-    overview: { mode: 'api', component: Overview },
-    posts: { mode: 'api', component: PostsTab },
   },
   journeys: {
-    funnels: { mode: 'warehouse', component: Funnels },
     journeys: { own: JourneysPage },
-    paths: { mode: 'warehouse', component: Sessions },
+    funnels: { mode: 'warehouse', component: Funnels },
     retention: { mode: 'warehouse', component: Retention },
   },
   goals: {
@@ -53,6 +47,7 @@ const TABS = {
   },
   raw: {
     events: { mode: 'warehouse', component: Events },
+    paths: { mode: 'warehouse', component: Sessions },
     sql: { mode: 'warehouse', component: SqlConsole },
   },
 };
@@ -65,7 +60,9 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
   const [pagesRange, setPagesRange] = usePersistent('pagesRange', '90d');
   const sec = SECTIONS[view];
   const tabs = sec.tabs.filter(([k]) => !WAREHOUSE_TABS.has(k) || hasWarehouse(site));
-  const tab = tabs.find(([k]) => k === wanted)?.[0] || tabs[0][0];
+  // A few views live behind a link instead of in the tab row (Edit steps, Retention).
+  const hidden = !tabs.some(([k]) => k === wanted) && Boolean(TABS[view][wanted]);
+  const tab = hidden ? wanted : tabs.find(([k]) => k === wanted)?.[0] || tabs[0][0];
   const spec = TABS[view][tab];
   // A page opens as its own view (its story); ?edit=1 opens the editor inside Pages.
   const page = view === 'pages' && tab === 'pages' && (params.get('article') || params.get('path'));
@@ -73,18 +70,13 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
     return <PageView key={`${site.id}:${page}`} site={site} path={page} back={{ href: `#/site/${site.id}/pages`, label: 'All pages' }} />;
   }
 
-  // Journeys keeps the raw data (events, SQL) a step away, at the end of its tab row.
-  const raw = view === 'journeys' && hasWarehouse(site) && (
-    <span class="nx-rawlink muted small">Raw data: <a href={hrefFor(site.id, 'raw', 'events')}>Events</a> · <a href={hrefFor(site.id, 'raw', 'sql')}>SQL</a></span>
-  );
-  const nav = (
+  const nav = tabs.length > 1 ? (
     <nav class="tabs nx-tabs-row" aria-label={sec.label}>
       {tabs.map(([k, l]) => (
         <a key={k} class={k === tab ? 'active' : undefined} href={hrefFor(site.id, view, k === tabs[0][0] ? '' : k)} aria-current={k === tab ? 'page' : undefined}>{l}</a>
       ))}
-      {raw}
     </nav>
-  );
+  ) : null;
 
   if (spec.own) {
     const Own = spec.own;
@@ -120,7 +112,7 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
       <Page title={sec.label}
         sub={searchTab ? `${engineSub(engineOf(params))}, plus AI answers · ${site.label}` : `${sec.q} · ${site.label}`}
         actions={searchTab ? <span class="nx-head-ctl"><EngineSwitch params={params} />{period}</span> : period || null}
-        back={view === 'raw' ? { href: hrefFor(site.id, 'journeys'), label: 'Journeys' } : null}>
+        back={hidden ? { href: hrefFor(site.id, view), label: sec.label } : view === 'raw' ? { href: hrefFor(site.id, 'journeys'), label: 'Journeys' } : null}>
         <SectionTabs.Provider value={null}>
           <div class="nx-explore-body">
             <View key={`${site.id}:${tab}`} site={site} range={range} params={params} auth={auth} />
@@ -160,15 +152,4 @@ function PagesTab({ site, range, params }) {
     return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages?article=${encodeURIComponent(open)}`; }} />;
   }
   return <PagesList site={site} range={range} />;
-}
-
-
-// What you put out, and who talked about you.
-function PostsTab({ range, params }) {
-  return (
-    <div class="nx-stack">
-      <section aria-label="Posts"><h2 class="nx-h2 nx-h2-gap">What you put out</h2><Posts range={range} id={params.get('post') || undefined} /></section>
-      <section aria-label="Mentions"><h2 class="nx-h2 nx-h2-gap">Who talked about you</h2><Mentions range={range} /></section>
-    </div>
-  );
 }

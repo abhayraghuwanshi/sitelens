@@ -56,6 +56,29 @@ test('event parameters break down by value', () => {
   assert.deepEqual(values, ['linux', 'macos', 'windows']);
 });
 
+test('routes: one row per came-from and path, newest paths included', () => {
+  const routes = demo.demoRoutes(range, { outcome: 'sign_up', limit: 10 });
+  assert.ok(routes.length > 0 && routes.length <= 10);
+  assert.ok(routes.every((r) => r.path.length > 0 && r.sessions > 0 && r.converted <= r.sessions));
+  assert.ok(routes[0].sessions >= routes.at(-1).sessions);
+});
+
+test('segments: ordered steps per group never grow', () => {
+  const steps = [
+    { kind: 'page', value: '/pricing' },
+    { kind: 'page', value: '/signup' },
+    { kind: 'event', value: 'sign_up' },
+  ];
+  const segments = demo.demoSegments(range, { by: 'country', steps, outcome: 'sign_up' });
+  assert.ok(segments.length > 0);
+  for (const row of segments) {
+    assert.equal(row.steps.length, 3);
+    for (let i = 1; i < row.steps.length; i++) assert.ok(row.steps[i] <= row.steps[i - 1]);
+    assert.ok(row.converted <= row.sessions);
+  }
+  assert.equal(demo.demoSegments(range, { by: 'source', steps: [steps[0]], outcome: 'sign_up' }).length, 0);
+});
+
 test('sessions list filters by page and converting event', () => {
   const list = demo.demoSessionsList(range, { path: '/signup', converted: 'sign_up', limit: 10 });
   assert.ok(list.length > 0 && list.length <= 10);

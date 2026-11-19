@@ -296,6 +296,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       },
       async onChange(site) {
         for (const p of (await store.get()).products || []) if (p.siteId === site.id) outcomes.clear(p.id);
+        // The site's own goals (no product) are cached separately too.
+        outcomes.clear(site.id);
       },
     }),
     ['GET', /^\/api\/state$/, async () => {
@@ -545,6 +547,21 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         steps: (query.get('steps') || '').split(',').filter(Boolean),
         outcome: query.get('outcome') || '',
         min: Number(query.get('min')) || 3,
+      }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/routes$/, async ({ match, query }) =>
+      engines.routes(await siteOr404(match[1]), query.get('range'), {
+        outcome: query.get('outcome') || '',
+        limit: Number(query.get('limit')) || 40,
+      }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/segments$/, async ({ match, query }) =>
+      engines.segments(await siteOr404(match[1]), query.get('range'), {
+        by: query.get('by') || 'source',
+        outcome: query.get('outcome') || '',
+        steps: (query.get('steps') || '').split(',').filter(Boolean).map((s) => {
+          const i = s.indexOf(':');
+          const kind = i > 0 ? s.slice(0, i) : 'page';
+          return { kind: kind === 'event' ? 'event' : 'page', value: i > 0 ? s.slice(i + 1) : s };
+        }),
       }, flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/left-out$/, async ({ match, query }) =>
       engines.leftOut(await siteOr404(match[1]), query.get('range'), flags(query))],

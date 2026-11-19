@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyEvents, autoGoals, buildFunnel, goalRates, byFamily, listingFamilies, RULES, insights, headline, rollup, lowerWord } from '../server/outcomes.mjs';
+import { classifyEvents, autoGoals, buildFunnel, goalRates, byFamily, listingFamilies, RULES, insights, headline, rollup, lowerWord, createOutcomes } from '../server/outcomes.mjs';
 import { normalizeGoals } from '../server/products.mjs';
 
 const EVENTS = [
@@ -143,6 +143,37 @@ test('rollup: totals outcomes, compares only goals with history, sums value', ()
   assert.equal(whole.outcomes.previous, 4);
   assert.equal(lowerWord('GitHub stars'), 'GitHub stars');
   assert.equal(lowerWord('Store installs'), 'store installs');
+});
+
+test('a site without a product measures the goals in its .sitelens.yml', async () => {
+  const site = { id: 's1', label: 'Kauzl', host: 'kauzl.com', demo: true };
+  let productCalls = 0;
+  const outcomes = createOutcomes({
+    store: { sites: async () => [site] },
+    products: {
+      list: async () => [],
+      get: async () => { productCalls += 1; return { kpis: [], series: {} }; },
+    },
+    auth: { token: async () => 't' },
+    listingProperty: async () => null,
+    siteConfig: {
+      applied: async () => ({ goals: [
+        { id: 'event-login', label: 'Sign-ins', source: 'event', match: 'login', role: 'outcome' },
+        { id: 'event-cta', label: 'Clicked towards Kauzl', source: 'event', match: 'cta_click', role: 'step' },
+      ] }),
+      get: async () => null,
+    },
+  });
+
+  const d = await outcomes.getSite('s1', '28d');
+  assert.equal(d.product.siteOnly, true);
+  assert.equal(d.goals.from, 'file');
+  assert.deepEqual(d.goals.list.map((g) => [g.label, g.role, g.unavailable]), [
+    ['Sign-ins', 'outcome', 'needs the GA4 site'],
+    ['Clicked towards Kauzl', 'step', 'needs the GA4 site'],
+  ]);
+  // No product is read (or invented) on the way.
+  assert.equal(productCalls, 0);
 });
 
 test('normalizeGoals validates types, event names and paths', () => {

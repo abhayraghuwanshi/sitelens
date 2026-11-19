@@ -457,6 +457,73 @@ ORDER BY sessions DESC`,
   return { sql, params: sessionParams(bq) };
 }
 
+// The routes people take: where they came from, the page they landed on, and
+// the pages they went to next (up to four), one row per route. `converted`
+// counts the sessions on that route that reached the site's outcome.
+export function routesSql(bq, range, { outcome = '', limit = 40 } = {}) {
+  if (!EVENT_NAME.test(outcome)) throw new Error('Routes need an outcome event from the site’s goals.');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT source, SPLIT(route, '|') AS path, COUNT(*) AS sessions, COUNTIF(converted) AS converted
+FROM (
+  SELECT IFNULL(visit_source, '(direct)') AS source,
+    ARRAY_TO_STRING(ARRAY(SELECT p FROM UNNEST(pages) AS p WITH OFFSET o WHERE o < 4 ORDER BY o), '|') AS route,
+    EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}') AS converted
+  FROM sessions
+  WHERE ARRAY_LENGTH(pages) > 0
+)
+GROUP BY source, route
+ORDER BY sessions DESC
+LIMIT @limit`,
+  );
+  return { sql, params: { ...sessionParams(bq), limit: clampInt(limit, 5, 200) } };
+}
+
+// Who gets there: the same ordered steps, counted per source / system / browser
+// / country, so one segment's route through the goal can be compared with the
+// average. Rows: { name, sessions, converted, steps: [n per step] }.
+export function segmentsSql(bq, range, { by = 'source', steps = [], outcome = '', limit = 12 } = {}) {
+  if (!EVENT_NAME.test(outcome)) throw new Error('Who gets there needs an outcome event from the site’s goals.');
+  const clean = (Array.isArray(steps) ? steps : [])
+    .map((s) => ({ kind: s.kind === 'event' ? 'event' : 'page', value: String(s.value || '').trim().slice(0, 200) }))
+    .filter((s) => s.value)
+    .slice(0, 8);
+  if (clean.length < 2) throw new Error('Who gets there needs at least two funnel steps.');
+  const dims = {
+    source: `IFNULL(visit_source, '(direct)')`,
+    system: systemGroup(bq),
+    browser: browserOf(bq),
+    country: `IFNULL(NULLIF(country, ''), '(not set)')`,
+  };
+  const dim = dims[by];
+  if (!dim) throw new Error('Pick source, system, browser or country.');
+  const params = { ...sessionParams(bq), limit: clampInt(limit, 3, 40) };
+  const ctes = [];
+  clean.forEach((step, i) => {
+    params[`k${i}`] = stepKey(step);
+    const after = i === 0 ? '' : ` AND ts > t${i - 1}`;
+    ctes.push(`f${i} AS (
+  SELECT *, (SELECT MIN(ts) FROM UNNEST(seq) WHERE k = @k${i}${after}) AS t${i}
+  FROM ${i === 0 ? 'sessions' : `f${i - 1}`}
+)`);
+  });
+  const cols = clean.map((_, i) => `,\n  COUNTIF(t${i} IS NOT NULL) AS step_${i}`).join('');
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT ${dim} AS name,
+  COUNT(*) AS sessions,
+  COUNTIF(EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')) AS converted${cols}
+FROM f${clean.length - 1}
+GROUP BY name
+ORDER BY sessions DESC
+LIMIT @limit`,
+    ctes,
+  );
+  return { sql, params, steps: clean };
+}
+
 // Whether the sessions source has the `os` and `browser` columns. Raw events
 // always do; a rollup only when Studio built it after they were added (it
 // records the table in `systemTable`). An older or hand-entered table doesn't.

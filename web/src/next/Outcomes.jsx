@@ -32,14 +32,7 @@ export function OutcomesPage({ site, params, back }) {
   let body;
   if (products.error) body = <ErrorState error={products.error} onRetry={products.reload} />;
   else if (!products.data) body = <Loading height={260} />;
-  else if (!product) {
-    body = (
-      <section class="card card-plain">
-        <p class="nx-lede">Outcomes are measured per product: this site plus its store listing or repos, and the goals that count as a result (a download, an install, a sign-up).</p>
-        <div class="nx-action-row"><a class="btn primary" href={`#/site/${site.id}/setup`}>Set up goals</a></div>
-      </section>
-    );
-  } else body = <OutcomeBody key={`${product.id}:${range}`} site={site} product={product} range={range} />;
+  else body = <OutcomeBody key={`${product?.id || `site:${site.id}`}:${range}`} site={site} product={product} range={range} />;
 
   return (
     <Page title="Goals" back={back}
@@ -51,7 +44,8 @@ export function OutcomesPage({ site, params, back }) {
 }
 
 function OutcomeBody({ site, product, range }) {
-  const data = useAsync((o) => api.get(`/outcomes/${product.id}${qs({ range, fresh: o?.fresh })}`), [product.id, range]);
+  const url = product ? `/outcomes/${product.id}` : `/sites/${site.id}/outcomes`;
+  const data = useAsync((o) => api.get(`${url}${qs({ range, fresh: o?.fresh })}`), [url, range]);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!data.data) return <><Loading height={160} /><Loading height={260} /></>;
   const d = data.data;
@@ -239,7 +233,7 @@ function FileLink({ file, site }) {
 function Goals({ d, site, onRefresh, refreshing }) {
   const g = d.goals;
   const fromFile = g.from === 'file';
-  const edit = fromFile ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
+  const edit = fromFile || d.product?.siteOnly ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
   return (
     <details class="card card-plain nx-goals">
       <summary>

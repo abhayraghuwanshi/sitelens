@@ -7,12 +7,13 @@ import { AddTodo } from '../components/Todos.jsx';
 import { Campaigns } from './Campaigns.jsx';
 import { family } from './Journeys.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
+import { Posts } from '../pages/Posts.jsx';
+import { Mentions } from '../pages/Mentions.jsx';
 
-// Traffic: where visits come from and whether they're worth it. One answer,
-// the mix (a bar of kinds of source, and how often each kind's visits reach a
-// key event), then the sources grouped by kind; a source opens in the drawer
-// (?src=). Tagged links and Google Ads sit below; the full campaign report and
-// the tagged-link builder are a click away.
+// Traffic: where visits come from and whether they're worth it, as one page
+// (docs/redesign/README.md): the answer, the mix, the sources by kind, what you
+// put out, and who talked about you. A source opens in the drawer (?src=); the
+// full campaign report and the tagged-link builder are a click away at the end.
 const KINDS = [
   ['search', 'Search', 'var(--series-1)'], ['ai', 'AI answers', 'var(--series-7)'], ['social', 'Communities', 'var(--series-2)'],
   ['direct', 'Direct', 'var(--series-muted)'], ['link', 'Other sites', 'var(--series-4)'], ['email', 'Email', 'var(--series-5)'], ['paid', 'Paid', 'var(--series-8)'],
@@ -148,7 +149,7 @@ export function TrafficView({ site, range, params }) {
 
       {(tagged.length > 0 || d.ads?.linked) && (
         <section class="nx-block" aria-label="Tagged links and ads">
-          <h2 class="nx-h2">What you put out <span class="muted small">· tagged links{d.ads?.linked ? ' and Google Ads' : ''}</span></h2>
+          <h2 class="nx-h2">Tagged links and ads <span class="muted small">· campaigns{d.ads?.linked ? ' and Google Ads' : ''}</span></h2>
           <div class="card card-plain nx-tight">
             {tagged.map((c) => {
               const cc = change(c.sessions, c.previous);
@@ -174,6 +175,16 @@ export function TrafficView({ site, range, params }) {
           </div>
         </section>
       )}
+
+      <section class="nx-block" aria-label="What you put out">
+        <h2 class="nx-h2">What you put out <span class="muted small">· posts, newsletters and links, and what they brought</span></h2>
+        <Posts range={range} id={params.get('post') || undefined} />
+      </section>
+
+      <section class="nx-block" aria-label="Who talked about you">
+        <h2 class="nx-h2">Who talked about you <span class="muted small">· mentions elsewhere</span></h2>
+        <Mentions range={range} />
+      </section>
 
       <button type="button" class="todo-link" aria-expanded={full} onClick={() => setFull(!full)}>{full ? 'Hide the full report' : 'Every campaign and source / medium, and the tagged-link builder'}</button>
       {full && <Campaigns site={site} range={range} />}

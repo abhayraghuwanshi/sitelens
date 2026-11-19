@@ -362,6 +362,40 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     };
   }
 
+  // The routes people take: came from × landed on × went to, with the outcome.
+  async function routes(site, rangeKey, { outcome = '', limit = 40 } = {}, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), routes: demo.demoRoutes(range, { outcome, limit }) };
+    const result = await run(site, sql.routesSql(requireBq(site), range, { outcome, limit }), flags);
+    return {
+      ...meta(site, range, [result]),
+      routes: result.rows.map((r) => ({
+        source: r.source,
+        path: (r.path || []).filter((p) => p != null && p !== ''),
+        sessions: Number(r.sessions) || 0,
+        converted: Number(r.converted) || 0,
+      })),
+    };
+  }
+
+  // The same funnel counted per source / system / browser / country.
+  async function segments(site, rangeKey, { by = 'source', steps = [], outcome = '' } = {}, flags) {
+    const range = await rangeFor(site, rangeKey);
+    if (site.demo) return { ...meta(site, range), by, segments: demo.demoSegments(range, { by, steps, outcome }) };
+    const built = sql.segmentsSql(requireBq(site), range, { by, steps, outcome });
+    const result = await run(site, built, flags);
+    return {
+      ...meta(site, range, [result]),
+      by,
+      segments: result.rows.map((r) => ({
+        name: r.name,
+        sessions: Number(r.sessions) || 0,
+        converted: Number(r.converted) || 0,
+        steps: built.steps.map((_, i) => Number(r[`step_${i}`]) || 0),
+      })),
+    };
+  }
+
   // How many sessions the leave-out rule removes from the BigQuery views.
   async function leftOut(site, rangeKey, flags) {
     const range = await eventsRange(site, rangeKey);
@@ -463,6 +497,8 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     leavers,
     leftOut,
     journeys,
+    routes,
+    segments,
     sessions,
     sessionsSummary,
     events,

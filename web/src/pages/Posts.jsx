@@ -138,7 +138,6 @@ function PostList({ range }) {
         )}
       </Card>
 
-      <Campaigns data={d} />
       <p class="note">Sessions marked ~ are inferred from timing. For exact numbers, share a tagged link from <b>Make a tagged link</b> above.</p>
     </>
   );
@@ -316,30 +315,6 @@ function LinkBuilder({ data }) {
         )}
       </div>
     </details>
-  );
-}
-
-// Every utm_campaign GA4 saw on your product sites, and the post it belongs to.
-function Campaigns({ data }) {
-  if (!data.campaigns?.length) return null;
-  const productLabel = (id) => data.products.find((p) => p.id === id)?.label || id;
-  return (
-    <Card title="Tagged links" sub="GA4 sessions per utm_campaign in this range" flush>
-      <table class="data">
-        <thead><tr><th>Campaign</th><th>Source</th><th>Product</th><th>Post</th><th class="num">Sessions</th></tr></thead>
-        <tbody>
-          {data.campaigns.map((c) => (
-            <tr key={`${c.product}:${c.campaign}`}>
-              <td class="mono small">{c.campaign}</td>
-              <td class="small">{c.sources.join(', ')}</td>
-              <td class="small muted">{productLabel(c.product)}</td>
-              <td class="small">{c.post ? <a href={c.post.permalink} target="_blank" rel="noreferrer">{c.post.title}</a> : <span class="muted">no post logged</span>}</td>
-              <td class="num">{formatNumber(c.sessions)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </Card>
   );
 }
 

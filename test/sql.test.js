@@ -176,6 +176,37 @@ test('journeys group sessions by source and landing page, counting goal steps', 
   assert.match(sql.journeysSql({ ...bq, leaveOut: { countries: ['China'] } }, range, { outcome: 'done' }).sql, /WHERE NOT \(IFNULL\(country/);
 });
 
+test('routes keep the came-from and the pages; segments count ordered steps per group', () => {
+  const routes = sql.routesSql(bq, range, { outcome: 'done', limit: 25 });
+  assert.match(routes.sql, /ARRAY_TO_STRING\(ARRAY\(SELECT p FROM UNNEST\(pages\)/);
+  assert.match(routes.sql, /GROUP BY source, route/);
+  assert.match(routes.sql, /k = 'event:done'/);
+  assert.equal(routes.params.limit, 25);
+  // An outcome that isn't a plain event name is dropped, never inlined.
+  assert.throws(() => sql.routesSql(bq, range, { outcome: "x' OR 1" }), /outcome/);
+
+  const segments = sql.segmentsSql(bq, range, {
+    by: 'country',
+    steps: [{ kind: 'page', value: '/pricing' }, { kind: 'event', value: 'sign_up' }],
+    outcome: 'done',
+  });
+  assert.equal(segments.steps.length, 2);
+  assert.match(segments.sql, /IFNULL\(NULLIF\(country, ''\), '\(not set\)'\) AS name/);
+  assert.match(segments.sql, /COUNTIF\(t0 IS NOT NULL\) AS step_0/);
+  assert.match(segments.sql, /COUNTIF\(t1 IS NOT NULL\) AS step_1/);
+  assert.match(segments.sql, /COUNTIF\(EXISTS\(SELECT 1 FROM UNNEST\(seq\) WHERE k = 'event:done'\)\) AS converted/);
+  assert.match(segments.sql, /FROM f1/);
+  assert.equal(segments.params.k0, 'page:/pricing');
+  assert.equal(segments.params.k1, 'event:sign_up');
+  assert.throws(() => sql.segmentsSql(bq, range, { by: 'country', steps: [{ kind: 'page', value: '/' }], outcome: 'done' }), /two funnel steps/);
+  assert.throws(() => sql.segmentsSql(bq, range, {
+    by: 'nope', steps: [{ kind: 'page', value: '/' }, { kind: 'page', value: '/x' }], outcome: 'done',
+  }), /source, system, browser or country/);
+  assert.throws(() => sql.segmentsSql(bq, range, {
+    steps: [{ kind: 'page', value: '/' }, { kind: 'page', value: '/x' }], outcome: "x' OR 1",
+  }), /outcome/);
+});
+
 test('cohorts drop weeks with no new users and mark the week the data starts in', async () => {
   const { normalizeCohorts } = await import('../server/engines.mjs');
   const rows = [

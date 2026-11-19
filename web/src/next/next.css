@@ -157,6 +157,37 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-tiles { padding-bottom: 0; border-bottom: 0; gap: 10px; }
 .nx-tiles > div { padding: 12px 14px; border-radius: var(--radius); background: var(--surface-2); }
 .nx-tiles b { font-size: var(--text-2xl); }
+
+/* Journeys: one goal, the steps down it, who gets there, and the routes. */
+.nx-jpage { display: flex; flex-direction: column; gap: 28px; }
+.nx-stairs { display: grid; }
+.nx-stair { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr) 150px; gap: 14px; align-items: center; padding: 8px 0; }
+.nx-stair-name { display: grid; gap: 1px; min-width: 0; }
+.nx-stair-name b { font-size: var(--text-md); }
+.nx-stair-kind { font-family: var(--mono); font-size: var(--text-xs); color: var(--text-3); overflow-wrap: anywhere; }
+.nx-stair-bar { height: 28px; background: var(--surface-2); border-radius: var(--radius-sm); overflow: hidden; }
+.nx-stair-bar span { display: block; height: 100%; background: var(--accent); border-radius: var(--radius-sm); }
+.nx-stair-num { display: grid; text-align: right; font-variant-numeric: tabular-nums; }
+.nx-stair-num b { font-size: var(--text-lg); }
+.nx-stair-num small { color: var(--text-3); font-size: var(--text-xs); }
+.nx-leakrow { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr); gap: 14px; padding: 2px 0; }
+.nx-leak { justify-self: start; display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 2px 6px; padding: 3px 10px; border-radius: var(--radius-pill); color: var(--text-2); font-size: var(--text-sm); }
+.nx-leak b { color: var(--critical-ink); font-weight: 600; }
+.nx-leak span { color: var(--accent-ink); font-weight: 500; }
+.nx-leak:hover { background: var(--surface-hover); text-decoration: none; }
+.nx-who { display: flex; flex-direction: column; }
+.nx-who-row { display: grid; grid-template-columns: minmax(0, 1fr) 110px 64px 70px 64px; gap: 10px; align-items: center; padding: 7px 0; border-top: 1px solid var(--border); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.nx-who-head { border-top: 0; color: var(--text-3); font-size: var(--text-xs); padding-top: 0; }
+.nx-who-bars { display: flex; align-items: flex-end; gap: 2px; height: 22px; }
+.nx-who-bars i { width: 12px; background: var(--accent); opacity: 0.7; border-radius: var(--radius-bar) var(--radius-bar) 0 0; }
+.nx-routes { display: flex; flex-direction: column; }
+.nx-route { display: grid; grid-template-columns: minmax(0, 1fr) 60px 70px 56px; gap: 10px; align-items: center; padding: 8px 0; border-top: 1px solid var(--border); font-size: var(--text-sm); font-variant-numeric: tabular-nums; }
+.nx-route-head { border-top: 0; color: var(--text-3); font-size: var(--text-xs); padding-top: 0; }
+.nx-rpath { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; min-width: 0; }
+.nx-rc { background: var(--surface-2); border-radius: var(--radius-xs); padding: 2px 7px; white-space: nowrap; }
+.nx-rc.ok { background: color-mix(in srgb, var(--good) 20%, var(--surface)); }
+.nx-rc.no { color: var(--text-3); background: transparent; border: 1px dashed var(--border-strong); }
+.nx-sep { color: var(--text-3); }
 .nx-ssum-flow { padding-top: 18px; border-top: 1px solid var(--border); }
 .nx-ssum-flow .chart { margin-top: 4px; }
 .nx-ssum-lists { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 28px; padding-top: 18px; border-top: 1px solid var(--border); }
@@ -294,6 +325,14 @@ button.nx-ssum-row:focus-visible { outline: 2px solid var(--accent); outline-off
   .nx-fstep { grid-template-columns: minmax(0, 1fr) 50px 90px; }
   .nx-fstep .nx-bar { display: none; }
   .nx-leavers li .muted { grid-column: 2 / -1; }
+  .nx-stair { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; }
+  .nx-stair-bar { grid-column: 1 / -1; grid-row: 2; height: 18px; }
+  .nx-leakrow { grid-template-columns: 1fr; }
+  .nx-leakrow > span { display: none; }
+  .nx-who-row { grid-template-columns: minmax(0, 1fr) 70px 56px; }
+  .nx-who-row > .nx-who-bars, .nx-who-row > :last-child, .nx-who-head > :nth-child(2) { display: none; }
+  .nx-route { grid-template-columns: minmax(0, 1fr) 52px; }
+  .nx-route > :nth-child(2), .nx-route > :nth-child(3) { display: none; }
 }
 
 /* Back to the page this one was opened from (the desktop app has no back button). */
@@ -673,11 +712,13 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
 .nx-eng.off { color: var(--text-3); }
 .nx-drow .bad, .nx .bad { color: var(--critical-ink); }
 .nx .good { color: var(--good-ink); }
-.nx-moves { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 10px; }
+.nx-moves { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 180px), 1fr)); gap: 10px; }
 .nx .nx-move { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--text); text-decoration: none; }
-.nx .nx-move:hover { border-color: var(--accent); text-decoration: none; }
+.nx .nx-move:hover { border-color: var(--border-strong); text-decoration: none; }
 .nx-move small { color: var(--text-3); font-size: var(--text-sm); }
-.nx-move > span { font-size: var(--text-md); }
+.nx-move > b { font-size: var(--text-base); }
+.nx-move .nx-mg { display: grid; margin-top: 6px; }
+.nx-move .nx-mg b { font-size: var(--text-2xl); font-weight: 700; letter-spacing: -0.01em; line-height: 1.1; font-variant-numeric: tabular-nums; }
 .nx-cards2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr)); gap: 12px; }
 .nx .nx-linkcard { gap: 6px; color: var(--text); text-decoration: none; }
 .nx a.nx-linkcard:hover { border-color: var(--border-strong); text-decoration: none; }

@@ -156,7 +156,7 @@ export function SearchView({ site, range, params }) {
               <a key={r.key} class="nx-move" href={hrefWith('q', r.key)}>
                 <small>{r.page ? pageName(r.page) : 'No page tied to it'} · {rank(r.pos)} now</small>
                 <b>“{r.key}”</b>
-                <span><span class="good">+{fmt(r.s.gain)}</span> <small>visits in the top 3</small></span>
+                <span class="nx-mg"><b class="good">+{fmt(r.s.gain)}</b><small>visits in the top 3</small></span>
               </a>
             ))}
           </div>

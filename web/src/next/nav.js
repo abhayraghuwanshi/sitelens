@@ -21,10 +21,10 @@ export const VIEWS = [
 export const SECTIONS = {
   pages: { label: 'Pages', q: 'Which content works', tabs: [['pages', 'All pages'], ['cycles', 'Content cycles'], ['health', 'Health']] },
   search: { label: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['ai', 'AI answers']] },
-  traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources'], ['posts', 'Posts & mentions'], ['overview', 'GA4 summary']] },
-  journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['funnels', 'Steps'], ['journeys', 'Routes'], ['paths', 'Paths'], ['retention', 'Retention']] },
+  traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Traffic']] },
+  journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys']] },
   goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals'], ['results', 'Results']] },
-  raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['sql', 'SQL']] },
+  raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['paths', 'Sessions'], ['sql', 'SQL']] },
 };
 
 // Old view names → [view, tab, extra params]. Covers Explore's tabs and the old sidebar.
@@ -40,12 +40,13 @@ export const LEGACY = {
   demand: ['search', 'queries'],
   ai: ['search', 'ai'],
   campaigns: ['traffic', 'sources'],
-  overview: ['traffic', 'overview'],
-  posts: ['traffic', 'posts'],
-  mentions: ['traffic', 'posts'],
-  sessions: ['journeys', 'paths'],
-  paths: ['journeys', 'paths'],
+  overview: ['story', ''],
+  posts: ['traffic', 'sources'],
+  mentions: ['traffic', 'sources'],
+  sessions: ['raw', 'paths'],
+  paths: ['raw', 'paths'],
   funnels: ['journeys', 'funnels'],
+  routes: ['journeys', 'journeys'],
   retention: ['journeys', 'retention'],
   events: ['raw', 'events'],
   sql: ['raw', 'sql'],
