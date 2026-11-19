@@ -386,24 +386,6 @@ export function TodoList({ todos, sites, showSite = false, empty }) {
   );
 }
 
-// The page: one site's to-dos (or every site's), with a form on top.
-export function TodosPage({ site, sites }) {
-  const list = useTodos(site ? { site: site.id } : {});
-  return (
-    <>
-      <section class="card card-plain">
-        <NewTodo site={site} />
-        <p class="note">Add them here, from “What to do next” on the Story, or from an article. Tick one off when the change is live: it goes on the Timeline that day, so the charts show whether it helped.</p>
-      </section>
-      <section class="card card-plain" aria-label="To-dos">
-        {list.error ? <ErrorState error={list.error} onRetry={list.reload} />
-          : !list.data ? <Loading height={120} />
-          : <TodoList todos={list.data.todos} sites={sites} showSite={!site} empty="Nothing to do yet." />}
-      </section>
-    </>
-  );
-}
-
 // For the article editor: this article's to-dos, and a quick way to add one.
 export function ArticleTodos({ site, path }) {
   const link = `#/site/${site.id}/articles?article=${encodeURIComponent(path)}`;
@@ -413,7 +395,7 @@ export function ArticleTodos({ site, path }) {
     <div class="todo-card">
       {list.data && <TodoList todos={mine} empty="Nothing to do on this article yet." />}
       <NewTodo site={site} link={link} placeholder="Add a change to make" />
-      <a class="nx-more" href={`#/site/${site.id}/todos`}>All to-dos for {site.label} <Icon name="chevron" size={12} /></a>
+      <a class="nx-more" href={`#/site/${site.id}/inbox?tab=todos`}>All to-dos for {site.label} <Icon name="chevron" size={12} /></a>
     </div>
   );
 }
