@@ -57,7 +57,13 @@ export function JourneysPage({ site, params }) {
   // The site's own funnel for this outcome first; a suggestion while it has none.
   const wantedFunnel = (list) => list.find((f) => f.steps?.at(-1)?.kind === 'event' && f.steps.at(-1).value === outcome?.match);
   const chosen = wantedFunnel(declared) || wantedFunnel(suggestions.data?.funnels || []) || declared[0] || suggestions.data?.funnels?.[0];
-  const steps = chosen?.steps || [];
+  const picks = [
+    ...(declared || []).map((f) => ({ key: `yours:${f.name}`, name: f.name, steps: f.steps, from: 'yours' })),
+    ...((suggestions.data?.funnels) || []).map((f) => ({ key: `suggested:${f.name}:${f.goal}`, name: f.name, steps: f.steps, from: 'suggested', why: f.why })),
+  ];
+  const [pickKey, setPickKey] = useState(null);
+  const viewing = pickKey ? picks.find((p) => p.key === pickKey) || null : null;
+  const steps = viewing?.steps || chosen?.steps || [];
   const [draft, setDraft] = useState(null);
   const [editing, setEditing] = useState(false);
   const edit = params?.get('edit') === '1';
@@ -94,6 +100,16 @@ export function JourneysPage({ site, params }) {
     const average = first ? last / first : 0;
     body = (
       <div class="nx-jpage">
+        {picks.length > 1 && (
+          <nav class="nx-fn-picker" aria-label="Funnels">
+            {picks.map((p) => (
+              <button key={p.key} type="button" class={`nx-fn-chip${JSON.stringify(p.steps) === JSON.stringify(steps) ? ' active' : ''}`} title={p.why}
+                onClick={() => setPickKey(pickKey === p.key ? null : p.key)}>
+                {p.name}{p.from === 'suggested' && <span class="nx-fn-tag">suggested</span>}
+              </button>
+            ))}
+          </nav>
+        )}
         {first > 0
           ? <p class="nx-lede"><Answer steps={funnel.data.steps} goals={goals} outcome={outcome} /></p>
           : <p class="muted">No visits reached the first step in this period. Try a longer range, or edit the steps.</p>}
