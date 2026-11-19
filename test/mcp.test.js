@@ -191,3 +191,14 @@ test('setup_site prompt is listed and fills in the site', async () => {
   const bad = await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'prompts/get', params: { name: 'nope' } });
   assert.equal(bad.error.code, -32602);
 });
+
+test('report_todo names the MCP client and model that wrote it', async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => { calls.push({ url, body: JSON.parse(init.body) }); return new Response('{}', { status: 200 }); };
+  const mcp = createMcp({ dataDir: '/nowhere', fetchImpl });
+  await mcp.handle({ jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-code', version: '2.1' } } });
+  await mcp.callTool('report_todo', { id: 'todo-abc', summary: 'Found it', model: 'Claude Opus 5.5' });
+  assert.equal(calls[0].body.client, 'claude-code');
+  assert.equal(calls[0].body.model, 'Claude Opus 5.5');
+  assert.equal(calls[0].body.author, 'claude');
+});

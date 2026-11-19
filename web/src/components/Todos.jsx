@@ -7,7 +7,7 @@ import { value, span } from '../../../shared/goal-format.js';
 
 // To-dos: changes you mean to make (server/todos.mjs). Anything that changes one
 // tells the rest of the page, so the sidebar count and other lists keep up.
-const CHANGED = 'studio:todos';
+export const CHANGED = 'studio:todos';
 const changed = () => dispatchEvent(new Event(CHANGED));
 const short = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 const isoDay = (ms) => new Date(ms).toLocaleDateString('en-CA');
@@ -57,7 +57,7 @@ export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls
 }
 
 // A one-line form: what needs doing, plus optional details.
-export function NewTodo({ site, link = '', placeholder = 'What needs doing? e.g. Rewrite the intro of /blog/raycast-alternatives-windows' }) {
+export function NewTodo({ site, link = '', onAdded, placeholder = 'What needs doing? e.g. Rewrite the intro of /blog/raycast-alternatives-windows' }) {
   const [title, setTitle] = useState('');
   const [detail, setDetail] = useState('');
   const [more, setMore] = useState(false);
@@ -69,7 +69,8 @@ export function NewTodo({ site, link = '', placeholder = 'What needs doing? e.g.
     setBusy(true);
     setError('');
     try {
-      await todoApi.add({ title, detail, site: site?.id || '', link });
+      const added = await todoApi.add({ title, detail, site: site?.id || '', link });
+      onAdded?.(added);
       setTitle('');
       setDetail('');
       setMore(false);
@@ -210,7 +211,7 @@ export function GoalHistory({ siteId, path, goal: given = null, withNow = false 
 
 // A to-do made from a page goal: the goal's progress, read the same way as the
 // goal card in the article, or a line when the page has a newer goal now.
-function TodoGoal({ todo }) {
+export function TodoGoal({ todo }) {
   const { path, key } = goalParts(todo.from);
   const d = useAsync(() => api.get(`/sites/${todo.site}/page-goal${qs({ path })}`), [todo.site, path]);
   const g = d.data?.goal;
@@ -305,7 +306,7 @@ function Rows({ title, note, rows, cols }) {
 const MOVED = [['', (r) => r.key], ['Now', (r) => num(r.value)], ['Before', (r) => num(r.previous)], ['Change', delta]];
 const SEARCHES = [['Search', (r) => r.query], ['Clicks', (r) => num(r.clicks)], ['Impressions', (r) => num(r.impressions)], ['CTR', (r) => `${r.ctr}%`], ['Position', (r) => r.position]];
 
-function TodoData({ c }) {
+export function TodoData({ c }) {
   if (c.note) return <p class="muted small">{c.note}</p>;
   const main = c.source || c.page || c.query;
   const t = c.searchTotals;
@@ -328,7 +329,7 @@ function TodoData({ c }) {
   );
 }
 
-function WriteUp({ id }) {
+export function WriteUp({ id }) {
   const [open, setOpen] = useState(false);
   const [form, setForm] = useState({ summary: '', changes: '', expected: '' });
   const [busy, setBusy] = useState(false);

@@ -8,7 +8,8 @@
 //   from: what suggested it (e.g. 'search:/blog/x'), so a suggestion is only added once;
 //   subject: what it's about ({ kind: source|page|query|search|outcome|posts, key }), so its
 //     data can be shown with it (server/todo-context.mjs); baseline: the numbers when it was added;
-//   entries: write-ups by you or Claude: { id, at, author, summary?, changes?, expected? }
+//   entries: write-ups by you or Claude: { id, at, author, client?, model?, summary?, changes?, expected? }
+//     (client: the MCP client that posted it, e.g. claude-code; model: what it said it was)
 //     (what was found, what was changed, what should happen);
 //   goals: for a page-goal to-do, the goals it went through before this one:
 //     { title, line, reached, at } (see carryGoal).
@@ -48,7 +49,11 @@ export function normalizeEntry(input = {}) {
   }
   const author = String(input.author || 'you');
   if (!AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${AUTHORS.join(', ')}.`);
-  return { author, ...entry };
+  // The agent behind a Claude write-up: its MCP client name and, if it said, its model.
+  const label = (k) => String(input[k] || '').replace(/[^\w .:/()+-]/g, '').trim().slice(0, 60);
+  const client = author === 'claude' ? label('client') : '';
+  const model = author === 'claude' ? label('model') : '';
+  return { author, ...(client ? { client } : {}), ...(model ? { model } : {}), ...entry };
 }
 
 export function normalizeTodo(input = {}) {

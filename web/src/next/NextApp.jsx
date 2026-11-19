@@ -80,7 +80,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   if (scope !== 'all' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (view === 'account') body = <Page title="Account" sub="Sites, sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} siteMeasures={siteMeasures} /></Page>;
   else if (view === 'alert-settings') body = <Page title="Alert settings" sub="What to watch on every site, and where alerts go" back={{ href: '#/inbox?tab=alerts', label: 'Inbox' }}><AlertSettings /></Page>;
-  else if (view === 'inbox') body = <Inbox site={site} sites={sites} tab={tab} counts={{ alerts: unread(site?.id), todos: openTodos(site?.id) }} />;
+  else if (view === 'inbox') body = <Inbox site={site} sites={sites} tab={tab} params={route.params} counts={{ alerts: unread(site?.id), todos: openTodos(site?.id) }} />;
   else if (view === 'live') body = site
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;

@@ -171,3 +171,9 @@ test('carryGoal: a page’s to-do moves on to its next goal and keeps the reache
     await done();
   }
 });
+
+test('a Claude write-up keeps its client and model; yours never does', async () => {
+  const { normalizeEntry } = await import('../server/todos.mjs');
+  assert.deepEqual(normalizeEntry({ author: 'claude', client: 'cursor', model: 'Opus 5.5 <b>', summary: 'x' }), { author: 'claude', client: 'cursor', model: 'Opus 5.5 b', summary: 'x' });
+  assert.deepEqual(normalizeEntry({ author: 'you', client: 'cursor', summary: 'x' }), { author: 'you', summary: 'x' });
+});
