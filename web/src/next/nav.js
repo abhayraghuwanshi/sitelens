@@ -77,7 +77,8 @@ export function resolve(parts, params) {
   if (section === 'todos') return { scope: 'all', view: 'inbox', tab: 'todos' };
   if (section === 'alerts') return { scope: 'all', view: params.get('view') === 'settings' ? 'alert-settings' : 'inbox', tab: 'alerts' };
   if (section === 'settings' || section === 'account') return { scope: 'all', view: 'account', tab: '' };
-  if (section === 'health' && params.get('site')) return { scope: params.get('site'), view: 'pages', tab: 'health' };
+  // The full uptime and PageSpeed history (?full=1) is still its own page.
+  if (section === 'health' && params.get('site') && !params.get('full')) return { scope: params.get('site'), view: 'pages', tab: 'health' };
   if (VIEW_KEYS.has(section)) return { scope: 'all', view: section, tab: params.get('tab') || '' };
   return { scope: 'all', view: section, tab: '' };
 }

@@ -43,6 +43,7 @@ import { createTodos, todoRoutes } from './todos.mjs';
 import { createTodoContext } from './todo-context.mjs';
 import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
+import { createSiteHealth, siteHealthRoutes } from './site-health.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
 import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
 import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
@@ -161,6 +162,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const campaigns = createCampaigns({ auth, siteConfig });
   // Setting a page's next goal moves its to-do on (todos is created below).
   const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
+  const siteHealth = createSiteHealth({ pageReview, hub: searchHub, vitals });
   const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });
   const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
@@ -216,6 +218,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...postRoutes({ posts, annotations }),
     ...bingRoutes({ bing, siteOr404 }),
     ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
+    ...siteHealthRoutes({ health: siteHealth, siteOr404 }),
     ...pageReviewRoutes({ review: pageReview, siteOr404 }),
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),

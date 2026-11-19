@@ -260,6 +260,30 @@ export function createVitals({ dbPath, store, env = process.env, getToken = asyn
     return { strategy, at, ...row };
   }
 
+  // PageSpeed for any one page (Pages → Health measures the busiest pages, not
+  // just the home page). Not stored: the caller caches it.
+  async function psiUrl(pageUrl, strategy) {
+    const { key } = await apiKey();
+    const url = new URL(PSI);
+    url.searchParams.set('url', pageUrl);
+    url.searchParams.set('strategy', strategy);
+    url.searchParams.set('category', 'performance');
+    const headers = {};
+    if (key) url.searchParams.set('key', key);
+    else {
+      const token = await getToken().catch(() => '');
+      if (token) headers.Authorization = `Bearer ${token}`;
+    }
+    try {
+      const res = await fetchImpl(url, { headers, signal: AbortSignal.timeout(120_000) });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(googleError(res.status, json, key ? 'key' : headers.Authorization ? 'oauth' : 'none'));
+      return { strategy, ...parsePsi(json), error: null };
+    } catch (err) {
+      return { strategy, score: null, lcp: null, cls: null, tbt: null, fcp: null, inp: null, field: null, error: err.message };
+    }
+  }
+
   // The project CrUX BigQuery queries are billed to: the first site with BigQuery set up.
   async function billingProject() {
     const site = (await store.sites()).find((s) => !s.demo && (s.bq?.billingProject || s.bq?.dataProject));
@@ -452,6 +476,7 @@ export function createVitals({ dbPath, store, env = process.env, getToken = asyn
     check,
     checkAll,
     audit,
+    psiUrl,
     summary,
     detail,
     start() {

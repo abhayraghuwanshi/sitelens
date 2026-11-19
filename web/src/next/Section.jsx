@@ -8,7 +8,6 @@ import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
 import { Events } from '../pages/Events.jsx';
 import { Sessions } from '../pages/Sessions.jsx';
-import { Health } from '../pages/Health.jsx';
 import { Posts } from '../pages/Posts.jsx';
 import { Mentions } from '../pages/Mentions.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
@@ -17,6 +16,7 @@ import { TrafficView } from './TrafficView.jsx';
 import { GoalsView } from './GoalsView.jsx';
 import { PagesList } from './PagesList.jsx';
 import { PageView } from './PageView.jsx';
+import { HealthView } from './HealthView.jsx';
 import { SearchView } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
@@ -30,7 +30,7 @@ const TABS = {
   pages: {
     pages: { mode: 'content', component: PagesTab },
     cycles: { mode: 'content', component: ContentCycles, period: false },
-    health: { component: HealthTab, period: false },
+    health: { component: HealthView, period: false },
   },
   search: {
     queries: { mode: 'api', component: SearchView },
@@ -158,12 +158,6 @@ function PagesTab({ site, range, params }) {
   return <PagesList site={site} range={range} />;
 }
 
-// Uptime and speed for this site only.
-function HealthTab({ site, params }) {
-  const p = new URLSearchParams(params);
-  p.set('site', site.id);
-  return <Health sites={[site]} params={p} />;
-}
 
 // What you put out, and who talked about you.
 function PostsTab({ range, params }) {
