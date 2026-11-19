@@ -139,8 +139,8 @@ export function IntegrationGrid({ onOpen }) {
           <div class="integration-head">
             <b>Google account</b>
             <span class="integration-status">
-              <span class={`dot${g.connected && !g.expired && !missing.length ? ' on' : ''}`} />
-              {g.connected ? (g.expired ? 'Token expired' : g.email || 'Connected') : 'Not connected'}
+              <span class={`dot${g.connected && !g.expired && !g.broken && !missing.length ? ' on' : ''}`} />
+              {g.connected ? (g.expired ? 'Token expired' : g.broken ? `${g.email || 'Signed in'} · needs signing in again` : g.email || 'Connected') : 'Not connected'}
             </span>
           </div>
           <p>One sign-in covers GA4, Search Console, BigQuery, PageSpeed and Firebase logs.</p>
@@ -153,30 +153,25 @@ export function IntegrationGrid({ onOpen }) {
           )}
           {missing.length > 0 && <p class="small" style={{ color: 'var(--warning-ink, var(--critical-ink))', margin: 0 }}>Sign in again to allow {missing.map((c) => c.label).join(', ')}.</p>}
         </div>
-        <button class={`btn${g.connected && !missing.length ? '' : ' primary'}`} type="button" onClick={() => onOpen('google')}>
-          {g.connected ? (missing.length ? 'Reconnect' : 'Manage') : 'Connect'}
+        <button class={`btn${g.connected && !missing.length && !g.broken ? '' : ' primary'}`} type="button" onClick={() => onOpen('google')}>
+          {g.connected ? (g.broken ? 'Sign in again' : missing.length ? 'Reconnect' : 'Manage') : 'Connect'}
         </button>
       </section>
 
       {GROUPS.map((group) => (
-        <section key={group.title}>
-          <div class="nav-label" style={{ padding: '0 0 8px' }}>{group.title}</div>
-          <div class="integration-grid">
+        <section key={group.title} class="nx-block" aria-label={group.title}>
+          <h2 class="nx-h2">{group.title}</h2>
+          <div class="card card-plain nx-tight nx-conn-list">
             {group.items.map((item) => {
               const s = item.status(d);
               const action = s.on ? 'Manage' : 'Connect';
               const open = () => (item.href ? navigate(item.href.slice(1)) : onOpen(item.panel));
               return (
-                <button key={item.key} type="button" class="integration" onClick={open} aria-label={`${item.name}: ${s.text}. ${action}`}>
-                  <span class="integration-icon"><Icon name={item.icon} size={18} /></span>
-                  <span class="integration-body">
-                    <span class="integration-head"><b>{item.name}</b></span>
-                    <span class="desc">{item.desc}</span>
-                    <span class="integration-status" style={s.warn ? { color: 'var(--critical-ink)' } : undefined}>
-                      <span class={`dot${s.on ? ' on' : ''}`} /> {s.text}
-                    </span>
-                  </span>
-                  <span class={`btn${s.on ? '' : ' primary'}`} aria-hidden="true">{action}</span>
+                <button key={item.key} type="button" class="nx-conn-row" onClick={open} aria-label={`${item.name}: ${s.text}. ${action}`} title={item.desc}>
+                  <span class="nx-hk"><Icon name={item.icon} size={15} /></span>
+                  <span class="nx-ob"><b>{item.name}</b><small class={s.warn ? 'bad' : 'muted'}><span class={`dot${s.on ? ' on' : ''}`} /> {s.text}</small></span>
+                  <span class="nx-conn-desc muted small">{item.desc}</span>
+                  <span class={`btn${s.on ? ' ghost' : ''}`} aria-hidden="true">{action}</span>
                 </button>
               );
             })}

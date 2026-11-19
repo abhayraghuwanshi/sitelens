@@ -118,8 +118,9 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const conn = state.demo
     ? (sites.some((s) => s.showcase) ? 'Live demo · view only' : 'Demo · sample data')
     : state.viewer ? 'Viewing shared sites'
-    : auth.connected ? (auth.expired ? 'Google sign-in expired' : 'Google connected') : 'Google not connected';
-  const connOn = !state.demo && !state.viewer && auth.connected && !auth.expired;
+    : auth.connected ? (auth.expired ? 'Google sign-in expired' : auth.broken ? 'Google needs you' : 'Google connected') : 'Google not connected';
+  const connOn = !state.demo && !state.viewer && auth.connected && !auth.expired && !auth.broken;
+  const connBad = !state.demo && !state.viewer && auth.connected && (auth.expired || auth.broken);
 
   const scopeBtn = (phone) => (
     <button type="button" class="nx-scope" onClick={() => toggle('scopes')} aria-expanded={pop === 'scopes'} aria-haspopup="true">
@@ -228,7 +229,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           {pop === 'user' && <div class="nx-pop nx-pop-user">{userRows}</div>}
           <button type="button" class={`nx-me${view === 'account' ? ' on' : ''}`} onClick={() => toggle('user')} aria-expanded={pop === 'user'} aria-haspopup="true">
             <span class="nx-avatar" aria-hidden="true">{initial(auth, state)}</span>
-            <span class="nx-who"><b>{state.viewer ? 'Viewer' : 'Account'}</b><small><span class={`nx-dot${connOn ? ' on' : ''}`} aria-hidden="true" />{conn}</small></span>
+            <span class="nx-who"><b>{state.viewer ? 'Viewer' : 'Account'}</b><small class={connBad ? 'bad' : undefined}><span class={`nx-dot${connOn ? ' on' : connBad ? ' bad' : ''}`} aria-hidden="true" />{conn}</small></span>
           </button>
         </div>
       </aside>

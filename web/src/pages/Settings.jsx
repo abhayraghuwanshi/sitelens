@@ -22,9 +22,9 @@ const PUBLIC_SAMPLE = {
 };
 
 const TABS = [
-  { key: 'integrations', label: 'Integrations' },
-  { key: 'mcp', label: 'MCP' },
   { key: 'sites', label: 'Sites & products' },
+  { key: 'integrations', label: 'Connections' },
+  { key: 'mcp', label: 'Claude & agents' },
 ];
 
 const PANELS = {
@@ -49,7 +49,7 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
   const panel = params.get('i') !== 'mcp' && PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
   // Sites and products share one tab: old ?tab=products links (with ?edit=<product id>) land there.
   const asked = params.get('tab') === 'products' ? 'sites' : params.get('tab');
-  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'integrations';
+  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'sites';
 
   // Alert settings moved to the Alerts page; old ?tab=alerts links land there.
   useEffect(() => {
@@ -68,13 +68,18 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
     <>
       <nav class="tabs" aria-label="Settings sections">
         {TABS.map((t) => (
-          <a key={t.key} href={`#/settings?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
+          <a key={t.key} href={`#/account?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
         ))}
       </nav>
+      {state.auth?.broken && panel !== 'google' && (
+        <a class="nx-note-line bad" href="#/account?i=google">
+          <Icon name="triangle" size={15} /><span><b>Google needs you.</b> {state.auth.broken}</span><span class="nx-go">Sign in again →</span>
+        </a>
+      )}
       {flashError && <ErrorState error={{ message: flashError }} />}
       {tab === 'integrations' && (panel ? (
         <>
-          <a class="back-link" href="#/settings?tab=integrations">← All integrations</a>
+          <a class="back-link" href="#/account?tab=integrations">← All connections</a>
           {PANELS[panel].render({ state, params, onChange })}
         </>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}

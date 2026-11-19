@@ -761,3 +761,17 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
   .nx-prow > :nth-child(4), .nx-prow > :nth-child(5) { display: none; }
 }
 @media (max-width: 820px) { .nx-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-right: -14px; padding-right: 14px; } }
+
+/* Account */
+.nx-dot.bad { background: var(--critical-ink); }
+.nx-who small.bad { color: var(--critical-ink); }
+.nx-note-line.bad { background: color-mix(in srgb, var(--critical-ink) 9%, var(--surface)); color: var(--text); }
+.nx-note-line.bad > svg { color: var(--critical-ink); flex: none; }
+.nx-conn-list { padding-top: 4px; padding-bottom: 4px; }
+.nx .nx-conn-row { display: grid; grid-template-columns: 28px minmax(160px, 0.8fr) minmax(0, 1.2fr) auto; gap: 14px; align-items: center; width: 100%; padding: 10px 2px; border: 0; border-bottom: 1px solid var(--border); background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.nx .nx-conn-row:last-child { border-bottom: 0; }
+.nx .nx-conn-row:hover { background: var(--surface-hover); }
+.nx-conn-row small { display: flex; align-items: center; gap: 6px; font-size: var(--text-sm); }
+.nx-conn-row small.bad { color: var(--critical-ink); }
+.nx-conn-desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 820px) { .nx .nx-conn-row { grid-template-columns: 28px minmax(0, 1fr) auto; } .nx-conn-desc { display: none; } }
