@@ -15,8 +15,9 @@ const CUSTOM = '__custom__';
 
 // Funnels: pick one (yours from .sitelens.yml, or a suggested one), see it left
 // to right with the drop between each step, read what it means, and edit the
-// steps only when you want to.
-export function Funnels({ site, range }) {
+// steps only when you want to. ?edit=1 opens the editor right away (the
+// Journeys page’s “Edit steps” links land here with it).
+export function Funnels({ site, range, params }) {
   const [saved, setSaved] = usePersistent(`funnel:${site.id}`, DEFAULT_STEPS);
   const [steps, setSteps] = useState(saved);
   const [editing, setEditing] = useState(false);
@@ -31,6 +32,8 @@ export function Funnels({ site, range }) {
   const events = useAsync(() => api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`), [site.id, range]);
   const result = useAsync(() => (run ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: run }) : null), [site.id, range, JSON.stringify(run)]);
   const suggestions = useAsync(() => api.get(`/sites/${site.id}/warehouse/funnel-suggestions${qs({ range })}`), [site.id, range]);
+  const edit = params?.get('edit') === '1';
+  useEffect(() => { if (edit) setEditing(true); }, [edit]);
 
   // With funnels in the file, edits here are for exploring and aren't kept.
   const keep = (next) => !declared.length && setSaved(next);
@@ -86,11 +89,13 @@ export function Funnels({ site, range }) {
           eventNames={(events.data?.events || []).map((e) => e.name)} run={run} label={label} />
       )}
 
-      <section class="card card-plain" aria-label="Funnel">
-        {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
-          : !result.data ? <Loading height={340} />
-          : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} goals={goals} site={site} range={range} outcome={outcome} bare />}
-      </section>
+      {!editing && (
+        <section class="card card-plain" aria-label="Funnel">
+          {result.error ? <ErrorState error={result.error} onRetry={result.reload} />
+            : !result.data ? <Loading height={340} />
+            : <FunnelView data={result.data} name={current?.name || 'Custom funnel'} label={label} goals={goals} site={site} range={range} outcome={outcome} bare />}
+        </section>
+      )}
     </div>
   );
 }

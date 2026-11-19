@@ -107,7 +107,7 @@ export function JourneysPage({ site, params }) {
       actions={
         <span class="nx-head-ctl">
           {outcome && <span class="chip" title="The site’s outcome goal">{outcome.label}</span>}
-          <a class="btn" href={`#/site/${site.id}/journeys?tab=funnels&range=${range}`}>Edit steps</a>
+          <a class="btn" href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a>
           <Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />
         </span>
       }>
@@ -162,7 +162,7 @@ export function Stairs({ steps, goals, site, range, outcome, bare }) {
           ];
         }).flat()}
       </div>
-      <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}`}>Edit steps</a></p>
+      <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a></p>
     </>
   );
   if (bare) return <>{content}</>;
@@ -294,7 +294,7 @@ function NoSteps({ site, range }) {
   return (
     <p class="muted">
       This site has no funnel steps for its outcome yet.{' '}
-      <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}`}>Set the steps</a> — paste the pages people pass through, or name the events.
+      <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Set the steps</a> — paste the pages people pass through, or name the events.
     </p>
   );
 }
