@@ -21,7 +21,7 @@ export const VIEWS = [
 export const SECTIONS = {
   pages: { label: 'Pages', q: 'Which content works', tabs: [['pages', 'All pages'], ['cycles', 'Content cycles'], ['health', 'Health']] },
   search: { label: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['ai', 'AI answers']] },
-  traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources & campaigns'], ['overview', 'GA4 summary'], ['posts', 'Posts & mentions']] },
+  traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources'], ['posts', 'Posts & mentions'], ['overview', 'GA4 summary']] },
   journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys'], ['paths', 'Paths'], ['funnels', 'Funnels'], ['retention', 'Retention']] },
   goals: { label: 'Goals', q: 'Is it working', tabs: [['results', 'Results'], ['numbers', 'Your numbers']] },
   raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['sql', 'SQL']] },
