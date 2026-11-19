@@ -27,7 +27,7 @@ import { createArticleEditor, articleEditorRoutes } from './article-editor.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
-import { createCampaigns, campaignRoutes } from './campaigns.mjs';
+import { createCampaigns, createAdSpend, createAdDays, campaignRoutes } from './campaigns.mjs';
 import { createProductSetup, productSetupRoutes } from './product-setup.mjs';
 import { createPosts, postRoutes } from './posts.mjs';
 import { createBing, bingRoutes } from './bing.mjs';
@@ -159,7 +159,9 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const searchHub = createSearchHub({ engines, bing, auth, fetchImpl });
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
   const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig, cacheDb });
-  const campaigns = createCampaigns({ auth, siteConfig });
+  const campaigns = createCampaigns({ auth, siteConfig, store });
+  const adDays = createAdDays({ auth, store });
+  const adSpend = createAdSpend({ store, onChange: (site) => { campaigns.forget(site); adDays.forget(site); } });
   // Setting a page's next goal moves its to-do on (todos is created below).
   const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
   const siteHealth = createSiteHealth({ pageReview, hub: searchHub, vitals });
@@ -177,7 +179,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
-  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
+  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays });
   // Calendar days are local, so the story's "today" is too.
   const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
   const todos = createTodos({ store, annotations, context: createTodoContext({ calendar, engines, outcomes, store, today: () => new Date().toLocaleDateString('en-CA') }) });
@@ -451,7 +453,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...productRoutes({ products }),
     ...journeyRoutes({ journey }),
     ...outcomeRoutes({ outcomes }),
-    ...campaignRoutes({ campaigns, siteOr404 }),
+    ...campaignRoutes({ campaigns, adSpend, siteOr404 }),
     ['GET', /^\/api\/portfolio$/, async ({ query }) => engines.portfolio(await store.sites(), query.get('range') || '28d')],
 
     ['GET', /^\/api\/sites\/([\w-]+)\/dashboard$/, async ({ match, query }) =>

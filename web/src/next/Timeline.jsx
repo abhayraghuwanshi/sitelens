@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
+import { moneyFormat } from './AdMoney.jsx';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
@@ -26,12 +27,14 @@ const pct = (c) => (c === null || !Number.isFinite(c) ? '—' : `${c >= 0 ? '+' 
 const monthName = (ym, short) => new Date(tOf(`${ym}-01`)).toLocaleDateString('en-GB', { month: short ? 'short' : 'long', year: short ? undefined : 'numeric', timeZone: 'UTC' });
 const shiftMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); return iso(Date.UTC(y, m - 1 + n, 1)).slice(0, 7); };
 
-const METRICS = [['sessions', 'Visits'], ['users', 'People'], ['views', 'Page views'], ['clicks', 'Search clicks']];
+const METRICS = [['sessions', 'Visits'], ['users', 'People'], ['views', 'Page views'], ['clicks', 'Search clicks'], ['spent', 'Ad spend'], ['earned', 'Ad earnings']];
+// Money metrics (Traffic → Ad money): shown only for sites with any, in the GA4 currency.
+const MONEY = new Set(['spent', 'earned']);
 const LENSES = { page: { name: 'Landing pages', one: 'page', of: 'sessions' }, source: { name: 'Sources', one: 'source', of: 'sessions' }, query: { name: 'Searches', one: 'search', of: 'clicks' } };
 const ZOOMS = { day: 1, '7d': 7, '28d': 28 };
 // Marks: what you did and what happened, by kind.
-const KINDS = { deploy: ['rocket', 'Deploys'], release: ['github', 'Releases'], post: ['megaphone', 'Posts'], mention: ['chat', 'Mentions'], note: ['star', 'Notes'], alert: ['bell', 'Alerts'] };
-const kindOf = (k) => (k === 'deploy' ? 'deploy' : k === 'release' || k === 'extension' ? 'release' : k === 'post' ? 'post' : k === 'mention' ? 'mention' : 'note');
+const KINDS = { deploy: ['rocket', 'Deploys'], release: ['github', 'Releases'], post: ['megaphone', 'Posts'], ad: ['target', 'Ads'], mention: ['chat', 'Mentions'], note: ['star', 'Notes'], alert: ['bell', 'Alerts'] };
+const kindOf = (k) => (k === 'deploy' ? 'deploy' : k === 'release' || k === 'extension' ? 'release' : k === 'post' ? 'post' : k === 'ad' ? 'ad' : k === 'mention' ? 'mention' : 'note');
 const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-7)', 'var(--series-4)', 'var(--series-5)', 'var(--series-3)', 'var(--series-8)', 'var(--series-6)'];
 const pageName = (p) => (p === '/' ? 'Home page' : p);
 
@@ -57,7 +60,8 @@ export function Timeline({ site, sites, params }) {
   const asLine = params.get('v') === 'line' && zoom !== 'day';
   const picked = params.get('day') || '';
   const [marks, setMarks] = usePersistent('tl-marks', Object.keys(KINDS).join(','));
-  const layers = marks.split(',').filter(Boolean);
+  // Saved before "Ads" existed: show it until it's turned off ("-ad" remembers that).
+  const layers = [...marks.split(',').filter((k) => k && k !== '-ad'), ...(marks.includes('ad') ? [] : ['ad'])];
   const [menu, setMenu] = useState('');
   const [adding, setAdding] = useState(false);
   const phone = usePhone();
@@ -115,7 +119,8 @@ export function Timeline({ site, sites, params }) {
     const row = map.get(d);
     if (!row || row[metric] === null) return '';
     if (focused) return `background:color-mix(in srgb, ${focused.color} ${Math.round(Math.min(share(focused, d) * 130, 72))}%, var(--surface))`;
-    if (lens === 'amount') return `background:color-mix(in srgb, var(--accent) ${Math.round(6 + (row[metric] / max) * 64)}%, var(--surface))`;
+    // Money is shaded by amount: a usual day of ad spend is usually nothing.
+    if (lens === 'amount' || (lens === 'change' && MONEY.has(metric))) return row[metric] ? `background:color-mix(in srgb, var(--accent) ${Math.round(6 + (row[metric] / max) * 64)}%, var(--surface))` : '';
     if (lens !== 'change') return '';
     const u = usual(d);
     if (!u) return '';
@@ -123,7 +128,11 @@ export function Timeline({ site, sites, params }) {
     const a = Math.min(Math.abs(c), 0.6);
     return a < 0.05 ? '' : `background:color-mix(in srgb, var(${c > 0 ? '--good-ink' : '--critical-ink'}) ${Math.round(8 + (a / 0.6) * 34)}%, var(--surface))`;
   };
-  const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked, L, phone, go, today: iso(Date.now()) };
+  const money = moneyFormat(metrics.data?.currency);
+  // A metric's value as text: money in the currency, counts as counts (vk: short).
+  const vf = (v, k = metric) => (v === null || v === undefined ? '—' : MONEY.has(k) ? money(v) : fmt(v));
+  const vk = (v, k = metric) => (MONEY.has(k) && v !== null && v !== undefined ? money(v) : kfmt(v));
+  const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked, L, phone, go, vf, vk, today: iso(Date.now()) };
 
   // Header controls.
   const periodLabel = zoom === 'day' ? (end === last ? 'Yesterday' : fmtD(end, { weekday: 'short', day: 'numeric', month: 'short' }))
@@ -156,13 +165,13 @@ export function Timeline({ site, sites, params }) {
           <hr /><span class="tl-lab">Break down by</span>
           {Object.entries(LENSES).map(([k, x]) => <MenuItem key={k} on={lens === k} onClick={() => go({ by: k, f: '' })}>{x.name}</MenuItem>)}
         </Menu>
-        <Menu name="marks" open={menu} setOpen={setMenu} label={<>Marks{layers.length < 6 ? ` ${layers.length}/6` : ''} <Icon name="updown" size={11} /></>} cls="nx-chip">
+        <Menu name="marks" open={menu} setOpen={setMenu} label={<>Marks{layers.length < Object.keys(KINDS).length ? ` ${layers.length}/${Object.keys(KINDS).length}` : ''} <Icon name="updown" size={11} /></>} cls="nx-chip">
           {Object.entries(KINDS).map(([k, [ic, l]]) => {
             const on = layers.includes(k);
             const n = [...(events.data?.events || []).map((e) => kindOf(e.kind)), ...(events.data?.alerts || []).map(() => 'alert')].filter((x) => x === k).length;
             return (
               <button key={k} type="button" class="nx-pop-row" role="menuitemcheckbox" aria-checked={on}
-                onClick={() => setMarks((on ? layers.filter((x) => x !== k) : [...layers, k]).join(','))}>
+                onClick={() => setMarks([...(on ? layers.filter((x) => x !== k) : [...layers, k]), ...(on && k === 'ad' ? ['-ad'] : [])].join(','))}>
                 <span class={`tl-cbx${on ? ' on' : ''}`}>{on && <Icon name="check" size={11} />}</span><Icon name={ic} size={14} />{l}<span class="nx-pop-meta">{n}</span>
               </button>
             );
@@ -278,7 +287,7 @@ function MenuItem({ on, onClick, children }) {
 // One tile per number: the window's total, against usual days, and its line. Picks the number.
 // A small line that reads out on hover: move anywhere over it and the nearest
 // day's number shows above it (nothing shows until you hover).
-export function Spark({ vals, dates, color = 'var(--accent)', unit = '', cls = '' }) {
+export function Spark({ vals, dates, color = 'var(--accent)', unit = '', cls = '', format = null }) {
   const [i, setI] = useState(-1);
   const ref = useRef(null);
   const n = vals.length;
@@ -300,7 +309,7 @@ export function Spark({ vals, dates, color = 'var(--accent)', unit = '', cls = '
       {i >= 0 && <>
         <i class="tl-sdot" style={`left:${at * 100}%;top:${(y(vals[i]) / 24) * 100}%;background:${color}`} />
         <span class={`tl-tip${at > 0.7 ? ' r' : at < 0.3 ? ' l' : ''}`} style={`left:${at * 100}%`}>
-          {fmtD(dates[i], { weekday: 'short', day: 'numeric', month: 'short' })} · {vals[i] == null ? 'no data' : <><b>{Number.isInteger(vals[i]) ? fmt(vals[i]) : vals[i].toLocaleString('en-US', { maximumFractionDigits: 1 })}</b>{unit ? ` ${unit}` : ''}</>}
+          {fmtD(dates[i], { weekday: 'short', day: 'numeric', month: 'short' })} · {vals[i] == null ? 'no data' : <><b>{format ? format(vals[i]) : Number.isInteger(vals[i]) ? fmt(vals[i]) : vals[i].toLocaleString('en-US', { maximumFractionDigits: 1 })}</b>{unit ? ` ${unit}` : ''}</>}
         </span>
       </>}
     </span>
@@ -321,8 +330,8 @@ function Tiles({ days, ctx }) {
         return (
           <button key={k} type="button" class={`tl-tile${on ? ' on' : ''}`} aria-pressed={on} onClick={() => ctx.go({ m: k === 'sessions' ? '' : k, ...(ctx.L ? { by: '', f: '' } : {}) })}>
             <small>{l}</small>
-            <b>{kfmt(tot)}<span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span></b>
-            <Spark vals={vals} dates={ds} unit={l.toLowerCase()} />
+            <b>{ctx.vk(tot, k)}{!(MONEY.has(k) && c === null) && <span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span>}</b>
+            <Spark vals={vals} dates={ds} unit={l.toLowerCase()} format={MONEY.has(k) ? (v) => ctx.vf(v, k) : null} />
           </button>
         );
       })}
@@ -354,7 +363,7 @@ function Cell({ d, ctx }) {
     const u = ctx.usual(d);
     const c = v !== null && u ? v / u - 1 : null;
     val = v === null ? <span class="tl-dv muted">—</span>
-      : <span class="tl-dv">{ctx.phone ? kfmt(v) : fmt(v)}{!ctx.phone && ctx.lens === 'change' && c !== null && <small class={c >= 0 ? 'good' : 'bad'}>{pct(c)}</small>}</span>;
+      : <span class="tl-dv">{ctx.phone ? ctx.vk(v) : ctx.vf(v)}{!ctx.phone && ctx.lens === 'change' && c !== null && <small class={c >= 0 ? 'good' : 'bad'}>{pct(c)}</small>}</span>;
   }
   return (
     <button type="button" class={`tl-day${ctx.picked === d ? ' sel' : ''}`} style={ctx.fill(d)} aria-label={fmtD(d, { weekday: 'long', day: 'numeric', month: 'long' })}
@@ -394,7 +403,7 @@ function WeekView({ days, ctx }) {
           <button key={d} type="button" class={`tl-wcol${ctx.picked === d ? ' sel' : ''}`} onClick={() => ctx.go({ day: ctx.picked === d ? '' : d })}>
             <span class="tl-wtop" style={ctx.fill(d)}>
               <span class="muted small">{fmtD(d, { weekday: 'short', day: 'numeric' })}</span>
-              <b>{fmt(v)}</b>
+              <b>{ctx.vf(v)}</b>
               <small class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)} vs usual</small>
             </span>
             <span class="tl-wev">
@@ -423,7 +432,7 @@ function YearGrid({ days, ctx }) {
               {ds.map((d) => {
                 const ev = ctx.evOn(d);
                 return <button key={d} type="button" class={`tl-sq${ev.some((e) => e.kind === 'alert') ? ' al' : ev.length ? ' ev' : ''}`} style={ctx.fill(d) || 'background:var(--surface-2)'}
-                  title={`${fmtD(d, { weekday: 'short', day: 'numeric', month: 'short' })} · ${fmt(ctx.map.get(d)?.[ctx.metric])}${ev.length ? ` · ${ev.map((e) => e.label).join(', ')}` : ''}`}
+                  title={`${fmtD(d, { weekday: 'short', day: 'numeric', month: 'short' })} · ${ctx.vf(ctx.map.get(d)?.[ctx.metric])}${ev.length ? ` · ${ev.map((e) => e.label).join(', ')}` : ''}`}
                   aria-label={d} onClick={() => ctx.go({ z: '', month: ym, day: d })} />;
               })}
             </div>
@@ -480,7 +489,7 @@ function LineView({ days, items, ctx, evList }) {
         {hi >= 0 && (
           <div class={`tl-ltip${hx > 0.65 ? ' r' : ''}`} style={`left:${hx * 100}%`}>
             <b>{weekly ? `Week of ${fmtD(groups[hi][0], { day: 'numeric', month: 'short' })}` : fmtD(groups[hi][0], { weekday: 'short', day: 'numeric', month: 'short' })}</b>
-            {[...series].sort((a, b) => (b.dashed ? -1 : 0) || b.vals[hi] - a.vals[hi]).map((s) => <span key={s.label}><i style={`background:${s.color}`} /><em>{s.label}</em><b>{fmt(s.vals[hi])}</b></span>)}
+            {[...series].sort((a, b) => (b.dashed ? -1 : 0) || b.vals[hi] - a.vals[hi]).map((s) => <span key={s.label}><i style={`background:${s.color}`} /><em>{s.label}</em><b>{ctx.L ? fmt(s.vals[hi]) : ctx.vf(s.vals[hi])}</b></span>)}
           </div>
         )}
         <div class="tl-cols">
@@ -512,7 +521,7 @@ function ScaleKey({ ctx, asLine }) {
   if (asLine) return <p class="tl-scale">Each point is a day; click one to open it.</p>;
   if (ctx.focused) return <p class="tl-scale"><b>{ctx.focused.key}</b>: its {ctx.L.of === 'clicks' ? 'clicks' : 'visits'} each day; darker is a bigger share. <button type="button" class="todo-link" onClick={() => ctx.go({ f: '' })}>Stop</button></p>;
   if (ctx.L) return <p class="tl-scale">A day is named when something starts: a new {ctx.L.one}, or one rising to 2× its usual share.</p>;
-  if (ctx.lens === 'amount') return <p class="tl-scale">Fewer <i style="background:color-mix(in srgb, var(--accent) 10%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 38%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 70%, var(--surface))" /> More</p>;
+  if (ctx.lens === 'amount' || MONEY.has(ctx.metric)) return <p class="tl-scale">{MONEY.has(ctx.metric) ? 'Less' : 'Fewer'} <i style="background:color-mix(in srgb, var(--accent) 10%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 38%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 70%, var(--surface))" /> More</p>;
   return (
     <p class="tl-scale">Below a usual day
       <i style="background:color-mix(in srgb, var(--critical-ink) 40%, var(--surface))" /><i style="background:color-mix(in srgb, var(--critical-ink) 18%, var(--surface))" /><i style="background:var(--surface)" />
@@ -530,7 +539,7 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
   const worst = [...rows].sort((a, b) => a.c - b.c).slice(0, 3).filter((x) => x.c < 0);
   const dayRow = (x) => (
     <button key={x.d} type="button" class="tl-brow" onClick={() => ctx.go({ day: x.d })}>
-      <span>{fmtD(x.d, { weekday: 'short', day: 'numeric', month: 'short' })}</span><b>{fmt(x.v)}</b><span class={x.c >= 0 ? 'good' : 'bad'}>{pct(x.c)}</span>
+      <span>{fmtD(x.d, { weekday: 'short', day: 'numeric', month: 'short' })}</span><b>{ctx.vf(x.v)}</b><span class={x.c >= 0 ? 'good' : 'bad'}>{pct(x.c)}</span>
     </button>
   );
   const effect = (date) => {
@@ -647,7 +656,8 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
                 if (v === null) return null;
                 const b = baseOf(k);
                 const c = b ? v / b - 1 : null;
-                return <div key={k} class="tl-num"><span>{l}</span><b>{fmt(v)}</b><span class="muted">{fmt(b)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span></div>;
+                const vf = ctx.vf || ((x, key) => (MONEY.has(key) && x != null ? x.toLocaleString('en-US', { maximumFractionDigits: 2 }) : fmt(x)));
+                return <div key={k} class="tl-num"><span>{l}</span><b>{vf(v, k)}</b><span class="muted">{vf(b, k)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span></div>;
               })}
             </div>
           </div>

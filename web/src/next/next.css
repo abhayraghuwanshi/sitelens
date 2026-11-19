@@ -1348,3 +1348,31 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .lv-who.sm { width: 16px; height: 16px; margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .lv-who.fresh.goal, .lv-who.fresh.intent { animation: lv-pop 2.4s ease-out infinite; } }
 @keyframes lv-pop { 0% { box-shadow: 0 0 0 0 color-mix(in srgb, var(--lv-c) 45%, transparent); } 70%, 100% { box-shadow: 0 0 0 7px transparent; } }
+
+/* ---------- Traffic → Ad money: spend, what it brought, ad earnings ---------- */
+.am-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 8px 16px; }
+.am-head .nx-h2 { margin: 0; }
+.am-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; }
+.am-stats > div { display: grid; gap: 2px; min-width: 0; }
+.am-stats small { font-size: var(--text-xs); color: var(--text-3); text-transform: uppercase; letter-spacing: .05em; font-weight: 600; }
+.am-stats b { font-size: var(--text-2xl); font-variant-numeric: tabular-nums; line-height: 1.15; }
+.am-stats span { font-size: var(--text-sm); }
+.am-rows { display: grid; border-top: 1px solid var(--border); }
+.am-row { display: grid; grid-template-columns: minmax(0, 1fr) 90px 70px 90px minmax(140px, 180px) 44px; gap: 12px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: var(--text-md); }
+.am-row:last-child { border-bottom: 0; }
+.am-th { font-size: var(--text-xs); color: var(--text-3); padding: 8px 0 6px; }
+.am-name { display: grid; gap: 1px; min-width: 0; }
+.am-name small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: var(--text-sm); }
+.am-act { text-align: right; }
+.am-hints { margin: 0; padding-left: 18px; display: grid; gap: 4px; }
+.am-form { gap: 14px; }
+.am-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 16px; }
+.am-btns { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.am-remove, .am-confirm { margin-left: auto; }
+@media (max-width: 860px) {
+  .am-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .am-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .am-row > :nth-child(3), .am-row > :nth-child(4), .am-th { display: none; }
+  .am-row > :nth-child(5) { grid-column: 1 / -1; font-size: var(--text-sm); }
+}
+@media (max-width: 560px) { .am-grid { grid-template-columns: minmax(0, 1fr); } }

@@ -243,7 +243,7 @@ export function demoDay(siteId, date) {
 
 /* ---------- The service ---------- */
 
-export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, now = () => Date.now() }) {
+export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, now = () => Date.now() }) {
   // Which sites, repos and extensions a view covers. 'all' = every real site
   // (the sample only when there's nothing else); a site adds its product's repos and extensions.
   async function scope(siteParam = 'all') {
@@ -303,7 +303,21 @@ export function createCalendar({ store, history, annotations, extensions = null,
 
   async function eventsFor(sc, from, to) {
     const listed = await annotations.list({ from, to, scopes: sc.scopes });
-    return [...listed, ...demoAnnotations(sc.sites, from, to)].sort((a, b) => a.date.localeCompare(b.date));
+    return [...listed, ...demoAnnotations(sc.sites, from, to), ...(await adMarks(sc, from, to))].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // Entered ad campaigns, marked on the day each started.
+  const AD_PLATFORM = { google: 'Google Ads', reddit: 'Reddit Ads', x: 'X Ads', meta: 'Meta Ads', linkedin: 'LinkedIn Ads', other: 'Ad' };
+  async function adMarks(sc, from, to) {
+    const all = (await store.get()).adSpend || {};
+    return sc.sites.flatMap((site) => (all[site.id] || [])
+      .filter((e) => e.start >= from && e.start <= to)
+      .map((e) => {
+        const days = Math.round((Date.parse(`${e.end}T00:00:00Z`) - Date.parse(`${e.start}T00:00:00Z`)) / 86_400_000) + 1;
+        const amount = e.amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return { id: `ad-${e.id}`, date: e.start, kind: 'ad', source: 'ad-spend', scope: `site:${site.id}`,
+          label: `${AD_PLATFORM[e.platform] || 'Ad'}: ${e.name} · ${amount} over ${days} day${days === 1 ? '' : 's'}${sc.key === 'all' ? ` (${site.label})` : ''}` };
+      }));
   }
 
   async function alertsFor(sc, from, to) {
@@ -550,7 +564,10 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const r = span(from, to);
     const sc = await scope(site);
     const lookback = addDays(r.from, -7 * WEEKS);
-    const sums = { sessions: new Map(), users: new Map(), views: new Map(), clicks: new Map() };
+    const sums = { sessions: new Map(), users: new Map(), views: new Map(), clicks: new Map(), spent: new Map(), earned: new Map() };
+    let hasSpent = false;
+    let hasEarned = false;
+    const currencies = new Set();
     const add = (map, d, v) => map.set(d, (map.get(d) || 0) + (v || 0));
     const errors = [];
     let hasTraffic = false;
@@ -576,6 +593,15 @@ export function createCalendar({ store, history, annotations, extensions = null,
       } catch (err) {
         errors.push({ site: s.label, message: err.message });
       }
+      // Ad money: spend (Google Ads + entered) and ad earnings, when the site has any.
+      if (adDays) {
+        try {
+          const money = await adDays(s, lookback, r.to);
+          if (money.currency && (money.spent || money.earned)) currencies.add(money.currency);
+          if (money.spent) { hasSpent = true; for (const [d, v] of money.spent) add(sums.spent, d, v); }
+          if (money.earned) { hasEarned = true; for (const [d, v] of money.earned) add(sums.earned, d, v); }
+        } catch { /* ad money is extra: the day's other numbers stand without it */ }
+      }
     }
     const days = [];
     for (let d = r.from; d <= r.to; d = addDays(d, 1)) {
@@ -591,12 +617,16 @@ export function createCalendar({ store, history, annotations, extensions = null,
         baseline: baseline === null ? null : Math.round(baseline),
         change: t.change === null || !Number.isFinite(t.change) ? null : Math.round(t.change * 1000) / 1000,
         clicks: hasSearch && searchLast && d <= searchLast ? sums.clicks.get(d) || 0 : null,
+        spent: hasSpent ? Math.round((sums.spent.get(d) || 0) * 100) / 100 : null,
+        earned: hasEarned ? Math.round((sums.earned.get(d) || 0) * 100) / 100 : null,
       });
     }
     return {
       from: r.from, to: r.to, site: sc.key,
       sites: sc.sites.map((s) => ({ id: s.id, label: s.label })),
       searchLast: searchLast || null,
+      // One currency, or none when sites differ (amounts are then shown plain).
+      currency: currencies.size === 1 ? [...currencies][0] : '',
       totals: {
         sessions: hasTraffic ? days.reduce((a, x) => a + x.sessions, 0) : null,
         views: hasTraffic ? days.reduce((a, x) => a + x.views, 0) : null,
