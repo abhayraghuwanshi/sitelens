@@ -102,7 +102,7 @@ export function Funnels({ site, range, params }) {
 
 // Steps named the way the site's goals name them (“Saw the downloads
 // section”), with the raw page or event underneath.
-function labeller(goals) {
+export function labeller(goals) {
   const byEvent = new Map(goals.filter((g) => g.source === 'event' && g.match).map((g) => [g.match, g.label]));
   const name = (s) => (s.kind === 'event' ? byEvent.get(s.value) || null : s.value === '/' ? 'Home page' : null);
   return {
@@ -185,7 +185,7 @@ function findings(steps, leak, label) {
   return out.slice(0, 6);
 }
 
-function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label }) {
+export function Editor({ site, steps, setSteps, apply, declared, eventNames, run, label }) {
   const update = (i, patch) => setSteps(steps.map((s, k) => (k === i ? { ...s, ...patch } : s)));
   return (
     <section class="card card-plain nx-fn-editor" aria-label="Edit funnel steps">

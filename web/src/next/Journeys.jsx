@@ -4,6 +4,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Page } from './Page.jsx';
 import { Marked } from '../components/Marks.jsx';
+import { Editor, labeller } from '../pages/Funnels.jsx';
 
 // Journeys: one goal at a time. The steps down it, who gets there, and the
 // routes that bring people in or lose them — all from BigQuery, so a site's
@@ -57,19 +58,26 @@ export function JourneysPage({ site, params }) {
   const wantedFunnel = (list) => list.find((f) => f.steps?.at(-1)?.kind === 'event' && f.steps.at(-1).value === outcome?.match);
   const chosen = wantedFunnel(declared) || wantedFunnel(suggestions.data?.funnels || []) || declared[0] || suggestions.data?.funnels?.[0];
   const steps = chosen?.steps || [];
-  const stepsKey = steps.map((s) => `${s.kind}:${s.value}`).join(',');
+  const [draft, setDraft] = useState(null);
+  const [editing, setEditing] = useState(false);
+  const edit = params?.get('edit') === '1';
+  const editingMode = editing || edit;
+  const effSteps = draft || steps;
+  const stepsKey = effSteps.map((s) => `${s.kind}:${s.value}`).join(',');
 
-  const funnel = useAsync(() => (outcome && steps.length ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps }) : null),
+  const funnel = useAsync(() => (outcome && effSteps.length ? api.post(`/sites/${site.id}/warehouse/funnel`, { range, steps: effSteps }) : null),
     [site.id, range, stepsKey, outcome?.match]);
 
   const [who, setWho] = useState('source');
-  const segments = useAsync(() => (outcome && steps.length
+  const segments = useAsync(() => (outcome && effSteps.length
     ? api.get(`/sites/${site.id}/warehouse/segments${qs({ range, by: who, outcome: outcome.match, steps: stepsKey })}`)
     : null), [site.id, range, who, stepsKey, outcome?.match]);
 
   const routes = useAsync(() => (outcome
     ? api.get(`/sites/${site.id}/warehouse/routes${qs({ range, outcome: outcome.match, limit: 60 })}`)
     : null), [site.id, range, outcome?.match]);
+
+  const events = useAsync(() => (site.modes?.warehouse ? api.get(`/sites/${site.id}/warehouse/events${qs({ range })}`).catch(() => null) : null), [site.id, range, site.modes?.warehouse]);
 
   let body;
   if (!site.modes?.warehouse) body = <p class="muted">Journeys read each visit from the site’s GA4 BigQuery export. Connect it in the site’s settings to see them.</p>;
@@ -89,7 +97,7 @@ export function JourneysPage({ site, params }) {
         {first > 0
           ? <p class="nx-lede"><Answer steps={funnel.data.steps} goals={goals} outcome={outcome} /></p>
           : <p class="muted">No visits reached the first step in this period. Try a longer range, or edit the steps.</p>}
-        {first > 0 && <Stairs steps={funnel.data.steps} goals={goals} site={site} range={range} outcome={outcome} />}
+        {first > 0 && <Stairs steps={funnel.data.steps} goals={goals} site={site} range={range} outcome={outcome} onEdit={() => setEditing(true)} />}
         <WhoGetsThere site={site} who={who} setWho={setWho} data={segments} steps={funnel.data.steps} goals={goals} outcome={outcome} average={average} />
         <RoutesCard site={site} data={routes} outcome={outcome} average={average} range={range} />
         <p class="nx-rawlink muted small">
@@ -107,11 +115,22 @@ export function JourneysPage({ site, params }) {
       actions={
         <span class="nx-head-ctl">
           {outcome && <span class="chip" title="The site’s outcome goal">{outcome.label}</span>}
-          <a class="btn" href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a>
+          <button class="btn" type="button" onClick={() => setEditing(true)}>Edit steps</button>
           <Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />
         </span>
       }>
-      {body}
+      {editingMode ? (
+        <Editor
+          site={site}
+          steps={effSteps}
+          setSteps={setDraft}
+          apply={() => { setEditing(false); }}
+          declared={declared}
+          eventNames={(events.data?.events || []).map((e) => e.name)}
+          run={effSteps}
+          label={labeller(goals)}
+        />
+      ) : body}
     </Page>
   );
 }
@@ -134,7 +153,7 @@ function Answer({ steps, goals, outcome }) {
 }
 
 // Steps down the goal, with the drop between each one.
-export function Stairs({ steps, goals, site, range, outcome, bare }) {
+export function Stairs({ steps, goals, site, range, outcome, bare, onEdit }) {
   const first = steps[0]?.sessions || 0;
   const content = (
     <>
@@ -162,7 +181,11 @@ export function Stairs({ steps, goals, site, range, outcome, bare }) {
           ];
         }).flat()}
       </div>
-      <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a></p>
+      <p class="note">Steps for “{outcome.label}” come from the site’s file or a suggestion. {onEdit ? (
+        <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`} onClick={(e) => { e.preventDefault(); onEdit(); }}>Edit steps</a>
+      ) : (
+        <a href={`#/site/${site.id}/journeys?tab=funnels&range=${range}&edit=1`}>Edit steps</a>
+      )}</p>
     </>
   );
   if (bare) return <>{content}</>;
