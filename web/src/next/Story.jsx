@@ -551,6 +551,12 @@ const GROUPS = [
   { key: 'grow', label: 'Bring more visits', icon: 'trend' },
 ];
 
+// Only the reason: Outcomes' findings carry their advice after "Do:", which
+// goes onto the to-do (detail) rather than the list.
+const brief = (why) => String(why || '').split(/\s+Do:\s/)[0].trim();
+
+// A plain list: what to change, why in one line, what it's worth, and one
+// button. The title opens the place to make the change.
 function NextSteps({ site, range }) {
   const next = useAsync(() => api.get(`/sites/${site.id}/next-steps${qs({ range })}`), [site.id, range]);
   const todos = useTodos({ site: site.id });
@@ -563,31 +569,25 @@ function NextSteps({ site, range }) {
   return (
     <section class="card card-plain nx-next" aria-label="What to do next">
       <SectionHead title="What to do next" more={{ href: `#/site/${site.id}/todos`, label: open ? `Your to-dos (${open})` : 'Your to-dos' }} />
-      <p class="muted">{steps.length
-        ? 'From this period’s numbers. Add one to your to-dos, and tick it off when the change is live: it goes on the Timeline that day, so you can see whether it worked.'
-        : 'Nothing stands out for this period. Add your own changes to your to-dos.'}</p>
+      {!steps.length && <p class="muted m-0">Nothing stands out for this period.</p>}
       {GROUPS.map((g) => {
         const list = steps.filter((x) => x.group === g.key);
         if (!list.length) return null;
         return (
-          <div class="nx-step-group" key={g.key}>
-            <div class="nx-label-sm"><Icon name={g.icon} size={12} /> {g.label}</div>
-            <div class="nx-actions">
-              {list.map((x) => {
-                const todo = added.get(x.key);
-                return (
-                  <div class={`nx-action${todo ? ' started' : ''}`} key={x.key}>
+          <div class="nx-nlist-group" key={g.key}>
+            <h3 class="nx-nlist-lbl">{g.label}</h3>
+            <ul class="nx-nlist">
+              {list.map((x) => (
+                <li class="nx-nrow" key={x.key}>
+                  <a class="nx-nmain" href={x.link} title={x.linkLabel} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>
                     <b>{x.title}</b>
-                    <span class="muted">{x.why}</span>
-                    {x.worth && <dl class="nx-kv"><dt>{g.key === 'fix' ? 'Lost' : 'Worth'}</dt><dd class={g.key === 'fix' ? 'bad' : 'good'}>{x.worth}</dd></dl>}
-                    <div class="nx-action-row">
-                      <a class="btn" href={x.link} {...(x.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>{x.linkLabel}</a>
-                      <AddTodo site={site} added={todo} class="btn ghost" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                    <span>{brief(x.why)}</span>
+                  </a>
+                  <span class="nx-nworth">{x.worth || ''}</span>
+                  <AddTodo site={site} added={added.get(x.key)} class="btn" label="Add to to-dos" todo={{ title: x.title, detail: x.why, link: x.link, from: x.key, subject: x.subject, baseline: x.baseline }} />
+                </li>
+              ))}
+            </ul>
           </div>
         );
       })}

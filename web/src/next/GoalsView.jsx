@@ -59,7 +59,7 @@ export function GoalsView({ site, range }) {
       <div class="nx-cards2">
         <a class="card card-plain nx-linkcard" href={`#/site/${site.id}/goals?tab=results`}>
           <span class="nx-label-sm">Results</span>
-          <span>What {site.label}’s visits led to: downloads, installs, sign-ups, and what to do about it.</span>
+          <span>What {site.label}’s visits led to: downloads, installs, sign-ups, and what stands out.</span>
           <span class="nx-go">See results →</span>
         </a>
         {site.modes?.warehouse && (

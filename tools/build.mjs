@@ -120,7 +120,7 @@ ${ld.map(jsonLd).join('\n')}
 <a class="skip" href="#main">${skip}</a>
 <header class="top"><div class="wrap">
   <div class="brand"><a class="home-link" href="${APP}/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a><a class="tag" href="${href('')}">free tools</a></div>
-  <nav aria-label="Main"><a href="${href('')}">Tools</a><a href="${ghref('')}">Guides</a><a href="${APP}/demo">Demo</a><a class="btn amber small" href="${APP}">Try Kauzl</a></nav>
+  <nav aria-label="Main"><a href="${href('')}">Tools</a><a href="${ghref('')}">Guides</a><a href="${APP}/tour/">Look inside</a><a class="btn amber small" href="#early-access">Get early access</a></nav>
 </div></header>
 ${band}
 <main class="wrap" id="main">${body}</main>
@@ -134,12 +134,21 @@ ${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}?v=${ASSET_V
   return html;
 }
 
-function cta(c = {}) {
-  return `<aside class="cta" aria-label="About Kauzl">
+// Kauzl is invite-only: the call to action is the early-access form, posted to
+// the app's /waitlist (same origin when the tools are served at kauzl.com/tools/).
+// from= records where people joined: tools or guides.
+function cta(c = {}, from = 'tools') {
+  return `<aside class="cta" id="early-access" aria-label="Get early access to Kauzl">
 <div class="cta-copy">${owl(56, { variant: 'paper' })}
 <h2>${c.title || 'You shipped it. Did it work?'}</h2>
 <p>${c.text || 'Kauzl lines up every change you ship with what happened next: traffic, search, mentions and AI answers. A straight answer, not another dashboard.'}</p>
-<a class="btn amber" href="${APP}">Try Kauzl free</a></div>
+<form class="join" method="post" action="${APP}/waitlist">
+<input type="hidden" name="from" value="${from}">
+<label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+<input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" aria-label="Your email">
+<button class="btn amber" type="submit">Get early access</button>
+</form>
+<p class="fine">Kauzl is opening to a few teams at a time. <a href="${APP}/tour/">Look inside first</a> · <a href="${APP}/login">Sign in</a></p></div>
 <div class="cta-chart" aria-hidden="true"><span class="lbl">Your last launch</span>
 <div class="bars"><i class="b"></i><i class="a"></i></div><div class="keys"><span>Before</span><span>After</span></div></div>
 </aside>`;
@@ -199,7 +208,7 @@ ${g.inShort?.length ? `<aside class="in-short"><p class="lbl">In short</p><ul>${
 ${g.body}
 ${g.faq?.length ? `<h2>Questions</h2><div class="faq">${g.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : ''}
 </article>
-${cta(g.cta)}
+${cta(g.cta, 'guides')}
 ${tools.length ? `<h2 class="section-title">Free tools for this</h2><div class="grid">${tools.map(tile).join('')}</div>` : ''}
 <h2 class="section-title">More guides</h2>
 <div class="grid">${others.map(guideTile).join('')}</div>`;
@@ -226,7 +235,7 @@ function guidesIndex(guides) {
 </div></section>`;
   const body = `<section class="group"><h2 class="section-title">All guides</h2><p class="section-sub">${guides.length} guides, newest ideas first.</p>
 <div class="grid">${guides.map(guideTile).join('')}</div></section>
-${cta()}`;
+${cta({}, 'guides')}`;
   return layout({
     canonical: gurl(''), page: 'index:guides', skip: 'Skip to the guides', title: 'Analytics Guides: GA4, UTMs, AI Traffic, A/B Tests | Kauzl',
     description: 'Plain-English guides to Google Analytics 4, UTM parameters, ChatGPT and AI traffic, AI crawlers, Search Console and A/B testing, each with a free tool.',
@@ -339,7 +348,7 @@ ${pages.map((p) => `- [${p.name}](${url(p.slug)}): ${p.description}`).join('\n')
 ## Kauzl
 
 - [Home](${SITE}/): what Kauzl does
-- [Live demo](${SITE}/demo): a real site's analytics, view only
+- [Look inside](${SITE}/tour/): the Kauzl app with sample data, no sign-up
 `;
 await writeFile(path.join(here, 'dist', 'llms.txt'), llms);
 

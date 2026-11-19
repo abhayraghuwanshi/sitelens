@@ -459,7 +459,7 @@ export function createGateway({
       if (form.get('website')) return seeOther(res, '/waitlist?joined=1');
       const email = cleanEmail(form.get('email'));
       if (!email) return seeOther(res, `/waitlist?error=${encodeURIComponent('That doesn’t look like an email address.')}`);
-      const from = ['home', 'login', 'waitlist'].includes(form.get('from')) ? form.get('from') : 'waitlist';
+      const from = ['home', 'login', 'waitlist', 'tools', 'guides'].includes(form.get('from')) ? form.get('from') : 'waitlist';
       const known = db.prepare('SELECT 1 FROM waitlist WHERE email = ?').get(email);
       if (!known && waitlistBusy()) return seeOther(res, `/waitlist?error=${encodeURIComponent('Lots of requests right now. Try again in a little while.')}`);
       joinWaitlist(email, from);

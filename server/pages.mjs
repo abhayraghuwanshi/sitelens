@@ -112,12 +112,12 @@ export function loginPage(error, { tools = false, ga = '', joined = false, v = '
 }
 
 // /waitlist: the form on its own, the thank-you, or what went wrong.
-const JOIN_SOURCES = new Set(['home', 'login', 'waitlist']);
+const JOIN_SOURCES = new Set(['home', 'login', 'waitlist', 'tools', 'guides']);
 export function waitlistPage({ joined = '', error = '', tools = false, ga = '', v = '' } = {}) {
   const inner = joined
     ? `<h1>You’re on the list</h1>
   <p class="lead">Thanks. We’ll email you when your spot opens, with a link to sign in.</p>
-  <div class="links"><a class="opt" href="/demo"><span><b>Look around the demo meanwhile</b><small>No sign-in needed</small></span>${ARROW}</a>
+  <div class="links"><a class="opt" href="/tour/"><span><b>Look inside meanwhile</b><small>Sample data, no sign-in needed</small></span>${ARROW}</a>
   ${tools ? `<a class="opt" href="/tools/"><span><b>Try the free tools</b><small>They run in your browser</small></span>${ARROW}</a>` : ''}</div>`
     : `<h1>Get early access</h1>
   <p class="lead">Kauzl is in early access. Leave your email and we’ll invite you as spots open.</p>

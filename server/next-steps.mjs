@@ -88,7 +88,7 @@ export function buildNextSteps({ siteId, rangeKey = '28d', story = null, search 
   }
 
   // Convert: what Outcomes says is broken or leaking.
-  for (const i of insights.filter((x) => x.tone === 'bad' || x.tone === 'warn').slice(0, 3)) {
+  for (const i of insights.filter((x) => x.tone === 'bad' || x.tone === 'warn')) {
     steps.push({
       key: `outcome:${i.key}`, group: 'convert', subject: { kind: 'outcome', key: i.key }, title: i.title,
       why: [i.detail, i.action && `Do: ${i.action}`].filter(Boolean).join(' '),

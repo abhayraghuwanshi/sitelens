@@ -339,6 +339,23 @@ button.nx-ssum-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .nx-back { display: inline-block; margin-bottom: 4px; font-size: var(--text-md); color: var(--accent); text-decoration: none; }
 .nx-back:hover { text-decoration: underline; }
 .nx-step-group { display: flex; flex-direction: column; gap: 4px; }
+/* Story's "What to do next": a plain list, one row per change. */
+.nx-nlist-group + .nx-nlist-group { margin-top: 8px; }
+.nx-nlist-lbl { margin: 0 0 2px; font-size: var(--text-sm); font-weight: 500; color: var(--text-3); }
+.nx-nlist { list-style: none; margin: 0; padding: 0; }
+.nx-nrow { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 6px 20px; align-items: center; padding: 11px 0; border-top: 1px solid var(--border); }
+.nx-nmain { display: grid; gap: 2px; min-width: 0; color: inherit; text-decoration: none; }
+.nx-nmain b { font-weight: 600; }
+.nx-nmain:hover b { text-decoration: underline; text-underline-offset: 3px; }
+.nx-nmain span { color: var(--text-3); font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nx-nworth { color: var(--text-3); font-size: var(--text-sm); white-space: nowrap; font-variant-numeric: tabular-nums; }
+.nx-nrow .btn.done { border-color: var(--border); color: var(--text-3); }
+.nx-nrow-2 { grid-template-columns: minmax(0, 1fr) auto; }
+@media (max-width: 720px) {
+  .nx-nrow { grid-template-columns: minmax(0, 1fr) auto; }
+  .nx-nrow .nx-nworth { grid-row: 2; }
+  .nx-nmain span { white-space: normal; }
+}
 .nx-step-group .nx-label-sm { display: flex; align-items: center; gap: 6px; }
 
 .nx-link { padding: 0; border: 0; background: none; color: var(--accent); font: inherit; cursor: pointer; }

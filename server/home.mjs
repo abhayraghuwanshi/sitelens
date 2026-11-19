@@ -23,12 +23,25 @@ import { SCENARIOS, scene, chartSvg } from './home-play.js';
 // The hero's first scenario, drawn finished into the HTML; /home-play.js makes it playable.
 const FIRST = scene(SCENARIOS[0]);
 
+// Questions people ask before signing up. Plain text answers (also FAQPage
+// data): under 320 characters, each starting with its subject (tools/seo-rules.mjs).
+const FAQ = [
+  ['What is Kauzl?', 'Kauzl is analytics for people who ship. It reads Google Analytics 4, Search Console and Bing, puts your releases, posts and campaigns on the same timeline, and says what changed, why, and what to do next.'],
+  ['Does Kauzl replace Google Analytics?', 'No. Kauzl reads the analytics you already have and adds the why: which release, post or campaign moved the numbers. Keep GA4 or Vercel Web Analytics counting visits.'],
+  ['Do I need to add a tracking script?', 'No. Kauzl adds no script to your site. It connects to the tools you already use, read-only, so there is nothing to install and nothing new for visitors to block.'],
+  ['What access does Kauzl need?', 'Kauzl asks Google for read-only access to the Analytics property and Search Console site you pick. GitHub, Reddit, the Chrome Web Store and the other sources are optional, and you add only the ones you use.'],
+  ['Does Kauzl work without Google Analytics?', 'Yes, from Search Console alone. The Story then uses search clicks instead of visits. Add GA4, Vercel Web Analytics or Firebase later to see every source.'],
+  ['Can I ask Claude or Cursor about my traffic?', 'Yes. Kauzl is an MCP server, so Claude Code, Claude Desktop, Cursor and other MCP agents can read your numbers, explain a dip and work through your to-dos.'],
+  ['How do I get access?', 'Kauzl is opening to a few teams at a time. Leave your email and we’ll send an invite with a link to sign in. Until then, look inside with sample data, no sign-up needed.'],
+];
+
 // What Kauzl is, for search engines and AI assistants (tools/seo-rules.mjs checks it).
 const LD = JSON.stringify([
   { '@context': 'https://schema.org', '@type': 'Organization', name: 'Kauzl', url: 'https://kauzl.com/', logo: 'https://kauzl.com/tools/assets/og.png' },
   { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Kauzl', url: 'https://kauzl.com/' },
   { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Kauzl', applicationCategory: 'BusinessApplication', operatingSystem: 'Web',
     url: 'https://kauzl.com/', description: 'Analytics for people who ship: Kauzl reads Google Analytics 4, Search Console and Bing, puts releases, posts and campaigns on the same timeline, and says what changed and why.' },
+  { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQ.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
 ]).replace(/</g, '\\u003c');
 
 const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
@@ -97,22 +110,13 @@ const AGENT = {
         to-do to roll it back.</pre>`,
 };
 
-// "Plugs into what you ship with": every source Kauzl reads (left), what it
-// turns them into (right). Only real connectors (server/*.mjs).
+// "Plugs into what you ship with": every source Kauzl reads. Only real
+// connectors (server/*.mjs); your own numbers get their own card below.
 const HUB_IN = [
   ['Traffic', ['Google Analytics 4', 'Vercel Web Analytics', 'Firebase Hosting', 'BigQuery']],
   ['Search', ['Search Console', 'Bing Webmaster Tools', 'PageSpeed & CrUX']],
   ['What you ship', ['GitHub', 'Vercel deploys', 'Chrome Web Store']],
   ['Where people talk', ['Reddit', 'Hacker News', 'Product Hunt', 'Bluesky', 'Mastodon', 'Dev.to']],
-  ['Your own numbers', ['Cloudflare D1']],
-];
-const HUB_OUT = [
-  ['To-dos that report back', 'Every finding becomes a to-do. Tick it off and Kauzl checks, weeks later, whether it helped.', 'todos'],
-  ['A goal for every page', 'What each page is for, how it’s doing, and the next realistic target: page 2, then page 1, not “rank #1”.', 'pages'],
-  ['Search on Google and Bing', 'Where each page ranks on both, and what people search for. Bing also feeds Copilot, DuckDuckGo and ChatGPT search.', 'pages'],
-  ['Alerts that know a normal week', 'Drops and spikes against the same weekday, with a daily digest in Slack or Discord.', 'alerts'],
-  ['Verdicts on articles and posts', 'Content and Reddit cycles: grow, keep, improve or cut, every 14 days.', 'cycles'],
-  ['Answers in your agent', 'Every number over MCP, in Claude, Cursor and other MCP agents.', null],
 ];
 
 
@@ -142,15 +146,16 @@ const FREE_TOOLS = [
 
 const CSS = `
 :root { color-scheme: light; --ink: #121522; --ink-2: #1C2135; --ink-line: #2A3048; --ink-text: #C9CDD8; --amber: #F5A524; --before: #9AA1B2;
-  --bg: #F6F7F9; --surface: #FFFFFF; --sunk: #EEF0F4; --text: #121522; --text-2: #3A3F50; --muted: #5B6172; --line: #E3E6EC; --link: #A35F00;
-  --good: #1F7A3D; --good-soft: #E4F4E9; --amber-soft: #FDF1DC; --label: #A35F00; --label-ink: #F5A524;
+  --bg: #F6F7F9; --surface: #FFFFFF; --sunk: #EEF0F4; --text: #121522; --text-2: #3A3F50; --muted: #5B6172; --line: #E3E6EC; --link: #121522; --amber-text: #A35F00;
+  --good: #1F7A3D; --good-soft: #E4F4E9; --amber-soft: #FDF1DC; --label: #5B6172; --label-ink: #9AA1B2;
   --head: "Bricolage Grotesque", "Inter", system-ui, sans-serif; --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; }
 /* Dark: neutral charcoal, not navy; amber only for actions, the owl and "after". */
-@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #141519; --ink-2: #1B1C21; --ink-line: #2A2C33; --ink-text: #C4C4CC; --before: #8B8B94; --bg: #0E0F12; --surface: #17181D; --sunk: #111215; --text: #F4F4F5; --text-2: #D4D4D8; --muted: #A1A1AA; --line: #26282F; --link: #F4F4F5; --amber-soft: #1F2026; --label: #A1A1AA; --label-ink: #A1A1AA; --good: #5FD08A; --good-soft: #13291C; } }
+@media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #141519; --ink-2: #1B1C21; --ink-line: #2A2C33; --ink-text: #C4C4CC; --before: #8B8B94; --bg: #0E0F12; --surface: #18191E; --sunk: #111215; --text: #F4F4F5; --text-2: #D4D4D8; --muted: #A1A1AA; --line: #2C2E36; --link: #F4F4F5; --amber-text: #F5A524; --amber-soft: #1F2026; --label: #A1A1AA; --label-ink: #A1A1AA; --good: #5FD08A; --good-soft: #13291C; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.6 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--link); }
-h1, h2, h3 { font-family: var(--head); letter-spacing: -0.02em; line-height: 1.1; }
+h1, h2 { font-family: var(--head); letter-spacing: -0.02em; line-height: 1.1; }
+h3 { font-family: var(--font); font-weight: 600; letter-spacing: -0.01em; line-height: 1.3; }
 .wrap { max-width: 1120px; margin: 0 auto; padding-inline: 24px; }
 :focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
 
@@ -181,20 +186,20 @@ nav.links a:hover { color: #fff; }
 .hero::before, .final::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
 .hero::before { mask-image: linear-gradient(90deg, transparent, #000 60%); }
 .hero-in { position: relative; display: grid; grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr); gap: 56px; align-items: center; }
-.eyebrow { margin: 0 0 18px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--label-ink); }
+.eyebrow { margin: 0 0 18px; font: 500 15px var(--font); color: var(--ink-text); }
 .hero h1 { font-size: clamp(42px, 6.6vw, 76px); font-weight: 800; letter-spacing: -0.04em; line-height: 1.02; margin: 0 0 20px; }
 .hero h1 em { font-style: normal; color: var(--amber); }
 .lead { font-size: 19px; color: var(--ink-text); margin: 0 0 30px; max-width: 32em; }
 .ctas { display: flex; flex-wrap: wrap; gap: 12px; }
 .perks { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; margin: 22px 0 0; font-size: 14px; color: var(--ink-text); }
-.perks li { display: inline-flex; align-items: center; gap: 6px; } .perks svg { color: var(--label-ink); }
+.perks li { display: inline-flex; align-items: center; gap: 6px; } .perks svg { color: var(--ink-text); }
 
 /* "Ship it": the playable hero card, with the owl perched on top (home-play.js) */
 .play-wrap { position: relative; padding-top: 58px; }
 .play-wrap > svg.owl { position: absolute; top: 0; right: 36px; z-index: 2; filter: drop-shadow(0 10px 18px rgb(0 0 0 / .35)); }
 .play { position: relative; margin: 0; background: var(--surface); color: var(--text); border-radius: 22px; padding: 20px 22px 22px; box-shadow: 0 30px 70px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .04); }
 .play-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
-.play-top .sample { font-weight: 600; color: var(--link); background: var(--amber-soft); padding: 1px 9px; border-radius: 99px; }
+.play-top .sample { font-weight: 600; color: var(--amber-text); background: var(--amber-soft); padding: 1px 9px; border-radius: 99px; }
 .ship { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 2px; }
 .ship[hidden] { display: none; }
 .ship-lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
@@ -233,31 +238,30 @@ nav.links a:hover { color: #fff; }
 .tag { flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 6px; background: var(--ink); color: var(--amber); }
 
 /* sections */
-section { padding: 112px 0 0; }
-.kicker { margin: 0 0 8px; font: 600 13px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--label); }
-h2.title { font-size: clamp(30px, 4vw, 44px); font-weight: 800; letter-spacing: -0.035em; margin: 0 0 10px; }
-p.sub { color: var(--text-2); margin: 0 0 32px; max-width: 40em; font-size: 17px; }
+section { padding: 128px 0 0; }
+.kicker { margin: 0 0 10px; font: 500 15px var(--font); color: var(--muted); }
+h2.title { font-size: clamp(28px, 3.2vw, 38px); font-weight: 800; letter-spacing: -0.03em; margin: 0 0 14px; }
+p.sub { color: var(--muted); margin: 0 0 40px; max-width: 36em; font-size: 17px; line-height: 1.6; }
 .grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
 .card { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 24px; box-shadow: 0 1px 2px rgb(18 21 34 / .04); }
-.card h3 { margin: 16px 0 8px; font-size: 19px; }
-.card p { margin: 0; color: var(--text-2); font-size: 15px; }
+.card h3 { margin: 16px 0 6px; font-size: 17px; }
+.card p { margin: 0; color: var(--muted); font-size: 15px; }
 /* What's inside: one panel. The questions are radio tabs (no script), the
    unpicked ones a hollow "before" eye, the picked one the filled "after" eye;
    the answers share one grid cell, so switching never moves the page. */
 .qa { display: grid; grid-template-columns: minmax(0, .9fr) minmax(0, 1.1fr); gap: 32px 48px; align-items: center; position: relative; }
 .qa-r { position: absolute; opacity: 0; pointer-events: none; width: 1px; height: 1px; }
 .qa-list { display: flex; flex-direction: column; gap: 4px; }
-.qa-tab { display: block; position: relative; padding: 16px 18px 16px 44px; border-radius: 16px; cursor: pointer; transition: background .2s; }
+.qa-tab { display: block; position: relative; padding: 14px 18px 14px 44px; border-radius: 16px; cursor: pointer; transition: background .2s; }
 .qa-tab:hover { background: var(--surface); }
-.qa-tab::before { content: ""; position: absolute; left: 16px; top: 19px; width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid var(--before); box-sizing: border-box; transition: border-color .2s, background .2s, transform .2s; }
-.qa-n { display: block; margin: 0 0 4px; font: 600 12px var(--font); letter-spacing: .08em; text-transform: uppercase; color: var(--muted); }
-.qa-qt { display: block; font: 800 clamp(19px, 2vw, 24px)/1.15 var(--head); letter-spacing: -0.03em; color: var(--muted); transition: color .2s; }
+.qa-tab::before { content: ""; position: absolute; left: 16px; top: 17px; width: 14px; height: 14px; border-radius: 50%; border: 2.5px solid var(--before); box-sizing: border-box; transition: border-color .2s, background .2s, transform .2s; }
+.qa-n { display: block; margin: 0 0 3px; font: 500 13px var(--font); color: var(--muted); }
+.qa-qt { display: block; font: 600 17px/1.35 var(--font); letter-spacing: -0.01em; color: var(--text-2); transition: color .2s; }
 ${QA.map((_, i) => `#qa-${i + 1}:checked ~ .qa-list [for=qa-${i + 1}]`).join(',\n')} { background: var(--surface); box-shadow: 0 1px 2px rgb(18 21 34 / .05), 0 10px 28px rgb(18 21 34 / .07); }
 .qa-tab:is(${QA.map((_, i) => `#qa-${i + 1}:checked ~ .qa-list [for=qa-${i + 1}]`).join(', ')})::before { border-color: var(--amber); background: var(--amber); transform: scale(1.15); }
 :is(${QA.map((_, i) => `#qa-${i + 1}:checked ~ .qa-list [for=qa-${i + 1}]`).join(', ')}) .qa-qt { color: var(--text); }
 ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).join(',\n')} { outline: 2px solid var(--amber); outline-offset: 2px; }
 .qa-panels { display: grid; position: relative; }
-.qa-panels::before { content: ""; position: absolute; inset: -12% -8%; background: radial-gradient(closest-side, rgb(245 165 36 / .22), transparent); filter: blur(10px); z-index: -1; pointer-events: none; }
 .qa-panels > .qa-a { grid-area: 1 / 1; visibility: hidden; opacity: 0; }
 .qa-panels > .qa-a:is(${QA.map((_, i) => `#qa-${i + 1}:checked ~ .qa-panels .p${i + 1}`).join(', ')}) { visibility: visible; opacity: 1; animation: qa-in .45s cubic-bezier(.2, .8, .2, 1); }
 .qa-panels > .qa-a { box-shadow: 0 1px 2px rgb(18 21 34 / .04), 0 30px 60px rgb(18 21 34 / .12); }
@@ -268,11 +272,11 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .verdict { margin-left: auto; display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; padding: 4px 10px; border-radius: 99px; }
 .verdict::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; }
 .verdict.good { color: var(--good); background: var(--good-soft); }
-.verdict.amber { color: var(--link); background: var(--amber-soft); }
+.verdict.amber { color: var(--amber-text); background: var(--amber-soft); }
 .verdict.muted { color: var(--muted); background: var(--sunk); }
 .verdict.bad { color: #C62F35; background: #FDECEC; }
-.qa-text { margin: 0 0 16px; font: 600 19px/1.4 var(--font); letter-spacing: -0.01em; color: var(--text); }
-.qa-text b { box-shadow: inset 0 -.42em 0 rgb(245 165 36 / .38); }
+.qa-text { margin: 0 0 16px; font: 400 17px/1.5 var(--font); color: var(--text-2); }
+.qa-text b { font-weight: 650; color: var(--text); }
 .b-vis { background: var(--sunk); border-radius: 14px; padding: 16px; font-size: 13px; min-width: 0; }
 .qa-go { display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--link); text-decoration: none; }
 .qa-go:hover { text-decoration: underline; }
@@ -282,7 +286,7 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .tour-full a { color: var(--link); font-weight: 600; text-decoration: none; }
 @media (max-width: 760px) { .tour-frame iframe { height: 720px; } }
 .qa-claude { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 20px 56px; align-items: center; margin-top: 40px; background: var(--ink); color: #F6F7F9; border: 1px solid var(--ink-line); border-radius: 24px; padding: 36px; }
-.qa-claude h3 { margin: 0 0 10px; font-size: clamp(28px, 3.4vw, 40px); font-weight: 800; letter-spacing: -0.035em; color: #F6F7F9; }
+.qa-claude h3 { margin: 0 0 10px; font-family: var(--head); font-size: clamp(26px, 3vw, 34px); font-weight: 800; letter-spacing: -0.035em; color: #F6F7F9; }
 .qa-claude h3 em { font-style: normal; color: var(--amber); }
 .qa-claude p { margin: 0; color: var(--ink-text); }
 .qa-claude .b-vis { background: #0B0C0F; border: 1px solid var(--ink-line); }
@@ -302,7 +306,7 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .v-week .day { display: flex; flex-direction: column; align-items: center; justify-content: flex-end; height: 100%; gap: 4px; }
 .v-week i { display: block; width: 100%; border-radius: 6px 6px 3px 3px; background: var(--before); }
 .v-week .has i { background: var(--amber); }
-.v-week .mark { font-size: 10px; font-weight: 700; color: var(--label); min-height: 14px; }
+.v-week .mark { font-size: 10px; font-weight: 700; color: var(--amber-text); min-height: 14px; }
 .v-week .d { font-size: 11px; color: var(--muted); }
 .v-cyc { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .v-cyc th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px 0; }
@@ -314,7 +318,7 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .v-cyc th:nth-child(n+2):not(:last-child) { text-align: center; } .v-cyc:not(.v-sub) td:nth-child(n+2):nth-child(-n+4) i { margin: 0 auto; }
 .v-sub th:nth-child(n+2):not(:last-child) { text-align: right; padding-right: 12px; }
 .vp { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
-.vp.good { color: var(--good); background: var(--good-soft); } .vp.amber { color: var(--link); background: var(--amber-soft); } .vp.bad { color: #C62F35; background: #FDECEC; }
+.vp.good { color: var(--good); background: var(--good-soft); } .vp.amber { color: var(--amber-text); background: var(--amber-soft); } .vp.bad { color: #C62F35; background: #FDECEC; }
 .v-camp { width: 100%; border-collapse: collapse; }
 .v-camp td { padding: 6px 0; } .v-camp td:first-child { white-space: nowrap; padding-right: 10px; color: var(--text-2); }
 .v-camp .bar { width: 50%; } .v-camp .bar i { display: block; height: 10px; border-radius: 4px; background: var(--amber); }
@@ -332,66 +336,81 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
    tracker's grey number and turns into Kauzl's sentence as it scrolls in. */
 section.band { position: relative; margin-top: 112px; padding: 96px 0; background: var(--ink); color: #F6F7F9; overflow: hidden; }
 section.band::before { content: ""; position: absolute; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; mask-image: radial-gradient(ellipse at 80% 20%, #000, transparent 70%); pointer-events: none; }
-section.band::after { content: ""; position: absolute; width: 560px; height: 560px; right: -160px; top: -200px; background: radial-gradient(closest-side, rgb(245 165 36 / .18), transparent); pointer-events: none; }
 section.band .wrap { position: relative; z-index: 1; }
 section.band .kicker { color: var(--label-ink); } section.band h2.title { color: #F6F7F9; } section.band p.sub { color: var(--ink-text); }
-.ledger { border-top: 1px solid var(--ink-line); }
-.l-row { display: grid; grid-template-columns: minmax(0, .8fr) minmax(0, 1.2fr); align-items: center; border-bottom: 1px solid var(--ink-line); }
-.l-row > span { padding: 22px 0; font-size: 17px; }
-.l-row > span:first-child { color: #8B90A0; padding-right: 24px; font-variant-numeric: tabular-nums; }
-.l-row > span:last-child { color: var(--ink-text); position: relative; padding-left: 30px; }
-.l-row .arrow { position: absolute; left: 0; font-style: normal; font-weight: 700; color: var(--amber); }
-.l-row b { color: #F6F7F9; box-shadow: inset 0 -.38em 0 rgb(245 165 36 / .35); }
-.l-head > span { padding-block: 0 12px; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #8B90A0; }
-.l-head > span:last-child { color: var(--amber); }
-section.band .l-foot { color: var(--ink-text); } section.band .l-foot a { color: var(--amber); }
+/* Four before/after cards: the tracker's grey line on top, Kauzl's sentence below. */
+.pairs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.pair { margin: 0; background: var(--ink-2); border: 1px solid var(--ink-line); border-radius: 18px; overflow: hidden; }
+.pair .says { display: flex; align-items: baseline; gap: 10px; margin: 0; padding: 14px 20px; border-bottom: 1px dashed var(--ink-line); color: #8B90A0; font-size: 15px; font-variant-numeric: tabular-nums; }
+.pair .says span { flex: none; font-size: 12.5px; font-weight: 500; padding: 1px 8px; border-radius: 99px; border: 1px solid var(--ink-line); }
+.pair .adds { display: flex; gap: 12px; align-items: flex-start; margin: 0; padding: 18px 20px 20px; color: var(--ink-text); font-size: 17px; line-height: 1.45; }
+.pair .adds .who { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: #0B0C0F; border: 1px solid var(--ink-line); flex: none; margin-top: -2px; }
+.pair b { color: #F6F7F9; font-weight: 600; }
+section.band .l-foot { color: var(--ink-text); } section.band .l-foot a { color: #F6F7F9; }
 .l-foot { margin: 14px 0 0; color: var(--muted); font-size: 14px; } .l-foot a { color: var(--link); font-weight: 600; }
 
-/* Plugs into: sources → the owl → what comes out. Dashes flow toward the owl. */
-.hub { display: grid; grid-template-columns: minmax(0, 1fr) 150px minmax(0, 1.05fr); gap: 0 44px; align-items: center; }
-.hub-in { display: flex; flex-direction: column; gap: 10px; }
-.hub-grp { position: relative; z-index: 1; background: var(--surface); border: 1px solid var(--line); border-radius: 16px; padding: 12px 14px; }
-.hub-grp::after, .hub-out li::before { content: ""; position: absolute; top: 50%; width: 119px; height: 2px; background: repeating-linear-gradient(90deg, var(--amber) 0 5px, transparent 5px 11px); opacity: .7; }
-.hub-grp::after { right: -120px; }
-.hub-lbl { margin: 0 0 8px; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: var(--muted); }
-.hub-grp ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
-.hub-grp li { font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 99px; background: var(--sunk); color: var(--text-2); }
-.hub-core { display: grid; justify-items: center; gap: 10px; position: relative; align-self: stretch; align-content: center; }
-.hub-core::before { content: ""; position: absolute; top: 4%; bottom: 4%; left: 50%; width: 2px; transform: translateX(-50%); background: linear-gradient(transparent, rgb(245 165 36 / .45) 12%, rgb(245 165 36 / .45) 88%, transparent); }
-.hub-ring { position: relative; z-index: 1; display: grid; place-items: center; width: 132px; height: 132px; border-radius: 50%; background: var(--ink); box-shadow: 0 0 0 10px rgb(245 165 36 / .12), 0 0 0 22px rgb(245 165 36 / .06), 0 24px 50px rgb(18 21 34 / .25); }
-.hub-word { position: relative; z-index: 1; font: 800 20px/1 var(--head); letter-spacing: -0.045em; background: var(--bg); padding: 2px 8px; }
-.hub-out { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
-.hub-out li { position: relative; }
-.hub-out a { z-index: 1; }
-.hub-out li::before { left: -120px; }
-.hub-out a { display: grid; gap: 2px; padding: 12px 16px 12px 44px; border-radius: 16px; background: var(--surface); border: 1px solid var(--line); color: inherit; text-decoration: none; position: relative; transition: border-color .15s, transform .15s, box-shadow .15s; }
-.hub-out a::before { content: ""; position: absolute; left: 16px; top: 15px; width: 14px; height: 14px; border-radius: 50%; background: var(--amber); box-shadow: 0 0 0 4px var(--amber-soft); }
-.hub-out a:hover { border-color: var(--amber); transform: translateX(3px); box-shadow: 0 12px 28px rgb(18 21 34 / .08); }
-.hub-out b { font: 800 16px/1.25 var(--head); letter-spacing: -0.02em; }
-.hub-out span { font-size: 13.5px; color: var(--text-2); line-height: 1.45; }
+/* Plugs into: four plain columns of sources, then your own numbers. */
+.srcs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 32px; border-top: 1px solid var(--line); padding-top: 24px; }
+.srcs h3 { margin: 0 0 12px; font-size: 15px; color: var(--muted); font-weight: 500; }
+.srcs ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; font-size: 15.5px; font-weight: 500; color: var(--text); }
+.own { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); gap: 24px 48px; align-items: center; margin-top: 40px; background: var(--surface); border: 1px solid var(--line); border-radius: 20px; padding: 28px 32px; }
+.own h3 { margin: 0 0 8px; font-size: 20px; }
+.own p { margin: 0; color: var(--muted); font-size: 15.5px; }
+.own ul { list-style: none; margin: 14px 0 0; padding: 0; display: grid; gap: 6px; font-size: 15px; color: var(--text-2); }
+.own li::before { content: "✓"; color: var(--good); font-weight: 700; margin-right: 8px; }
+.own li.soon::before { content: "○"; color: var(--muted); }
+.soon-tag { font-size: 12px; font-weight: 600; color: var(--amber-text); background: var(--amber-soft); padding: 1px 8px; border-radius: 99px; margin-left: 6px; }
+.own .v-term { background: #0B0C0F; border: 1px solid var(--ink-line); border-radius: 14px; padding: 16px 18px; font-size: 12.5px; }
 
-.steps { counter-reset: s; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; position: relative; }
-.steps .card::before { counter-increment: s; content: counter(s); display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; background: var(--amber); color: var(--ink); font: 800 17px var(--head); }
-.steps .card h3 { margin-top: 14px; }
+/* How it works: headline left, three numbered steps right on one rail; no cards. */
+.how { display: grid; grid-template-columns: minmax(0, .85fr) minmax(0, 1.15fr); gap: 32px 72px; align-items: start; }
+.how p.sub { margin-bottom: 0; }
+.steps { list-style: none; margin: 0; padding: 0; counter-reset: s; position: relative; }
+.steps li:not(:last-child)::after { content: ""; position: absolute; left: 21px; top: 44px; bottom: 0; width: 2px; background: var(--line); }
+.steps li { position: relative; display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 0 20px; padding-bottom: 32px; }
+.steps li:last-child { padding-bottom: 0; }
+.steps li::before { counter-increment: s; content: counter(s); position: relative; display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%; background: var(--surface); border: 2px solid var(--line); color: var(--text); font: 800 18px var(--head); }
+.steps li:last-child::before { background: var(--ink); border-color: var(--ink); color: var(--amber); }
+.steps h3 { margin: 9px 0 4px; font-size: 19px; }
+.steps p { margin: 0; color: var(--muted); font-size: 15.5px; max-width: 32em; }
+/* How it works sits on its own full-width band, a step lighter than the page,
+   so it never reads as the same block as the FAQ below. */
+section.soft { margin-top: 128px; padding: 96px 0; background: var(--surface); border-block: 1px solid var(--line); }
+section.soft .st-vis { background: var(--bg); box-shadow: none; }
+section.soft .steps li::before { background: var(--bg); }
+section.soft .steps li:last-child::before { background: var(--ink); }
+/* FAQ: one centred column; each question opens in place (no script). */
+.faq-wrap { max-width: 760px; }
+.faq-head { text-align: center; margin-bottom: 32px; }
+.faq-head h2.title { margin: 0; }
+.faq-more { text-align: center; }
+.faq { border-top: 1px solid var(--line); }
+.faq details { border-bottom: 1px solid var(--line); }
+.faq summary { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 18px 0; font-weight: 600; font-size: 17px; color: var(--text); cursor: pointer; list-style: none; }
+.faq summary::-webkit-details-marker { display: none; }
+.faq summary::after { content: "+"; flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--line); color: var(--muted); font: 500 18px/1 var(--font); transition: transform .2s, background .2s, color .2s; }
+.faq summary:hover::after { color: var(--text); border-color: var(--muted); }
+.faq details[open] summary::after { transform: rotate(45deg); background: var(--ink); border-color: var(--ink); color: var(--amber); }
+.faq details p { margin: -6px 0 0; padding: 0 44px 20px 0; color: var(--muted); font-size: 15.5px; max-width: 40em; }
+.faq-more { margin: 20px 0 0; color: var(--muted); font-size: 15px; } .faq-more a { color: var(--link); font-weight: 600; }
+
+/* Each step shows the screen you'll see: a small, plain picture, sample values. */
+.st-vis { margin-top: 14px; background: var(--surface); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; font-size: 13.5px; box-shadow: 0 1px 2px rgb(18 21 34 / .04); }
+.st-row { display: grid; grid-template-columns: 9.5em minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 7px 0; }
+.st-row + .st-row { border-top: 1px solid var(--line); }
+.st-row .k { color: var(--muted); }
+.st-row .v { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-ok { color: var(--good); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.st-add { color: var(--muted); font-size: 12px; font-weight: 600; white-space: nowrap; }
+.st-story { display: flex; gap: 10px; align-items: flex-start; }
+.st-story .who { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--ink); flex: none; }
+.st-story p { margin: 0; color: var(--text-2); font-size: 14px; max-width: none; }
+.st-story b { color: var(--text); }
 
 /* why an owl */
 
 
-.tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
-.tile { display: flex; flex-direction: column; text-decoration: none; color: var(--text); background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 22px; transition: border-color .15s, transform .15s, box-shadow .15s; }
-.tile:hover { border-color: var(--amber); transform: translateY(-2px); box-shadow: 0 14px 30px rgb(18 21 34 / .1); }
-.tile h3 { margin: 0 0 6px; font-size: 18px; }
-.tile p { margin: 0 0 14px; font-size: 14px; color: var(--text-2); flex: 1; }
-.tile .go { font-size: 14px; font-weight: 600; color: var(--link); }
-.sec-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 16px; }
-.all { flex: none; font-size: 15px; font-weight: 600; color: var(--link); text-decoration: none; white-space: nowrap; } .all:hover { text-decoration: underline; }
-.sec-head .all { margin-bottom: 34px; }
-.guides { display: flex; align-items: center; gap: 12px 18px; flex-wrap: wrap; margin-top: 16px; padding: 14px 18px; border: 1px solid var(--line); border-radius: 16px; background: var(--surface); }
-.guides .lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
-.guides .chips { display: flex; flex-wrap: wrap; gap: 8px; flex: 1; }
-.guides .chips a { padding: 6px 12px; border-radius: 99px; background: var(--sunk); border: 1px solid var(--line); color: var(--text-2); font-size: 14px; text-decoration: none; transition: border-color .15s, color .15s; }
-.guides .chips a:hover { border-color: var(--amber); color: var(--text); }
-.tile .kick { font-size: 12px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--label); }
+
 
 .final { position: relative; overflow: hidden; display: grid; justify-items: center; text-align: center; background: var(--ink); color: #F6F7F9; border-radius: 28px; padding: 44px; }
 .final > * { position: relative; }
@@ -405,13 +424,15 @@ section.band .l-foot { color: var(--ink-text); } section.band .l-foot a { color:
 .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
 .final .fine { margin: 14px auto 0; font-size: 14px; } .final .fine a { color: #F6F7F9; } .final .ctas { justify-content: center; } .final svg.owl { margin: 0 auto; }
 
-footer { margin-top: 72px; padding: 36px 0 48px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
-footer .wrap { display: flex; justify-content: space-between; align-items: center; gap: 16px 32px; flex-wrap: wrap; }
-.foot-brand { display: flex; gap: 12px; align-items: center; }
-.foot-brand p { margin: 0; } .foot-brand .why { margin-top: 6px; max-width: 34em; font-size: 13px; } .foot-brand .word { font-size: 22px; color: var(--text); }
-footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: var(--muted); text-decoration: none; } footer nav a:hover { color: var(--text); }
+footer { margin-top: 96px; padding: 48px 0 56px; border-top: 1px solid var(--line); color: var(--muted); font-size: 14px; }
+footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, minmax(0, 1fr)); gap: 32px; align-items: start; }
+.foot-brand { display: flex; gap: 12px; align-items: flex-start; }
+.foot-brand p { margin: 0; } .foot-brand .why { margin-top: 6px; max-width: 30em; font-size: 13px; } .foot-brand .word { font-size: 22px; color: var(--text); }
+.foot-col h2 { margin: 0 0 12px; font: 600 14px var(--font); letter-spacing: 0; color: var(--text); }
+.foot-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 9px; }
+.foot-col a { color: var(--muted); text-decoration: none; } .foot-col a:hover { color: var(--text); }
 /* Motion: the hero acts out before → after once; answers animate when picked;
-   ledger rows turn over as they scroll in (where the browser supports it). */
+   before/after cards turn over as they scroll in (where the browser supports it). */
 .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 @keyframes qa-in { from { opacity: 0; transform: translateY(14px) scale(.985); } }
 @keyframes draw { from { stroke-dashoffset: 1; } }
@@ -426,8 +447,6 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
 @keyframes nudge { 0%, 100% { transform: none; } 10% { transform: translateY(-3px); } 20% { transform: none; } }
 @keyframes drop { 0% { transform: translateY(-40px); opacity: 0; } 60% { transform: translateY(3px); opacity: 1; } }
 @media (prefers-reduced-motion: no-preference) {
-  .hub-grp::after, .hub-out li::before { animation: flow .9s linear infinite; }
-  .hub-ring { animation: breathe 3.2s ease-in-out infinite; }
   .play.shipping .pc-flag > * { animation: drop .5s cubic-bezier(.3, 1.4, .5, 1) both; }
   .play.shipping .pc-band, .play.shipping .pc-base, .play.shipping .pc-normal { animation: fade-up .5s .5s both; }
   .play.shipping .pc-after { stroke-dasharray: 1; animation: draw 1.1s .55s cubic-bezier(.5, 0, .3, 1) both; }
@@ -453,20 +472,17 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
     & .vp { animation: pop .4s .45s both; }
   }
   @supports (animation-timeline: view()) {
-    .l-row:not(.l-head) > span:last-child { animation: turn linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
-    .l-row:not(.l-head) > span:first-child { animation: dim linear both; animation-timeline: view(); animation-range: entry 0% cover 25%; }
+    .pair .adds { animation: turn linear both; animation-timeline: view(); animation-range: entry 0% cover 30%; }
   }
 }
 @media (prefers-color-scheme: dark) {
   .final, .tag { border: 1px solid var(--ink-line); }
-  .verdict.amber { color: var(--amber); }
-  .verdict.bad, .vp.bad { color: #FF8A8E; background: #2A1416; } .vp.amber { color: var(--amber); }
+  .verdict.bad, .vp.bad { color: #FF8A8E; background: #2A1416; } 
   .ship button[aria-pressed=true] { background: var(--amber); border-color: var(--amber); color: #121522; }
   .ship button[aria-pressed=true]::before { color: #121522; }
-  .hub-ring { border: 1px solid var(--line); }
-  .hub-ring svg.owl path:first-child { fill: #F6F7F9; }
   .play { box-shadow: 0 30px 70px rgb(0 0 0 / .5), 0 0 0 1px var(--line); }
-  .play-say .who { border: 1px solid var(--line); }
+  .play-say .who, .st-story .who { border: 1px solid var(--line); }
+  .steps li:last-child::before { border-color: #3A3C45; }
   section.band { border-block: 1px solid var(--ink-line); }
   /* Ink owls would vanish on dark cards: draw them light. */
   .foot-brand svg.owl path:first-child { fill: #F6F7F9; }
@@ -476,15 +492,16 @@ footer nav { display: flex; gap: 18px; flex-wrap: wrap; } footer nav a { color: 
 @media (max-width: 900px) {
   .hero-in { grid-template-columns: minmax(0, 1fr); }
   .hero { padding: 44px 0 100px; }
-  .grid, .steps, .tiles { grid-template-columns: minmax(0, 1fr); }
+  .grid, .how { grid-template-columns: minmax(0, 1fr); }
+  footer .wrap { grid-template-columns: repeat(2, minmax(0, 1fr)); } .foot-brand { grid-column: 1 / -1; }
+  .st-row { grid-template-columns: minmax(0, 1fr) auto; } .st-row .k { grid-column: 1 / -1; font-size: 12px; }
   .qa, .qa-claude { grid-template-columns: minmax(0, 1fr); gap: 16px; }
-  .hub { grid-template-columns: minmax(0, 1fr); gap: 20px; } .hub-grp::after, .hub-out li::before, .hub-core::before { display: none; } .hub-ring { width: 104px; height: 104px; } .qa-claude { padding: 24px; }
+  .srcs { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; } .own { grid-template-columns: minmax(0, 1fr); padding: 22px; } .qa-claude { padding: 24px; }
   .qa-list { flex-direction: row; overflow-x: auto; scroll-snap-type: x mandatory; margin-inline: -24px; padding: 4px 24px 12px; gap: 8px; }
   .qa-tab { flex: 0 0 min(78%, 300px); scroll-snap-align: start; background: var(--surface); border: 1px solid var(--line); }
-  .l-row { grid-template-columns: minmax(0, 1fr); } .l-row > span:first-child { padding-bottom: 0; } .l-head { display: none; }
+  .pairs { grid-template-columns: minmax(0, 1fr); }
   section.band { padding: 64px 0; }
   nav.links a:not(.keep) { display: none; }
-  .sec-head { flex-direction: column; align-items: flex-start; } .sec-head .all { margin: -16px 0 24px; }
   .top .wrap { gap: 16px; }
 }
 @media (max-width: 480px) { .join { flex-direction: column; } .wrap { padding-inline: 16px; } .final { padding: 28px; } section { padding-top: 72px; } .qa-list { margin-inline: -16px; padding-inline: 16px; } }
@@ -585,49 +602,59 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
   <section id="works-with" class="band"><div class="wrap">
     <p class="kicker">Works with what you have</p><h2 class="title">Keep your analytics. Add the why.</h2>
     <p class="sub">You already have something counting visits. Kauzl doesn’t replace it. It reads it, lines it up with what you shipped and posted, and says which work paid off.</p>
-    <div class="ledger" role="table" aria-label="Example: what your tracker says, and what Kauzl adds">
-      <div class="l-row l-head" role="row"><span role="columnheader">Your analytics says</span><span role="columnheader">Kauzl adds</span></div>
-      ${LEDGER.map(([says, adds]) => `<div class="l-row" role="row"><span role="cell">${says}</span><span role="cell"><i class="arrow" aria-hidden="true">→</i>${adds}</span></div>`).join('\n      ')}
+    <div class="pairs">
+      ${LEDGER.map(([says, adds]) => `<figure class="pair"><p class="says"><span>Your analytics</span>${says}</p><p class="adds"><span class="who" aria-label="Kauzl">${owl(20, { variant: 'paper' })}</span><span>${adds}</span></p></figure>`).join('\n      ')}
     </div>
     <p class="l-foot">Sample numbers. Comparing tools? <a href="/guides/kauzl-vs-plausible/">Kauzl vs Plausible</a>, honestly.</p>
   </div></section>
 
   <section id="connects"><div class="wrap">
     <p class="kicker">Plugs into what you ship with</p><h2 class="title">Everything you use, one verdict</h2>
-    <p class="sub">Traffic, search, deploys, posts and your own numbers go in. To-dos, goals, alerts and answers come out. Read-only, and no new tracking script.</p>
-    <div class="hub">
-      <div class="hub-in">
-        ${HUB_IN.map(([group, items]) => `<div class="hub-grp"><p class="hub-lbl">${group}</p><ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul></div>`).join('\n        ')}
-      </div>
-      <div class="hub-core" aria-hidden="true"><span class="hub-ring">${owl(64, { variant: 'paper' })}</span><span class="hub-word">kauzl</span></div>
-      <ol class="hub-out">
-        ${HUB_OUT.map(([title, text, to]) => `<li><a href="/tour/${to ? `?to=${to}` : ''}"><b>${title}</b><span>${text}</span></a></li>`).join('\n        ')}
-      </ol>
+    <p class="sub">Connect what you already use, read-only. Kauzl lines it all up on one timeline, so a dip has a reason next to it.</p>
+    <div class="srcs">
+      ${HUB_IN.map(([group, items]) => `<div><h3>${group}</h3><ul>${items.map((x) => `<li>${x}</li>`).join('')}</ul></div>`).join('\n      ')}
+    </div>
+    <div class="own">
+      <div><h3>And the numbers only your app knows</h3>
+        <p>Sign-ups, revenue, daily active users, trial starts. Bring them in as custom metrics and they sit on the same timeline as your traffic.</p>
+        <ul><li>Read from Cloudflare D1 with a SELECT query</li><li class="soon">Send from your own code, cron or Zapier<span class="soon-tag">Soon</span></li></ul></div>
+      <pre class="v-term" aria-label="Example: sending a daily number to Kauzl"><span class="you"># once a day, from anywhere</span>
+curl -X POST https://kauzl.com/m/&lt;metric-key&gt; \\
+  -d '{"day": "2026-11-19", "value": 41}'
+
+<span class="ai">✓</span> Sign-ups · 41 · on the timeline</pre>
     </div>
   </div></section>
 
-  <section id="how"><div class="wrap">
-    <p class="kicker">How it works</p><h2 class="title">Set up in a few minutes</h2>
-    <p class="sub">No new tracking script. Connect what you already use, read-only, and the first Story is ready in minutes.</p>
-    <div class="steps">
-      <div class="card"><h3>Sign in with Google</h3><p>Pick your Analytics property and Search Console site. Read-only access.</p></div>
-      <div class="card"><h3>Add what you ship</h3><p>Link the GitHub repo, store listing and accounts you post from, so releases and posts land on the Timeline.</p></div>
-      <div class="card"><h3>Read the Story</h3><p>See what moved and why, set goals and alerts, and turn findings into to-dos that report back.</p></div>
-    </div>
+  <section id="how" class="soft"><div class="wrap how">
+    <div><p class="kicker">How it works</p><h2 class="title">Set up in a few minutes</h2>
+    <p class="sub">No new tracking script. Connect what you already use, read-only, and the first Story is ready in minutes.</p></div>
+    <ol class="steps">
+      <li><div><h3>Sign in with Google</h3><p>Pick your Analytics property and Search Console site. Read-only access.</p>
+        <div class="st-vis" aria-hidden="true">
+          <div class="st-row"><span class="k">Google Analytics 4</span><span class="v">acme.com · web</span><span class="st-ok">✓ Read-only</span></div>
+          <div class="st-row"><span class="k">Search Console</span><span class="v">sc-domain:acme.com</span><span class="st-ok">✓ Read-only</span></div>
+        </div></div></li>
+      <li><div><h3>Add what you ship</h3><p>Link the GitHub repo, store listing and accounts you post from, so releases and posts land on the Timeline.</p>
+        <div class="st-vis" aria-hidden="true">
+          <div class="st-row"><span class="k">GitHub</span><span class="v">acme/web</span><span class="st-ok">✓ Releases</span></div>
+          <div class="st-row"><span class="k">Reddit</span><span class="v">u/acme_team</span><span class="st-ok">✓ Posts</span></div>
+          <div class="st-row"><span class="k">Chrome Web Store</span><span class="v">Acme for Chrome</span><span class="st-add">+ Add</span></div>
+        </div></div></li>
+      <li><div><h3>Read the Story</h3><p>See what moved and why, set goals and alerts, and turn findings into to-dos that report back.</p>
+        <div class="st-vis" aria-hidden="true"><div class="st-story"><span class="who">${owl(20, { variant: 'paper' })}</span>
+          <p><b>Sign-ups up 18% since the pricing change</b>, more than a normal week moves. The Reddit post on Thursday added 54 visits.</p></div></div></div></li>
+    </ol>
   </div></section>
 
-${tools ? `  <section id="tools"><div class="wrap">
-    <div class="sec-head"><div><p class="kicker">Free tools</p><h2 class="title">Start without signing up</h2>
-    <p class="sub">Small tools that run in your browser. Nothing you type leaves the page.</p></div>
-    <a class="all" href="/tools/">All 10 tools →</a></div>
-    <div class="tiles">
-      ${FREE_TOOLS.map(([slug, name, blurb]) => `<a class="tile" href="/tools/${slug}/"><h3>${name}</h3><p>${blurb}</p><span class="go">Open →</span></a>`).join('\n      ')}
+  <section id="faq"><div class="wrap faq-wrap">
+    <div class="faq-head"><p class="kicker">FAQ</p><h2 class="title">Questions, answered</h2></div>
+    <div><div class="faq">
+      ${FAQ.map(([q, a], i) => `<details${i ? '' : ' open'}><summary>${q}</summary><p>${a}</p></details>`).join('\n      ')}
     </div>
-    <nav class="guides" aria-label="Guides"><span class="lbl">Guides</span>
-      <div class="chips">${GUIDES.map(([slug, name]) => `<a href="/guides/${slug}/">${name}</a>`).join('')}</div>
-      <a class="all" href="/guides/">All guides →</a></nav>
+    <p class="faq-more">Rather see it? <a href="#inside">Look inside with sample data</a>.</p></div>
   </div></section>
-` : ''}
+
   <section id="early-access"><div class="wrap">
     <div class="final">
       <div>${owl(56, { variant: 'paper' })}
@@ -649,8 +676,10 @@ ${tools ? `  <section id="tools"><div class="wrap">
 
 <footer><div class="wrap">
   <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p><p class="why"><b>Why an owl</b> · <em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”. Its left eye is before you shipped, the right one after.</p></div></div>
-  <nav aria-label="Footer">${toolsLink('<a href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}<a href="#features">Features</a><a href="${enter}">Open Kauzl</a></nav>
-</div></footer>
+  <nav class="foot-col" aria-label="Kauzl"><h2>Kauzl</h2><ul><li><a href="#inside">Look inside</a></li><li><a href="#features">Features</a></li><li><a href="#how">How it works</a></li><li><a href="#faq">FAQ</a></li><li><a href="${enter}">Open Kauzl</a></li></ul></nav>
+${tools ? `  <nav class="foot-col" aria-label="Free tools"><h2>Free tools</h2><ul>${FREE_TOOLS.map(([slug, name]) => `<li><a href="/tools/${slug}/">${name}</a></li>`).join('')}<li><a href="/tools/">All tools →</a></li></ul></nav>
+  <nav class="foot-col" aria-label="Guides"><h2>Guides</h2><ul>${GUIDES.slice(0, 4).map(([slug, name]) => `<li><a href="/guides/${slug}/">${name}</a></li>`).join('')}<li><a href="/guides/">All guides →</a></li></ul></nav>
+` : ''}</div></footer>
 <script type="module" src="/home-play.js${q}"></script>
 ${tools ? `<script type="module" src="/tools/assets/site.js${q}"></script>` : ''}
 ${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js${q}" data-ga="${ga}"></script>` : ''}
