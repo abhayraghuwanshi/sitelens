@@ -1,7 +1,6 @@
 import { usePersistent } from '../hooks.js';
 import { Segmented } from '../components/ui.jsx';
 import { Overview } from '../pages/Overview.jsx';
-import { PageReview } from '../pages/PageReview.jsx';
 import { Articles } from '../pages/Articles.jsx';
 import { ContentCycles } from '../pages/ContentCycles.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
@@ -16,6 +15,7 @@ import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page, SectionTabs } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
 import { GoalsView } from './GoalsView.jsx';
+import { PagesList } from './PagesList.jsx';
 import { SearchView } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
@@ -149,7 +149,7 @@ function PagesTab({ site, range, params }) {
     // Back always lands on the list, however the page was opened.
     return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages`; }} />;
   }
-  return <div class="pages-one"><PageReview site={site} range={range} /></div>;
+  return <PagesList site={site} range={range} />;
 }
 
 // Uptime and speed for this site only.
