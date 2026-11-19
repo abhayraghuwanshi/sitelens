@@ -605,7 +605,8 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // against the window of the same length just before it.
   // `back`: how many days earlier the "previous" window starts (default: the
   // span just before). One day is set against the same weekday with back = 7.
-  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0 } = {}) {
+  // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
+  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false } = {}) {
     if (!['source', 'page', 'query'].includes(by)) throw new ValidationError('by must be source, page or query.');
     const r = span(from, to);
     const sc = await scope(site);
@@ -615,6 +616,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const multi = sc.sites.length > 1;
     const cur = new Map();
     const prev = new Map();
+    const perDay = new Map(); // key → Map(date → value), only with `daily`
     const errors = [];
     for (const s of sc.sites) {
       if (!s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
@@ -625,6 +627,11 @@ export function createCalendar({ store, history, annotations, extensions = null,
           const map = row.date >= r.from ? cur : row.date <= prevTo ? prev : null;
           if (!map) continue;
           map.set(key, (map.get(key) || 0) + row.value);
+          if (daily && map === cur) {
+            if (!perDay.has(key)) perDay.set(key, new Map());
+            const byDate = perDay.get(key);
+            byDate.set(row.date, (byDate.get(row.date) || 0) + row.value);
+          }
         }
       } catch (err) {
         errors.push({ site: s.label, message: err.message });
@@ -639,8 +646,14 @@ export function createCalendar({ store, history, annotations, extensions = null,
       })
       .sort((a, b) => b.value - a.value || b.previous - a.previous)
       .slice(0, Math.min(200, Math.max(1, Number(limit) || 25)));
+    const dates = [];
+    if (daily) {
+      for (let d = r.from; d <= r.to; d = addDays(d, 1)) dates.push(d);
+      for (const row of rows) row.days = dates.map((d) => perDay.get(row.key)?.get(d) || 0);
+    }
     return {
       from: r.from, to: r.to, previous: { from: prevFrom, to: addDays(r.from, -1) }, site: sc.key, by,
+      ...(daily ? { dates } : {}),
       metric: by === 'query' ? 'clicks' : 'sessions',
       note: 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
       rows,
@@ -666,7 +679,7 @@ export function calendarRoutes({ calendar, history }) {
   const range = (query) => ({ from: query.get('from') || '', to: query.get('to') || '', site: query.get('site') || 'all' });
   return [
     ['GET', /^\/api\/calendar\/metrics$/, async ({ query }) => calendar.metrics(range(query))],
-    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25, back: Number(query.get('back')) || 0 })],
+    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25, back: Number(query.get('back')) || 0, daily: query.get('daily') === '1' })],
     ['GET', /^\/api\/calendar\/events$/, async ({ query }) => calendar.events(range(query))],
     ['GET', /^\/api\/calendar\/status$/, async () => history.status()],
     ['POST', /^\/api\/calendar\/sync$/, async () => ({ sites: await history.syncAll() })],

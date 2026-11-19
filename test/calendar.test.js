@@ -228,6 +228,11 @@ test('real sites read the local store: totals, story breakdowns and per-site err
     assert.equal(metrics.totals.clicks, 12);
     const sources = await calendar.breakdown({ from: '2026-10-14', to: '2026-10-14', site: 'a', by: 'source' });
     assert.deepEqual(sources.rows.map((r) => [r.key, r.value]), [['Reddit', 60], ['Google', 30]]);
+    // daily: each row's value on every date of the window, for the Timeline's lenses.
+    const daily = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'source', daily: true });
+    assert.deepEqual(daily.dates, ['2026-10-13', '2026-10-14', '2026-10-15']);
+    assert.deepEqual(daily.rows.find((r) => r.key === 'Reddit').days, [0, 60, 0]);
+    assert.equal(sources.dates, undefined);
     await assert.rejects(calendar.breakdown({ from: '2026-10-14', to: '2026-10-14', by: 'nope' }), ValidationError);
     await assert.rejects(calendar.metrics({ from: '2024-01-01', to: '2026-10-14' }), /at most 500 days/);
   } finally {

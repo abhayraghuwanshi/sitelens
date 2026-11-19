@@ -4,7 +4,7 @@ import { usePersistent } from '../hooks.js';
 import { Icon } from '../components/icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { ErrorState } from '../components/ui.jsx';
-import { Calendar } from '../pages/Calendar.jsx';
+import { Timeline } from './Timeline.jsx';
 import { Setup } from '../pages/Setup.jsx';
 import { SiteAccess } from './SiteAccess.jsx';
 import { Settings } from '../pages/Settings.jsx';
@@ -84,7 +84,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (view === 'live') body = site
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
-  else if (view === 'timeline') body = <Page title="Timeline" sub="Every day, and what shipped on it"><Calendar sites={sites} scoped params={site ? withSite(route.params, site.id) : withSite(route.params, 'all')} /></Page>;
+  else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} />;
   else if (view === 'story') body = site ? <Story key={site.id} site={site} params={route.params} /> : <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
@@ -298,10 +298,4 @@ function NavItem({ href, icon, active, children }) {
       <Icon name={icon} size={16} /> <span class="nx-item-text">{children}</span>
     </a>
   );
-}
-
-function withSite(params, id) {
-  const next = new URLSearchParams(params);
-  if (!next.get('site')) next.set('site', id);
-  return next;
 }
