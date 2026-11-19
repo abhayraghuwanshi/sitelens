@@ -42,7 +42,7 @@ export function OutcomesPage({ site, params, back }) {
   } else body = <OutcomeBody key={`${product.id}:${range}`} site={site} product={product} range={range} />;
 
   return (
-    <Page title="Outcomes" back={back}
+    <Page title="Goals" back={back}
       sub={`What ${site.label}’s visits led to, what to do about it, and where people drop off`}
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       {body}

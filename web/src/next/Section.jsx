@@ -1,0 +1,174 @@
+import { usePersistent } from '../hooks.js';
+import { Segmented } from '../components/ui.jsx';
+import { Overview } from '../pages/Overview.jsx';
+import { PageReview } from '../pages/PageReview.jsx';
+import { Articles } from '../pages/Articles.jsx';
+import { ContentCycles } from '../pages/ContentCycles.jsx';
+import { SearchHub } from '../pages/SearchHub.jsx';
+import { AiSearch } from '../pages/AiSearch.jsx';
+import { Funnels } from '../pages/Funnels.jsx';
+import { Retention } from '../pages/Retention.jsx';
+import { Events } from '../pages/Events.jsx';
+import { Sessions } from '../pages/Sessions.jsx';
+import { Health } from '../pages/Health.jsx';
+import { Posts } from '../pages/Posts.jsx';
+import { Mentions } from '../pages/Mentions.jsx';
+import { CustomMetricsCard } from '../pages/CustomMetrics.jsx';
+import { Explore as SqlConsole } from '../pages/Explore.jsx';
+import { Page, SectionTabs } from './Page.jsx';
+import { Campaigns } from './Campaigns.jsx';
+import { JourneysPage } from './Journeys.jsx';
+import { OutcomesPage } from './Outcomes.jsx';
+import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
+
+// The reports: Pages, Search, Traffic, Journeys, Goals and Raw data. Each is one
+// question with a few tabs. `mode` says which ranges a tab reads (GA4's API
+// ranges, BigQuery's 7/28/90 days); `own` tabs draw their own header and period;
+// `period: false` tabs have none (a cycle is its own period, Health its own).
+const TABS = {
+  pages: {
+    pages: { mode: 'content', component: PagesTab },
+    cycles: { mode: 'content', component: ContentCycles, period: false },
+    health: { component: HealthTab, period: false },
+  },
+  search: {
+    queries: { mode: 'api', component: SearchTab },
+    ai: { mode: 'api', component: AiSearch },
+  },
+  traffic: {
+    sources: { mode: 'api', component: Campaigns },
+    overview: { mode: 'api', component: Overview },
+    posts: { mode: 'api', component: PostsTab },
+  },
+  journeys: {
+    journeys: { own: JourneysPage },
+    paths: { mode: 'warehouse', component: Sessions },
+    funnels: { mode: 'warehouse', component: Funnels },
+    retention: { mode: 'warehouse', component: Retention },
+  },
+  goals: {
+    results: { own: OutcomesPage },
+    numbers: { mode: 'api', component: CustomMetricsCard },
+  },
+  raw: {
+    events: { mode: 'warehouse', component: Events },
+    sql: { mode: 'warehouse', component: SqlConsole },
+  },
+};
+
+const WAREHOUSE_TABS = new Set(['paths', 'funnels', 'retention', 'events', 'sql']);
+
+export function Section({ view, tab: wanted, site, params, auth, ranges: lists }) {
+  const [saved, setSaved] = usePersistent('range', '28d');
+  // Pages (and a page's view) keep their own period, defaulting to 90 days like their suggestions.
+  const [pagesRange, setPagesRange] = usePersistent('pagesRange', '90d');
+  const sec = SECTIONS[view];
+  const tabs = sec.tabs.filter(([k]) => !WAREHOUSE_TABS.has(k) || hasWarehouse(site));
+  const tab = tabs.find(([k]) => k === wanted)?.[0] || tabs[0][0];
+  const spec = TABS[view][tab];
+
+  // Journeys keeps the raw data (events, SQL) a step away, at the end of its tab row.
+  const raw = view === 'journeys' && hasWarehouse(site) && (
+    <span class="nx-rawlink muted small">Raw data: <a href={hrefFor(site.id, 'raw', 'events')}>Events</a> · <a href={hrefFor(site.id, 'raw', 'sql')}>SQL</a></span>
+  );
+  const nav = (
+    <nav class="tabs nx-tabs-row" aria-label={sec.label}>
+      {tabs.map(([k, l]) => (
+        <a key={k} class={k === tab ? 'active' : undefined} href={hrefFor(site.id, view, k === tabs[0][0] ? '' : k)} aria-current={k === tab ? 'page' : undefined}>{l}</a>
+      ))}
+      {raw}
+    </nav>
+  );
+
+  if (spec.own) {
+    const Own = spec.own;
+    return (
+      <SectionTabs.Provider value={nav}>
+        <Own key={`${site.id}:${tab}`} site={site} params={params} />
+      </SectionTabs.Provider>
+    );
+  }
+
+  const ranges = spec.mode === 'warehouse' ? lists.warehouse : lists.api;
+  const pages = view === 'pages';
+  const want = pages ? pagesRange : params.get('range') || saved;
+  const range = ranges.some((r) => r.key === want) ? want : pages ? '90d' : '28d';
+  const View = spec.component;
+  const period = spec.period !== false && (
+    <Segmented label="Date range" value={range} options={ranges} onChange={(key) => {
+      if (pages) return setPagesRange(key);
+      setSaved(key);
+      // Keep the tab and anything open; only the range changes.
+      const next = new URLSearchParams(params);
+      next.set('range', key);
+      // Older links (#/site/<id>/sessions…) carry no ?tab; keep the tab they opened.
+      if (tab !== tabs[0][0]) next.set('tab', tab);
+      location.hash = `/site/${site.id}/${view}?${next}`;
+    }} />
+  );
+
+  return (
+    <SectionTabs.Provider value={nav}>
+      <Page title={sec.label} sub={`${sec.q} · ${site.label}`} actions={period || null}
+        back={view === 'raw' ? { href: hrefFor(site.id, 'journeys'), label: 'Journeys' } : null}>
+        <SectionTabs.Provider value={null}>
+          <div class="nx-explore-body">
+            <View key={`${site.id}:${tab}`} site={site} range={range} params={params} auth={auth} />
+          </div>
+        </SectionTabs.Provider>
+      </Page>
+    </SectionTabs.Provider>
+  );
+}
+
+// A report picked with All sites in scope: say what it shows, and pick a site.
+export function PickSite({ view, sites }) {
+  const sec = SECTIONS[view];
+  const list = sites.filter((s) => view !== 'journeys' && view !== 'raw' ? true : hasWarehouse(s));
+  return (
+    <Page title={sec.label} sub={`${sec.q}. Pick a site:`}>
+      <div class="nx-pick">
+        {list.map((s) => (
+          <a key={s.id} class="nx-pick-row" href={hrefFor(s.id, view)}>
+            <b>{s.label}</b><span class="muted">{s.demo ? 'Sample data' : s.host}</span>
+          </a>
+        ))}
+      </div>
+    </Page>
+  );
+}
+
+// All pages: every page with its verdict; a page opens its own view (?article=,
+// or ?path= from older traffic links). Search's summary sits above the list.
+function PagesTab({ site, range, params }) {
+  const open = params.get('article') || params.get('path');
+  if (open) {
+    const p = new URLSearchParams(params);
+    p.delete('path');
+    p.set('article', open);
+    // Back always lands on the list, however the page was opened.
+    return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages`; }} />;
+  }
+  return <div class="pages-one"><PageReview site={site} range={range} /></div>;
+}
+
+function SearchTab({ site, range }) {
+  return <SearchHub site={site} range={range} part="all" />;
+}
+
+// Uptime and speed for this site only.
+function HealthTab({ site, params }) {
+  const p = new URLSearchParams(params);
+  p.set('site', site.id);
+  return <Health sites={[site]} params={p} />;
+}
+
+// What you put out, and who talked about you.
+function PostsTab({ range, params }) {
+  return (
+    <div class="nx-stack">
+      <section aria-label="Posts"><h2 class="nx-h2 nx-h2-gap">What you put out</h2><Posts range={range} id={params.get('post') || undefined} /></section>
+      <section aria-label="Mentions"><h2 class="nx-h2 nx-h2-gap">Who talked about you</h2><Mentions range={range} /></section>
+    </div>
+  );
+}

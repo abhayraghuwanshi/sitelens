@@ -102,7 +102,6 @@ export function JourneysPage({ site, params }) {
   return (
     <Page title="Journeys" sub="How people come: where from, the page they land on, and what they do next"
       actions={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />}>
-      <a class="nx-more" href={`#/site/${site.id}?range=${range}`}>← Story</a>
       {j.data.data && j.outcome && <Summary j={j} />}
       <section class="card card-plain">{body}</section>
     </Page>
