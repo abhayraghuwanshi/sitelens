@@ -16,6 +16,7 @@ import { Page, SectionTabs } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
 import { GoalsView } from './GoalsView.jsx';
 import { PagesList } from './PagesList.jsx';
+import { PageView } from './PageView.jsx';
 import { SearchView } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
@@ -66,6 +67,11 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
   const tabs = sec.tabs.filter(([k]) => !WAREHOUSE_TABS.has(k) || hasWarehouse(site));
   const tab = tabs.find(([k]) => k === wanted)?.[0] || tabs[0][0];
   const spec = TABS[view][tab];
+  // A page opens as its own view (its story); ?edit=1 opens the editor inside Pages.
+  const page = view === 'pages' && tab === 'pages' && (params.get('article') || params.get('path'));
+  if (page && !params.get('edit')) {
+    return <PageView key={`${site.id}:${page}`} site={site} path={page} back={{ href: `#/site/${site.id}/pages`, label: 'All pages' }} />;
+  }
 
   // Journeys keeps the raw data (events, SQL) a step away, at the end of its tab row.
   const raw = view === 'journeys' && hasWarehouse(site) && (
@@ -146,8 +152,8 @@ function PagesTab({ site, range, params }) {
     const p = new URLSearchParams(params);
     p.delete('path');
     p.set('article', open);
-    // Back always lands on the list, however the page was opened.
-    return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages`; }} />;
+    // Closing the editor goes back to the page's own view.
+    return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages?article=${encodeURIComponent(open)}`; }} />;
   }
   return <PagesList site={site} range={range} />;
 }

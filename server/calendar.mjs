@@ -606,7 +606,8 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // `back`: how many days earlier the "previous" window starts (default: the
   // span just before). One day is set against the same weekday with back = 7.
   // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
-  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false } = {}) {
+  // `key`: only that row (one page's days, for its own view).
+  async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false, key: only = '' } = {}) {
     if (!['source', 'page', 'query'].includes(by)) throw new ValidationError('by must be source, page or query.');
     const r = span(from, to);
     const sc = await scope(site);
@@ -644,6 +645,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
         const before = prev.get(key) || 0;
         return { key, value, previous: before, change: before ? Math.round(((value - before) / before) * 1000) / 1000 : null, share: total ? Math.round((value / total) * 1000) / 1000 : 0 };
       })
+      .filter((row) => !only || row.key === only)
       .sort((a, b) => b.value - a.value || b.previous - a.previous)
       .slice(0, Math.min(200, Math.max(1, Number(limit) || 25)));
     const dates = [];
@@ -679,7 +681,7 @@ export function calendarRoutes({ calendar, history }) {
   const range = (query) => ({ from: query.get('from') || '', to: query.get('to') || '', site: query.get('site') || 'all' });
   return [
     ['GET', /^\/api\/calendar\/metrics$/, async ({ query }) => calendar.metrics(range(query))],
-    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25, back: Number(query.get('back')) || 0, daily: query.get('daily') === '1' })],
+    ['GET', /^\/api\/calendar\/breakdown$/, async ({ query }) => calendar.breakdown({ ...range(query), by: query.get('by') || 'source', limit: Number(query.get('limit')) || 25, back: Number(query.get('back')) || 0, daily: query.get('daily') === '1', key: query.get('key') || '' })],
     ['GET', /^\/api\/calendar\/events$/, async ({ query }) => calendar.events(range(query))],
     ['GET', /^\/api\/calendar\/status$/, async () => history.status()],
     ['POST', /^\/api\/calendar\/sync$/, async () => ({ sites: await history.syncAll() })],
