@@ -975,3 +975,9 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
   .pv-qrow > :nth-child(4), .pv-qrow > :nth-child(5), .pv-qrow > :nth-child(6) { display: none; }
   .pv-goal .nx-prog { width: 80px; }
 }
+/* Inbox goals */
+.nx-k.goal { background: color-mix(in srgb, var(--brand-amber) 18%, var(--surface)); color: var(--warning-ink); }
+.nx-gbar { grid-column: 2; display: flex; align-items: center; gap: 10px; min-width: 0; }
+.nx-gbar .nx-prog { width: 140px; flex: none; }
+.nx-gbar small { color: var(--text-3); font-size: var(--text-sm); }
+.nx-ibh { margin: 8px 0 2px; }

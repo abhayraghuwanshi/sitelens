@@ -13,7 +13,7 @@
 
 import { ValidationError } from './store.mjs';
 import { createCache } from './cache.mjs';
-import { nextGoal, progress, currentValue, PURPOSES } from './page-goals.mjs';
+import { nextGoal, progress, currentValue, goalStatus, PURPOSES } from './page-goals.mjs';
 
 const DAY = 86_400_000;
 export const DECISIONS = ['keep', 'improve', 'merge', 'remove'];
@@ -297,7 +297,23 @@ export function createPageReview({ articles, bing, store, outcomes = null, cache
     return { ...row, period: all.period };
   }
 
-  return { review, decide, setGoal, goalFor };
+  // Every goal you saved on this site's pages, with where it stands. Sites
+  // without one skip the review entirely, so asking is cheap.
+  async function goals(site) {
+    const saved = (await store.get()).pageGoals?.[site.id] || {};
+    if (!Object.values(saved).some((g) => g.target)) return [];
+    const { rows } = await review(site, '90d');
+    return rows.filter((r) => r.goal?.target).map((r) => {
+      const t = r.goal.target;
+      return {
+        site: site.id, path: r.path, title: r.title || r.path, goal: t.title, metric: t.metric, from: t.from, to: t.to, query: t.query || null,
+        setAt: t.setAt, checkBy: t.checkBy, now: r.goal.progress?.now ?? null, share: r.goal.progress?.share ?? null,
+        status: goalStatus(t, r.goal.progress, today()),
+      };
+    });
+  }
+
+  return { review, decide, setGoal, goalFor, goals };
 }
 
 export function pageReviewRoutes({ review, siteOr404 }) {
@@ -305,6 +321,7 @@ export function pageReviewRoutes({ review, siteOr404 }) {
     ['GET', /^\/api\/sites\/([\w-]+)\/page-review$/, async ({ match, query }) => review.review(await siteOr404(match[1]), query.get('range') || '90d', { fresh: query.has('fresh') })],
     ['POST', /^\/api\/sites\/([\w-]+)\/page-decisions$/, async ({ match, body }) => review.decide(await siteOr404(match[1]), body)],
     ['POST', /^\/api\/sites\/([\w-]+)\/page-goals$/, async ({ match, body }) => review.setGoal(await siteOr404(match[1]), body)],
+    ['GET', /^\/api\/sites\/([\w-]+)\/goals$/, async ({ match }) => ({ goals: await review.goals(await siteOr404(match[1])) })],
     ['GET', /^\/api\/sites\/([\w-]+)\/page-goal$/, async ({ match, query }) => review.goalFor(await siteOr404(match[1]), query.get('path') || '', query.get('range') || '90d')],
   ];
 }

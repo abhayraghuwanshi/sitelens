@@ -1,6 +1,7 @@
 import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
-import { usePersistent } from '../hooks.js';
+import { usePersistent, useAsync } from '../hooks.js';
+import { api } from '../api.js';
 import { Icon } from '../components/icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { ErrorState } from '../components/ui.jsx';
@@ -67,11 +68,14 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   }, [setupMoved, site?.id]);
 
   const todos = useTodos({ status: 'open' });
+  // Goals saved on pages, every site: the ones behind wait in the Inbox too.
+  const goals = useAsync(() => Promise.all(sites.map((s) => api.get(`/sites/${s.id}/goals`).then((r) => r.goals, () => []))).then((all) => all.flat()), [sites.map((s) => s.id).join()]);
+  const behindFor = (id) => (goals.data || []).filter((g) => g.status === 'behind' && (!id || g.site === id)).length;
   const alertCounts = useUnreadAlerts();
   const live = useLiveCounts(sites);
   const openTodos = (id) => (todos.data?.todos || []).filter((t) => !id || t.site === id).length;
   const unread = (id) => (id ? alertCounts.bySite[id] || 0 : alertCounts.unread || 0);
-  const waiting = (id) => openTodos(id) + unread(id);
+  const waiting = (id) => openTodos(id) + unread(id) + behindFor(id);
   const liveFor = (id) => (id ? live.bySite[id] : live.total);
   const scopeId = site?.id || 'all';
   const editHref = (s) => `#/account?tab=sites&edit=${encodeURIComponent(s.id)}`;
@@ -80,7 +84,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   if (scope !== 'all' && !site) body = <ErrorState error={{ message: 'That site was removed or never existed.' }} />;
   else if (view === 'account') body = <Page title="Account" sub="Sites, sign-ins and keys, once for all your sites"><Settings state={state} params={route.params} onChange={onReload} siteExtras={siteExtras} siteMeasures={siteMeasures} /></Page>;
   else if (view === 'alert-settings') body = <Page title="Alert settings" sub="What to watch on every site, and where alerts go" back={{ href: '#/inbox?tab=alerts', label: 'Inbox' }}><AlertSettings /></Page>;
-  else if (view === 'inbox') body = <Inbox site={site} sites={sites} tab={tab} params={route.params} counts={{ alerts: unread(site?.id), todos: openTodos(site?.id) }} />;
+  else if (view === 'inbox') body = <Inbox site={site} sites={sites} tab={tab} params={route.params} counts={{ alerts: unread(site?.id), todos: openTodos(site?.id) }} goals={goals} />;
   else if (view === 'live') body = site
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;

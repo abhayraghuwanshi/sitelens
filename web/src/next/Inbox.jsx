@@ -14,7 +14,10 @@ import { hrefFor } from './nav.js';
 // and done to-dos fold away under "Earlier". An item opens in the drawer
 // (?open=<id>): a to-do as its thread (who did what, the change, why, what to
 // expect), an alert with what it saw. Adding a to-do is its own view (?add=1).
-const FILTERS = [['all', 'All'], ['alerts', 'Alerts'], ['todos', 'To-dos']];
+const FILTERS = [['all', 'All'], ['alerts', 'Alerts'], ['todos', 'To-dos'], ['goals', 'Goals']];
+// Goals you set on pages, by where they stand. All shows the ones behind.
+const GOAL_STATES = [['behind', 'Behind', 'down'], ['on-track', 'On track', 'up'], ['waiting', 'Not measured yet', 'muted'], ['reached', 'Reached', 'up']];
+const goalValue = (g, v) => (v === null || v === undefined ? '—' : g.metric === 'position' ? `#${Math.round(v * 10) / 10}` : ['ctr', 'rate', 'engagement'].includes(g.metric) ? `${(v * 100).toFixed(1)}%` : Math.round(v).toLocaleString('en-US'));
 const alertsChanged = () => dispatchEvent(new Event('alerts-changed'));
 const day = (ms) => new Date(ms).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
 
@@ -51,7 +54,7 @@ function stageOf(t) {
 }
 const lastAt = (t) => Math.max(t.createdAt || 0, t.doneAt || 0, ...(t.entries || []).map((e) => e.at || 0));
 
-export function Inbox({ site, sites, tab, params, counts }) {
+export function Inbox({ site, sites, tab, params, counts, goals }) {
   const scope = site ? site.id : 'all';
   const filter = FILTERS.some(([k]) => k === tab) ? tab : 'all';
   const feed = useAsync(() => api.get(`/alerts${qs(site ? { site: site.id } : {})}`), [site?.id]);
@@ -101,12 +104,15 @@ export function Inbox({ site, sites, tab, params, counts }) {
     ...(todos.data?.todos || []).map((t) => ({ kind: 'todo', id: t.id, at: lastAt(t), done: t.status === 'done', todo: t })),
   ].sort((a, b) => b.at - a.at);
   const shown = items.filter((x) => filter === 'all' || (filter === 'alerts' ? x.kind === 'alert' : x.kind === 'todo'));
+  const myGoals = (goals.data || []).filter((g) => !site || g.site === site.id);
+  const behind = myGoals.filter((g) => g.status === 'behind');
   const now = shown.filter((x) => !x.done);
   const past = shown.filter((x) => x.done);
   // Rows waiting, once loaded (alerts on the same thing count once); the sidebar's counts until then.
   const waitingOf = (kind) => items.filter((x) => !x.done && x.kind === kind).length;
-  const count = loading ? { all: counts.alerts + counts.todos, alerts: counts.alerts, todos: counts.todos }
-    : { all: waitingOf('alert') + waitingOf('todo'), alerts: waitingOf('alert'), todos: waitingOf('todo') };
+  const count = loading ? { all: counts.alerts + counts.todos + behind.length, alerts: counts.alerts, todos: counts.todos, goals: myGoals.length }
+    : { all: waitingOf('alert') + waitingOf('todo') + behind.length, alerts: waitingOf('alert'), todos: waitingOf('todo'), goals: myGoals.length };
+  const goalRow = (g) => <GoalRow key={`${g.site}:${g.path}`} g={g} site={!site && sites.find((s) => s.id === g.site)} />;
   const opened = items.find((x) => x.id === open);
   const failed = feed.data?.lastRun?.errors?.length || 0;
 
@@ -140,10 +146,20 @@ export function Inbox({ site, sites, tab, params, counts }) {
         : loading ? <Loading height={240} />
         : (
           <>
+            {filter === 'goals' ? (
+              myGoals.length ? GOAL_STATES.map(([k, l]) => {
+                const list = myGoals.filter((g) => g.status === k);
+                return list.length ? <section key={k} class="nx-inbox" aria-label={l}><h2 class="nx-label-sm nx-ibh">{l} · {list.length}</h2>{list.map(goalRow)}</section> : null;
+              }) : (
+                <p class="nx-empty">No goals set yet. Open a page from <a href={site ? `#/site/${site.id}/pages` : '#/pages'}>Pages</a> and save its next goal: it shows here, behind or on track, until it’s reached.</p>
+              )
+            ) : (
             <div class="nx-inbox">
-              {now.length ? now.map(row) : <p class="nx-empty">Nothing waiting{filter === 'alerts' ? ' in alerts' : filter === 'todos' ? ' in to-dos' : ''}.{filter !== 'alerts' && <> <a href={hrefWith('add', '1')}>Add a to-do</a></>}</p>}
+              {filter === 'all' && behind.map(goalRow)}
+              {now.length || (filter === 'all' && behind.length) ? now.map(row) : <p class="nx-empty">Nothing waiting{filter === 'alerts' ? ' in alerts' : filter === 'todos' ? ' in to-dos' : ''}.{filter !== 'alerts' && <> <a href={hrefWith('add', '1')}>Add a to-do</a></>}</p>}
             </div>
-            {past.length > 0 && (
+            )}
+            {filter !== 'goals' && past.length > 0 && (
               <>
                 <button type="button" class="todo-link nx-earlier" aria-expanded={earlier} onClick={() => setEarlier(!earlier)}>
                   {earlier ? 'Hide earlier' : `Earlier · ${past.length} read or done`}
@@ -204,6 +220,22 @@ function Row({ item, labels, site, on }) {
       <span class="nx-k todo"><Icon name="check" size={14} /></span>
       <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}{t.title} <span class={`nx-pill ${tone}`}>{stage}</span></span>
       <small>{last ? `${agentOf(last).name} · ${day(last.at)}` : `To-do · added ${day(t.createdAt)}`}{t.entries?.length > 1 ? ` · ${t.entries.length} write-ups` : ''}</small>
+    </a>
+  );
+}
+
+// A goal saved on a page: where it is now, against where it's going, and by when.
+function GoalRow({ g, site }) {
+  const state = GOAL_STATES.find(([k]) => k === g.status) || GOAL_STATES[2];
+  const due = new Date(`${g.checkBy}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return (
+    <a class="nx-msg nx-goalmsg" href={`#/site/${g.site}/pages?article=${encodeURIComponent(g.path)}`}>
+      <span class="nx-k goal"><Icon name="target" size={14} /></span>
+      <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}<b>{g.title}</b>: {g.goal} <span class={`nx-pill ${state[2]}`}>{state[1]}</span></span>
+      <span class="nx-gbar">
+        {g.share !== null && <span class="nx-prog"><i style={`width:${Math.round(g.share * 100)}%`} /></span>}
+        <small>{g.now !== null ? `now ${goalValue(g, g.now)}, aiming` : 'Aiming'} for {goalValue(g, g.to)} · {g.status === 'reached' ? 'reached' : `check by ${due}`}</small>
+      </span>
     </a>
   );
 }

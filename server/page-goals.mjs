@@ -203,3 +203,19 @@ export function currentValue(target, row, conversion) {
   if (target.metric === 'clicks') return row.google?.clicks ?? null;
   return null;
 }
+
+// Where a saved goal stands today: reached, on track (progress keeping up with
+// the time gone since it was set), behind, or not measured yet. Pure.
+// `today`: YYYY-MM-DD. A goal past its check date and not reached is behind.
+export function goalStatus(target, prog, today) {
+  if (!target) return null;
+  if (prog?.reached) return 'reached';
+  const start = Date.parse(`${target.setAt}T00:00:00Z`);
+  const end = Date.parse(`${target.checkBy}T00:00:00Z`);
+  const now = Date.parse(`${today}T00:00:00Z`);
+  if (Number.isFinite(end) && now > end) return 'behind';
+  if (!prog) return 'waiting';
+  const elapsed = Number.isFinite(start) && end > start ? Math.max(0, Math.min(1, (now - start) / (end - start))) : 0;
+  return prog.share >= elapsed - 0.15 ? 'on-track' : 'behind';
+}
+
