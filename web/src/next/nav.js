@@ -22,7 +22,7 @@ export const SECTIONS = {
   pages: { label: 'Pages', q: 'Which content works', tabs: [['pages', 'All pages'], ['cycles', 'Content cycles'], ['health', 'Health']] },
   search: { label: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['ai', 'AI answers']] },
   traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources'], ['posts', 'Posts & mentions'], ['overview', 'GA4 summary']] },
-  journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys'], ['paths', 'Paths'], ['funnels', 'Funnels'], ['retention', 'Retention']] },
+  journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['funnels', 'Steps'], ['journeys', 'Routes'], ['paths', 'Paths'], ['retention', 'Retention']] },
   goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals'], ['results', 'Results']] },
   raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['sql', 'SQL']] },
 };
@@ -68,6 +68,8 @@ export function resolve(parts, params) {
       // Old links carried their own params (an open article, a funnel); keep them, but not ?tab.
       [view, tab] = [LEGACY[view][0], LEGACY[view][1]];
     }
+    // The Story links to one route (?open=); that's the Routes tab, not the default Steps.
+    if (view === 'journeys' && !tab && params.get('open')) tab = 'journeys';
     return { scope: siteId, view, tab };
   }
   if (!section) return { scope: 'all', view: 'story', tab: '' };

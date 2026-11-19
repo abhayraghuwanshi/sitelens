@@ -94,14 +94,14 @@ export function JourneysPage({ site, params }) {
           <JourneyRow key={x.key} site={site} j={x} steps={j.steps} outcome={j.outcome} range={range}
             open={current === x.key} onToggle={() => setOpen(current === x.key ? '-' : x.key)} />
         ))}
-        <p class="note">A journey shows once it has 3 visits in the period; the rest are in Explore → Sessions. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
+        <p class="note">A journey shows once it has 3 visits in the period; the rest are under Paths. “Came from” is the first page’s utm_source, else its referrer; for visits with neither, “first came from” is where that visitor first found the site.{site.leaveOut?.countries?.length ? ' Bot-like visits are left out (see the site’s settings).' : ''}</p>
       </div>
     );
   }
 
   return (
-    <Page title="Journeys" sub="How people come: where from, the page they land on, and what they do next"
-      actions={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />}>
+    <Page title="Journeys" sub="Routes: where people come from, the page they land on, and what they do next"
+      actions={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?tab=journeys&range=${key}`; }} />}>
       {j.data.data && j.outcome && <Summary j={j} />}
       <section class="card card-plain">{body}</section>
     </Page>

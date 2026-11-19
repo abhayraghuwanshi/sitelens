@@ -150,7 +150,7 @@ a.nx-cause:hover { color: var(--accent); }
 .nx-jsys-head { font-size: var(--text-sm); color: var(--text-3); white-space: nowrap; }
 .nx-jsys-pct { display: inline-block; min-width: 30px; text-align: right; }
 .nx-jfind { margin: 0; padding: 0; list-style: none; display: grid; gap: 8px; }
-.nx-jfind li { display: grid; gap: 3px; align-content: start; padding: 10px 12px; border-left: 3px solid var(--border); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: var(--surface-2); }
+.nx-jfind li { display: grid; gap: 3px; align-content: start; padding: 10px 12px; border-radius: var(--radius-md); background: var(--surface-2); }
 .nx-jfind-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .nx-jfind-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 @media (max-width: 1100px) { .nx-jfind-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
@@ -208,15 +208,15 @@ button.nx-ssum-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .nx-access-who { display: grid; gap: 1px; min-width: 0; }
 .nx-access-who b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nx-access-how { margin: 0; line-height: 1.7; }
-.nx-jfind li.tone-neutral { border-left-color: var(--accent); }
+.nx-jfind li.tone-neutral { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); }
 .nx-ret-explain p { margin: 0 0 8px; max-width: 80ch; line-height: 1.55; color: var(--text-2, var(--text)); }
 .nx-ret-example { padding: 10px 14px; border-radius: var(--radius-md); background: color-mix(in srgb, var(--accent) 9%, transparent); }
 .nx-ret-heat td { min-width: 64px; }
 .nx-ret-n { display: block; font-size: var(--text-xs); opacity: 0.7; }
 .nx-ret-later { color: var(--text-3); }
-.nx-jfind li.tone-good { border-left-color: var(--good); }
-.nx-jfind li.tone-bad { border-left-color: var(--critical-ink); }
-.nx-jfind li.tone-warn { border-left-color: var(--warning); }
+.nx-jfind li.tone-good { background: color-mix(in srgb, var(--good-ink) 8%, var(--surface)); }
+.nx-jfind li.tone-bad { background: color-mix(in srgb, var(--critical-ink) 8%, var(--surface)); }
+.nx-jfind li.tone-warn { background: color-mix(in srgb, var(--warning) 12%, var(--surface)); }
 .nx-journey.open .nx-jrow svg { transform: rotate(90deg); }
 .nx-journey.open { background: var(--bg); border-radius: var(--radius); }
 .nx-jbody { padding: 6px 14px 16px; display: flex; flex-direction: column; gap: 12px; }

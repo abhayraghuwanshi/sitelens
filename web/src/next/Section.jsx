@@ -41,9 +41,9 @@ const TABS = {
     posts: { mode: 'api', component: PostsTab },
   },
   journeys: {
+    funnels: { mode: 'warehouse', component: Funnels },
     journeys: { own: JourneysPage },
     paths: { mode: 'warehouse', component: Sessions },
-    funnels: { mode: 'warehouse', component: Funnels },
     retention: { mode: 'warehouse', component: Retention },
   },
   goals: {
@@ -56,7 +56,7 @@ const TABS = {
   },
 };
 
-const WAREHOUSE_TABS = new Set(['paths', 'funnels', 'retention', 'events', 'sql']);
+const WAREHOUSE_TABS = new Set(['paths', 'retention', 'events', 'sql']);
 
 export function Section({ view, tab: wanted, site, params, auth, ranges: lists }) {
   const [saved, setSaved] = usePersistent('range', '28d');
