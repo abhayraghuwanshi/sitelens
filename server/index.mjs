@@ -463,6 +463,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const [detail, recent] = await Promise.all([engines.liveDetail(site), site.demo ? null : recentEvents(site).catch(() => [])]);
       return { ...detail, recent: recent || detail.recent || [] };
     }],
+    // Live, one row per visitor, for sites with the GA4 streaming export in BigQuery.
+    ['GET', /^\/api\/sites\/([\w-]+)\/live\/people$/, async ({ match }) => engines.livePeople(await siteOr404(match[1]))],
     // Live: every site's count right now, busiest first. A site that fails says why.
     ['GET', /^\/api\/live$/, async () => {
       const sites = (await store.sites()).filter((s) => s.demo || s.propertyId);

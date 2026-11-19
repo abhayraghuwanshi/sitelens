@@ -145,29 +145,44 @@ export function cycleVerdict(r, prev, { days = CYCLE_DAYS, today, rank = 1, size
   const deadNow = r.visits < 2 * scale && !clicks && !ai && !r.conversions;
   const deadBefore = prev ? (prev.visits || 0) < 2 * scale && !((prev.google?.clicks || 0) + (prev.bing?.clicks || 0)) && !((prev.ai?.cited || 0) + (prev.ai?.sessions || 0)) && !prev.conversions : null;
   const query = g.query || b.query || '';
+  // reason: the verdict in plain words; why: the same with this cycle's numbers.
+  const out = (verdict, reason) => ({ verdict, reason: reason.trim(), why: `${reason.trim()} ${said}` });
 
-  if (deadNow && age !== null && age >= 0 && age < NEW_DAYS) return { verdict: 'new', why: `Published ${age} day${age === 1 ? '' : 's'} ago: Google and Bing usually take a few weeks to place a new page. ${said}` };
+  if (deadNow && age !== null && age >= 0 && age < NEW_DAYS) return out('new', `Published ${age} day${age === 1 ? '' : 's'} ago: Google and Bing usually take a few weeks to place a new page.`);
   if (deadNow) {
     if (deadBefore || (deadBefore === null && (age === null || age >= 90))) {
-      return { verdict: 'cut', why: `Nothing found it${deadBefore ? ' two cycles running' : ''}: no search clicks, no AI citations, no readers. Merge it into a stronger page on the same topic, or remove it and redirect. ${said}` };
+      return out('cut', `Nothing found it${deadBefore ? ' two cycles running' : ''}: no search clicks, no AI citations, no readers. Merge it into a stronger page on the same topic, or remove it and redirect.`);
     }
-    return { verdict: 'watch', why: `Nothing found it this cycle. If the next one is the same, cut it. Check it’s indexed in both Google and Bing. ${said}` };
+    return out('watch', `Nothing found it this cycle. If the next one is the same, cut it. Check it’s indexed in both Google and Bing.`);
   }
   const top = Math.max(1, Math.ceil(size / 3));
   if (rank <= top && value >= 10 * scale && (r.visits < 10 * scale || stayed >= 0.3)) {
-    return { verdict: 'grow', why: `One of the strongest in its category (#${rank} of ${size}). Write follow-ups${query ? ` around “${query}”` : ''} and link them from here.${trend} ${said}` };
+    return out('grow', `One of the strongest in its category (#${rank} of ${size}). Write follow-ups${query ? ` around “${query}”` : ''} and link them from here.${trend}`);
   }
   if (r.visits >= 10 * scale && stayed < 0.3) {
-    return { verdict: 'improve', why: `Readers arrive but only ${pct(stayed)} stay: it doesn’t convince them. Answer the question they came with sooner.${trend} ${said}` };
+    return out('improve', `Readers arrive but only ${pct(stayed)} stay: it doesn’t convince them. Answer the question they came with sooner.${trend}`);
   }
   // Far down the results a low click rate is the position, not the title.
   if (g.impressions >= 100 * scale && g.clicks / g.impressions < 0.015 && g.position && g.position <= 15) {
-    return { verdict: 'improve', why: `Google shows it ${fmt(g.impressions)} times${g.position ? ` around position ${g.position.toFixed(1)}` : ''} but ${pct(g.clicks / g.impressions)} click: rewrite the title and description${query ? ` for “${query}”` : ''}.${trend} ${said}` };
+    return out('improve', `Google shows it ${fmt(g.impressions)} times${g.position ? ` around position ${g.position.toFixed(1)}` : ''} but ${pct(g.clicks / g.impressions)} click: rewrite the title and description${query ? ` for “${query}”` : ''}.${trend}`);
   }
-  return { verdict: 'keep', why: `${value >= 10 * scale ? 'Earns its place, though others in its category do more.' : 'Earns a little.'}${trend} ${said}` };
+  return out('keep', `${value >= 10 * scale ? 'Earns its place, though others in its category do more.' : 'Earns a little.'}${trend}`);
 }
 
 /* ---------- a cycle's report (pure) ---------- */
+
+// Each article's verdicts in earlier cycles (oldest first, at most five), for
+// the history dots on its card. cycles: [{ n, start, rows, prev, days, today }].
+export function pastVerdicts(cycles) {
+  const out = new Map();
+  for (const c of cycles.slice(-5)) {
+    for (const r of buildCycle(c).rows) {
+      if (!out.has(r.path)) out.set(r.path, []);
+      out.get(r.path).push({ n: c.n, start: c.start, verdict: r.verdict });
+    }
+  }
+  return out;
+}
 
 const sumOf = (rows, fn) => rows.reduce((a, r) => a + (fn(r) || 0), 0);
 
@@ -550,7 +565,8 @@ export function createContentCycles({ dbPath, store, auth, articles, bing, aiSea
     }
     if (report) {
       const decisions = (await store.get()).pageDecisions?.[site.id] || {};
-      report.rows = report.rows.map((r) => ({ ...r, decision: decisions[r.path] || null }));
+      const past = pastVerdicts(stored.filter((c) => c.n < report.n).map((c) => ({ n: c.n, start: c.start, rows: [...snapshotsOf(site, c.n).values()], prev: snapshotsOf(site, c.n - 1), days: s.days, today: addDays(c.end, 1) })));
+      report.rows = report.rows.map((r) => ({ ...r, decision: decisions[r.path] || null, past: past.get(r.path) || [] }));
     }
     return { ...base, cycles: history, current, report };
   }
@@ -621,6 +637,17 @@ function demoOverview(todayIso, cycle) {
   const soFar = Math.floor((ms(addDays(todayIso, -2)) - ms(live.start)) / DAY) + 1;
   const pick = want === 4 ? { ...live, end: addDays(todayIso, -2), rows: rowsFor(4, soFar / days) } : closed[want - 1];
   const prev = new Map((want > 1 ? (want === 4 ? closed[2] : closed[want - 2]).rows : []).map((r) => [r.path, r]));
+  const byPath = (rows) => new Map(rows.map((r) => [r.path, r]));
+  const past = pastVerdicts(closed.filter((c) => c.n < want).map((c, i) => ({ n: c.n, start: c.start, rows: c.rows, prev: i ? byPath(closed[i - 1].rows) : new Map(), days, today: addDays(c.end, 1) })));
+  const report = {
+    kind: want === 4 ? 'live' : 'closed', n: want, start: pick.start, end: pick.end, partial: want === 4,
+    goals: ['file_download'], sources: { google: true, bing: true, ga4: true, ai: 24 },
+    ...(() => {
+      const so = want === 4 ? Math.floor((ms(pick.end) - ms(pick.start)) / DAY) + 1 : days;
+      return buildCycle({ rows: pick.rows, prev, days: so, today: want === 4 ? todayIso : addDays(pick.end, 1), prevScale: so / days });
+    })(),
+  };
+  report.rows = report.rows.map((r) => ({ ...r, past: past.get(r.path) || [] }));
   return {
     demo: true,
     settings: { on: true, days, start, askAi: true, categories: {} },
@@ -628,14 +655,7 @@ function demoOverview(todayIso, cycle) {
     cycles: closed.map((c) => ({ n: c.n, start: c.start, end: c.end, articles: c.rows.length, visits: sumOf(c.rows, (r) => r.visits), conversions: sumOf(c.rows, (r) => r.conversions),
       google: sumOf(c.rows, (r) => r.google.clicks), bing: sumOf(c.rows, (r) => r.bing.clicks), aiCited: sumOf(c.rows, (r) => r.ai.cited) })),
     current: { ...live, day: Math.floor((ms(todayIso) - ms(live.start)) / DAY) + 1, measuredTo: addDays(todayIso, -2) },
-    report: {
-      kind: want === 4 ? 'live' : 'closed', n: want, start: pick.start, end: pick.end, partial: want === 4,
-      goals: ['file_download'], sources: { google: true, bing: true, ga4: true, ai: 24 },
-      ...(() => {
-        const so = want === 4 ? Math.floor((ms(pick.end) - ms(pick.start)) / DAY) + 1 : days;
-        return buildCycle({ rows: pick.rows, prev, days: so, today: want === 4 ? todayIso : addDays(pick.end, 1), prevScale: so / days });
-      })(),
-    },
+    report,
   };
 }
 

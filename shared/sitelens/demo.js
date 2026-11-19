@@ -455,6 +455,18 @@ export function demoLiveDetail(host = 'example.com', at = Date.now()) {
     countries: split(last30, [0.38, 0.17, 0.14, 0.11, 0.08], ['United States', 'India', 'Germany', 'United Kingdom', 'Brazil']),
     devices: split(last30, [0.62, 0.34, 0.04], ['desktop', 'mobile', 'tablet']),
     sources: split(last30, [0.34, 0.26, 0.18, 0.12, 0.1], ['google', '(direct)', 'reddit.com', 'chatgpt.com', 'news.ycombinator.com']),
+    feed: [
+      [0, 'DE', 'Germany', 'Berlin', pages[1].title, 'desktop', 'google', 2],
+      [1, 'US', 'United States', 'Austin', pages[2].title, 'desktop', 'chatgpt.com', 1],
+      [1, 'US', 'United States', 'Chicago', 'Home', 'mobile', '(direct)', 3],
+      [3, 'IN', 'India', 'Bengaluru', pages[1].title, 'mobile', '(direct)', 1],
+      [4, 'GB', 'United Kingdom', 'London', 'Home', 'desktop', 'google', 2],
+      [6, 'US', 'United States', 'Denver', pages[2].title, 'mobile', 'reddit.com', 1],
+      [11, 'BR', 'Brazil', 'São Paulo', pages[3].title, 'desktop', 'news.ycombinator.com', 1],
+      [17, 'DE', 'Germany', 'Munich', pages[3].title, 'desktop', 'github.com', 1],
+      [24, 'NL', 'Netherlands', 'Amsterdam', 'Home', 'desktop', 'google', 1],
+    ].map(([ago, code, country, city, page, device, source, users]) => ({ ago, code, country, city, page, device, source, users })),
+    wins: [{ ago: 3, event: 'sign_up', count: 1 }, { ago: 12, event: 'file_download', count: 2 }],
     scopedByStream: true,
     // What shipped or was posted just before, as the Timeline would show it.
     recent: [

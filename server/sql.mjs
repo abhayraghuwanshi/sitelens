@@ -170,6 +170,46 @@ function withSessions(bq, range, body, ctes = []) {
   return `WITH sessions AS (\n  ${source}\n)${extra}\n${body}`;
 }
 
+// Live: everyone with an event in the last `minutes` minutes, one row each,
+// from the streaming export's intraday tables (suffixes: intraday_YYYYMMDD,
+// today and yesterday so a day boundary in the property's time zone is covered).
+export function livePeopleSql(bq, suffixes, { minutes = 30, limit = 80 } = {}) {
+  if (!suffixes.length || !suffixes.every((x) => /^intraday_\d{8}$/.test(x))) throw new Error('Invalid intraday tables');
+  const left = leftOutWhere({ ...bq, sessionsTable: '' });
+  return {
+    sql: `WITH e AS (
+  SELECT user_pseudo_id AS visitor, event_timestamp AS t, event_name,
+    device.category AS device, device.web_info.browser AS browser, device.operating_system AS os,
+    geo.city AS city, geo.country AS country,
+    collected_traffic_source.manual_source AS src, traffic_source.source AS first_src,
+    ${PARAM('page_referrer')} AS referrer,
+    ${PATH_OF(PARAM('page_location'))} AS path, ${PARAM('page_title')} AS title,
+    ${PARAM('session_engaged')} = '1' AS engaged_event
+  FROM ${eventsTable(bq)}
+  WHERE _TABLE_SUFFIX IN (${suffixes.map((x) => `'${x}'`).join(', ')})${bq.streamId ? '\n    AND stream_id = @stream_id' : ''}
+    AND event_timestamp >= UNIX_MICROS(TIMESTAMP_SUB(CURRENT_TIMESTAMP(), INTERVAL ${Number(minutes)} MINUTE))
+    AND user_pseudo_id IS NOT NULL
+), p AS (
+  SELECT visitor, DIV(MIN(t), 1000) AS first_ms, DIV(MAX(t), 1000) AS last_ms,
+    ARRAY_AGG(device IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS device,
+    ARRAY_AGG(browser IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS browser,
+    ARRAY_AGG(os IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS os,
+    ARRAY_AGG(city IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS city,
+    ARRAY_AGG(country IGNORE NULLS ORDER BY t DESC LIMIT 1)[SAFE_OFFSET(0)] AS country,
+    ARRAY_AGG(src IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS source,
+    ARRAY_AGG(referrer IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS referrer,
+    ARRAY_AGG(first_src IGNORE NULLS ORDER BY t LIMIT 1)[SAFE_OFFSET(0)] AS first_source,
+    LOGICAL_OR(IFNULL(engaged_event, FALSE)) AS engaged,
+    ARRAY_AGG(STRUCT(DIV(t, 1000) AS ms, event_name AS name, path, title) ORDER BY t LIMIT 60) AS events
+  FROM e GROUP BY visitor
+)
+SELECT * FROM p${left ? `\nWHERE NOT (${left})` : ''}
+ORDER BY last_ms DESC
+LIMIT ${Number(limit)}`,
+    params: baseParams(bq),
+  };
+}
+
 // The site's leave-out rule as a condition on a session's country and engaged
 // columns, or '' for none. A materialized table built before `engaged` existed
 // can only be filtered by country, so then the rule is country-only.

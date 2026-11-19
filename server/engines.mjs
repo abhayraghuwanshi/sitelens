@@ -9,6 +9,7 @@ import { demoSiteReports, demoLive, demoLiveDetail, demoAiTraffic, demoPageTrend
 import * as sql from './sql.mjs';
 import * as demo from './demo-warehouse.mjs';
 import { createCache } from './cache.mjs';
+import { classifyEvents } from './outcomes.mjs';
 
 export class EngineError extends Error {
   constructor(message, { status = 400, kind = 'bad-request', hint = '' } = {}) {
@@ -21,6 +22,33 @@ export class EngineError extends Error {
 
 const API_TTL = 5 * 60_000;
 const LIVE_TTL = 40_000;
+
+// One visitor from the live BigQuery rows: where, on what, from where, the
+// pages in order and what they did (goals as Outcomes counts them).
+const ROUTINE = /^(page_view|session_start|first_visit|user_engagement|scroll)$/;
+const hostOf = (url) => { try { return new URL(url).hostname.replace(/^www\./, ''); } catch { return ''; } };
+export function personOf(r) {
+  const events = (r.events || []).map((e) => ({ ms: Number(e.ms), name: e.name, path: e.path || '/', title: e.title || '' }));
+  const pages = [];
+  for (const e of events) if (e.name === 'page_view' && pages.at(-1)?.path !== e.path) pages.push({ path: e.path, title: e.title, ms: e.ms });
+  const did = [];
+  for (const e of events) {
+    if (ROUTINE.test(e.name)) continue;
+    const c = classifyEvents([{ name: e.name, users: 1 }]);
+    const kind = c.completions.length ? 'goal' : c.intents.length ? 'intent' : 'other';
+    if (!did.some((d) => d.name === e.name)) did.push({ name: e.name, kind, ms: e.ms });
+  }
+  const referrer = hostOf(r.referrer);
+  const source = r.source && r.source !== '(direct)' ? r.source : referrer || (r.first_source && r.first_source !== '(direct)' ? r.first_source : '(direct)');
+  return {
+    id: String(r.visitor).slice(-6),
+    first: Number(r.first_ms), last: Number(r.last_ms),
+    device: r.device || '', browser: r.browser && r.browser !== '(not set)' ? r.browser : '', os: r.os && r.os !== '(not set)' ? r.os : '',
+    city: r.city && r.city !== '(not set)' ? r.city : '', country: r.country && r.country !== '(not set)' ? r.country : '',
+    source, new: events.some((e) => e.name === 'first_visit'),
+    pages, did, engaged: Boolean(r.engaged),
+  };
+}
 const WAREHOUSE_TTL = 60 * 60_000;
 // Past its TTL, a result still shows (up to this age) while a fresh one loads.
 const STALE_FOR = 24 * 60 * 60_000;
@@ -82,6 +110,25 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
       if (!site.propertyId) throw new EngineError('Link a GA4 property to this site to see who is on it.', { kind: 'needs-property' });
       const token = await auth.token();
       return fetchRealtimeDetail({ token, propertyId: site.propertyId, streamName: site.streamName });
+    });
+  }
+
+  // Live, one row per visitor: the GA4 streaming export (intraday tables) has
+  // each event about a minute after it happens, with browser, OS and source.
+  // Sites without it get { available: false } and keep the grouped feed.
+  async function livePeople(site) {
+    if (site.demo || !site.bq || site.bq.sessionsTable) return { available: false, reason: site.bq ? 'rollup' : 'no-bigquery' };
+    const bq = site.bq;
+    const tables = await cache.wrap(`tables:${site.id}`, 10 * 60_000, false, () =>
+      bigquery.listTables({ project: bq.dataProject || bq.billingProject, dataset: bq.dataset }));
+    const day = (d) => new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10).replace(/-/g, '');
+    // The property's day can be a day ahead of or behind UTC.
+    const suffixes = [day(-1), day(0), day(1)].map((d) => `intraday_${d}`).filter((x) => tables.includes(`events_${x}`));
+    if (!suffixes.length) return { available: false, reason: 'no-streaming' };
+    return liveCache.wrap(`live-people:${site.id}`, LIVE_TTL, false, async () => {
+      const built = sql.livePeopleSql(bq, suffixes);
+      const result = await bigquery.query({ project: bq.billingProject, sql: built.sql, params: built.params, location: bq.location, maxBytes: Math.min(bq.maxBytes || 5e8, 5e8) });
+      return { available: true, at: Date.now(), people: result.rows.map(personOf), bytes: result.bytes };
     });
   }
 
@@ -487,6 +534,7 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     dashboard,
     live,
     liveDetail,
+    livePeople,
     pageTrend,
     search,
     portfolio,

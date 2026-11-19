@@ -1,8 +1,7 @@
-import { useMemo, useState } from 'preact/hooks';
-import { formatNumber, formatPercent, formatDecimal } from '@shared/format.js';
+import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, withParam } from '../hooks.js';
-import { Card, KpiStrip, Loading, ErrorState, Empty, Segmented } from '../components/ui.jsx';
+import { Card, Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { RedditCycles } from './RedditCycles.jsx';
 import { AddTodo, useTodos } from '../components/Todos.jsx';
 
@@ -18,13 +17,7 @@ export const VERDICTS = {
   cut: { label: 'Cut', tone: 'bad', title: 'Nothing found it: merge or remove' },
   new: { label: 'Too new', tone: 'idle', title: 'Search engines take a few weeks to place a new page' },
 };
-const ENGINES = [
-  { key: 'google', label: 'Google', unit: 'clicks' },
-  { key: 'bing', label: 'Bing', unit: 'clicks', hint: 'Also feeds Copilot, DuckDuckGo and ChatGPT search' },
-  { key: 'ai', label: 'AI assistants', unit: 'visits + citations' },
-];
 const DECIDED = { keep: 'kept', improve: 'to improve', merge: 'to merge', remove: 'to remove' };
-const num = (v) => (v ? formatNumber(v) : <span class="muted">0</span>);
 // A page's own view (the article editor) lives under Explore → Pages.
 const pageHref = (site, path) => `#/site/${site.id}/pages?article=${encodeURIComponent(path)}`;
 const shortDate = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
@@ -61,9 +54,8 @@ function ArticleCycles({ site }) {
   if (!d.settings.start) return <StartCycles site={site} d={d} onSaved={data.reload} />;
   return (
     <>
-      <CycleHead site={site} d={d} cycle={cycle} setCycle={setCycle} onSaved={data.reload} />
-      {d.cycles.length > 1 && <History cycles={d.cycles} />}
-      {d.report ? <Report site={site} r={d.report} current={d.current} onSaved={data.reload} /> : <Waiting c={d.current} />}
+      {d.report ? <Board site={site} d={d} r={d.report} current={d.current} cycle={cycle} setCycle={setCycle} onSaved={data.reload} />
+        : <><CycleHead site={site} d={d} cycle={cycle} setCycle={setCycle} onSaved={data.reload} /><Waiting c={d.current} /></>}
     </>
   );
 }
@@ -122,9 +114,11 @@ function StartCycles({ site, d, onSaved }) {
   );
 }
 
-function CycleHead({ site, d, cycle, setCycle, onSaved }) {
+// The top line: which cycle, how far along, and the cycle switcher.
+function CycleHead({ site, d, cycle, setCycle, onSaved, need }) {
   const c = d.current;
   const s = d.settings;
+  const r = d.report;
   const [msg, setMsg] = useState('');
   const save = async (patch) => {
     setMsg('');
@@ -136,194 +130,168 @@ function CycleHead({ site, d, cycle, setCycle, onSaved }) {
     }
   };
   const options = [
-    ...d.cycles.slice(-6).map((x) => ({ key: String(x.n), label: `#${x.n}`, title: `${x.start} to ${x.end}` })),
-    { key: 'live', label: `#${c.n} so far`, title: c.measuredTo ? `${c.start} to ${c.measuredTo}` : 'No search data yet' },
+    ...d.cycles.slice(-5).map((x) => ({ key: String(x.n), label: shortDate(x.start), title: `Cycle ${x.n}: ${shortDate(x.start)} – ${shortDate(x.end)}` })),
+    { key: 'live', label: 'This one so far', title: c.measuredTo ? `Cycle ${c.n}: ${shortDate(c.start)} – ${shortDate(c.measuredTo)}` : 'No search data yet' },
   ];
   const shown = cycle || (d.cycles.length ? String(d.cycles.at(-1).n) : 'live');
+  const day = Math.min(c.day, s.days);
+  const pct = Math.round((day / s.days) * 100);
+  const head = need === undefined ? `Cycle ${shortDate(c.start)} – ${shortDate(c.end)}`
+    : need ? `${need} page${need === 1 ? ' needs' : 's need'} a decision` : 'Nothing needs a decision';
+  const facts = [
+    need === undefined ? null : `Cycle ${shortDate(c.start)} – ${shortDate(c.end)}`,
+    r ? `${r.rows.length} pages judged on Google, Bing and AI` : null,
+    r?.kind === 'live' && c.verdictsOn ? `verdicts final ${shortDate(c.verdictsOn)}` : null,
+  ].filter(Boolean).join(' · ');
   return (
-    <>
-      <div class="meta-line items-center">
-        <span>{`Cycle ${c.n}, day ${c.day} of ${s.days} (${shortDate(c.start)} to ${shortDate(c.end)})${s.on ? '' : ', paused'}`}</span>
-        <Segmented label="Which cycle" value={shown} onChange={setCycle} options={options} />
-        <label class="small"><input type="checkbox" checked={s.askAi} onChange={(e) => save({ askAi: e.currentTarget.checked })} /> AI checks each cycle</label>
-        <button class="btn ghost" type="button" onClick={() => save({ on: !s.on })}>{s.on ? 'Pause' : 'Resume'}</button>
+    <header class="cb-head">
+      <div class="cb-top">
+        <h2>{head}</h2>
+        <span class="cb-progwrap" title={r?.kind === 'live' ? 'Google and Bing report about two days late, so the newest days can still change' : ''}>
+          <span class="nx-prog cb-prog"><i style={{ width: `${pct}%` }} /></span>
+          <small>{s.on ? `Day ${day} of ${s.days}` : `Paused on day ${day} of ${s.days}`}</small>
+        </span>
+      </div>
+      <div class="cb-sub">
+        <span class="muted">{facts}</span>
+        <span class="cb-ctrl">
+          {options.length > 1 && <Segmented label="Which cycle" value={shown} onChange={setCycle} options={options} />}
+          <label class="small muted"><input type="checkbox" checked={s.askAi} onChange={(e) => save({ askAi: e.currentTarget.checked })} /> AI checks</label>
+          <button class="link-btn small" type="button" onClick={() => save({ on: !s.on })}>{s.on ? 'Pause' : 'Resume'}</button>
+        </span>
       </div>
       {d.demo && <p class="note m-0">Sample cycles: open one of your own sites to run real ones.</p>}
       {msg && <p class="note m-0">{msg}</p>}
-    </>
+    </header>
   );
 }
 
-function History({ cycles }) {
-  return (
-    <Card title="Cycle by cycle" sub="What all articles brought in each finished cycle" flush>
-      <div class="table-wrap">
-        <table class="data">
-          <thead><tr><th>Cycle</th><th class="num">Articles</th><th class="num">Visits</th><th class="num">Acted</th><th class="num">Google clicks</th><th class="num">Bing clicks</th><th class="num">AI citations</th></tr></thead>
-          <tbody>
-            {cycles.map((c) => (
-              <tr key={c.n}>
-                <td>#{c.n} <span class="small muted">{shortDate(c.start)}–{shortDate(c.end)}</span></td>
-                <td class="num">{formatNumber(c.articles)}</td>
-                <td class="num">{num(c.visits)}</td>
-                <td class="num">{num(c.conversions)}</td>
-                <td class="num">{num(c.google)}</td>
-                <td class="num">{num(c.bing)}</td>
-                <td class="num">{num(c.aiCited)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </Card>
-  );
-}
+// Four columns, one card per page. Keep sits with Grow, Watch with Cut.
+const COLUMNS = [
+  { name: 'Grow', tone: 'up', verdicts: ['grow', 'keep'] },
+  { name: 'Improve', tone: 'warn', verdicts: ['improve'] },
+  { name: 'Cut', tone: 'down', verdicts: ['cut', 'watch'] },
+  { name: 'Too new', tone: 'muted', verdicts: ['new'] },
+];
+const DOT = { grow: 'up', keep: 'up', improve: 'warn', watch: 'down', cut: 'down', new: 'muted' };
 
-function Report({ site, r, current, onSaved }) {
-  const t = r.totals;
-  const [only, setOnly] = useState('');
-  const [category, setCategory] = useState('');
-  const rows = useMemo(() => r.rows.filter((x) => (!only || x.verdict === only) && (!category || x.category === category)), [r, only, category]);
-  const off = Object.entries(r.sources || {}).filter(([k, v]) => k !== 'ai' && v !== true);
+// A page needs you this cycle when its verdict has a next step nobody has taken:
+// a winner with no follow-up to-do yet, or an improve/cut not yet marked.
+const needsYou = (x, todos) =>
+  (x.verdict === 'grow' && !todos.some((t) => t.from === `cycle:${x.path}`))
+  || ((x.verdict === 'improve' || x.verdict === 'cut') && !x.decision?.decision);
+// Biggest first: winners by what they earn, improves by the readers and
+// impressions at stake, cuts by how long they've been live with nothing.
+const ORDER = {
+  Grow: (a, b) => b.value - a.value,
+  Improve: (a, b) => (b.visits || 0) + (b.google?.impressions || 0) / 10 - (a.visits || 0) - (a.google?.impressions || 0) / 10,
+  Cut: (a, b) => (a.published || '9').localeCompare(b.published || '9'),
+  'Too new': () => 0,
+};
+const SHOWN = 3;
+
+function Board({ site, d, r, current, cycle, setCycle, onSaved }) {
   const todos = useTodos({ site: site.id });
+  const list = todos.data?.todos || [];
+  const off = Object.entries(r.sources || {}).filter(([k, v]) => k !== 'ai' && v !== true);
+  const need = r.rows.filter((x) => needsYou(x, list)).length;
   return (
     <>
-      <p class="note m-0">
-        {r.kind === 'live'
-          ? `Cycle ${r.n} so far: ${shortDate(r.start)} to ${shortDate(r.end)}. Search engines report about two days late, so the newest day can still fill in and the next one arrives tomorrow. Changes compare it with the cycle before, scaled to the same number of days.${current?.verdictsOn ? ` Verdicts are final on ${shortDate(current.verdictsOn)}.` : ''}`
-          : `Cycle ${r.n}: ${r.start} to ${r.end}.`}
-        {' '}{r.goals?.length ? `“Acted” counts readers who went on to ${r.goals.map((g) => g.replace(/_/g, ' ')).join(' or ')}.` : 'No download or sign-up event found in GA4, so “acted” stays at 0.'}
-        {' '}{r.sources?.ai ? `${formatNumber(r.sources.ai)} AI answers were checked in this window.` : 'No AI answer checks ran in this window, so citations are 0. Run them from AI search.'}
-      </p>
       {off.length > 0 && <p class="note m-0">{off.map(([k, v]) => `${{ google: 'Search Console', bing: 'Bing', ga4: 'GA4' }[k]}: ${v || 'not connected'}.`).join(' ')}</p>}
-
-      <KpiStrip items={[
-        { label: 'Articles', value: formatNumber(t.articles), meta: `${formatNumber(t.unseen)} unseen by Google and Bing` },
-        { label: 'Visits', value: formatNumber(t.visits), meta: t.visits ? `${formatPercent(t.engaged / t.visits, 0)} stayed (convinced)` : 'landing on an article', help: 'GA4 sessions that started on an article. Stayed: engaged sessions (10s+, 2+ pages or a key event).' },
-        { label: 'Acted', value: formatNumber(t.conversions), meta: t.visits ? `${formatPercent(t.conversions / t.visits, 1)} of visits` : 'downloads, sign-ups', help: 'Users who landed on an article and fired one of the site’s goal events.' },
-        { label: 'Google clicks', value: formatNumber(t.google) },
-        { label: 'Bing clicks', value: formatNumber(t.bing) },
-        { label: 'AI', value: formatNumber(t.aiCited), meta: `citations · ${formatNumber(t.aiVisits)} visits`, help: 'Times an answer check cited one of these articles, and visits ChatGPT, Perplexity and other assistants sent.' },
-      ]} />
-
-      <div class="cycle-cats">
-        {r.categories.map((c) => <CategoryCard key={c.name} c={c} on={category === c.name} onPick={() => setCategory(category === c.name ? '' : c.name)} />)}
-      </div>
-
-      <div class="review-chips" role="group" aria-label="Filter by verdict">
-        <button type="button" class={`rv-chip${!only ? ' on' : ''}`} onClick={() => setOnly('')}>All <b>{r.rows.length}</b></button>
-        {Object.keys(VERDICTS).filter((k) => r.counts[k]).map((k) => (
-          <button type="button" key={k} title={VERDICTS[k].title} class={`rv-chip tone-${VERDICTS[k].tone}${only === k ? ' on' : ''}`} onClick={() => setOnly(only === k ? '' : k)}>{VERDICTS[k].label} <b>{r.counts[k]}</b></button>
+      <CycleHead site={site} d={d} cycle={cycle} setCycle={setCycle} onSaved={onSaved} need={need} />
+      <div class="cboard">
+        {COLUMNS.map((col) => (
+          <Column key={col.name} col={col} rows={r.rows.filter((x) => col.verdicts.includes(x.verdict)).sort(ORDER[col.name])}
+            site={site} r={r} current={current} todos={list} onSaved={onSaved} />
         ))}
-        {category && <button type="button" class="rv-chip on" onClick={() => setCategory('')}>{category} ✕</button>}
       </div>
-
-      <Card flush>
-        {rows.length ? (
-          <div class="table-wrap">
-            <table class="data review">
-              <thead>
-                <tr>
-                  <th>Article</th>
-                  <th class="num" title="Google clicks · impressions">Google</th>
-                  <th class="num" title="Bing clicks · impressions">Bing</th>
-                  <th class="num" title="AI visits · times an answer check cited it">AI</th>
-                  <th class="num" title="Visits that started on it">Visits</th>
-                  <th class="num" title="Share of those visits that engaged">Stayed</th>
-                  <th class="num" title="Readers who went on to a goal (download, sign-up…)">Acted</th>
-                  <th class="num" title="Value against its previous cycle: visits, plus 5 per reader who acted and 3 per AI citation">Change</th>
-                  <th>Verdict</th>
-                </tr>
-              </thead>
-              <tbody>{rows.map((x) => <ArticleRow key={x.path} site={site} x={x} categories={r.categories} todos={todos.data?.todos || []} onSaved={onSaved} />)}</tbody>
-            </table>
-          </div>
-        ) : <div class="pad-16"><Empty title="Nothing matches">Try another verdict or category.</Empty></div>}
-      </Card>
-      <p class="note">Value ranks articles within a category. It counts each visit as 1, each reader who acted as 5, and each AI citation as 3, because someone who read the answer may never visit. <b>Grow</b> goes to the top third of a category when its readers stay, <b>cut</b> to articles with no clicks, no AI and no readers two cycles running. Acting on a verdict saves it as the page’s decision on the Pages review.</p>
+      <p class="note">Each page is judged once a cycle against the others in its category: <b>Grow</b> (it’s working, add to it), <b>Improve</b> (shown or visited, but it loses the click or the reader), <b>Cut</b> (nothing found it: merge or redirect it), or <b>Too new</b>. Only pages waiting on you get a card; the rest fold into the line at the bottom of each column. Acting on a verdict saves it as the page’s decision.</p>
     </>
   );
 }
 
-function CategoryCard({ c, on, onPick }) {
-  const change = c.previous ? c.value / c.previous - 1 : null;
+// Full cards for the first few that need you; the rest as one-line rows.
+function Column({ col, rows, site, r, current, todos, onSaved }) {
+  const [more, setMore] = useState(false);
+  const [quietOpen, setQuietOpen] = useState(false);
+  const open = rows.filter((x) => needsYou(x, todos));
+  const quiet = rows.filter((x) => !needsYou(x, todos));
+  const cards = open.slice(0, SHOWN);
+  const rest = open.slice(SHOWN);
+  const counts = {};
+  for (const x of quiet) {
+    const k = x.verdict === 'new' ? 'too new' : x.verdict === 'keep' ? 'keep' : x.verdict === 'watch' ? 'to watch' : x.verdict === 'grow' ? 'with a to-do' : 'already marked';
+    counts[k] = (counts[k] || 0) + 1;
+  }
+  const quietLine = Object.entries(counts).map(([k, n]) => `${n} ${k}`).join(' · ');
+  const row = (x) => <CompactRow key={x.path} site={site} x={x} todos={todos} onSaved={onSaved} />;
   return (
-    <Card class={`cycle-cat${on ? ' on' : ''}`} title={<button type="button" class="link-btn" onClick={onPick} title="Show only this category">{c.name}</button>}
-      sub={`${c.articles} article${c.articles === 1 ? '' : 's'}${change !== null && Number.isFinite(change) ? ` · ${change >= 0 ? '+' : ''}${formatPercent(change, 0)} on the cycle before` : ''}`}>
-      <div class="cycle-funnel small">
-        <span><b>{formatNumber(c.visits)}</b> came</span>
-        <span>→ <b>{formatNumber(c.engaged)}</b> stayed{c.visits ? ` (${formatPercent(c.engaged / c.visits, 0)})` : ''}</span>
-        <span>→ <b>{formatNumber(c.conversions)}</b> acted{c.visits ? ` (${formatPercent(c.conversions / c.visits, 1)})` : ''}</span>
-      </div>
-      <table class="data cycle-engines">
-        <tbody>
-          {ENGINES.map((e) => {
-            const v = c.engines[e.key];
-            return (
-              <tr key={e.key} title={e.hint || ''}>
-                <th>{e.label}</th>
-                <td class="num">{num(v.value)}</td>
-                <td class="small muted" title="Readers this engine sent who acted, of all it sent">{v.visits ? `${formatNumber(v.conversions)}/${formatNumber(v.visits)} acted` : ''}</td>
-                <td class="small">{v.leader ? <span title={v.leader.path}>{v.leader.title || v.leader.path}</span> : <span class="muted">nothing yet</span>}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      {c.engines.agree === false && <p class="small muted" style={{ margin: '6px 0 0' }}>The engines favour different articles here, so compare what the leaders do differently.</p>}
-    </Card>
+    <section class="ccol" aria-label={col.name}>
+      <h3><span class={col.tone}>{col.name}</span> · {open.length ? `${open.length} to decide` : 'nothing to decide'}</h3>
+      {cards.map((x) => <PageCard key={x.path} site={site} x={x} r={r} current={current} todos={todos} onSaved={onSaved} />)}
+      {rest.length > 0 && (more
+        ? <div class="crows">{rest.map(row)}</div>
+        : <button type="button" class="ccol-more" onClick={() => setMore(true)}>Show {rest.length} more to decide</button>)}
+      {quiet.length > 0 && (
+        <>
+          <button type="button" class="ccol-quiet" aria-expanded={quietOpen} onClick={() => setQuietOpen(!quietOpen)}>
+            {open.length ? 'Plus ' : ''}{quietLine}{col.name === 'Too new' && current?.verdictsOn ? ` · judged ${shortDate(current.verdictsOn)}` : ''} {quietOpen ? '▴' : '▾'}
+          </button>
+          {quietOpen && <div class="crows">{quiet.map(row)}</div>}
+        </>
+      )}
+      {!rows.length && <p class="small muted m-0">None this cycle.</p>}
+    </section>
   );
 }
 
-function ArticleRow({ site, x, categories, todos, onSaved }) {
-  const change = x.previous === null ? null : x.previous === 0 ? (x.value ? Infinity : 0) : x.value / x.previous - 1;
-  return (
-    <tr>
-      <td class="cell-path" style={{ maxWidth: '360px' }}>
-        <a href={pageHref(site, x.path)} class="review-page">{x.title || x.path}</a>
-        <div class="small muted" style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-          <code>{x.path}</code>
-          <CategoryInput site={site} x={x} categories={categories} onSaved={onSaved} />
-          {x.google?.query && <span title="Top Google query this cycle">“{x.google.query}”</span>}
-        </div>
-      </td>
-      <td class="num" title={x.google?.position ? `Avg. position ${formatDecimal(x.google.position, 1)}` : ''}>{x.google ? <>{num(x.google.clicks)} <span class="muted">· {formatNumber(x.google.impressions)}</span></> : <span class="muted">—</span>}</td>
-      <td class="num" title={x.bing?.position ? `Avg. position ${formatDecimal(x.bing.position, 1)}` : ''}>{x.bing ? <>{num(x.bing.clicks)} <span class="muted">· {formatNumber(x.bing.impressions)}</span></> : <span class="muted">—</span>}</td>
-      <td class="num" title={x.ai?.prompts?.length ? `Cited for: ${x.ai.prompts.join(' · ')}` : ''}>{num(x.ai?.sessions)} <span class="muted">· {formatNumber(x.ai?.cited || 0)}</span></td>
-      <td class="num">{num(x.visits)}</td>
-      <td class="num">{x.visits ? formatPercent(x.engaged / x.visits, 0) : '—'}</td>
-      <td class="num">{num(x.conversions)}</td>
-      <td class="num">{change === null ? <span class="muted">—</span> : change === Infinity ? <span class="delta up">new</span> : <span class={change > 0 ? 'delta up' : change < 0 ? 'delta down' : 'muted'}>{change > 0 ? '+' : ''}{formatPercent(change, 0)}</span>}</td>
-      <td style={{ minWidth: '240px' }}>
-        <span class={`rv-tag ${VERDICTS[x.verdict].tone}`} title={VERDICTS[x.verdict].title}>{VERDICTS[x.verdict].label}</span>
-        {x.decision && <span class="rv-goal" title={x.decision.note || ''}>{DECIDED[x.decision.decision] || x.decision.decision}</span>}
-        <div class="small muted mt-4">{x.why}</div>
-        <Act site={site} x={x} todos={todos} onSaved={onSaved} />
-      </td>
-    </tr>
-  );
-}
-
-function CategoryInput({ site, x, categories, onSaved }) {
-  const [value, setValue] = useState(x.category);
-  const id = `cats-${site.id}`;
-  const save = async () => {
-    const next = value.trim();
-    if (next === x.category) return;
-    await api.post(`/sites/${site.id}/content-cycles/category`, { path: x.path, category: next });
-    onSaved();
+// One line: the page, its reason on hover, and where it stands.
+function CompactRow({ site, x, todos, onSaved }) {
+  const [busy, setBusy] = useState(false);
+  const decided = x.decision?.decision;
+  const todo = todos.find((t) => t.from === `cycle:${x.path}`);
+  const state = decided ? `Marked ${DECIDED[decided] || decided}`
+    : todo ? (todo.status === 'done' ? 'To-do done' : 'To-do open')
+    : { keep: 'Keep', watch: 'Watch', new: 'Too new' }[x.verdict] || '';
+  const undo = async () => {
+    setBusy(true);
+    try {
+      await api.post(`/sites/${site.id}/content-cycles/act`, { path: x.path, verdict: 'clear' });
+      onSaved();
+    } finally {
+      setBusy(false);
+    }
   };
   return (
-    <>
-      <input class="cycle-cat-input" type="text" list={id} value={value} aria-label={`Category of ${x.path}`} title={x.categoryFrom === 'you' ? 'Your category' : x.categoryFrom === 'topic' ? 'From the site’s search topics; type to change' : 'From the URL; type to change'}
-        onInput={(e) => setValue(e.currentTarget.value)} onBlur={save} onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()} />
-      <datalist id={id}>{categories.map((c) => <option key={c.name} value={c.name} />)}</datalist>
-    </>
+    <div class="crow" title={x.reason || x.why}>
+      <a href={pageHref(site, x.path)}>{x.title || x.path}</a>
+      <span class="small muted">{state}{decided && <> · <button type="button" class="link-btn" disabled={busy} onClick={undo}>Undo</button></>}</span>
+    </div>
   );
 }
 
-// One click from a verdict to a decision or a to-do.
-function Act({ site, x, todos, onSaved }) {
+function PageCard({ site, x, r, current, todos, onSaved }) {
+  const label = x.verdict === 'keep' ? 'Keep' : x.verdict === 'watch' ? 'Watch' : '';
+  const dots = [...(x.past || []), { n: r.n, start: r.start, verdict: x.verdict, now: true }];
+  return (
+    <article class="ccard">
+      <a class="ccard-title" href={pageHref(site, x.path)} title={x.path}>{x.title || x.path}</a>
+      {label && <span class={`ccard-sub ${DOT[x.verdict]}`}>{label}</span>}
+      <span class="cwhy" title={x.why}>{x.reason || x.why}</span>
+      <div class="cfoot">
+        <Next site={site} x={x} current={current} todos={todos} onSaved={onSaved} />
+        <span class="cdots" aria-label="Verdict each cycle">
+        {dots.map((h) => <span key={h.n} class={`cdot ${DOT[h.verdict]}`} title={`${shortDate(h.start)}: ${VERDICTS[h.verdict].label}${h.now ? ' (this cycle)' : ''}`}><i />{monthOf(h.start)}</span>)}
+        </span>
+      </div>
+    </article>
+  );
+}
+const monthOf = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { month: 'short', timeZone: 'UTC' });
+
+// What to do this cycle, and where it stands: one click from a verdict to a
+// decision or a to-do.
+function Next({ site, x, current, todos, onSaved }) {
   const [busy, setBusy] = useState(false);
   const act = async (verdict) => {
     setBusy(true);
@@ -337,23 +305,17 @@ function Act({ site, x, todos, onSaved }) {
   const from = `cycle:${x.path}`;
   const added = todos.find((t) => t.from === from);
   const link = pageHref(site, x.path);
-  if (x.verdict === 'grow') {
-    return (
-      <div class="row mt-6 gap-6">
+  const decided = x.decision?.decision;
+  return (
+    <div class="cnext">
+      {x.verdict === 'grow' && (
         <AddTodo site={site} added={added} class="btn cycle-act" label="To-do: write a follow-up"
           todo={{ title: `Write a follow-up to ${x.title || x.path}${x.google?.query ? ` around “${x.google.query}”` : ''}`, detail: x.why, link, from, subject: { kind: 'search', key: x.path } }} />
-      </div>
-    );
-  }
-  if (x.verdict === 'cut' || x.verdict === 'improve') {
-    const decided = x.decision?.decision;
-    return (
-      <div class="row mt-6 gap-6">
-        {decided ? <button class="btn ghost cycle-act" type="button" disabled={busy} onClick={() => act('clear')}>Undo decision</button>
-          : <button class="btn cycle-act" type="button" disabled={busy} onClick={() => act(x.verdict)}>{x.verdict === 'cut' ? 'Mark to remove' : 'Mark to improve'}</button>}
-        {x.verdict === 'improve' && <a class="btn ghost cycle-act" href={pageHref(site, x.path)}>Open in editor</a>}
-      </div>
-    );
-  }
-  return null;
+      )}
+      {(x.verdict === 'cut' || x.verdict === 'improve') && (decided
+        ? <button class="btn ghost cycle-act" type="button" disabled={busy} onClick={() => act('clear')}>Undo</button>
+        : <button class="btn cycle-act" type="button" disabled={busy} onClick={() => act(x.verdict)}>{x.verdict === 'cut' ? 'Mark to remove' : 'Mark to improve'}</button>)}
+      {x.verdict === 'improve' && <a class="btn ghost cycle-act" href={link}>Open in editor</a>}
+    </div>
+  );
 }
