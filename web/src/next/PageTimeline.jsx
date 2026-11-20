@@ -48,12 +48,12 @@ export function PageTimeline({ site, path }) {
 
   return (
     <div class="pt">
-      <div class="pt-tracks" role="group" aria-label="Show one kind of event">
+      {Object.values(t.tracks).filter(Boolean).length > 1 && <div class="pt-tracks" role="group" aria-label="Show one kind of event">
         <button type="button" class={`pt-trk${!track ? ' on' : ''}`} aria-pressed={!track} onClick={() => setTrack('')}>All <b>{t.events.length - t.quiet}</b></button>
         {Object.entries(t.tracks).filter(([, n]) => n).map(([k, n]) => (
           <button key={k} type="button" class={`pt-trk${track === k ? ' on' : ''}`} aria-pressed={track === k} onClick={() => setTrack(track === k ? '' : k)}>{TRACK_LABEL[k] || k} <b>{n}</b></button>
         ))}
-      </div>
+      </div>}
 
       {!shown.length && <p class="muted small">{track ? 'Nothing on this track in 90 days.' : 'Nothing has happened to this page in 90 days that Kauzl can see: no commits to its file, no notes that name it, no busy days, no to-dos.'}</p>}
 

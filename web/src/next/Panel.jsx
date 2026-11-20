@@ -15,6 +15,7 @@ import { TodoBody } from './Inbox.jsx';
 // The trail lives in the address (?panel=day:2026-11-15,page:%2Fblog%2Fx,todo:todo-ab12),
 // so it can be linked and Back walks it; a sidebar link has no ?panel, so it clears it.
 const KINDS = new Set(['day', 'page', 'todo']);
+const KIND_LABEL = { day: 'Day', page: 'Page', todo: 'To-do' };
 const fmtD = (d, o = { weekday: 'short', day: 'numeric', month: 'short' }) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { ...o, timeZone: 'UTC' });
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 
@@ -89,15 +90,17 @@ export function SidePanel({ site, sites, params }) {
       <a class="nx-drawer-scrim" href={panelHref([])} aria-label="Close the panel" tabIndex={-1} />
       <aside ref={box} tabIndex={-1} class={`nx-drawer sp${top.kind === 'page' ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={label(top)}>
         <span class="nx-grab nx-drawer-grab" aria-hidden="true" />
-        <header class="nx-drawer-h sp-h">
-          {items.length > 1 && <a class="nx-icon-btn" href={panelHref(items.slice(0, -1))} aria-label={`Back to ${label(items.at(-2))}`}><Icon name="chevron" size={14} class="flip" /></a>}
-          <nav class="sp-trail" aria-label="Where you came from">
-            {items.map((x, i) => (i === items.length - 1
-              ? <b key={i} aria-current="page">{label(x)}</b>
-              : <span key={i}><a href={panelHref(items.slice(0, i + 1))}>{label(x)}</a><i aria-hidden="true">›</i></span>))}
-          </nav>
-          {full && <a class="todo-link sp-open" href={full}>Open <Icon name="external" size={11} /></a>}
-          <a class="nx-icon-btn" href={panelHref([])} aria-label="Close"><Icon name="x" size={14} /></a>
+        <header class="sp-h">
+          <div class="sp-bar">
+            {items.length > 1 && <a class="nx-icon-btn" href={panelHref(items.slice(0, -1))} aria-label={`Back to ${label(items.at(-2))}`}><Icon name="chevron" size={14} class="flip" /></a>}
+            <nav class="sp-trail" aria-label="Where you came from">
+              {items.slice(0, -1).map((x, i) => <span key={i}><a href={panelHref(items.slice(0, i + 1))}>{label(x)}</a><i aria-hidden="true">›</i></span>)}
+              <span class="sp-kind">{KIND_LABEL[top.kind]}</span>
+            </nav>
+            {full && <a class="btn sp-open" href={full}>Open <Icon name="external" size={11} /></a>}
+            <a class="nx-icon-btn" href={panelHref([])} aria-label="Close"><Icon name="x" size={14} /></a>
+          </div>
+          <h2 class="sp-title" aria-current="page">{label(top)}</h2>
         </header>
         <div class="nx-drawer-body">{body}</div>
       </aside>
