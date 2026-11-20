@@ -1628,3 +1628,17 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .tl-dtabs { justify-content: space-between; gap: 0; }
 .tl-dtabs button { padding: 5px 4px; font-size: var(--text-sm); white-space: nowrap; flex: none; }
 .pt-av.google, .pt-av.bing { background: var(--surface); border: 1px solid var(--border); color: var(--text); }
+
+/* A search one engine has no row for (SearchView QueryPanel): a tag, then the facts, one per row. */
+.qp-why { display: grid; gap: 10px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.qp-why.warn { border-color: color-mix(in srgb, var(--critical-ink) 35%, var(--border)); background: color-mix(in srgb, var(--critical-ink) 5%, var(--surface)); }
+.qp-why > .nx-pill { justify-self: start; }
+.qp-facts { display: grid; grid-template-columns: 128px minmax(0, 1fr); gap: 10px 12px; margin: 0; font-size: var(--text-sm); }
+.qp-facts dt { color: var(--text-3); font-size: var(--text-xs); font-weight: 600; letter-spacing: .04em; text-transform: uppercase; padding-top: 2px; }
+.qp-facts dd { margin: 0; display: grid; gap: 1px; min-width: 0; }
+.qp-facts dd small { color: var(--text-3); font-size: var(--text-xs); line-height: 1.45; }
+.qp-near { display: flex !important; flex-wrap: wrap; gap: 6px; }
+.qp-chip { display: inline-flex; align-items: baseline; gap: 6px; max-width: 100%; padding: 3px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--bg); color: var(--text); text-decoration: none; font-size: var(--text-sm); }
+.qp-chip:hover { border-color: var(--border-strong); }
+.qp-chip i { font-style: normal; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
+@media (max-width: 640px) { .qp-facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } .qp-facts dd { margin-bottom: 8px; } }

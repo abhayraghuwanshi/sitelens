@@ -12,6 +12,7 @@ import { Drawer, hrefWith } from './Drawer.jsx';
 // every search as a list on demand. A search opens in the drawer (?q=).
 const ENGINES = [{ key: 'both', label: 'Both' }, { key: 'google', label: 'Google' }, { key: 'bing', label: 'Bing' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
+const fmtDay = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const rank = (p) => (p == null ? '—' : `#${Math.round(p)}`);
 // A usual click rate by position, to size what moving up is worth (an estimate to rank them, not a forecast).
 const ctrAt = (p) => (p == null ? 0 : p <= 1.5 ? 0.28 : p <= 2.5 ? 0.15 : p <= 3.5 ? 0.11 : p <= 5.5 ? 0.07 : p <= 10.5 ? 0.03 : p <= 20.5 ? 0.01 : 0.002);
@@ -343,19 +344,21 @@ function QueryPanel({ site, r, eng, onClose }) {
     if (!k) return '';
     const weeks = (k.weeks || []).slice(-8);
     const exact = weeks.reduce((n, w) => n + (w.impressions || 0), 0), broad = weeks.reduce((n, w) => n + (w.broad || 0), 0);
-    if (!weeks.length || (!exact && !broad)) return 'Bing’s keyword data has no searches for it at all in the US.';
-    const a = (n) => Math.round(n / 8);
-    return !exact ? `Almost nobody searches this exact wording on Bing: 0 searches a week in the US${broad ? ` (about ${a(broad) || '<1'} a week for longer searches that contain it)` : ''}.`
-      : `About ${a(exact) || '<1'} searches a week on Bing in the US.`;
+    if (!weeks.length || (!exact && !broad)) return { main: 'None', note: 'no searches at all in Bing’s US data' };
+    const a = (n) => Math.round(n / 8) || '<1';
+    return !exact ? { main: '0 a week', note: `for this exact wording, in the US${broad ? ` · about ${a(broad)} a week for longer searches that contain it` : ''}` }
+      : { main: `~${a(exact)} a week`, note: 'in the US' };
   })();
+  // Nobody searches it on Bing: Bing having no row is expected, not a gap to fix.
+  const unsearched = Boolean(demand && (demand.main === 'None' || demand.main === '0 a week'));
   const crawl = (() => {
-    if (!r.d || !ix.data) return '';
+    if (!r.d || !ix.data) return null;
     if (r.d.bad === 'Bing') {
       const b = ix.data.bing || {};
-      return b.note ? '' : b.lastCrawled ? `Bing crawled ${pageName(r.page)} on ${b.lastCrawled}, so it has the page.` : b.known ? `Bing found ${pageName(r.page)} but hasn’t crawled it yet.` : `Bing doesn’t know ${pageName(r.page)} yet: submit it in Bing Webmaster Tools.`;
+      return b.note ? null : b.lastCrawled ? { main: 'Crawled', note: `${fmtDay(b.lastCrawled)} · Bing has ${pageName(r.page)}`, tone: 'good' } : b.known ? { main: 'Found, not crawled', note: pageName(r.page), tone: 'warn' } : { main: 'Not known', note: `submit ${pageName(r.page)} in Bing Webmaster Tools`, tone: 'bad' };
     }
     const g = ix.data.google || {};
-    return g.note ? '' : g.indexed ? `Google has ${pageName(r.page)} indexed (crawled ${g.lastCrawled}).` : `Google: ${String(g.coverage || 'not indexed').toLowerCase()}.`;
+    return g.note ? null : g.indexed ? { main: 'Indexed', note: `crawled ${fmtDay(g.lastCrawled)} · ${pageName(r.page)}`, tone: 'good' } : { main: 'Not indexed', note: String(g.coverage || '').toLowerCase(), tone: 'bad' };
   })();
   const ctr = (x) => (x?.impressions ? `${((x.clicks / x.impressions) * 100).toFixed(1)}%` : '—');
   const rowsOf = [
@@ -365,10 +368,24 @@ function QueryPanel({ site, r, eng, onClose }) {
     <Drawer title={`“${r.key}”`} onClose={onClose}>
       <p class="nx-big">
         {r.pos == null ? 'Neither engine shows the site for it in this period.'
-          : <>{r.page ? pageName(r.page) : 'The site'} shows up {[r.google && <>at <b>{rank(r.google.position)}</b> on Google</>, r.bing && <>at <b>{rank(r.bing.position)}</b> on Bing</>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' and ', x] : [x]), [])}, and got {fmt(clicksOf(r, 'both'))} clicks.
+          : <>{r.page ? pageName(r.page) : 'The site'} shows up {[r.google && <>at <b>{rank(r.google.position)}</b> on Google</>, r.bing && <>at <b>{rank(r.bing.position)}</b> on Bing</>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' and ', x] : [x]), [])}, and got {fmt(clicksOf(r, 'both'))} {clicksOf(r, 'both') === 1 ? 'click' : 'clicks'}.
             {r.s.gain ? <> In the top 3 it would get about <b>{fmt(r.s.gain)}</b> more.</> : null}</>}
       </p>
-      {r.d && <p class={`nx-note-line${r.d.near ? '' : ' warn'}`}><b>{r.d.word}.</b> <span>{demand ? `${demand} ` : ''}{r.d.why}{crawl ? ` ${crawl}` : ''}{r.d.bad === 'Bing' && !r.d.near ? ' ChatGPT search and Copilot lean on Bing, so this also costs AI answers.' : ''}</span></p>}
+      {r.d && (
+        <section class={`qp-why${r.d.near || unsearched ? '' : ' warn'}`} aria-label={unsearched && !r.d.near ? 'Not searched on Bing' : r.d.word}>
+          <span class={`nx-pill${r.d.near || unsearched ? '' : ' down'}`}>{unsearched && !r.d.near ? 'Not searched on Bing' : r.d.word}</span>
+          <dl class="qp-facts">
+            {demand && <><dt>Searches on Bing</dt><dd><b>{demand.main}</b><small>{demand.note}</small></dd></>}
+            {r.d.near ? (
+              <><dt>{r.d.bad} shows you for</dt><dd class="qp-near">{r.d.near.map((o) => (
+                <a key={o.key} class="qp-chip" href={hrefWith('q', o.key)}>“{o.key}”<i>{rank(o[r.d.bad === 'Bing' ? 'bing' : 'google'].position)}</i></a>
+              ))}</dd></>
+            ) : <><dt>What {r.d.bad} says</dt><dd><small>{r.d.why}</small></dd></>}
+            {crawl && <><dt>The page</dt><dd><b class={crawl.tone}>{crawl.main}</b><small>{crawl.note}</small></dd></>}
+          </dl>
+          {r.d.bad === 'Bing' && !r.d.near && !unsearched && <p class="muted small m-0">ChatGPT search and Copilot lean on Bing, so this also costs AI answers.</p>}
+        </section>
+      )}
       <table class="nx-mini-table">
         <thead><tr><th /><th>Position</th><th>Seen</th><th>Clicks</th><th>Click rate</th></tr></thead>
         <tbody>
