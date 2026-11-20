@@ -5,7 +5,7 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { DecisionSelect, LABELS } from '../pages/PageReview.jsx';
 import { Page } from './Page.jsx';
-import { PageTimeline } from './PageTimeline.jsx';
+import { PageTimeline, TOOL_ICON } from './PageTimeline.jsx';
 
 // One page (docs/redesign/prototype.html → a page): its title and one status
 // word, one sentence on what it does for you, then its timeline (PageTimeline:
@@ -28,6 +28,7 @@ export function PageView({ site, path, back }) {
   const bingPage = useAsync(() => (site.demo ? null : api.get(`/bing/sites/${site.id}/page-queries${qs({ path })}`).catch(() => null)), [site.id, path]);
   const cycles = useAsync(() => api.get(`/sites/${site.id}/content-cycles`).catch(() => null), [site.id]);
   const [more, setMore] = useState(false);
+  const [version, setVersion] = useState(0);
 
   if (row.error) return <Page title={path} back={back}><ErrorState error={row.error} onRetry={row.reload} /></Page>;
   if (!row.data) return <Page title={path} back={back}><Loading height={420} owl label="Reading the page: its searches, visits and changes…" /></Page>;
@@ -54,13 +55,14 @@ export function PageView({ site, path, back }) {
 
   return (
     <Page title={<>{r.title || path} <span class={`nx-pill ${tone} pv-stat`} title={cyc?.why || r.reason}>{word}</span></>} sub={path} back={back}
-      actions={<span class="nx-btns"><a class="btn" href={`#/site/${site.id}/diagnose?path=${encodeURIComponent(path)}`}><Icon name="terminal" size={13} /> Diagnose this page</a><a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a></span>}>
+      actions={<span class="nx-btns"><a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a></span>}>
       <p class="nx-answer">
         <b>{fmt(r.visits)}</b> visits in 90 days{r.google?.clicks ? <>, <b>{fmt(r.google.clicks)}</b> from Google search</> : ''}{best ? <>, mostly from “{best.query}”</> : ''}.{chance ? <> The next <b>{fmt(chance.gain)}</b> visits are in “{chance.query}”.</> : ''}
       </p>
       {!r.inSitemap && <p class="nx-note-line warn"><Icon name="triangle" size={14} /><span><b>Not in the sitemap.</b> Search engines find it only through links.</span></p>}
 
-      <PageTimeline site={site} path={path} />
+      <PageChecks site={site} path={path} onRan={() => setVersion((v) => v + 1)} />
+      <PageTimeline site={site} path={path} version={version} />
       <PageSearches site={site} path={path} bingPage={bingPage.data} />
 
       <button type="button" class="todo-link pv-more" aria-expanded={more} onClick={() => setMore(!more)}>
@@ -139,6 +141,50 @@ function PageSearches({ site, path, bingPage }) {
       })}
       {list.length > 8 && <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${list.length}`}</button>}
       {list.length > 0 && <p class="muted small m-0">Trend: searches in the last 4 weeks against the 4 before.{on === 'google' ? ' ▲/▼: your position 13 weeks ago.' : ''} Click a search for its full trend.</p>}
+    </section>
+  );
+}
+
+// The page's checks, run here: one tile per check with its last result, and Run. A run lands on the
+// timeline below (server/diagnose.mjs → page-events), so it reloads after each one.
+function PageChecks({ site, path, onRan }) {
+  const ov = useAsync(() => (site.demo ? null : api.get(`/sites/${site.id}/diagnose${qs({ path })}`).catch(() => null)), [site.id, path]);
+  const [busy, setBusy] = useState('');
+  const [error, setError] = useState('');
+  if (!ov.data) return null;
+  const run = async (tool) => {
+    setBusy(tool);
+    setError('');
+    try {
+      const r = await api.post(`/sites/${site.id}/diagnose/run`, { path, tool });
+      if (r.failed) setError(`${r.findings?.[0]?.text || 'The check couldn’t run.'}`);
+      ov.reload();
+      onRan();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy('');
+    }
+  };
+  const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  return (
+    <section class="pc" aria-label="Checks">
+      <div class="pc-h"><h2 class="nx-label-sm">Checks</h2><a class="todo-link small" href={`#/site/${site.id}/diagnose?path=${encodeURIComponent(path)}`}>All in Diagnose →</a></div>
+      <div class="pc-grid">
+        {ov.data.tools.map((t) => (
+          <div key={t.key} class={`pc-t ${t.last?.tone || ''}`}>
+            <span class="pc-ic"><Icon name={TOOL_ICON[t.key] || 'search'} size={14} /></span>
+            <span class="pc-b">
+              <b>{t.name.replace('As Googlebot and GPTBot', 'As crawlers see it')}</b>
+              <small>{t.last ? <><span class={`pc-r ${t.last.tone || ''}`}>{t.last.headline}</span> · {short(t.last.date)}</> : 'Not run yet'}</small>
+            </span>
+            <button type="button" class="pc-run" disabled={Boolean(busy)} onClick={() => run(t.key)} aria-label={`Run ${t.name}`} aria-busy={busy === t.key}>
+              {busy === t.key ? <span class="pc-spin" /> : <Icon name="play" size={11} />}{busy === t.key ? 'Running' : 'Run'}
+            </button>
+          </div>
+        ))}
+      </div>
+      {error && <p class="nx-error small m-0" role="alert">{error}</p>}
     </section>
   );
 }

@@ -168,6 +168,8 @@ function checkBadge(c) {
   const k = String(c.key ?? '');
   if (c.tool === 'index') return /^Shown \/ Shown$/.test(k) ? 'Shown' : k.split(' / ')[0] || 'Checked';
   if (c.tool === 'bots') return /couldn|HTTP|stay away/i.test(k) ? 'Blocked' : (k.split(' / ')[0] || '').replace(' words', ' w');
+  const n = /^(\d+) problems?$/.exec(k);
+  if (n) return `${n[1]} ${n[1] === '1' ? 'issue' : 'issues'}`;
   return k.length <= 12 ? k : (c.headline || '').split(/[·:]/)[0].trim().slice(0, 12);
 }
 

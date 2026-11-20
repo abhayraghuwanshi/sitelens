@@ -1738,3 +1738,26 @@ a.ps-row:hover { background: var(--surface-hover); }
 }
 .pt-av.owl { background: none; padding: 0; overflow: hidden; }
 .pt-av.owl svg { display: block; width: 100%; height: 100%; }
+
+/* A page's Checks strip (PageView PageChecks): a tile per check, its last result, Run. */
+.pc { display: grid; gap: 8px; }
+.pc-h { display: flex; justify-content: space-between; align-items: baseline; }
+.pc-h h2 { margin: 0; }
+.pc-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 8px; }
+.pc-t { display: grid; grid-template-columns: 30px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 10px 10px 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); background: var(--bg); }
+.pc-t.up { border-style: solid; border-color: color-mix(in srgb, var(--good-ink) 30%, var(--border)); }
+.pc-t.warn { border-style: solid; border-color: color-mix(in srgb, var(--warning-ink) 40%, var(--border)); }
+.pc-t.down { border-style: solid; border-color: color-mix(in srgb, var(--critical-ink) 40%, var(--border)); }
+.pc-ic { width: 30px; height: 30px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
+.pc-b { display: grid; gap: 1px; min-width: 0; }
+.pc-b b { font-size: var(--text-sm); font-weight: 600; }
+.pc-b small { font-size: var(--text-xs); color: var(--text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pc-r.up { color: var(--good-ink); } .pc-r.warn { color: var(--warning-ink); } .pc-r.down { color: var(--critical-ink); }
+.pc-run { display: inline-flex; align-items: center; gap: 5px; font: inherit; font-size: var(--text-sm); font-weight: 600; padding: 4px 10px; border-radius: var(--radius-pill); border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border)); background: var(--accent-soft); color: var(--accent-ink); cursor: pointer; }
+.pc-run:hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 22%, var(--surface)); }
+.pc-run:disabled { opacity: .55; cursor: default; }
+.pc-spin { width: 10px; height: 10px; border-radius: 50%; border: 2px solid currentColor; border-right-color: transparent; animation: pc-spin .8s linear infinite; }
+@keyframes pc-spin { to { transform: rotate(360deg); } }
+/* A check on the timeline reads as a run: the check's icon in a dashed square, a dashed row. */
+.pt-av.tool { background: var(--bg); border: 1px dashed var(--border-strong); color: var(--text-2); }
+.pt-ev.run { border-style: dashed; background: var(--bg); }

@@ -18,6 +18,7 @@ import { runTodo, findingTodo, isProblem } from './checkTodo.js';
 const fmtD = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const WHO = { you: ['You', 'A'], kauzl: ['Kauzl', 'K'], agent: ['Claude Code', 'C'], claude: ['Claude', 'C'], google: ['Google', 'G'], bing: ['Bing', 'B'] };
+export const TOOL_ICON = { content: 'pages', speed: 'bolt', index: 'search', bots: 'eye' };
 const KIND_ICON = { change: 'github', spike: 'trend', check: 'search', mark: 'star', todo: 'check', crawl: 'globe' };
 const TRACK_LABEL = { goals: 'Goal', search: 'Search', content: 'Content', speed: 'Speed', index: 'Index', ai: 'AI answers', visitors: 'Visitors', work: 'Your work' };
 const STAGE_LABEL = { open: 'Open', proposed: 'Proposed', changed: 'Changed', live: 'Live', checked: 'Checked' };
@@ -29,8 +30,8 @@ export function Eyebrow({ track, tone, label }) {
 }
 const SEV = { high: 'down', mid: 'warn', low: 'warn', ok: 'up' };
 
-export function PageTimeline({ site, path }) {
-  const res = useAsync(() => api.get(`/sites/${site.id}/page-timeline${qs({ path })}`), [site.id, path]);
+export function PageTimeline({ site, path, version = 0 }) {
+  const res = useAsync(() => api.get(`/sites/${site.id}/page-timeline${qs({ path })}`), [site.id, path, version]);
   const [track, setTrack] = useState('');
   const [open, setOpen] = useState(null);
   const [att, setAtt] = useState(null);
@@ -79,8 +80,8 @@ export function PageTimeline({ site, path }) {
             {open === e.id
               ? <EventCard e={e} site={site} path={path} att={att} setAtt={setAtt} onClose={() => toggle(e.id)} />
               : (
-                <button type="button" class={`pt-ev ${e.quiet ? 'quiet' : ''}`} onClick={() => toggle(e.id)} aria-expanded="false">
-                  <span class="pt-who" title={(WHO[e.who] || [e.who])[0]}><Avatar who={e.who} /></span>
+                <button type="button" class={`pt-ev${e.quiet ? ' quiet' : ''}${e.kind === 'check' ? ' run' : ''}`} onClick={() => toggle(e.id)} aria-expanded="false">
+                  <span class="pt-who" title={e.kind === 'check' ? `${(WHO[e.who] || [e.who])[0]} ran it` : (WHO[e.who] || [e.who])[0]}>{e.kind === 'check' ? <span class="pt-av tool"><Icon name={TOOL_ICON[e.tool] || 'search'} size={12} /></span> : <Avatar who={e.who} />}</span>
                   <span class={`pt-badge ${e.tone || ''}${e.size >= 0.5 ? ' big' : ''}`} style={e.size != null ? `--s:${e.size}` : undefined}>{e.badge}</span>
                   <span class="pt-sub"><b class={`pt-st ${e.tone || ''}`}>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
                   <Spark s={e.attachment?.series} tone={e.tone} />
