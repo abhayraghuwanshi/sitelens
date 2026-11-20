@@ -61,25 +61,13 @@ export function PageView({ site, path, back }) {
       {!r.inSitemap && <p class="nx-note-line warn"><Icon name="triangle" size={14} /><span><b>Not in the sitemap.</b> Search engines find it only through links.</span></p>}
 
       <PageTimeline site={site} path={path} />
+      <PageSearches site={site} path={path} bingPage={bingPage.data} />
 
       <button type="button" class="todo-link pv-more" aria-expanded={more} onClick={() => setMore(!more)}>
-        {more ? 'Hide the details' : 'Details: every search, content cycle, your decision'}
+        {more ? 'Hide the details' : 'Details: Bing’s own searches, content cycle, your decision'}
       </button>
       {more && (
         <>
-          {searches.length > 0 && (
-            <section class="card card-plain nx-tight" aria-label="Every search">
-              <h3 class="nx-label-sm">Every search</h3>
-              <div class="pv-qrow pv-qhead" aria-hidden="true"><span>Search</span><span class="nx-num">Google</span><span class="nx-num">Bing</span><span class="nx-num">Seen</span><span class="nx-num">Clicks</span><span>Where it stands</span></div>
-              {[...searches].sort((a, b) => b.gain - a.gain || b.clicks - a.clicks).map((q) => (
-                <div key={q.query} class="pv-qrow">
-                  <span class="nx-qn">“{q.query}”</span><span class="nx-num">{rank(q.position)}</span><span class="nx-num">{rank(q.bing?.position)}</span>
-                  <span class="nx-num">{fmt(q.impressions)}</span><span class="nx-num">{fmt(q.clicks)}</span>
-                  <span>{q.state === 'top' ? <span class="good">Top 3</span> : q.state === 'p1' ? 'Page 1' : <span class="bad">Page 2+</span>}{q.gain ? <small class="muted"> · +{fmt(q.gain)} in the top 3</small> : ''}</span>
-                </div>
-              ))}
-            </section>
-          )}
           {bingPage.data && (() => {
             const google = new Set(searches.map((q) => q.query.toLowerCase()));
             const only = bingPage.data.queries.filter((q) => !google.has(q.query.toLowerCase()));
@@ -129,5 +117,45 @@ export function PageView({ site, path, back }) {
         </>
       )}
     </Page>
+  );
+}
+
+// The searches the page is found for (GET /page-searches): each with 13 weeks of how often it was
+// searched, whether that's rising, and where the page ranks on Google and Bing. Reading demand and
+// rank side by side says whether a change in visits is the trend or the page.
+function PageSearches({ site, path, bingPage }) {
+  const res = useAsync(() => (site.demo ? null : api.get(`/sites/${site.id}/page-searches${qs({ path })}`).catch(() => null)), [site.id, path]);
+  const [all, setAll] = useState(false);
+  if (!res.data?.searches?.length) return res.loading ? <section class="card card-plain ps ps-load" aria-hidden="true" /> : null;
+  const bing = new Map((bingPage?.queries || []).map((q) => [q.query.toLowerCase(), q]));
+  const list = res.data.searches;
+  const shown = all ? list : list.slice(0, 8);
+  const up = list.filter((q) => q.change != null && q.change >= 0.15).length, down = list.filter((q) => q.change != null && q.change <= -0.15).length;
+  return (
+    <section class="card card-plain ps" aria-label="Searches it’s found for">
+      <div class="ps-h">
+        <h2 class="nx-label-sm">Searches it’s found for</h2>
+        <span class="muted small">{list.length} on Google · 13 weeks{up || down ? ` · ${up} searched more, ${down} less` : ''}</span>
+      </div>
+      <div class="ps-row ps-head" aria-hidden="true"><span>Search</span><span>Searched, 13 weeks</span><span class="nx-num">Trend</span><span class="nx-num">Google</span><span class="nx-num">Bing</span><span class="nx-num">Clicks</span></div>
+      {shown.map((q) => {
+        const mx = Math.max(1, ...q.weeks.map((w) => w.impressions));
+        const b = bing.get(q.query.toLowerCase());
+        const moved = q.position != null && q.was != null && Math.abs(q.was - q.position) >= 1 ? (q.was > q.position ? 'up' : 'down') : '';
+        const ch = q.change == null ? 'new' : Math.round(q.change * 100);
+        return (
+          <a key={q.query} class="ps-row" href={`#/site/${site.id}/search?range=90d&q=${encodeURIComponent(q.query)}`}>
+            <span class="ps-q">“{q.query}”<small>{fmt(q.impressions)} views</small></span>
+            <span class="ps-spark" title={q.weeks.map((w) => w.impressions).join(', ')}>{q.weeks.map((w, i) => <i key={i} style={`height:${Math.max(6, (w.impressions / mx) * 100)}%`} class={i >= q.weeks.length - 4 ? 'now' : ''} />)}</span>
+            <span class={`nx-num ${ch === 'new' || ch >= 15 ? 'good' : ch <= -15 ? 'bad' : 'muted'}`}>{ch === 'new' ? 'new' : `${ch > 0 ? '↑' : ch < 0 ? '↓' : ''}${Math.abs(ch)}%`}</span>
+            <span class="nx-num">{rank(q.position)}{moved && <small class={moved === 'up' ? 'good' : 'bad'}>{moved === 'up' ? '▲' : '▼'} {rank(q.was)}</small>}</span>
+            <span class="nx-num">{b ? rank(b.position) : <span class="muted">—</span>}</span>
+            <span class="nx-num">{fmt(q.clicks)}</span>
+          </a>
+        );
+      })}
+      {list.length > 8 && <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${list.length}`}</button>}
+      <p class="muted small m-0">Trend: searches in the last 4 weeks against the 4 before. ▲/▼: your Google position 13 weeks ago. Click a search for its full trend.</p>
+    </section>
   );
 }

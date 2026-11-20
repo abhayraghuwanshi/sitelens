@@ -108,3 +108,48 @@ export async function fetchQueryTrend({ token, site, query, days = 91, end = new
   });
   return { query, from: addDays(end, -(days - 1)), to: end, days: rows.map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions, position: r.position })) };
 }
+
+// Weekly numbers per search, from daily rows: N weeks ending on `to` (the last one complete).
+// rows: [{ date, query, clicks, impressions, position }] → [{ query, impressions, clicks, position,
+//   was, weeks: [{ impressions, clicks, position }], change }] (change: last 4 weeks vs the 4 before).
+export function weeklyByQuery(rows, to, { weeks = 13, limit = 20 } = {}) {
+  const end = Date.parse(`${to}T00:00:00Z`);
+  const by = new Map();
+  for (const r of rows) {
+    const i = weeks - 1 - Math.floor((end - Date.parse(`${r.date}T00:00:00Z`)) / (7 * DAY));
+    if (i < 0 || i >= weeks) continue;
+    const q = by.get(r.query) || { query: r.query, w: Array.from({ length: weeks }, () => ({ impressions: 0, clicks: 0, pos: 0 })) };
+    q.w[i].impressions += r.impressions || 0;
+    q.w[i].clicks += r.clicks || 0;
+    q.w[i].pos += (r.position || 0) * (r.impressions || 0);
+    by.set(r.query, q);
+  }
+  const posOf = (list) => {
+    const imp = list.reduce((n, w) => n + w.impressions, 0);
+    return imp ? list.reduce((n, w) => n + w.pos, 0) / imp : null;
+  };
+  return [...by.values()].map(({ query, w }) => {
+    const sum = (a, b, k) => w.slice(a, b).reduce((n, x) => n + x[k], 0);
+    const now = sum(weeks - 4, weeks, 'impressions'), before = sum(weeks - 8, weeks - 4, 'impressions');
+    return {
+      query, impressions: sum(0, weeks, 'impressions'), clicks: sum(0, weeks, 'clicks'),
+      position: posOf(w.slice(weeks - 4)) ?? posOf(w), was: posOf(w.slice(0, 4)),
+      change: before ? (now - before) / before : now ? null : 0,
+      weeks: w.map((x) => ({ impressions: x.impressions, clicks: x.clicks, position: x.impressions ? x.pos / x.impressions : null })),
+    };
+  }).sort((a, b) => b.impressions - a.impressions).slice(0, limit);
+}
+
+// The searches one page is found for on Google, each with 13 weeks of history.
+export async function fetchPageSearches({ token, site, path, weeks = 13, end = new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10) }) {
+  const host = String(site.host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+  const rows = await querySearchAnalytics({
+    token, siteUrl: site.searchSite,
+    body: {
+      startDate: addDays(end, -(weeks * 7 - 1)), endDate: end, dimensions: ['date', 'query'], rowLimit: 25000,
+      dimensionFilterGroups: [{ groupType: 'and', filters: [{ dimension: 'page', operator: 'equals', expression: `https://${host}${path}` }] }],
+    },
+  });
+  const flat = rows.map((r) => ({ date: r.keys[0], query: r.keys[1], clicks: r.clicks, impressions: r.impressions, position: r.position }));
+  return { path, from: addDays(end, -(weeks * 7 - 1)), to: end, searches: weeklyByQuery(flat, end, { weeks }) };
+}

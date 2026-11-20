@@ -36,3 +36,19 @@ test('the usual is the same weekday only, averaged over the weeks that have data
   assert.equal(r.total.usualClicks, 15);
   assert.equal(r.total.usualImpressions, 200);
 });
+
+test('weeklyByQuery: 13 weekly buckets per search, demand change and position now vs then', async () => {
+  const { weeklyByQuery } = await import('../server/day-trends.mjs');
+  const to = '2026-11-18';
+  const day = (n) => new Date(Date.parse(`${to}T00:00:00Z`) - n * 86_400_000).toISOString().slice(0, 10);
+  const rows = [];
+  for (let n = 0; n < 91; n++) rows.push({ date: day(n), query: 'a', clicks: n < 28 ? 2 : 1, impressions: n < 28 ? 20 : 10, position: n < 28 ? 3 : 7 });
+  rows.push({ date: day(200), query: 'a', clicks: 99, impressions: 99, position: 1 });
+  const [a] = weeklyByQuery(rows, to);
+  assert.equal(a.weeks.length, 13);
+  assert.equal(a.weeks[12].impressions, 140);
+  assert.equal(Math.round(a.change * 100), 100);
+  assert.equal(a.position, 3);
+  assert.equal(a.was, 7);
+  assert.equal(a.impressions, 28 * 20 + 63 * 10);
+});
