@@ -1700,3 +1700,14 @@ a.ps-row:hover { background: var(--surface-hover); }
 /* An event's actions line up with its text and attachment: no indent from a borderless first button. */
 .pt-card > .nx-btns { margin: 2px 0 0; justify-content: flex-start; }
 .pt-card > .nx-btns .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* Event typography: a coloured eyebrow (what and whether it's good), a confident title, a calm body. */
+.pt-eyebrow { margin: 6px 0 -2px; font-size: var(--text-xs); font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--text-3); }
+.pt-eyebrow.up { color: var(--good-ink); }
+.pt-eyebrow.down { color: var(--critical-ink); }
+.pt-eyebrow.warn { color: var(--warning-ink); }
+.pt-card .pt-title { margin: 0; font-size: var(--text-xl); font-weight: 650; line-height: 1.25; letter-spacing: -0.015em; text-wrap: balance; }
+.pt-card .pt-body { font-size: var(--text-md); line-height: 1.6; color: var(--text-2); max-width: 62ch; text-wrap: pretty; }
+.pt-card .pt-from b { font-weight: 600; }
+/* Collapsed rows: no dot; the title takes the tone's colour only when it's bad news. */
+.pt-st.down { color: var(--critical-ink); }

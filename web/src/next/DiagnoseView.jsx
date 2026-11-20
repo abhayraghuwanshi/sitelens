@@ -4,7 +4,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
-import { Attachment } from './PageTimeline.jsx';
+import { Attachment, Eyebrow } from './PageTimeline.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { runTodo, findingTodo, isProblem } from './checkTodo.js';
 
@@ -64,7 +64,8 @@ export function DiagnoseView({ site, params }) {
       {result && (
         <div class="pt-card dg-res" aria-live="polite">
           <div class="pt-hd"><span class="pt-av you">A</span><span class="pt-from"><b>You</b><small>to {result.path} · just now</small></span></div>
-          <h3 class="pt-title">{result.tone && result.tone !== 'muted' && <i class={`pt-dot ${result.tone}`} />}{NAME[result.tool]}: {result.headline}</h3>
+          <Eyebrow label={NAME[result.tool]} tone={result.tone} />
+          <h3 class="pt-title">{result.headline.replace(/^./, (c) => c.toUpperCase())}</h3>
           <Attachment a={{ title: `${NAME[result.tool]} result`, cells: result.cells, findings: result.findings }} date={result.date} site={site}
             todoOf={(result.findings || []).filter(isProblem).length > 1 ? (f) => (isProblem(f) ? findingTodo({ site, path: result.path, tool: result.tool, finding: f }) : null) : null} />
           <div class="nx-btns">

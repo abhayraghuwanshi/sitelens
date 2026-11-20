@@ -20,6 +20,12 @@ const WHO = { you: ['You', 'A'], kauzl: ['Kauzl', 'K'], agent: ['Claude Code', '
 const KIND_ICON = { change: 'github', spike: 'trend', check: 'search', mark: 'star', todo: 'check', crawl: 'globe' };
 const TRACK_LABEL = { goals: 'Goal', search: 'Search', content: 'Content', speed: 'Speed', index: 'Index', ai: 'AI answers', visitors: 'Visitors', work: 'Your work' };
 const STAGE_LABEL = { open: 'Open', proposed: 'Proposed', changed: 'Changed', live: 'Live', checked: 'Checked' };
+// What kind of event, and whether it's good: one small coloured line above the title.
+const TONE_WORD = { up: 'Good news', down: 'Needs a look', warn: 'Worth a look', muted: 'No change' };
+export function Eyebrow({ track, tone, label }) {
+  const words = [label || TRACK_LABEL[track], TONE_WORD[tone]].filter(Boolean);
+  return words.length ? <p class={`pt-eyebrow ${tone || ''}`}>{words.join(' · ')}</p> : null;
+}
 const SEV = { high: 'down', mid: 'warn', low: 'warn', ok: 'up' };
 
 export function PageTimeline({ site, path }) {
@@ -74,7 +80,7 @@ export function PageTimeline({ site, path }) {
               : (
                 <button type="button" class="pt-ev" onClick={() => toggle(e.id)} aria-expanded="false">
                   <span class="pt-who"><Avatar who={e.who} /><b>{(WHO[e.who] || [e.who])[0]}</b></span>
-                  <span class="pt-sub">{e.tone && e.tone !== 'muted' && <i class={`pt-dot ${e.tone}`} />}<b>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
+                  <span class="pt-sub"><b class={`pt-st ${e.tone || ''}`}>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
                   <Icon name="chevron" size={14} class="pt-go" />
                 </button>
               )}
@@ -114,7 +120,8 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
         <Avatar who={e.who} />
         <span class="pt-from"><b>{(WHO[e.who] || [e.who])[0]}</b><small>to {path}</small></span>
       </button>
-      <h3 class="pt-title">{e.tone && e.tone !== 'muted' && <i class={`pt-dot ${e.tone}`} />}{e.title}</h3>
+      <Eyebrow track={e.track} tone={e.tone} />
+      <h3 class="pt-title">{e.title}</h3>
       {e.detail && <p class="pt-body">{e.detail}</p>}
       {parts.length > 0 && (att ? <Attachment a={a} date={e.date} onClose={() => setAtt(null)} todoOf={problems.length > 1 ? (f) => (isProblem(f) ? findingTodo({ site, path, tool: e.tool, finding: f }) : null) : null} site={site} /> : (
         <button type="button" class="pt-att" onClick={() => setAtt(e.id)} aria-expanded="false">
