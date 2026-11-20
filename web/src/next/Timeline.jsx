@@ -676,11 +676,11 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
           )}
           <div class="tl-sec">
             <div class="tl-dtabs" role="tablist">
-              {[['page', 'Pages'], ['source', 'Sources'], ['query', 'Searches'], ['country', 'Countries']].map(([k, l]) => (
+              {[['page', 'Pages'], ['source', 'Sources'], ['query', 'Searches'], ...(scope !== 'all' ? [['trend', 'Trends']] : []), ['country', 'Countries']].map(([k, l]) => (
                 <button key={k} type="button" role="tab" aria-selected={tab === k} class={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
               ))}
             </div>
-            {lists[tab].length ? lists[tab].slice(0, 6).map((x) => {
+            {tab === 'trend' ? <DayTrends scope={scope} date={date} wd={wd} /> : lists[tab].length ? lists[tab].slice(0, 6).map((x) => {
               const gain = x.expected === undefined ? null : x.value - x.expected;
               const flat = gain !== null && Math.abs(gain) < Math.max(3, x.expected * 0.15);
               const fresh = gain !== null && !x.expected && x.value > 0;
@@ -749,4 +749,39 @@ function merge(sites, key) {
     }
   }
   return [...out.values()].sort((a, b) => b.value - a.value);
+}
+
+// A day's search trends (server/day-trends.mjs): up or down because people searched more
+// or less, you ranked differently, or fewer clicked, each search against the same weekday.
+const WHY_LABEL = { demand: ['Searched more', 'Searched less'], rank: ['Ranked higher', 'Ranked lower'], ctr: ['Clicked more', 'Clicked less'], new: ['New search', 'New search'], gone: ['Not searched', 'Not searched'] };
+function DayTrends({ scope, date, wd }) {
+  const t = useAsync(() => api.get(`/sites/${scope}/day-trends${qs({ date })}`), [scope, date]);
+  if (t.error) return <p class="muted small m-0">{t.error.message}</p>;
+  if (!t.data) return <Loading height={120} />;
+  const x = t.data;
+  if (x.pending || !x.queries?.length) return <p class="muted small m-0">{x.verdict}</p>;
+  const pctOf = (a, b) => (b ? Math.round((a / b - 1) * 100) : null);
+  const ip = pctOf(x.total.impressions, x.total.usualImpressions), cp = pctOf(x.total.clicks, x.total.usualClicks);
+  const top = x.queries[0]?.query;
+  return (
+    <div class="tl-trend">
+      <p class="m-0"><b>{x.verdict}</b></p>
+      <div class="tl-tcells">
+        <div><small>People searching</small><b class={ip == null ? '' : ip >= 10 ? 'good' : ip <= -10 ? 'bad' : ''}>{ip == null ? '—' : `${ip > 0 ? '+' : ip < 0 ? '−' : ''}${Math.abs(ip)}%`}</b><span>{fmt(x.total.impressions)} impressions, usually {fmt(x.total.usualImpressions)}</span></div>
+        <div><small>Search clicks</small><b class={cp == null ? '' : cp >= 10 ? 'good' : cp <= -10 ? 'bad' : ''}>{cp == null ? '—' : `${cp > 0 ? '+' : cp < 0 ? '−' : ''}${Math.abs(cp)}%`}</b><span>{fmt(x.total.clicks)}, usually {fmt(x.total.usualClicks)}</span></div>
+      </div>
+      <ul class="tl-tq">
+        {x.queries.map((q) => {
+          const up = q.why === 'rank' ? (q.day.position ?? 99) < (q.usual.position ?? 99) : q.why === 'demand' ? q.imprGap > 0 : q.clickGap > 0;
+          return (
+            <li key={q.query}>
+              <span class="tl-tqn">“{q.query}”<small>{fmt(q.day.impressions)} searches, usually {fmt(q.usual.impressions)}{q.day.position != null ? ` · #${q.day.position.toFixed(1)}` : ''}{q.usual.position != null && q.why === 'rank' ? ` (was #${q.usual.position.toFixed(1)})` : ''}</small></span>
+              <span class={`nx-pill ${q.why === 'new' || (up && q.why !== 'gone') ? 'up' : q.why === 'gone' || !up ? 'down' : ''}`}>{WHY_LABEL[q.why][up ? 0 : 1]}</span>
+            </li>
+          );
+        })}
+      </ul>
+      <p class="muted small m-0">Against the same {wd} in the {x.weeks} weeks before, from Search Console.{top ? <> <a href={`https://trends.google.com/trends/explore?date=today%203-m&q=${encodeURIComponent(top)}`} target="_blank" rel="noopener noreferrer">“{top}” on Google Trends ↗</a></> : ''}</p>
+    </div>
+  );
 }

@@ -19,6 +19,7 @@ import { createCache, openCacheDb, requestContext } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { fetchTopics, demoTopics } from './search-topics.mjs';
+import { fetchDayTrends } from './day-trends.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
 import { createFunnelSuggest, funnelSuggestRoutes, linkedRepos, siteRepos } from './funnel-suggest.mjs';
@@ -518,6 +519,15 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const data = await sourceCache.wrap(key, 10 * 60_000, query.has('fresh'), async () =>
         fetchDemand({ token: await auth.token(), site, rangeKey, groups }));
       return { ...data, ...meta };
+    }],
+    // A day's search trends: up or down because people searched more or less, you ranked differently, or fewer clicked.
+    ['GET', /^\/api\/sites\/([\w-]+)\/day-trends$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const date = query.get('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ValidationError('date must be YYYY-MM-DD.');
+      if (site.demo) return { date, verdict: 'The sample site has no Search Console data.', queries: [] };
+      if (!site.searchSite) throw new EngineError('Pick a Search Console property for this site in Settings.', { kind: 'needs-search' });
+      return sourceCache.wrap(`day-trends:${site.id}:${date}`, 60 * 60_000, query.has('fresh'), async () => fetchDayTrends({ token: await auth.token(), site, date }));
     }],
     // How each search topic in the site's .sitelens.yml does in Google.
     ['GET', /^\/api\/sites\/([\w-]+)\/search-topics$/, async ({ match, query }) => {

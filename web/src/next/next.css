@@ -1611,3 +1611,19 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .tl-empty.odd { border-style: solid; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
 .tl-empty .tl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .tl-empty .btn { display: inline-flex; align-items: center; gap: 6px; }
+
+/* A day's Trends tab: why search moved, then each search with its cause. */
+.tl-trend { display: grid; gap: 10px; font-size: var(--text-sm); }
+.tl-tcells { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+.tl-tcells > div { display: grid; gap: 1px; padding: 7px 10px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); min-width: 0; }
+.tl-tcells small, .tl-tcells span { font-size: var(--text-xs); color: var(--text-3); }
+.tl-tcells b { font-size: var(--text-md); font-variant-numeric: tabular-nums; }
+.tl-tq { list-style: none; margin: 0; padding: 0; display: grid; }
+.tl-tq li { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 6px 0; border-top: 1px solid var(--border); }
+.tl-tq li:first-child { border-top: 0; }
+.tl-tqn { display: grid; min-width: 0; }
+.tl-tqn small { color: var(--text-3); font-size: var(--text-xs); }
+/* Five day tabs fit the side column: tighter, smaller, and scroll rather than spill if still too wide. */
+.tl-dtabs { overflow-x: auto; scrollbar-width: none; }
+.tl-dtabs { justify-content: space-between; gap: 0; }
+.tl-dtabs button { padding: 5px 4px; font-size: var(--text-sm); white-space: nowrap; flex: none; }
