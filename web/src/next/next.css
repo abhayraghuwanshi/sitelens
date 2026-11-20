@@ -1788,3 +1788,9 @@ a.ps-row:hover { background: var(--surface-hover); }
 a.ps-row, a.ps-row:hover, a.ps-row:focus-visible { text-decoration: none; }
 a.ps-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 a.qp-chip:hover { text-decoration: none; }
+
+/* Display type (Bricolage Grotesque, as on kauzl.com): page titles, an event's title, and headline figures. */
+.nx-head h1 { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; }
+.pt-card .pt-title, .sp-title { font-family: var(--display); font-weight: 650; letter-spacing: -0.015em; }
+.qt-stats b, .tl-tile b, .lv-stat b, .nx-answer > b:first-child { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; }
+.nx-h2 { font-family: var(--display); font-weight: 650; letter-spacing: -0.01em; }
