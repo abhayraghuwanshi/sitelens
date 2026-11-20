@@ -406,17 +406,17 @@ function QueryPanel({ site, r, eng, onClose }) {
   );
 }
 
-// A search over 13 weeks: how many people searched it on Google (impressions) and on Bing (Bing's
-// keyword data, longer searches that contain it included), and where you ranked on Google.
-// Reading demand and rank together says whether a move is the trend or you.
-function QueryTrend({ days, from, to, bingWeeks, loading }) {
+// A search over 13 weeks, as two small panels on the same weeks: how many searched it (Google, and
+// Bing's US data when it has any), and where you ranked on Google (#1 at the top). The headline numbers
+// sit above; each line is labelled at its ends; one hover reads out a week across both.
+function QueryTrend({ days, to, bingWeeks, loading }) {
   if (!days) return loading ? <div class="qt qt-load" aria-hidden="true" /> : null;
   if (!days.length) return null;
   const DAYMS = 86_400_000;
   const N = 13;
   const end = Date.parse(`${to}T00:00:00Z`);
   const weekOf = (d) => N - 1 - Math.floor((end - Date.parse(`${d}T00:00:00Z`)) / (7 * DAYMS));
-  const W = Array.from({ length: N }, (_, i) => ({ start: new Date(end - (N - 1 - i) * 7 * DAYMS - 6 * DAYMS).toISOString().slice(0, 10), g: 0, pos: 0, b: null }));
+  const W = Array.from({ length: N }, (_, i) => ({ start: new Date(end - (N - 1 - i) * 7 * DAYMS - 6 * DAYMS).toISOString().slice(0, 10), g: 0, pos: 0, b: 0 }));
   for (const d of days) {
     const i = weekOf(d.date);
     if (i < 0 || i >= N) continue;
@@ -426,45 +426,64 @@ function QueryTrend({ days, from, to, bingWeeks, loading }) {
   for (const w of W) w.p = w.g ? w.pos / w.g : null;
   for (const bw of bingWeeks || []) {
     const i = weekOf(new Date(Date.parse(`${bw.week}T00:00:00Z`) + 6 * DAYMS).toISOString().slice(0, 10));
-    if (i >= 0 && i < N) W[i].b = (W[i].b || 0) + Math.max(bw.broad || 0, bw.impressions || 0);
+    if (i >= 0 && i < N) W[i].b += Math.max(bw.broad || 0, bw.impressions || 0);
   }
-  // Bing answered (even with no weeks in this window): its line is drawn, at 0 where it has nothing.
-  const hasBing = Array.isArray(bingWeeks);
+  const hasBing = W.some((w) => w.b > 0);
   const sum = (a, b, k) => W.slice(a, b).reduce((n, w) => n + (w[k] || 0), 0);
   const gNow = sum(N - 4, N, 'g'), gBefore = sum(N - 8, N - 4, 'g');
-  const gChange = gBefore ? Math.round((gNow / gBefore - 1) * 100) : null;
-  const firstP = W.find((w) => w.p != null)?.p, lastP = [...W].reverse().find((w) => w.p != null)?.p;
-  const mx = Math.max(1, ...W.map((w) => Math.max(w.g, w.b || 0)));
-  const X = (i) => ((i + 0.5) / N) * 100;
-  const pMin = Math.min(...W.filter((w) => w.p != null).map((w) => w.p)), pMax = Math.max(...W.filter((w) => w.p != null).map((w) => w.p));
-  const PY = (p) => (pMax === pMin ? 50 : 8 + ((p - pMin) / (pMax - pMin)) * 84); // #1 at the top
-  const pPath = W.map((w, i) => (w.p == null ? null : `${X(i)},${PY(w.p)}`)).filter(Boolean);
-  const bPath = W.map((w, i) => `${X(i)},${99 - ((w.b || 0) / mx) * 91}`);
-  const bNow = sum(N - 4, N, 'b');
+  const change = gBefore ? Math.round((gNow / gBefore - 1) * 100) : null;
+  const ps = W.filter((w) => w.p != null);
+  const firstP = ps[0]?.p, lastP = ps.at(-1)?.p;
   const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
-  // One read-out for the bars and the position line: the week, searches on each engine, your position.
-  const tip = (i) => [`Week of ${short(W[i].start)}`, `Google ${W[i].g.toLocaleString('en-US')} searches`, hasBing ? `Bing ${W[i].b || 0}` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ');
-  const say = [
-    gChange == null ? (gNow ? 'Google searches only recently' : 'Hardly any Google searches') : `Google searches ${gChange >= 10 ? `up ${gChange}%` : gChange <= -10 ? `down ${-gChange}%` : 'steady'} in the last 4 weeks`,
-    hasBing ? (bNow ? `about ${Math.round(bNow / 4)} a week on Bing in the US` : 'none in Bing’s US data') : '',
-    firstP != null && lastP != null && Math.abs(firstP - lastP) >= 1 ? `you moved from #${Math.round(firstP)} to #${Math.round(lastP)}` : lastP != null ? `you held around #${Math.round(lastP)}` : '',
-  ].filter(Boolean).join('; ');
+  const f = (v) => Math.round(v).toLocaleString('en-US');
+  const X = (i) => (i / (N - 1)) * 100;
+
+  // Searches panel: 0 at the bottom, a little headroom on top.
+  const sMax = Math.max(1, ...W.map((w) => Math.max(w.g, w.b))) * 1.15;
+  const SY = (v) => 100 - (v / sMax) * 100;
+  const gLine = W.map((w, i) => `${X(i)},${SY(w.g)}`).join(' ');
+  const bLine = W.map((w, i) => `${X(i)},${SY(w.b)}`).join(' ');
+  // Position panel: #1 on top; the range covers the line and at least #1–#5.
+  const pTop = 1, pBottom = Math.max(5, Math.ceil(Math.max(...ps.map((w) => w.p), 1)));
+  const PY = (p) => ((p - pTop) / (pBottom - pTop)) * 100;
+  const pLine = W.map((w, i) => (w.p == null ? null : `${X(i)},${PY(w.p)}`)).filter(Boolean).join(' ');
+  const guides = [...new Set([1, 3, 10, 20].filter((g) => g < pBottom).concat(pBottom))];
+  const tip = (i) => [`Week of ${short(W[i].start)}`, `${f(W[i].g)} Google searches`, hasBing ? `${f(W[i].b)} Bing` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ');
+  const endLabel = (val, y, cls = '') => <span class={`qt-end ${cls}`} style={`top:${y}%`}>{val}</span>;
+
   return (
     <section class="qt" aria-label="Trend, 13 weeks">
-      <div class="qt-h"><b>Trend</b><span class="muted">13 weeks · {say}.</span></div>
-      <div class="qt-key"><span><i class="qt-g" />Google searches</span>{hasBing && <span><i class="qt-b" />Bing searches (US)</span>}<span><i class="qt-p" />Your Google position</span></div>
-      <div class="qt-plot">
-        <div class="qt-bars">{W.map((w, i) => <span key={i}><i style={`height:${(w.g / mx) * 92}%`} /></span>)}</div>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
-          {hasBing && <polyline points={bPath.join(' ')} class="qt-bl" vector-effect="non-scaling-stroke" />}
-        </svg>
-        <HoverLayer count={N} x={X} text={tip} />
+      <div class="qt-stats">
+        <div><small>Searches a week</small><b>{f(gNow / 4)}</b><span class={change == null ? 'muted' : change >= 10 ? 'good' : change <= -10 ? 'bad' : 'muted'}>{change == null ? 'new' : `${change > 0 ? '↑' : change < 0 ? '↓' : ''}${Math.abs(change)}% vs 4 weeks before`}</span></div>
+        <div><small>Your Google position</small><b>{lastP != null ? `#${Math.round(lastP)}` : '—'}</b><span class={firstP != null && lastP != null && firstP - lastP >= 1 ? 'good' : firstP != null && lastP != null && lastP - firstP >= 1 ? 'bad' : 'muted'}>{firstP != null && lastP != null ? (Math.abs(firstP - lastP) >= 1 ? `was #${Math.round(firstP)} 13 weeks ago` : 'held for 13 weeks') : ''}</span></div>
       </div>
-      <div class="qt-pos">
-        <small>#{Math.round(pMin)}</small>
-        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{pPath.length > 1 && <polyline points={pPath.join(' ')} class="qt-pl" vector-effect="non-scaling-stroke" />}</svg>
-        <HoverLayer count={N} x={X} text={tip} />
-        <small>#{Math.round(pMax)}</small>
+      <div class="qt-panels">
+        <div class="qt-p">
+          <small class="qt-pl">Searches a week{hasBing ? <> · <i class="qt-key g" />Google <i class="qt-key b" />Bing (US keyword data)</> : ' · Google · Bing’s US keyword data has none'}</small>
+          <div class="qt-box">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              <polygon points={`0,100 ${gLine} 100,100`} class="qt-ga" />
+              <polyline points={gLine} class="qt-gl" vector-effect="non-scaling-stroke" />
+              {hasBing && <polyline points={bLine} class="qt-bl" vector-effect="non-scaling-stroke" />}
+            </svg>
+            {endLabel(f(W[0].g), SY(W[0].g), 'l')}
+            {endLabel(f(W[N - 1].g), SY(W[N - 1].g), 'r')}
+            <HoverLayer count={N} text={tip} />
+          </div>
+        </div>
+        <div class="qt-p">
+          <small class="qt-pl">Your Google position · #1 at the top</small>
+          <div class="qt-box pos">
+            <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+              {guides.map((g) => <line key={g} x1="0" x2="100" y1={PY(g)} y2={PY(g)} class="qt-guide" vector-effect="non-scaling-stroke" />)}
+              {pLine && <polyline points={pLine} class="qt-pline" vector-effect="non-scaling-stroke" />}
+            </svg>
+            {guides.map((g) => <span key={g} class="qt-gl-l" style={`top:${PY(g)}%`}>#{g}</span>)}
+            {firstP != null && endLabel(`#${Math.round(firstP)}`, PY(firstP), 'l p')}
+            {lastP != null && endLabel(`#${Math.round(lastP)}`, PY(lastP), 'r p')}
+            <HoverLayer count={N} text={tip} />
+          </div>
+        </div>
       </div>
       <div class="qt-x"><span>{short(W[0].start)}</span><span>{short(to)}</span></div>
     </section>
