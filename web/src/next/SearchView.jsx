@@ -28,13 +28,32 @@ const beforeOf = (r, eng) => {
 };
 const clicksOf = (r, eng) => (eng === 'google' ? r.google?.clicks || 0 : eng === 'bing' ? r.bing?.clicks || 0 : (r.google?.clicks || 0) + (r.bing?.clicks || 0));
 const seenOf = (r, eng) => (eng === 'google' ? r.google?.impressions || 0 : eng === 'bing' ? r.bing?.impressions || 0 : r.impressions || 0);
-// The engines disagree: only one shows it, or they're 5+ places apart.
-function disagree(r) {
+// A search's words, for spotting close wordings: lower case, plurals folded, filler dropped.
+const FILLER = new Set(['for', 'the', 'a', 'an', 'to', 'in', 'on', 'of', 'and', 'with', 'vs', 'best', 'free', 'top']);
+export const wordsOf = (q) => new Set(String(q).toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((w) => w && !FILLER.has(w)).map((w) => (w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w)));
+// Other searches one engine reports that say the same thing in other words (one's words inside the other's).
+export function nearOn(r, all, engine) {
+  const mine = wordsOf(r.key);
+  if (!mine.size) return [];
+  const inside = (a, b) => [...a].every((w) => b.has(w));
+  return all.filter((o) => o.key !== r.key && o[engine]?.position != null)
+    .filter((o) => { const w = wordsOf(o.key); return w.size && (inside(mine, w) || inside(w, mine)); })
+    .sort((a, b) => (b[engine].impressions || 0) - (a[engine].impressions || 0)).slice(0, 3);
+}
+const listNear = (near, engine) => near.map((o) => `“${o.key}” (${rank(o[engine].position)})`).join(near.length > 2 ? ', ' : ' and ');
+// The engines disagree: only one shows it, or they're 5+ places apart. An engine that reports
+// nothing for this exact wording may still show the site for a close one: that's said, not "missing".
+function disagree(r, all = []) {
   const g = r.google?.position ?? null;
   const b = r.bing?.position ?? null;
   if (g == null && b == null) return null;
-  if (b == null) return { bad: 'Bing', word: 'Missing on Bing', why: 'Bing doesn’t show the site for it. It may not have crawled the page yet.' };
-  if (g == null) return { bad: 'Google', word: 'Missing on Google', why: 'Google doesn’t show the site for it yet; the page may need links or time.' };
+  for (const [engine, name, pos] of [['bing', 'Bing', b], ['google', 'Google', g]]) {
+    if (pos != null) continue;
+    const near = nearOn(r, all, engine);
+    return near.length
+      ? { bad: name, word: `Other wording on ${name}`, why: `${name} reports nothing for this exact wording, but shows the site for ${listNear(near, engine)}.`, near }
+      : { bad: name, word: `Missing on ${name}`, why: `${name} reports no searches for this wording in this period: it doesn’t show the site for it, or too rarely to be counted.` };
+  }
   if (Math.abs(g - b) < 5) return null;
   return b > g ? { bad: 'Bing', word: 'Lower on Bing', why: `Bing ranks it ${Math.round(b - g)} places below Google.` } : { bad: 'Google', word: 'Lower on Google', why: `Google ranks it ${Math.round(g - b)} places below Bing.` };
 }
@@ -76,7 +95,7 @@ export function SearchView({ site, range, params }) {
   // Comparing engines only means something when both answered.
   const both = !h.google?.error && !h.bing?.error;
   const rows = h.queries
-    .map((r) => ({ ...r, pos: posOf(r, eng), was: beforeOf(r, eng), s: stateOf(r, eng), d: eng === 'both' && both ? disagree(r) : null, page: pageFor.get(r.key)?.path || '' }))
+    .map((r) => ({ ...r, pos: posOf(r, eng), was: beforeOf(r, eng), s: stateOf(r, eng), d: eng === 'both' && both ? disagree(r, h.queries) : null, page: pageFor.get(r.key)?.path || '' }))
     .filter((r) => eng === 'both' || (eng === 'google' ? r.google : r.bing));
   const total = rows.reduce((n, r) => n + clicksOf(r, eng), 0);
   const close = rows.filter((r) => (r.s.k === 'p1' || r.s.k === 'p2') && r.s.gain > 0).sort((a, b) => b.s.gain - a.s.gain);
@@ -116,12 +135,12 @@ export function SearchView({ site, range, params }) {
           {shown.map((r) => (
             <a key={r.key} class={`nx-lrow${open === r.key ? ' on' : ''}`} href={hrefWith('q', r.key)}>
               <span class="nx-lname"><b>“{r.key}”</b>
-                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), moveOf(r) && <span class={moveOf(r) === 'up' ? 'good' : 'bad'}>{moveOf(r)} from {rank(r.was)}</span>, r.d && <span class="bad">{r.d.word.toLowerCase()}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
+                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), moveOf(r) && <span class={moveOf(r) === 'up' ? 'good' : 'bad'}>{moveOf(r)} from {rank(r.was)}</span>, r.d && <span class={r.d.near ? 'muted' : 'bad'}>{r.d.word.toLowerCase()}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
               </span>
               <span class="nx-ltrack" title={r.pos == null ? 'Not in the results yet' : `${rank(r.pos)} now${r.was != null ? `, ${rank(r.was)} the period before` : ''}`}>
                 <span class="nx-lz" style="left:0;width:18%" /><span class="nx-lz alt" style="left:18%;width:32%" /><span class="nx-lz" style="left:50%;width:28%" /><span class="nx-lz alt" style="left:78%;width:22%" />
                 {moveOf(r) && <span class={`nx-larr ${moveOf(r)}`} style={`left:${Math.min(xOf(r.was), xOf(r.pos))}%;width:${Math.abs(xOf(r.was) - xOf(r.pos))}%`}><i /></span>}
-                <span class={`nx-ldot${r.pos == null ? ' gap' : ''}${r.d ? ' dis' : ''}`} style={`left:${xOf(r.pos)}%`} />
+                <span class={`nx-ldot${r.pos == null ? ' gap' : ''}${r.d && !r.d.near ? ' dis' : ''}`} style={`left:${xOf(r.pos)}%`} />
               </span>
               <span class="nx-num">{fmt(seenOf(r, eng))}</span>
             </a>
@@ -142,7 +161,7 @@ export function SearchView({ site, range, params }) {
                 <span class="nx-qn">“{r.key}”</span>
                 <span class={`nx-eng${r.google ? '' : ' off'}`}>Google {rank(r.google?.position)}</span>
                 <span class={`nx-eng${r.bing ? '' : ' off'}`}>Bing {rank(r.bing?.position)}</span>
-                <b class="bad">{r.d.word}</b>
+                <b class={r.d.near ? 'muted' : 'bad'}>{r.d.word}</b>
               </a>
             ))}
             <p class="muted small m-0">Bing matters more than its clicks: ChatGPT search and Copilot lean on Bing’s index.</p>
@@ -314,6 +333,17 @@ function aiLine(d, site) {
 }
 
 function QueryPanel({ site, r, eng, onClose }) {
+  // When one engine reports nothing, say whether it has even read the page, rather than guess.
+  const ix = useAsync(() => (r.d && r.page ? api.get(`/sites/${site.id}/index-status${qs({ path: r.page })}`).catch(() => null) : null), [site.id, r.key]);
+  const crawl = (() => {
+    if (!r.d || !ix.data) return '';
+    if (r.d.bad === 'Bing') {
+      const b = ix.data.bing || {};
+      return b.note ? '' : b.lastCrawled ? `Bing crawled ${pageName(r.page)} on ${b.lastCrawled}, so it has the page.` : b.known ? `Bing found ${pageName(r.page)} but hasn’t crawled it yet.` : `Bing doesn’t know ${pageName(r.page)} yet: submit it in Bing Webmaster Tools.`;
+    }
+    const g = ix.data.google || {};
+    return g.note ? '' : g.indexed ? `Google has ${pageName(r.page)} indexed (crawled ${g.lastCrawled}).` : `Google: ${String(g.coverage || 'not indexed').toLowerCase()}.`;
+  })();
   const ctr = (x) => (x?.impressions ? `${((x.clicks / x.impressions) * 100).toFixed(1)}%` : '—');
   const rowsOf = [
     ['Google', r.google], ['Bing', r.bing],
@@ -325,7 +355,7 @@ function QueryPanel({ site, r, eng, onClose }) {
           : <>{r.page ? pageName(r.page) : 'The site'} shows up {[r.google && <>at <b>{rank(r.google.position)}</b> on Google</>, r.bing && <>at <b>{rank(r.bing.position)}</b> on Bing</>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' and ', x] : [x]), [])}, and got {fmt(clicksOf(r, 'both'))} clicks.
             {r.s.gain ? <> In the top 3 it would get about <b>{fmt(r.s.gain)}</b> more.</> : null}</>}
       </p>
-      {r.d && <p class="nx-note-line warn"><b>{r.d.word}.</b> <span>{r.d.why}{r.d.bad === 'Bing' ? ' ChatGPT search and Copilot lean on Bing, so this also costs AI answers.' : ''}</span></p>}
+      {r.d && <p class={`nx-note-line${r.d.near ? '' : ' warn'}`}><b>{r.d.word}.</b> <span>{r.d.why}{crawl ? ` ${crawl}` : ''}{r.d.bad === 'Bing' && !r.d.near ? ' ChatGPT search and Copilot lean on Bing, so this also costs AI answers.' : ''}</span></p>}
       <table class="nx-mini-table">
         <thead><tr><th /><th>Position</th><th>Seen</th><th>Clicks</th><th>Click rate</th></tr></thead>
         <tbody>
