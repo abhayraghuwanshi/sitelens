@@ -84,7 +84,7 @@ export function PageTimeline({ site, path, version = 0 }) {
                   <span class="pt-who" title={e.kind === 'check' ? `${(WHO[e.who] || [e.who])[0]} ran it` : (WHO[e.who] || [e.who])[0]}>{e.kind === 'check' ? <span class="pt-av tool"><Icon name={TOOL_ICON[e.tool] || 'search'} size={12} /></span> : <Avatar who={e.who} />}</span>
                   <span class={`pt-badge ${e.tone || ''}${e.size >= 0.5 ? ' big' : ''}`} style={e.size != null ? `--s:${e.size}` : undefined}>{e.badge}</span>
                   <span class="pt-sub"><b class={`pt-st ${e.tone || ''}`}>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
-                  <Spark s={e.attachment?.series} tone={e.tone} />
+                  {e.via ? <Via v={e.via} /> : <Spark s={e.attachment?.series} tone={e.tone} />}
                   <Icon name="chevron" size={14} class="pt-go" />
                 </button>
               )}
@@ -120,6 +120,16 @@ function Spark({ s, tone }) {
 }
 
 // Kauzl's own events carry its owl; everyone else gets their initial.
+const agoOf = (at) => {
+  const mins = Math.round((Date.now() - at) / 60000);
+  return mins < 2 ? 'just now' : mins < 60 ? `${mins} min ago` : mins < 24 * 60 ? `${Math.round(mins / 60)} h ago` : `${Math.round(mins / 1440)} d ago`;
+};
+// Kauzl asked the engine for this: its owl and how long ago, so a crawl event says where it came from.
+function Via({ v }) {
+  const ago = agoOf(v.at);
+  return <span class="pt-via" title={`Kauzl asked ${v.engine === 'google' ? 'Google' : 'Bing'} ${new Date(v.at).toLocaleString()}`}><Logo size={14} title="Kauzl" />asked {ago}</span>;
+}
+
 function Avatar({ who }) {
   if (who === 'kauzl') return <span class="pt-av kauzl owl"><Logo size={22} title="Kauzl" /></span>;
   return <span class={`pt-av ${who}`}>{(WHO[who] || ['', '?'])[1]}</span>;
@@ -140,7 +150,7 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
     <div class="pt-card">
       <button type="button" class="pt-hd" onClick={onClose} aria-expanded="true">
         <Avatar who={e.who} />
-        <span class="pt-from"><b>{(WHO[e.who] || [e.who])[0]}</b><small>to {path}</small></span>
+        <span class="pt-from"><b>{(WHO[e.who] || [e.who])[0]}</b><small>{e.via ? <>Kauzl asked {e.via.engine === 'google' ? 'Google' : 'Bing'} · {agoOf(e.via.at)}</> : <>to {path}</>}</small></span>
       </button>
       <Eyebrow track={e.track} tone={e.tone} />
       <h3 class="pt-title">{e.title}</h3>

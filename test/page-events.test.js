@@ -248,3 +248,19 @@ test('every event has a short badge: the result in a word or a number', () => {
   assert.equal(by['todo:'], 'To-do');
   assert.ok(t.events.every((e) => e.badge), 'no event without a badge');
 });
+
+test('a crawl event says Kauzl asked the engine, and when', async () => {
+  const { crawlEvents } = await import('../server/page-events.mjs');
+  const at = Date.parse('2026-11-21T09:30:00Z');
+  const [g] = crawlEvents({ index: { google: { indexed: true, coverage: 'Submitted and indexed', lastCrawled: '2026-11-14', at }, bing: {} }, today: TODAY });
+  assert.deepEqual(g.via, { by: 'kauzl', at, engine: 'google' });
+  assert.equal(g.attachment.cells.at(-1).label, 'Asked by Kauzl');
+  assert.equal(g.attachment.cells.at(-1).value, '21 Nov, 09:30');
+});
+
+test('an engine that times out is named in the notes, not silently missing', async () => {
+  const pe = createPageEvents({ today: () => TODAY, sources: { index: async () => ({ google: { note: 'The operation was aborted due to timeout' }, bing: { known: false } }) } });
+  const t = await pe.timeline({ id: 's' }, '/p');
+  assert.match(t.notes.google, /^Google didn’t answer this time \(The operation was aborted due to timeout\)/);
+  assert.ok(!t.events.some((e) => e.kind === 'crawl'));
+});

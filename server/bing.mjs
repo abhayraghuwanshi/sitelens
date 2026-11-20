@@ -390,8 +390,8 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
     try {
-      const r = await cache.wrap(`url:${url}`, HOUR, false, () => call('GetUrlInfo', { siteUrl, url }));
-      return parseUrlInfo(r);
+      const r = await cache.wrap(`urlinfo:${url}`, HOUR, false, async () => ({ answer: await call('GetUrlInfo', { siteUrl, url }), at: Date.now() }));
+      return { ...parseUrlInfo(r.answer), at: r.at }; // at: when Kauzl asked Bing (kept an hour)
     } catch (err) {
       if (err.kind === 'needs-bing') throw err;
       return { known: false, note: err.message };

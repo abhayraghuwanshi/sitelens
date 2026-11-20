@@ -212,21 +212,24 @@ export function crawlEvents({ index, changes = [], from = '', today, series }) {
     return s ? `The first crawl since your ${dayLabel(s.c.date)} change: ${who} now has the new version.` : '';
   };
   const out = [];
-  const ev = (id, date, who, title, detail, tone, cells, findings, badge) => out.push({
-    id, date, who, kind: 'crawl', track: 'index', title, detail, tone, badge,
-    attachment: { title: `What ${who === 'google' ? 'Google' : 'Bing'} said`, cells, findings, series: null },
+  // Kauzl asked the engine (URL inspection / URL info) at `at`: the event says so, and when.
+  const asked = (at, who) => (at ? { by: 'kauzl', at, engine: who } : null);
+  const askedCell = (at) => (at ? [{ label: 'Asked by Kauzl', value: new Date(at).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'UTC' }), note: 'UTC · it rechecks every few hours', tone: '' }] : []);
+  const ev = (id, date, who, title, detail, tone, cells, findings, badge, at) => out.push({
+    id, date, who, kind: 'crawl', track: 'index', title, detail, tone, badge, via: asked(at, who),
+    attachment: { title: `What ${who === 'google' ? 'Google' : 'Bing'} said`, cells: [...cells, ...askedCell(at)].slice(0, 3), findings, series: null },
   });
   if (g.lastCrawled && !g.note) {
     const shown = g.indexed;
     ev(`crawl:google:${g.lastCrawled}`, g.lastCrawled, 'google', `Google crawled it: ${shown ? 'indexed' : String(g.coverage || 'not indexed').toLowerCase()}`,
       sinceLine(g.lastCrawled, 'Google') || (shown ? 'It can show in Google’s results.' : 'It isn’t in Google’s results.'), shown ? 'up' : 'down',
       [{ label: 'Google', value: shown ? 'Indexed' : 'Not indexed', note: g.coverage || '', tone: shown ? 'up' : 'down' }, { label: 'Crawled', value: dayLabel(g.lastCrawled), note: 'last time Google read it', tone: '' }],
-      g.link ? [{ sev: '', text: 'Google’s full answer, in Search Console', note: g.link }] : [], shown ? 'Indexed' : 'Not indexed');
+      g.link ? [{ sev: '', text: 'Google’s full answer, in Search Console', note: g.link }] : [], shown ? 'Indexed' : 'Not indexed', g.at);
   }
-  if (b.known && b.discovered && !b.note) ev(`crawl:bing-found:${b.discovered}`, b.discovered, 'bing', 'Bing found it', 'Bing knows the page exists; it shows in Bing once crawled.', '', [{ label: 'Found', value: dayLabel(b.discovered), note: '', tone: '' }], [], 'Found');
+  if (b.known && b.discovered && !b.note) ev(`crawl:bing-found:${b.discovered}`, b.discovered, 'bing', 'Bing found it', 'Bing knows the page exists; it shows in Bing once crawled.', '', [{ label: 'Found', value: dayLabel(b.discovered), note: '', tone: '' }], [], 'Found', b.at);
   if (b.known && b.lastCrawled && !b.note && b.lastCrawled !== b.discovered) {
     ev(`crawl:bing:${b.lastCrawled}`, b.lastCrawled, 'bing', 'Bing crawled it', sinceLine(b.lastCrawled, 'Bing') || 'It can show in Bing’s results.', 'up',
-      [{ label: 'Bing', value: 'Crawled', note: b.httpStatus ? `HTTP ${b.httpStatus}` : '', tone: 'up' }, { label: 'Crawled', value: dayLabel(b.lastCrawled), note: 'last time Bing read it', tone: '' }], [], 'Crawled');
+      [{ label: 'Bing', value: 'Crawled', note: b.httpStatus ? `HTTP ${b.httpStatus}` : '', tone: 'up' }, { label: 'Crawled', value: dayLabel(b.lastCrawled), note: 'last time Bing read it', tone: '' }], [], 'Crawled', b.at);
   }
   return out.filter((e) => (!from || e.date >= from) && e.date <= today);
 }
@@ -381,6 +384,11 @@ export function createPageEvents({ sources, today = () => new Date().toLocaleDat
       else { data[n] = []; notes[n] = r.reason?.message || String(r.reason); }
       if (r.status === 'fulfilled' && r.value?.note) notes[n] = r.value.note;
     });
+    // An engine that didn't answer leaves its crawl out: say so rather than show nothing.
+    for (const [k, name] of [['google', 'Google'], ['bing', 'Bing']]) {
+      const n = data.index?.[k]?.note;
+      if (n && !/sample site|Pick a Search Console|isn’t in your Bing/i.test(n)) notes[k] = `${name} didn’t answer this time (${n.replace(/\.$/, '')}), so its last crawl isn’t shown. It’s asked again on the next load.`;
+    }
     const file = data.commits?.[0]?.file || '';
     const out = buildTimeline({ path, file, today: to, from, ...data, index: Array.isArray(data.index) ? null : data.index, edits: (data.edits || []).filter((u) => u.date >= from), marks: data.marks || [] });
     return { ...out, from, notes };
