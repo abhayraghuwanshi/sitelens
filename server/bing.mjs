@@ -49,6 +49,20 @@ export const bingDay = (value) => {
   return t === null ? null : isoDay(t + 12 * HOUR);
 };
 
+// Bing's GetUrlInfo answer → what it knows. For a URL it has never seen, Bing still answers,
+// with placeholder dates (0001-01-01) and size 0: that's "not known", not "crawled".
+export function parseUrlInfo(r) {
+  if (!r) return { known: false };
+  const day = (v) => {
+    const d = v ? bingDay(v) : null;
+    return d && d >= '2000-01-01' ? d : null;
+  };
+  const discovered = day(r.DiscoveryDate), lastCrawled = day(r.LastCrawledDate);
+  const httpStatus = r.HttpStatus || null;
+  const known = Boolean(discovered || lastCrawled || httpStatus || r.DocumentSize);
+  return { known, httpStatus, discovered, lastCrawled, size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null };
+}
+
 // The Bing site for a Studio host: same host ignoring scheme and www; verified first, then https.
 export function matchSiteUrl(host, bingSites) {
   const want = bare(host);
@@ -333,12 +347,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
     try {
       const r = await cache.wrap(`url:${url}`, HOUR, false, () => call('GetUrlInfo', { siteUrl, url }));
-      if (!r) return { known: false };
-      return {
-        known: true, httpStatus: r.HttpStatus ?? null,
-        discovered: r.DiscoveryDate ? bingDay(r.DiscoveryDate) : null, lastCrawled: r.LastCrawledDate ? bingDay(r.LastCrawledDate) : null,
-        size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null,
-      };
+      return parseUrlInfo(r);
     } catch (err) {
       if (err.kind === 'needs-bing') throw err;
       return { known: false, note: err.message };
