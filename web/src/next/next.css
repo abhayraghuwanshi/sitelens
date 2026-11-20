@@ -1583,3 +1583,25 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .sp-pages a, .sp-pages li > span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-sl > a { color: inherit; text-decoration: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tl-sl > a:hover { text-decoration: underline; color: var(--accent-ink); }
+
+/* Page timeline rows read as things to open: a bordered row with room, a hover and a chevron. */
+.pt-tl { gap: 6px; }
+.pt-row { padding: 0; }
+.pt-date { padding-top: 13px; }
+.pt-ico { margin-top: 10px; }
+.pt-ev { grid-template-columns: 112px minmax(0, 1fr) 14px; gap: 12px; padding: 10px 14px; border: 1px solid var(--border); background: var(--surface); border-radius: var(--radius-md); }
+.pt-ev:hover { background: var(--surface-hover); border-color: var(--border-strong); }
+.pt-ev .pt-go { color: var(--text-3); }
+.pt-ev:hover .pt-go { color: var(--text); }
+.pt-row.quiet .pt-ev { background: transparent; border-style: dashed; }
+.pt-card { margin-top: 0; margin-bottom: 4px; }
+.pt-ico.now { margin-top: 12px; }
+.pt-fold .todo-link { margin-top: 10px; }
+@media (max-width: 640px) {
+  .pt-ev { grid-template-columns: minmax(0, 1fr) 14px; padding: 8px 10px; }
+  .pt-ev .pt-who { grid-column: 1; }
+  .pt-ev .pt-sub { grid-column: 1; }
+  .pt-ev .pt-go { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
+  .pt-date { padding-top: 0; }
+  .pt-ico { margin-top: 0; }
+}

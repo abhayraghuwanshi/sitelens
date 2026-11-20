@@ -73,6 +73,7 @@ export function PageTimeline({ site, path }) {
                 <button type="button" class="pt-ev" onClick={() => toggle(e.id)} aria-expanded="false">
                   <span class="pt-who"><Avatar who={e.who} /><b>{(WHO[e.who] || [e.who])[0]}</b></span>
                   <span class="pt-sub">{e.tone && e.tone !== 'muted' && <i class={`pt-dot ${e.tone}`} />}<b>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
+                  <Icon name="chevron" size={14} class="pt-go" />
                 </button>
               )}
           </li>

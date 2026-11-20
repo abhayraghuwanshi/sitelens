@@ -183,3 +183,14 @@ test('two runs of a check on one day: the later one is the day’s event', () =>
   ] });
   assert.deepEqual(t.events.map((e) => e.title), ['Speed test: 3.5 s on phones']);
 });
+
+test('a to-do is on a page only when it names that exact page', async () => {
+  const { todoIsFor } = await import('../server/page-events.mjs');
+  const founder = { title: 'Get shown for a search (/founder)', link: '#/site/s/pages?article=%2Ffounder', from: 'search:/founder' };
+  assert.equal(todoIsFor(founder, '/'), false, 'the home page is not inside every link');
+  assert.equal(todoIsFor(founder, '/founder'), true);
+  assert.equal(todoIsFor({ title: 'x', from: 'goal:/blog/x:clicks' }, '/blog/x'), true);
+  assert.equal(todoIsFor({ title: 'x', from: 'goal:/blog/x:clicks' }, '/blog'), false);
+  assert.equal(todoIsFor({ title: 'Home', subject: { kind: 'page', key: '/' } }, '/'), true);
+  assert.equal(todoIsFor({ title: 'Fix (/pricing)' }, '/pricing'), true);
+});

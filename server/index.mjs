@@ -45,7 +45,7 @@ import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
 import { createSiteHealth, siteHealthRoutes } from './site-health.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
-import { createPageEvents, pageEventRoutes } from './page-events.mjs';
+import { createPageEvents, pageEventRoutes, todoIsFor } from './page-events.mjs';
 import { createDiagnose, diagnoseRoutes } from './diagnose.mjs';
 import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
 import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
@@ -197,7 +197,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     commits: (site, path, since) => editor.commits(site, path, { since }),
     checks: async (site, path, since) => ({ checks: await diagnose.runs(site, { path, since }) }),
     marks: async (site, from, to) => ({ marks: (await calendar.events({ site: site.id, from, to })).events || [] }),
-    todos: async (site, path) => ({ todos: ((await todos.list({ site: site.id })).todos || []).filter((t) => (t.link || '').includes(encodeURIComponent(path)) || (t.from || '').endsWith(`:${path}`) || (t.subject?.kind === 'page' && t.subject.key === path) || (path !== '/' && t.title.includes(path))) }),
+    todos: async (site, path) => ({ todos: ((await todos.list({ site: site.id })).todos || []).filter((t) => todoIsFor(t, path)) }),
   } });
   function githubDb() {
     if (!github.hasDb()) {

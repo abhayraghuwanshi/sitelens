@@ -296,6 +296,19 @@ export function buildTimeline({ path, file = '', today, series = [], commits = [
   return { path, today, events, quiet: events.filter((e) => e.quiet).length, tracks: counts, now: nowOf({ todos, events, path, today }) };
 }
 
+// Is this to-do about this page? Compares the exact page, never a substring: the home
+// page "/" is inside every link, so a loose match put every to-do on it.
+export function todoIsFor(t, path) {
+  if (t.subject?.kind === 'page') return t.subject.key === path;
+  const from = String(t.from || '').split(':');
+  if (from.length >= 2 && from[1].startsWith('/')) return from[1] === path;
+  const m = /[?&](?:article|path)=([^&#]+)/.exec(String(t.link || ''));
+  if (m) {
+    try { return decodeURIComponent(m[1]) === path; } catch { return false; }
+  }
+  return path !== '/' && String(t.title || '').endsWith(`(${path})`);
+}
+
 /* --- gathering: real data in, timeline out --- */
 
 // sources: { series(site, path, from, to), commits(site, path, since), edits(site, path), marks(site, from, to),
