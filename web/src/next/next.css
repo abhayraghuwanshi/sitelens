@@ -1697,3 +1697,6 @@ a.ps-row:hover { background: var(--surface-hover); }
 .pt-finds li > span:nth-child(2) { flex: 1; }
 .pt-ftodo { flex: none; margin-left: 8px; font-size: var(--text-sm); white-space: nowrap; }
 .pt-ftodo .todo-link { display: inline-flex; align-items: center; gap: 4px; }
+/* An event's actions line up with its text and attachment: no indent from a borderless first button. */
+.pt-card > .nx-btns { margin: 2px 0 0; justify-content: flex-start; }
+.pt-card > .nx-btns .btn { display: inline-flex; align-items: center; gap: 6px; }

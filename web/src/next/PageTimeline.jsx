@@ -106,7 +106,7 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
     problems.length > 0 && <AddTodo key="todo" site={site} class="btn primary" label="To-do" todo={runTodo({ site, path, tool: e.tool, headline: e.title.replace(/^[^:]+:\s*/, ''), findings: a.findings, date: fmtD(e.date) })} />,
     e.attachment.diff?.url && <a key="c" class="btn" href={e.attachment.diff.url} target="_blank" rel="noopener noreferrer"><Icon name="github" size={13} /> Open the commit</a>,
     e.todo && <a key="t" class="btn" href={pushPanel({ kind: 'todo', key: e.todo })}>Open the to-do</a>,
-    <a key="d" class="btn ghost" href={pushPanel({ kind: 'day', key: e.date })}>See this day</a>,
+    <a key="d" class="btn" href={pushPanel({ kind: 'day', key: e.date })}><Icon name="calendar" size={13} /> See this day</a>,
   ].filter(Boolean);
   return (
     <div class="pt-card">
