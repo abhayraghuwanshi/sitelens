@@ -92,6 +92,25 @@ export function aggregateQueries(rows, from, to, limit = 50) {
     .slice(0, limit);
 }
 
+// Adds 13 weekly impressions to each aggregated query (Bing's rows are dated), the last week ending
+// on `to`, plus the change of the last 4 weeks against the 4 before (null when it's new).
+export function withWeeks(queries, rows, to, weeks = 13) {
+  const end = Date.parse(`${to || new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const by = new Map(queries.map((q) => [q.query, Array(weeks).fill(0)]));
+  for (const r of rows) {
+    const w = by.get(r.Query);
+    const day = bingDay(r.Date);
+    if (!w || !day) continue;
+    const i = weeks - 1 - Math.floor((end - Date.parse(`${day}T00:00:00Z`)) / (7 * DAY));
+    if (i >= 0 && i < weeks) w[i] += Number(r.Impressions) || 0;
+  }
+  return queries.map((q) => {
+    const w = by.get(q.query);
+    const now = w.slice(-4).reduce((a, b) => a + b, 0), before = w.slice(-8, -4).reduce((a, b) => a + b, 0);
+    return { ...q, weeks: w.map((impressions) => ({ impressions })), change: before ? (now - before) / before : now ? null : 0 };
+  });
+}
+
 export function bingError(json, status) {
   const code = json?.ErrorCode;
   const message = String(json?.Message || '').replace(/^ERROR!!!\s*/, '');
@@ -302,7 +321,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
     const rows = (await cache.wrap(`page-queries:${url}`, 3 * HOUR, false, () => call('GetPageQueryStats', { siteUrl, page: url }))) || [];
-    return { url, queries: aggregateQueries(rows, from, to, 200) };
+    return { url, queries: withWeeks(aggregateQueries(rows, from, to, 200), rows, to) };
   }
 
   // The sitemaps Bing has for the site (submitted in Webmaster Tools, or found in robots.txt):

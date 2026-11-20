@@ -1672,7 +1672,7 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .ps-load { min-height: 220px; }
 .ps-h { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 4px 12px; margin-bottom: 4px; }
 .ps-h h2 { margin: 0; }
-.ps-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) 58px 76px 50px 50px; gap: 12px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: var(--text-sm); font-variant-numeric: tabular-nums; border-radius: var(--radius-sm); }
+.ps-row { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(90px, 1fr) 58px 76px 50px; gap: 12px; align-items: center; padding: 8px 6px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; font-size: var(--text-sm); font-variant-numeric: tabular-nums; border-radius: var(--radius-sm); }
 a.ps-row:hover { background: var(--surface-hover); }
 .ps-head { font-size: var(--text-xs); color: var(--text-3); padding-top: 0; }
 .ps-q { display: grid; min-width: 0; font-weight: 500; }
@@ -1684,5 +1684,11 @@ a.ps-row:hover { background: var(--surface-hover); }
 .ps-row .nx-num small { display: block; font-size: var(--text-xs); }
 @media (max-width: 640px) {
   .ps-row { grid-template-columns: minmax(0, 1fr) 70px 50px 52px; }
-  .ps-row > :nth-child(5), .ps-row > :nth-child(6) { display: none; }
+  .ps-row > :nth-child(5) { display: none; }
 }
+.ps-tabs { display: inline-flex; gap: 2px; padding: 2px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: var(--bg); }
+.ps-tabs button { font: inherit; font-size: var(--text-sm); border: 0; background: none; color: var(--text-2); padding: 3px 12px; border-radius: var(--radius-pill); cursor: pointer; }
+.ps-tabs button b { font-weight: 600; color: var(--text-3); margin-left: 2px; }
+.ps-tabs button.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
+.ps-tabs button.on b { color: inherit; }
+.ps-h { align-items: center; }
