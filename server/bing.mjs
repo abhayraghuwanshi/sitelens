@@ -295,6 +295,16 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return aggregateQueries(rows || [], from, to, 5000).map(({ query, ...p }) => ({ page: query, ...p }));
   }
 
+  // The searches Bing showed one page for (GetPageQueryStats), over a period: Bing's own per-page
+  // report, so a page's Bing searches don't depend on matching Google's wording.
+  async function pageQueries(site, url, { from = '', to = '' } = {}) {
+    if (site.demo) return { url, queries: [] };
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    const rows = (await cache.wrap(`page-queries:${url}`, 3 * HOUR, false, () => call('GetPageQueryStats', { siteUrl, page: url }))) || [];
+    return { url, queries: aggregateQueries(rows, from, to, 200) };
+  }
+
   // The sitemaps Bing has for the site (submitted in Webmaster Tools, or found in robots.txt):
   // each with Bing's status, when it last read it and how many URLs it found there.
   async function feeds(site) {
@@ -425,7 +435,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, pageQueries, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));
@@ -447,6 +457,14 @@ export function bingRoutes({ bing, siteOr404 }) {
     ['GET', /^\/api\/bing\/status$/, async () => bing.status()],
     ['POST', /^\/api\/bing\/key$/, async ({ body }) => bing.saveKey(body.key)],
     ['POST', /^\/api\/bing\/match$/, async ({ body }) => bing.setMatch(String(body.siteId || ''), body.siteUrl || '')],
+    ['GET', /^\/api\/bing\/sites\/([\w-]+)\/page-queries$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const path = query.get('path') || '/';
+      const host = String(site.host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const days = Math.min(180, Math.max(7, Number(query.get('days')) || 90));
+      const to = new Date().toISOString().slice(0, 10), from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+      return bing.pageQueries(site, `https://${host}${path}`, { from, to });
+    }],
     ['GET', /^\/api\/bing\/sites\/([\w-]+)\/sitemaps$/, async ({ match }) => bing.feeds(await siteOr404(match[1]))],
     ['GET', /^\/api\/bing\/sites\/([\w-]+)$/, async ({ match, query }) => bing.overview(await siteOr404(match[1]), query.get('range') || '28d', { fresh: query.has('fresh') })],
     ['POST', /^\/api\/bing\/sites\/([\w-]+)\/submit$/, async ({ match, body }) => bing.submit(await siteOr404(match[1]), body.urls)],

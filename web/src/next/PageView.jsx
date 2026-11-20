@@ -24,6 +24,8 @@ const CYCLE = { grow: ['Grow', 'up'], improve: ['Improve', 'warn'], cut: ['Cut',
 export function PageView({ site, path, back }) {
   const row = useAsync(() => api.get(`/sites/${site.id}/page-goal${qs({ path, range: '90d' })}`), [site.id, path]);
   const hub = useAsync(() => api.get(`/sites/${site.id}/search-hub${qs({ range: '90d' })}`).catch(() => null), [site.id]);
+  // Bing's own report for this page: the searches it showed the page for, in Bing's wording.
+  const bingPage = useAsync(() => (site.demo ? null : api.get(`/bing/sites/${site.id}/page-queries${qs({ path })}`).catch(() => null)), [site.id, path]);
   const cycles = useAsync(() => api.get(`/sites/${site.id}/content-cycles`).catch(() => null), [site.id]);
   const [more, setMore] = useState(false);
 
@@ -32,7 +34,8 @@ export function PageView({ site, path, back }) {
   const r = row.data;
 
   // Its searches (Google, from Search Console's page × search report), with where Bing has the same search.
-  const bingOf = new Map((hub.data?.queries || []).map((q) => [q.key, q.bing]));
+  const bingPageOf = new Map((bingPage.data?.queries || []).map((q) => [q.query.toLowerCase(), q]));
+  const bingOf = new Map((hub.data?.queries || []).map((q) => [q.key, bingPageOf.get(q.key) || q.bing]));
   const searches = (hub.data?.queryPages || []).filter((q) => q.path === path).map((q) => {
     const gain = Math.round((q.impressions || 0) * Math.max(0, ctrAt(3) - ctrAt(q.position)));
     const bing = bingOf.get(q.query);
@@ -77,6 +80,32 @@ export function PageView({ site, path, back }) {
               ))}
             </section>
           )}
+          {bingPage.data && (() => {
+            const google = new Set(searches.map((q) => q.query.toLowerCase()));
+            const only = bingPage.data.queries.filter((q) => !google.has(q.query.toLowerCase()));
+            const seen = bingPage.data.queries.reduce((n, q) => n + q.impressions, 0);
+            return (
+              <section class="card card-plain nx-tight" aria-label="On Bing">
+                <h3 class="nx-label-sm">On Bing</h3>
+                <p class="muted small m-0">
+                  {bingPage.data.queries.length
+                    ? <>Bing showed this page {fmt(seen)} {seen === 1 ? 'time' : 'times'} for {bingPage.data.queries.length} {bingPage.data.queries.length === 1 ? 'search' : 'searches'} in 90 days{only.length === bingPage.data.queries.length && searches.length ? ', none worded like the Google ones above' : ''}. Bing’s own report for this page.</>
+                    : 'Bing hasn’t shown this page for any search in 90 days.'}
+                </p>
+                {only.length > 0 && (
+                  <>
+                    <div class="pv-qrow pv-bqrow pv-qhead" aria-hidden="true"><span>Search on Bing</span><span class="nx-num">Bing</span><span class="nx-num">Seen</span><span class="nx-num">Clicks</span></div>
+                    {only.slice(0, 15).map((q) => (
+                      <div key={q.query} class="pv-qrow pv-bqrow">
+                        <span class="nx-qn">“{q.query}”</span><span class="nx-num">{rank(q.position)}</span><span class="nx-num">{fmt(q.impressions)}</span><span class="nx-num">{fmt(q.clicks)}</span>
+                      </div>
+                    ))}
+                    {only.length > 15 && <p class="muted small m-0">and {only.length - 15} more, each seen once or twice.</p>}
+                  </>
+                )}
+              </section>
+            );
+          })()}
           {cyc && (
             <section class="card card-plain pv-cycle" aria-label="Content cycle">
               <div class="pv-cyhead">

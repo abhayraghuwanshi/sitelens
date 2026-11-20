@@ -1664,3 +1664,5 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .qt-pos small:first-child { top: 0; } .qt-pos small:last-of-type { bottom: 0; }
 .qt-pl { fill: none; stroke: var(--text-2); stroke-width: 1.6; }
 .qt-x { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-3); }
+.pv-qrow.pv-bqrow { grid-template-columns: minmax(0, 1fr) 56px 70px 56px; }
+.pv-bqrow.pv-qhead { margin-top: 8px; }
