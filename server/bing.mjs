@@ -295,6 +295,21 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return aggregateQueries(rows || [], from, to, 5000).map(({ query, ...p }) => ({ page: query, ...p }));
   }
 
+  // The sitemaps Bing has for the site (submitted in Webmaster Tools, or found in robots.txt):
+  // each with Bing's status, when it last read it and how many URLs it found there.
+  async function feeds(site) {
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    const list = (await cache.wrap(`feeds:${siteUrl}`, HOUR, false, () => call('GetFeeds', { siteUrl }))) || [];
+    return {
+      siteUrl,
+      feeds: list.map((f) => ({
+        url: f.Url, status: f.Status || '', type: f.Type || '', urls: f.UrlCount ?? null, submitted: f.Submitted ? bingDay(f.Submitted) : null,
+        lastCrawled: f.LastCrawled ? bingDay(f.LastCrawled) : null, fileSize: f.FileSize ?? null,
+      })),
+    };
+  }
+
   async function submit(site, urls) {
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
@@ -410,7 +425,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));
@@ -432,6 +447,7 @@ export function bingRoutes({ bing, siteOr404 }) {
     ['GET', /^\/api\/bing\/status$/, async () => bing.status()],
     ['POST', /^\/api\/bing\/key$/, async ({ body }) => bing.saveKey(body.key)],
     ['POST', /^\/api\/bing\/match$/, async ({ body }) => bing.setMatch(String(body.siteId || ''), body.siteUrl || '')],
+    ['GET', /^\/api\/bing\/sites\/([\w-]+)\/sitemaps$/, async ({ match }) => bing.feeds(await siteOr404(match[1]))],
     ['GET', /^\/api\/bing\/sites\/([\w-]+)$/, async ({ match, query }) => bing.overview(await siteOr404(match[1]), query.get('range') || '28d', { fresh: query.has('fresh') })],
     ['POST', /^\/api\/bing\/sites\/([\w-]+)\/submit$/, async ({ match, body }) => bing.submit(await siteOr404(match[1]), body.urls)],
   ];
