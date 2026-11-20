@@ -1605,3 +1605,9 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
   .pt-date { padding-top: 0; }
   .pt-ico { margin-top: 0; }
 }
+
+/* A day with nothing marked: what to do about it, not just "nothing". */
+.tl-empty { display: grid; gap: 10px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-sm); line-height: 1.5; }
+.tl-empty.odd { border-style: solid; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.tl-empty .tl-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.tl-empty .btn { display: inline-flex; align-items: center; gap: 6px; }

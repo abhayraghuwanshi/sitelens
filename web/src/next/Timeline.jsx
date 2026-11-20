@@ -705,13 +705,29 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
               <p class="tl-effect">{ef === null ? <span class="muted">Too early to judge: the 3 days after aren’t in yet.</span>
                 : <>Visits <b class={ef >= 0 ? 'good' : 'bad'}>{pct(ef)}</b> in the 3 days after, against the 3 before.</>}</p>
             )}
-            {!marks.length && <p class="muted small m-0">Nothing marked.</p>}
+            {!marks.length && !adding && (() => {
+              // Nothing marked: on an unusual day, ask what caused it; on a quiet one, say what shows here.
+              const ch = d.data.change;
+              const odd = ch != null && Math.abs(ch) >= 0.3 && Math.max(d.data.sessions || 0, d.data.baseline || 0) >= 10;
+              return (
+                <div class={`tl-empty${odd ? ' odd' : ''}`}>
+                  <p class="m-0">
+                    <b>{odd ? `${ch > 0 ? 'Up' : 'Down'} ${pct(ch).replace(/^[+−]/, '')} on a usual ${wd}, and nothing is marked.` : 'Nothing marked on this day.'}</b>{' '}
+                    <span class="muted">{odd ? 'If you shipped, posted or changed something, add it: Kauzl then tracks what it did.' : 'Releases, deploys, posts and your notes show here.'}</span>
+                  </p>
+                  <span class="tl-chips">
+                    <button type="button" class={`btn${odd ? ' primary' : ''}`} onClick={() => { setAdding(true); setAsking(false); }}><Icon name="plus" size={12} /> Add what happened</button>
+                    <button type="button" class={`btn ghost${asking ? ' on' : ''}`} aria-pressed={asking} onClick={() => setAsking(!asking)}><Icon name="sparkles" size={12} /> {odd ? 'Ask Claude why' : 'Ask about this day'}</button>
+                  </span>
+                </div>
+              );
+            })()}
             <ClaudeComments key={`${scope}:${date}`} siteId={scope} date={date} onChange={d.reload} bare asking={asking} />
             {adding && <TimelineAdd site={scope} sites={[]} date={date} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); d.reload(); }} />}
-            {!adding && (
+            {!adding && marks.length > 0 && (
               <span class="tl-chips">
-                <button type="button" class="nx-chip" onClick={() => { setAdding(true); setAsking(false); }}><Icon name="plus" size={12} /> Note</button>
-                <button type="button" class={`nx-chip${asking ? ' on' : ''}`} onClick={() => setAsking(!asking)}><Icon name="sparkles" size={12} /> Ask about this day</button>
+                <button type="button" class="nx-chip" onClick={() => { setAdding(true); setAsking(false); }}><Icon name="plus" size={12} /> Add a note</button>
+                <button type="button" class={`nx-chip${asking ? ' on' : ''}`} aria-pressed={asking} onClick={() => setAsking(!asking)}><Icon name="sparkles" size={12} /> Ask about this day</button>
               </span>
             )}
           </div>
