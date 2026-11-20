@@ -1269,7 +1269,7 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .lv-spark { display: grid; gap: 3px; justify-items: end; }
 .lv-bars { display: flex; align-items: flex-end; gap: 2px; height: 30px; width: 130px; }
 .lv-bars i { flex: 1; background: var(--ink-amber-soft); border-radius: var(--radius-bar); }
-.lv-bars i:nth-last-child(-n+5) { background: var(--brand-amber); }
+.lv-bars i:nth-last-of-type(-n+5) { background: var(--brand-amber); }
 .lv-map { position: relative; width: 100%; max-width: 820px; margin: 0 auto; }
 .lv-map svg { width: 100%; height: auto; display: block; }
 .lv-land { fill: var(--ink-land); }
@@ -1775,3 +1775,5 @@ a.ps-row:hover { background: var(--surface-hover); }
 .hv-tip.r { transform: translateX(calc(-100% + 8px)); }
 .pt-sparkw { position: relative; display: block; width: 72px; height: 22px; }
 .ps-spark { position: relative; }
+.lv-bars, .qt-pos, .pt-thw { position: relative; }
+.pt-thw { display: block; width: 56px; height: 30px; }

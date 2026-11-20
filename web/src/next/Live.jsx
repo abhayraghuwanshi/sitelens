@@ -2,6 +2,7 @@ import { useEffect, useState } from 'preact/hooks';
 import { api } from '../api.js';
 import { Icon } from '../components/icons.jsx';
 import { ErrorState, OwlLoader } from '../components/ui.jsx';
+import { HoverLayer } from './HoverChart.jsx';
 import { LiveMap } from './LiveMap.jsx';
 
 // Live: who is on a site right now (GA4 realtime, last 5 minutes), minute by
@@ -155,7 +156,9 @@ export function LivePage({ site }) {
             {wins !== null && <div class="lv-stat"><b class="amber">{fmt(wins)}</b><small>{wins === 1 ? 'goal reached' : 'goals reached'}</small></div>}
             <div class="lv-spark">
               <div class="lv-bars" role="img" aria-label={`People each minute for the last 30 minutes, ${data.perMinute[29]} this minute`}>
-                {data.perMinute.map((n, i) => <i key={i} style={{ height: `${Math.max(8, (n / max) * 100)}%` }} title={`${i === 29 ? 'This minute' : `${29 - i} min ago`}: ${fmt(n)}`} />)}
+                {data.perMinute.map((n, i) => <i key={i} style={{ height: `${Math.max(8, (n / max) * 100)}%` }} />)}
+                <HoverLayer count={data.perMinute.length} guide={false} x={(i) => ((i + 0.5) / data.perMinute.length) * 100}
+                  text={(i) => `${i === data.perMinute.length - 1 ? 'This minute' : `${data.perMinute.length - 1 - i} min ago`} · ${fmt(data.perMinute[i])} ${data.perMinute[i] === 1 ? 'person' : 'people'}`} />
               </div>
               <small>each minute, last 30</small>
             </div>

@@ -442,6 +442,8 @@ function QueryTrend({ days, from, to, bingWeeks, loading }) {
   const bPath = W.map((w, i) => `${X(i)},${99 - ((w.b || 0) / mx) * 91}`);
   const bNow = sum(N - 4, N, 'b');
   const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  // One read-out for the bars and the position line: the week, searches on each engine, your position.
+  const tip = (i) => [`Week of ${short(W[i].start)}`, `Google ${W[i].g.toLocaleString('en-US')} searches`, hasBing ? `Bing ${W[i].b || 0}` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ');
   const say = [
     gChange == null ? (gNow ? 'Google searches only recently' : 'Hardly any Google searches') : `Google searches ${gChange >= 10 ? `up ${gChange}%` : gChange <= -10 ? `down ${-gChange}%` : 'steady'} in the last 4 weeks`,
     hasBing ? (bNow ? `about ${Math.round(bNow / 4)} a week on Bing in the US` : 'none in Bing’s US data') : '',
@@ -452,15 +454,16 @@ function QueryTrend({ days, from, to, bingWeeks, loading }) {
       <div class="qt-h"><b>Trend</b><span class="muted">13 weeks · {say}.</span></div>
       <div class="qt-key"><span><i class="qt-g" />Google searches</span>{hasBing && <span><i class="qt-b" />Bing searches (US)</span>}<span><i class="qt-p" />Your Google position</span></div>
       <div class="qt-plot">
-        <div class="qt-bars">{W.map((w, i) => <span key={i} title={`Week of ${short(w.start)}: ${w.g} Google searches${w.b != null ? `, ${w.b} on Bing` : ''}${w.p != null ? `, #${w.p.toFixed(1)}` : ''}`}><i style={`height:${(w.g / mx) * 92}%`} /></span>)}</div>
+        <div class="qt-bars">{W.map((w, i) => <span key={i}><i style={`height:${(w.g / mx) * 92}%`} /></span>)}</div>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {hasBing && <polyline points={bPath.join(' ')} class="qt-bl" vector-effect="non-scaling-stroke" />}
         </svg>
-        <HoverLayer count={N} x={X} text={(i) => [`Week of ${short(W[i].start)}`, `Google ${W[i].g.toLocaleString('en-US')}`, hasBing ? `Bing ${W[i].b || 0}` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ')} />
+        <HoverLayer count={N} x={X} text={tip} />
       </div>
       <div class="qt-pos">
         <small>#{Math.round(pMin)}</small>
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{pPath.length > 1 && <polyline points={pPath.join(' ')} class="qt-pl" vector-effect="non-scaling-stroke" />}</svg>
+        <HoverLayer count={N} x={X} text={tip} />
         <small>#{Math.round(pMax)}</small>
       </div>
       <div class="qt-x"><span>{short(W[0].start)}</span><span>{short(to)}</span></div>

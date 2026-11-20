@@ -179,10 +179,13 @@ function Thumb({ a }) {
     const X = (i) => (i / (v.length - 1)) * W, Y = (y) => H - 2 - (y / mx) * (H - 4);
     const days = v.length, mi = Math.round((Date.parse(a.series.mark) - Date.parse(a.series.from)) / 86_400_000);
     return (
+      <span class="pt-thw">
       <svg viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true">
         <path d={v.map((y, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(y).toFixed(1)}`).join(' ')} fill="none" stroke="var(--accent)" stroke-width="1.4" />
         {mi >= 0 && mi < days && <><line x1={X(mi)} x2={X(mi)} y1="0" y2={H} stroke="var(--text-3)" stroke-dasharray="2 2" /><circle cx={X(mi)} cy={Y(v[mi])} r="2.4" fill="var(--text)" /></>}
       </svg>
+      <HoverLayer count={v.length} text={(i) => `${shortDay(dayOf(a.series.from, i))} · ${fmt(v[i])} ${v[i] === 1 ? 'visit' : 'visits'}`} />
+      </span>
     );
   }
   if (a.cells?.[0]) return <b class={`pt-num ${a.cells[0].tone || ''}`}>{a.cells[0].value}</b>;

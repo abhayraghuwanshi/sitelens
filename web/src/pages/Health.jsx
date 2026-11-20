@@ -5,6 +5,7 @@ import { Card, KpiStrip, Loading, ErrorState, Empty, Segmented } from '../compon
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
 import { CwvBadge, formatMetric, formatPct, formatAgo, statusClass } from '../components/vitals.jsx';
+import { HoverLayer } from '../next/HoverChart.jsx';
 import { ServerHealthCard } from './Firebase.jsx';
 
 const RANGES = [
@@ -85,9 +86,9 @@ function SiteHealth({ site, range }) {
         {uptime.checks ? (
           <>
             <div class="uptime-bar" role="img" aria-label={`Uptime ${formatPct(uptime.pct)} over ${d.range.key}`}>
-              {buckets.map((b) => (
-                <i key={b.at} class={b.state} title={`${stamp(b.at)} · ${b.checks ? `${b.up}/${b.checks} up${b.avgMs ? ` · ${b.avgMs}ms` : ''}` : 'no checks'}`} />
-              ))}
+              {buckets.map((b) => <i key={b.at} class={b.state} />)}
+              <HoverLayer count={buckets.length} guide={false} x={(i) => ((i + 0.5) / buckets.length) * 100}
+                text={(i) => { const b = buckets[i]; return `${stamp(b.at)} · ${b.checks ? `${b.up}/${b.checks} up${b.avgMs ? ` · ${b.avgMs}ms` : ''}` : 'no checks'}`; }} />
             </div>
             <div class="uptime-axis"><span>{stamp(d.range.from)}</span><span>now</span></div>
             <div class="mt-16">
