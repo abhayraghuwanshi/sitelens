@@ -34,7 +34,7 @@ document.addEventListener('change', (e) => {
 });
 {
   const p = new URLSearchParams(location.search);
-  const TO = { story: 'view:story', timeline: 'view:timeline', inbox: 'view:inbox', todos: 'view:inbox', alerts: 'view:inbox',
+  const TO = { story: 'view:timeline', timeline: 'view:timeline', inbox: 'view:inbox', todos: 'view:inbox', alerts: 'view:inbox',
     pages: 'view:pages', cycles: 'view:pages|tab:cycles', health: 'view:pages|tab:health', search: 'view:search', ai: 'view:search|tab:ai',
     traffic: 'view:traffic', campaigns: 'view:traffic', journeys: 'view:journeys', funnels: 'view:journeys', goals: 'view:goals', outcomes: 'view:goals', live: 'view:live' };
   if (p.get('device') === 'phone' || p.get('device') === 'desktop') S.device = p.get('device');

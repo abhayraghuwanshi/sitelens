@@ -280,7 +280,8 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .b-vis { background: var(--sunk); border-radius: 14px; padding: 16px; font-size: 13px; min-width: 0; }
 .qa-go { display: inline-block; margin-top: 14px; font-size: 14px; font-weight: 600; color: var(--link); text-decoration: none; }
 .qa-go:hover { text-decoration: underline; }
-.tour-frame { margin-top: 24px; border: 1px solid var(--border, rgba(0,0,0,.12)); border-radius: 16px; overflow: hidden; box-shadow: 0 18px 50px rgba(18,21,34,.14); background: #fff; }
+/* The tour fills the frame; the frame is the only border, in the page's own colours (no white edge in dark mode). */
+.tour-frame { margin-top: 24px; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; box-shadow: 0 18px 50px rgba(18,21,34,.14); background: var(--bg); isolation: isolate; }
 .tour-frame iframe { display: block; width: 100%; height: 780px; border: 0; }
 .tour-full { margin-top: 10px; font-size: 14px; }
 .tour-full a { color: var(--link); font-weight: 600; text-decoration: none; }
@@ -546,7 +547,7 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
       <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
         <a class="btn amber" href="#inside">Look inside</a>
-        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="/waitlist">Get early access</a>'}
+        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="#early-access">Get early access</a>'}
       </div>
       <ul class="perks"><li>${CHECK}Look around, no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>

@@ -704,6 +704,261 @@ pre.sql { margin: 0; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; color:
 .dtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); margin-bottom: 4px; overflow-x: auto; }
 .dtabs button { border: 0; background: none; padding: 5px 8px; font-size: 12.5px; color: var(--text-2); border-bottom: 2px solid transparent; cursor: pointer; white-space: nowrap; }
 .dtabs button.on { color: var(--text); border-bottom-color: var(--text); font-weight: 600; }
+/* A page told as one timeline */
+.tl { list-style: none; margin: 4px 0 0; padding: 0; display: grid; }
+.tlm { display: grid; grid-template-columns: 56px 22px minmax(0, 1fr); column-gap: 8px; position: relative; }
+.tlm::before { content: ""; position: absolute; left: 74px; top: 0; bottom: 0; width: 2px; background: var(--border); }
+.tlm:first-child::before { top: 14px; }
+.tlnow::before { bottom: auto; height: 14px; }
+.tld { font-size: 12px; color: var(--text-3); padding-top: 9px; text-align: right; font-variant-numeric: tabular-nums; }
+.tlnow .tld { color: var(--accent-ink); font-weight: 700; }
+.tlic { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 1.5px solid var(--border-strong); color: var(--text-2); margin-top: 6px; position: relative; z-index: 1; }
+.tlm.t-up .tlic { border-color: var(--up); color: var(--up); }
+.tlm.t-down .tlic { border-color: var(--down); color: var(--down); }
+.tlm.t-warn .tlic { border-color: var(--warn-ink); color: var(--warn-ink); }
+.tlic.k-now { background: var(--accent); border-color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.tlw small { font-size: 11.5px; color: var(--text-3); font-weight: 400; }
+.tlnb .tstages { margin: 4px 0 0; }
+.tldot { width: 10px; height: 10px; border-radius: 50%; background: var(--surface); border: 2px solid var(--border-strong); margin: 12px 0 0 2px; position: relative; z-index: 1; }
+.tlm.t-up .tldot { border-color: var(--up); }
+.tlm.t-down .tldot { border-color: var(--down); background: var(--down); }
+.tlm.t-warn .tldot { border-color: var(--warn-ink); }
+.tlnow .tldot { width: 14px; height: 14px; margin: 10px 0 0 0; border-color: var(--accent); background: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.tlb { display: grid; gap: 3px; text-align: left; border: 0; background: none; padding: 6px 10px 14px; border-radius: 10px; cursor: pointer; color: var(--text); font: inherit; width: 100%; }
+.tlb:hover { background: var(--hover); }
+.tlw { display: flex; align-items: center; gap: 8px; font-size: 14px; }
+.tlm.t-down .tlw b { color: var(--down); }
+.tlx { font-size: 13px; color: var(--text-2); line-height: 1.45; }
+.tlsee { font-size: 11.5px; color: var(--text-3); }
+.tlb:hover .tlsee { color: var(--accent-ink); }
+.tlav { width: 20px; height: 20px; border-radius: 6px; display: inline-grid; place-items: center; font-size: 10px; font-weight: 700; background: var(--surface-2); color: var(--text-2); flex: none; }
+.tlav.a-kauzl { background: var(--accent); color: var(--on-accent); }
+.tlav.a-g { background: var(--text); color: var(--surface); }
+.tlav.a-cc { background: #D97757; color: #fff; }
+.tlav.a-cursor { background: var(--text-2); color: var(--surface); }
+.tlev { grid-column: 3; padding: 0 0 14px 10px; display: grid; gap: 8px; }
+.tlnb { display: grid; gap: 6px; background: var(--surface); border: 1px solid var(--accent); border-radius: 12px; padding: 12px 14px; margin: 4px 0 8px; }
+.tlnb > b { font-size: 15.5px; color: var(--text); }
+.tlact { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 2px; }
+.tlgain { font-weight: 700; font-variant-numeric: tabular-nums; margin-right: 4px; }
+.tlmore ul { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 4px; }
+.tlmore li { display: flex; gap: 10px; align-items: center; justify-content: space-between; font-size: 13px; padding: 6px 0; border-top: 1px solid var(--border); }
+.tlmore li span { flex: 1; }
+.evtabs { display: flex; gap: 6px; flex-wrap: wrap; }
+.evtabs button { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 4px 11px; font-size: 12.5px; color: var(--text-2); cursor: pointer; }
+.evtabs button.on { border-color: var(--text); color: var(--text); }
+.m0 { margin: 0; }
+.app.p .tlm { grid-template-columns: 40px 22px minmax(0, 1fr); column-gap: 6px; }
+.app.p .tlm::before { left: 56px; }
+.app.p .tlev { grid-column: 1 / -1; padding-left: 0; }
+/* A page as a timeline of events; each event is a message with one attachment (the proof) */
+.tl > .tlm > .ev { grid-column: 3; min-width: 0; }
+.ev { font: inherit; color: var(--text); text-align: left; width: 100%; }
+.ev-c { display: grid; grid-template-columns: 150px minmax(0, 1fr); gap: 10px; align-items: center; border: 0; background: none; border-radius: 10px; padding: 8px 10px; margin: 2px 0 6px; cursor: pointer; }
+.ev-c:hover { background: var(--hover); }
+.ev-l { display: flex; align-items: center; gap: 8px; font-size: 13px; min-width: 0; }
+.ev-l b { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ev-s { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.ev-s .cdot2 { display: inline-block; margin: 0 7px 1px 0; vertical-align: middle; }
+.ev-o { display: grid; grid-template-columns: minmax(0, 1fr); gap: 8px; border: 1px solid var(--border); background: var(--surface); border-radius: 12px; padding: 12px 14px; margin: 2px 0 12px; }
+.ev-o p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.5; }
+.ev-hd { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: center; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: var(--text); text-align: left; width: 100%; }
+.ev-now { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.pf { display: grid; gap: 2px; }
+.pf-h { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--text-3); }
+.pf-h b { color: var(--text); }
+.pf-s { width: 100%; height: 56px; display: block; }
+.pf-x { position: relative; display: flex; justify-content: space-between; height: 14px; }
+.pf-x small { font-size: 10.5px; color: var(--text-3); white-space: nowrap; }
+.pf-x small[style] { position: absolute; transform: translateX(-50%); top: 0; color: var(--text); font-weight: 600; }
+.app.p .ev-c { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+/* A page as a mail thread: every event is a message with one attachment */
+.mm-sub .cdot2, .mm-s .cdot2 { display: inline-block; margin: 0 7px 1px 0; vertical-align: middle; }
+.mth > li, .mm-c, .mm-o { min-width: 0; }
+.mm-o, .mm-body, .att-v { grid-template-columns: minmax(0, 1fr); }
+.att-t { table-layout: fixed; min-width: 0; }
+.att-t td { overflow-wrap: anywhere; }
+.att-t, .att-t tbody, .att-t tr { max-width: 100%; }
+.att-t th, .att-t td { white-space: normal !important; min-width: 0; }
+.att-t td small { display: block; font-weight: 400; font-size: 12px; color: var(--text-3); }
+.app.p .att { min-width: 0; width: 100%; }
+.mth { width: 100%; box-sizing: border-box; list-style: none; margin: 4px 0 0; padding: 0; display: grid; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); overflow: hidden; }
+.mth > li { border-top: 1px solid var(--border); }
+.mth > li:first-child { border-top: 0; }
+.mm { width: 100%; font: inherit; color: var(--text); text-align: left; }
+.mm-c { display: grid; grid-template-columns: 22px 108px minmax(0, 1fr) 60px; gap: 10px; align-items: center; border: 0; background: none; padding: 10px 14px; cursor: pointer; }
+.mm-c:hover { background: var(--hover); }
+.mm-from { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-sub { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mm-sub b { font-weight: 600; }
+.mm-d { font-size: 12px; color: var(--text-3); text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.mm-o { padding: 12px 14px 14px; display: grid; gap: 8px; background: var(--surface); }
+.mm-hd { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 10px; align-items: center; border: 0; background: none; padding: 0; cursor: pointer; font: inherit; color: var(--text); text-align: left; width: 100%; }
+.mm-who { display: grid; line-height: 1.25; }
+.mm-who b { font-size: 13.5px; }
+.mm-who small { font-size: 11.5px; color: var(--text-3); }
+.mm-body { display: grid; gap: 8px; padding-left: 32px; }
+.mm-body p { margin: 0; font-size: 13.5px; color: var(--text-2); line-height: 1.5; }
+.mm-s { font-size: 15px; }
+.mm-s.down, .mm-sub b.down { color: var(--down); }
+.att { display: flex; align-items: center; gap: 10px; justify-self: start; min-width: 260px; max-width: 100%; border: 1px solid var(--border); background: var(--bg); border-radius: 10px; padding: 8px 12px; cursor: pointer; font: inherit; color: var(--text); text-align: left; }
+.att:hover, .att.on { border-color: var(--border-strong); }
+.att > span:nth-child(2) { display: grid; flex: 1; min-width: 0; }
+.att b { font-size: 13px; }
+.att { min-width: 300px; padding: 6px 12px 6px 6px; background: var(--surface); }
+.att > .ico:last-child { color: var(--text-3); flex: none; }
+.att:hover > .ico:last-child { color: var(--text); }
+.att-th { width: 64px; height: 38px; flex: none; display: grid; place-items: center; border-radius: 7px; background: var(--bg); border: 1px solid var(--border); color: var(--text-2); }
+.att-r { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 6px; }
+.att-r > div { display: grid; gap: 1px; align-content: start; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 7px 10px; min-width: 0; }
+.att-r small { font-size: 11.5px; color: var(--text-3); }
+.att-r b { font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.att-r span { font-size: 11.5px; color: var(--text-3); }
+.att-v .ent-f { border-top: 0; }
+.dif { border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface); font-size: 12.5px; }
+.dif-h { display: flex; align-items: center; gap: 6px; padding: 6px 10px; border-bottom: 1px solid var(--border); background: var(--bg); color: var(--text-2); min-width: 0; }
+.dif-h b { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.dif-h span { color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; flex: 0 1 auto; }
+.dif-h b { flex: 0 1 auto; }
+.app.p .dif-h span { display: none; }
+.dif-h em { flex: none; }
+.dif-h em { margin-left: auto; font-style: normal; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.dif-h em i { font-style: normal; font-weight: 600; }
+.dl { display: grid; grid-template-columns: 22px minmax(0, 1fr); align-items: baseline; }
+.dl > i { font-style: normal; text-align: center; color: var(--text-3); user-select: none; }
+.dl code { font: 12px/1.55 ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 10px 1px 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--text-2); }
+.dl-a { background: color-mix(in srgb, var(--up, #1a7f37) 12%, transparent); }
+.dl-a > i, .dl-a code { color: var(--text); }
+.dl-a > i { color: var(--up, #1a7f37); }
+.dl-d { background: color-mix(in srgb, var(--down, #cf222e) 10%, transparent); }
+.dl-d code { text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--down, #cf222e) 45%, transparent); }
+.dl-d > i { color: var(--down, #cf222e); }
+.dif-p .dl code { font: 13px/1.5 inherit; font-family: inherit; padding: 3px 10px 3px 0; }
+.dl-s code { font-family: inherit; font-style: italic; color: var(--text-3); }
+.att-th .dfn { font-size: 11px; font-weight: 600; display: grid; line-height: 1.2; text-align: center; font-variant-numeric: tabular-nums; }
+.nbec-h { display: flex; gap: 6px; align-items: baseline; }
+.ndiff { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.ndiff > div { display: grid; gap: 3px; align-content: start; border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; background: var(--surface); }
+.ndiff > div:first-child p { color: var(--text-3); text-decoration: line-through; text-decoration-color: color-mix(in srgb, var(--text-3) 50%, transparent); }
+.ndiff > div:last-child { border-color: color-mix(in srgb, var(--accent) 45%, var(--border)); }
+.ndiff > div:last-child p { color: var(--text); }
+.ndiff small, .nbec > small { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-3); }
+.ndiff p { margin: 0; font-size: 13px; line-height: 1.45; }
+.nbec { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.nbec > small { margin-right: 2px; }
+.nwhy { border: 1px solid var(--border); background: var(--surface); border-radius: 999px; padding: 3px 10px; font: inherit; font-size: 12px; color: var(--text); cursor: pointer; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.nwhy:hover { border-color: var(--border-strong); }
+.nmore { margin-left: auto; }
+.app.p .ndiff { grid-template-columns: minmax(0, 1fr); }
+.app.p .att-r { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.app.p .att-r > div { padding: 6px 7px; }
+.app.p .att-r b { font-size: 13.5px; }
+.app.p .att { min-width: 0; }
+.att-num { font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.att small { font-size: 11.5px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.att-v { border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; display: grid; gap: 8px; background: var(--bg); }
+.att-vh { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.att-vh .muted { margin-left: auto; font-size: 12px; }
+.att-vh .muted + .muted { margin-left: 10px; }
+.att-vh[data-act] { cursor: pointer; }
+.att-t { border-collapse: collapse; width: 100%; font-size: 13px; }
+.att-t th { text-align: left; font-weight: 400; color: var(--text-3); padding: 4px 12px 4px 0; width: 34%; text-transform: none; letter-spacing: 0; font-size: 13px; background: none; }
+.att-t td { padding: 4px 12px 4px 0; font-weight: 600; font-variant-numeric: tabular-nums; }
+.att-t td.muted { font-weight: 400; font-size: 12px; }
+.att-t tr + tr th, .att-t tr + tr td { border-top: 1px solid var(--border); }
+.mm-now { background: color-mix(in srgb, var(--accent) 6%, var(--surface)); }
+.app.p .mm-c { grid-template-columns: 22px minmax(0, 1fr) 48px; }
+.app.p .mm-from { display: none; }
+.app.p .mm-body { padding-left: 0; }
+/* The page tracker: track readings, and one entry shape */
+.trk { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px; }
+.trkc { display: grid; gap: 1px; text-align: left; border: 1px solid var(--border); background: var(--surface); border-radius: 10px; padding: 7px 9px; cursor: pointer; min-width: 0; font: inherit; color: var(--text); }
+.trkc:hover { border-color: var(--border-strong); }
+.trkc.on { border-color: var(--text); box-shadow: inset 0 0 0 1px var(--text); }
+.trkc small { font-size: 11px; color: var(--text-3); }
+.trkc b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trkc span { font-size: 11px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ent { display: grid; gap: 10px; background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+.ent-r { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.ent-r span { display: grid; gap: 1px; min-width: 0; }
+.ent-r small { font-size: 11px; color: var(--text-3); }
+.ent-r b { font-size: 15px; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ent-r em { font-style: normal; font-size: 11.5px; color: var(--text-3); }
+.ent-f { list-style: none; margin: 0; padding: 0; display: grid; border-top: 1px solid var(--border); }
+.ent-f li { display: grid; grid-template-columns: 10px minmax(0, 1fr); gap: 8px; padding: 7px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+.ent-f li:last-child { border-bottom: 0; }
+.ent-f li span { display: grid; gap: 1px; }
+.ent-f small { font-size: 11.5px; color: var(--text-3); }
+.cdot2 { width: 7px; height: 7px; border-radius: 50%; margin-top: 6px; background: var(--border-strong); }
+.cdot2.down { background: var(--down); } .cdot2.warn { background: var(--warn-ink); } .cdot2.up { background: var(--up); } .cdot2.muted { background: var(--border); }
+.ent-a { display: flex; flex-wrap: wrap; gap: 6px; }
+.app.p .trk, .drawer .trk { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.app.p .ent-r { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+/* Quiet events fold */
+.tlq .tlic { border-style: dotted; color: var(--text-3); font-size: 14px; }
+.tlqb { font-size: 12.5px; font-weight: 500; padding: 9px 10px; color: var(--text-3); }
+/* Home: Needs you on the Timeline */
+.needs-row { display: flex; align-items: center; gap: 8px 10px; flex-wrap: wrap; font-size: 13px; }
+.needs-row > b { white-space: nowrap; }
+.needs-list { display: flex; gap: 6px; flex-wrap: wrap; flex: 1; min-width: 0; }
+.needs-list .chip { display: inline-flex; align-items: center; gap: 6px; max-width: 340px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.needs-list .cdot2 { margin: 0; flex: none; }
+.ask-card { padding: 10px 12px; }
+.app.p .needs-row { display: grid; gap: 6px; }
+.app.p .needs-list { display: grid; gap: 6px; }
+.app.p .needs-list .chip { max-width: 100%; justify-content: flex-start; }
+.app.p .needs-row .linkish { justify-self: start; }
+/* Tools, and visit days on a page */
+.tpick { display: grid; gap: 6px; }
+.tpick .chip.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+.tgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 10px; }
+.tcard { display: grid; gap: 6px; align-content: start; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px; }
+.tcard p { margin: 0; font-size: 13px; color: var(--text-2); }
+.tcard small { font-size: 11.5px; }
+.tcard .jbtn { justify-self: start; margin-top: 4px; }
+.tres { border-color: var(--accent); }
+/* Diagnose: one page picker, one list of checks, results drawn as timeline events */
+.dgpick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.dgseg { display: flex; flex-wrap: wrap; gap: 2px; padding: 3px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); }
+.dgseg button { border: 0; background: none; font: inherit; font-size: 12.5px; color: var(--text-2); padding: 5px 10px; border-radius: 7px; cursor: pointer; white-space: nowrap; }
+.dgseg button:hover { color: var(--text); }
+.dgseg button.on { background: var(--surface); color: var(--text); font-weight: 600; box-shadow: 0 1px 2px rgba(0,0,0,.08); }
+.dgl { padding-top: 2px; padding-bottom: 2px; }
+.dgr { display: grid; grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 14px; align-items: center; padding: 12px 0; border-top: 1px solid var(--border); }
+.dgr:first-child { border-top: 0; }
+.dgr.on .dgn b { color: var(--accent); }
+.dgn { display: grid; gap: 2px; min-width: 0; }
+.dgn b { font-size: 13.5px; }
+.dgn small { font-size: 12px; color: var(--text-3); line-height: 1.4; }
+.dgv { display: grid; grid-template-columns: 14px minmax(0, 1fr); column-gap: 0; align-items: baseline; font-size: 13px; min-width: 0; }
+.dgv .cdot2 { margin: 0; }
+.dgv small { grid-column: 2; font-size: 11.5px; color: var(--text-3); }
+.dgrun { display: inline-flex; align-items: center; gap: 5px; }
+.dgres { margin: 0; }
+.dgtl { margin-top: 0; }
+.app.p .dgr { grid-template-columns: 32px minmax(0, 1fr) auto; align-items: start; gap: 4px 10px; }
+.app.p .dgv { grid-column: 2 / -1; }
+.app.p .dgrun { grid-row: 1; grid-column: 3; }
+.app.p .dgn small { display: none; }
+.sessl { gap: 0; }
+.sess { display: grid; grid-template-columns: 44px minmax(0, 1fr); gap: 10px; padding: 8px 0; border-top: 1px solid var(--border); font-size: 13px; }
+.sess:first-child { border-top: 0; padding-top: 0; }
+.sessb { display: grid; gap: 2px; }
+.tlic.k-visits { border-style: dashed; }
+/* How it reads: content rules on a page, worst first */
+.clist { display: grid; }
+.crow { display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; gap: 10px; align-items: start; border: 0; border-top: 1px solid var(--border); background: none; padding: 9px 2px; width: 100%; text-align: left; cursor: pointer; color: var(--text); font: inherit; }
+.clist > .crow:first-child { border-top: 0; }
+.crow:hover, .crow.on { background: var(--hover); }
+.cdot { width: 8px; height: 8px; border-radius: 50%; margin-top: 6px; background: var(--border-strong); }
+.cdot.high { background: var(--down); } .cdot.mid { background: var(--warn-ink); }
+.cst { font-size: 12px; color: var(--text-2); text-align: right; font-variant-numeric: tabular-nums; }
+.cdet { display: grid; gap: 8px; padding: 2px 2px 12px 22px; }
+.cdet p { margin: 0; }
+.cq { font-size: 12.5px; color: var(--text-2); background: var(--surface-2); border-radius: 8px; padding: 8px 10px; }
+.cq mark { background: color-mix(in srgb, var(--warn-ink) 18%, var(--surface)); color: var(--text); border-radius: 3px; padding: 0 2px; }
+.app.p .crow { grid-template-columns: 10px minmax(0, 1fr); }
+.app.p .cst { grid-column: 2; text-align: left; }
 .ib { display: grid; gap: 1px; }
 .ib h5 { margin: 0 0 4px; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--text-3); }
 .brow, .erow { display: grid; gap: 8px; align-items: center; border: 0; background: none; padding: 6px 4px; border-radius: 6px; text-align: left; cursor: pointer; font-size: 12.5px; font-variant-numeric: tabular-nums; color: var(--text); width: 100%; }
@@ -751,8 +1006,17 @@ pre.sql { margin: 0; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; color:
 .chxl span:first-child { transform: none; }
 .chxl span:last-child { transform: translateX(-100%); }
 .chhint { font-size: 11.5px; color: var(--text-3); }
-.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 340px; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); overflow-y: auto; padding: 14px 16px; z-index: 12; }
-.app.d.has-drawer .main { padding-right: 366px; }
+.drawer { position: absolute; top: 0; right: 0; bottom: 0; width: 380px; background: var(--surface); border-left: 1px solid var(--border); box-shadow: var(--shadow); overflow-y: auto; padding: 14px 16px; z-index: 12; }
+.app.d.has-drawer .main { padding-right: 406px; }
+.drawer.wide { width: 560px; max-width: 70%; }
+.pnl { display: grid; gap: 12px; grid-template-columns: minmax(0, 1fr); }
+.pnl-h, .pnl-b { min-width: 0; }
+.pnl-open { font-size: 12.5px; white-space: nowrap; padding: 0 4px; }
+.pnl-h { position: sticky; top: -14px; z-index: 2; display: flex; align-items: center; gap: 6px; background: var(--surface); margin: -14px -14px 0; padding: 10px 14px; border-bottom: 1px solid var(--border); }
+.pnl-trail { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; font-size: 13px; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+.pnl-trail .linkish { font-size: 13px; font-weight: 500; }
+.pnl-b .head h3 { font-size: 19px; }
+.sheet .pnl-h { top: -8px; margin: -8px -10px 0; }
 .tscroll { max-height: 320px; overflow: auto; border: 1px solid var(--border); border-radius: 8px; }
 .ctable { min-width: 0; font-size: 12.5px; }
 .ctable th, .ctable td { padding: 6px 10px; white-space: nowrap; }
@@ -1495,6 +1759,7 @@ const I = {
   updown: '<path d="M8 9l4-4 4 4M8 15l4 4 4-4"/>',
   menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
   x: '<path d="M6 6l12 12M18 6L6 18"/>',
+  play: '<path d="M7 5l12 7-12 7z"/>',
   terminal: '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M12 15h5"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/>',
   plug: '<path d="M9 2v6M15 2v6M6 8h12v4a6 6 0 0 1-12 0zM12 18v4"/>',
@@ -1531,6 +1796,7 @@ const INBOX = [
   { site: 'kauzl', k: 'alert', t: 'Signups fell 40% on Tuesday', s: 'Goal alert · 2 days ago' },
   { site: 'kauzl', k: 'todo', id: 't1', t: 'Rewrite the pricing page title for “analytics for small sites”', s: 'From Search · 18 clicks a week at stake' },
   { site: 'kauzl', k: 'todo', id: 't2', t: 'Add FAQ schema to the GA4 setup guide', s: 'From Page review' },
+  { site: 'kauzl', k: 'todo', id: 't4', t: 'Put the UTM definition in the first sentence', s: 'From How it reads · 6,600 searches a month' },
   { site: 'docs', k: 'todo', id: 't3', t: 'Merge the two MCP setup pages', s: 'They compete for the same search' },
   { site: 'demo', k: 'alert', t: 'Checkout errors doubled', s: 'Event alert · today' },
   { site: 'demo', k: 'alert', t: 'Bing clicks up 3× on product pages', s: 'Search alert · yesterday' },
@@ -1542,17 +1808,17 @@ const REPORTS = [
   { g: 'Data', items: [['sql', 'SQL', 'Ask the warehouse directly']] },
 ];
 const ALL_REPORTS = REPORTS.flatMap((g) => g.items.map(([k, l, d]) => ({ k, l, d, g: g.g })));
-const VIEWS = [['story', 'Story', 'sparkles'], ['inbox', 'Inbox', 'inbox'], ['timeline', 'Timeline', 'calendar'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['traffic', 'Traffic', 'arrows'], ['journeys', 'Journeys', 'route'], ['goals', 'Goals', 'target']];
+const VIEWS = [['timeline', 'Timeline', 'calendar'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['traffic', 'Traffic', 'arrows'], ['journeys', 'Journeys', 'route'], ['goals', 'Goals', 'target'], ['tools', 'Diagnose', 'terminal']];
 const RANGES = [['today', 'Today'], ['7d', '7d'], ['28d', '28d'], ['90d', '90d']];
 const OLD_TABS = ['Pages', 'Campaigns', 'Content cycles', 'AI answers', 'Sessions', 'Funnels', 'Retention', 'Events', 'SQL', 'Overview'];
 
 const S = {
   mode: 'after', device: 'desktop',
-  scope: 'kauzl', view: 'story', tab: null, raw: null, ask: null, range: '28d', inboxF: 'all',
+  scope: 'kauzl', view: 'timeline', tab: null, raw: null, ask: null, range: '28d', inboxF: 'all',
   pop: null, // 'scopes' | 'user' | 'cmd' | 'more' | 'day'
-  cal: { metric: 'visits', lens: 'change', zoom: 'month', month: '2026-11', end: '2026-11-17', view: 'calendar', cmp: 'usual', rank: 'top', mxAll: false, dtab: null, day: null, focus: null, layers: ['deploy', 'content', 'post', 'release', 'mention', 'alert'] },
+  cal: { metric: 'visits', lens: 'change', zoom: 'month', month: '2026-11', end: '2026-11-17', view: 'calendar', cmp: 'usual', rank: 'top', mxAll: false, dtab: null, day: null, focus: null, layers: ['deploy', 'content', 'search', 'found', 'todo', 'post', 'release', 'mention', 'alert'] },
   g: '2026-11-15',
-  page: null, pfilter: 'all', psort: 'visits', pdet: false, src: null, tg: null, madd: false, msrc: null, metrics: null, mform: {}, flow: null, fpeek: null, pushT: 'curl', pushGot: false, bot: null, botV: 0, botRaw: false, botAs: 'google', yf: null, setupSite: null, ix: null, todo: null, thist: false, q: null, qAll: null, outAll: false, qtable: false, eng: 'both', ladAll: false,
+  stack: [], ptrack: null, runs: [], tpage: '/guides/what-is-a-utm-code', tres: null, page: null, pfilter: 'all', psort: 'visits', pdet: false, src: null, tg: null, madd: false, msrc: null, metrics: null, mform: {}, flow: null, fpeek: null, pushT: 'curl', pushGot: false, bot: null, botV: 0, botRaw: false, botAs: 'google', yf: null, setupSite: null, ix: null, todo: null, thist: false, q: null, qAll: null, outAll: false, qtable: false, eng: 'both', ladAll: false,
   jgoal: 'signup', jsteps: {}, jleak: null, jedit: false, jby: 'source', jroutes: 'best',
   chartMode: 'chart', srange: null, tsort: ['date', 'desc'], copied: false,
   b: 'story', bSite: 'kauzl', bMenu: false, bTab: 'Pages',
@@ -1644,6 +1910,7 @@ const TODOS = {
       { by: 'kauzl', at: '10 Nov', auto: 'Saw it live: the page changed on 9 Nov (commit a41c2e). Google recrawled it on 10 Nov. I’ll check the numbers on 29 Nov.' },
     ] },
   t3: { stage: 'open', page: '/mcp/setup', why: 'Two pages rank for “kauzl mcp setup” and swap places week to week; neither gets above #6.', entries: [{ by: 'you', at: 'Yesterday', note: 'Made from Search.' }] },
+  t4: { stage: 'open', page: '/guides/what-is-a-utm-code', why: 'How it reads: the definition comes in the third paragraph, and the guide slipped from #4 to #10 for “what is a utm code”. Google and AI answers quote the opening.', entries: [{ by: 'you', at: 'Today', note: 'Made from How it reads.' }] },
 };
 const STAGE_PILL = { open: ['Not started', 'muted'], proposed: ['Needs your OK', 'warn'], changed: ['Changed', ''], live: ['Live · checking 29 Nov', 'up'], checked: ['Checked', 'up'] };
 function agentChip(e) {
@@ -1677,7 +1944,7 @@ function todoPanel(id) {
   return `<div class="insp-in tpanel"><div class="insp-h"><b>${m.t}</b><button type="button" class="icon-btn" data-act="todo:none|close" aria-label="Close">${ic('x', 14)}</button></div>
     <div class="tlead">${lead}</div>
     ${main}
-    <div class="tfoot"><button type="button" class="linkish" data-act="thist" aria-expanded="${open}">${open ? 'Hide' : 'History'} · ${T.entries.length}</button>${rep ? `<button type="button" class="linkish" data-act="noop">Send back to an agent</button>` : ''}<button type="button" class="linkish" data-act="view:pages|pg:${T.page}">Open the page</button></div>
+    <div class="tfoot"><button type="button" class="linkish" data-act="thist" aria-expanded="${open}">${open ? 'Hide' : 'History'} · ${T.entries.length}</button>${rep ? `<button type="button" class="linkish" data-act="noop">Send back to an agent</button>` : ''}<button type="button" class="linkish" data-act="ppage:${T.page}">Open the page</button></div>
     ${open ? `<ol class="thist">${hist}</ol>` : ''}</div>`;
 }
 function inboxBody(scope, phone) {
@@ -1689,7 +1956,7 @@ function inboxBody(scope, phone) {
     const sub = T ? `${last ? `${AGENTS[last.by][0]} · ${last.at}` : 'To-do'} · ${m.s}` : m.s;
     const inner = `<span class="k ${m.k}">${ic(m.k === 'alert' ? 'bell' : 'check', 14)}</span><span class="mt2">${scope === 'all' ? `<span class="tag">${site(m.site).label}</span>` : ''}${m.t}${pill ? ` <span class="tpill ${pill[1]}">${pill[0]}</span>` : ''}</span><small>${sub}</small>`;
     if (m.go) return `<button type="button" class="msg msgb" data-act="${m.go}${phone ? '|pop:ix' : ''}">${inner}</button>`;
-    return T ? `<button type="button" class="msg msgb${S.todo === m.id ? ' on' : ''}" data-act="todo:${m.id}${phone ? '|pop:todo' : ''}">${inner}</button>` : `<div class="msg">${inner}</div>`;
+    return T ? `<button type="button" class="msg msgb${S.stack.length && stackTop().v === m.id ? ' on' : ''}" data-act="pclear|ptodo:${m.id}">${inner}</button>` : `<div class="msg">${inner}</div>`;
   };
   let body;
   if (f === 'goal') {
@@ -1827,7 +2094,7 @@ const LEADS = {
   searches: { key: 'queries', name: 'Searches', one: 'search', of: 'clicks', top: 'Each day’s top Google + Bing search', items: (sc) => QUERYSET[sc] },
   countries: { key: 'countries', name: 'Countries', one: 'country', of: 'visits', top: 'Each day’s top country', items: () => COUNTRIES },
 };
-const KINDS = { deploy: ['rocket', 'Deploys'], content: ['doc', 'New pages'], post: ['mega', 'Posts'], release: ['tag', 'Releases'], mention: ['chat', 'Mentions'], alert: ['bell', 'Alerts'] };
+const KINDS = { deploy: ['rocket', 'Deploys'], content: ['doc', 'Page changes'], search: ['search', 'Search moves'], found: ['target', 'Kauzl found'], todo: ['check', 'To-dos'], visits: ['pulse', 'Visitors'], goal: ['sparkles', 'Goals'], link: ['link', 'Links and mentions'], ai: ['chat', 'AI answers'], cycle: ['layers', 'Content cycles'], post: ['mega', 'Posts'], release: ['tag', 'Releases'], mention: ['chat', 'Mentions'], alert: ['bell', 'Alerts'] };
 const PAGESET = {
   kauzl: [['/', 0], ['/pricing', 1], ['/guides/ga4-bigquery-export', 2], ['/kauzl-vs-plausible', 3, '2026-11-15'], ['/guides/google-analytics-mcp-server', 4, '2026-11-04'], ['/guides/what-is-a-utm-code', 5, '2026-10-14'], ['/guides/track-chatgpt-traffic', 6], ['/docs', 7]],
   docs: [['/quickstart', 0], ['/mcp/setup', 1], ['/api', 2], ['/', 3]],
@@ -1843,7 +2110,7 @@ const EVENTS = [
   ['kauzl', '2026-11-04', 'deploy', 'New pricing page'], ['kauzl', '2026-11-04', 'content', 'Guide: GA4 MCP server'], ['kauzl', '2026-11-07', 'release', 'v0.9 released'],
   ['kauzl', '2026-11-10', 'deploy', 'Signup button moved'], ['kauzl', '2026-11-11', 'alert', 'Signups fell 40%'], ['kauzl', '2026-11-12', 'mention', 'Mentioned on Hacker News'],
   ['kauzl', '2026-11-15', 'post', 'Posted on r/analytics'], ['kauzl', '2026-11-15', 'content', 'Page: Kauzl vs Plausible'], ['kauzl', '2026-11-17', 'deploy', 'Owl loader'],
-  ['kauzl', '2026-10-08', 'deploy', 'Dark mode'], ['kauzl', '2026-10-14', 'content', 'Guide: What is a UTM code'], ['kauzl', '2026-10-21', 'post', 'Launch thread on X'], ['kauzl', '2026-10-28', 'release', 'v0.8 released'],
+  ['kauzl', '2026-10-08', 'deploy', 'Dark mode'], ['kauzl', '2026-10-14', 'content', 'Guide: Track ChatGPT traffic'], ['kauzl', '2026-10-21', 'post', 'Launch thread on X'], ['kauzl', '2026-10-28', 'release', 'v0.8 released'],
   ['docs', '2026-11-09', 'deploy', 'Docs search'], ['docs', '2026-11-13', 'alert', 'MCP setup page lost 2 spots'],
   ['demo', '2026-11-06', 'deploy', 'Winter sale banner'], ['demo', '2026-11-16', 'alert', 'Bing clicks up 3×'], ['demo', '2026-11-17', 'alert', 'Checkout errors doubled'],
 ];
@@ -2062,7 +2329,7 @@ function effectOf(scope, date, k) {
   const sum = (ds) => ds.reduce((a, d) => a + day(scope, d).v[k], 0);
   return { c: sum(after) / Math.max(1, sum([1, 2, 3].map((i) => addD(date, -i)))) - 1 };
 }
-const MARK_SAY = { deploy: (t, h) => `You deployed “${t}” at ${h}`, content: (t, h) => `You published “${t.replace(/^(Guide|Page): /, '')}” at ${h}`, post: (t, h) => `${t} at ${h}`, release: (t, h) => `${t} at ${h}`, mention: (t) => t };
+const MARK_SAY = { deploy: (t, h) => `You deployed “${t}” at ${h}`, content: (t, h) => `You published “${t.replace(/^(Guide|Page): /, '')}” at ${h}`, post: (t, h) => `${t} at ${h}`, release: (t, h) => `${t} at ${h}`, mention: (t) => t, search: (t) => t, found: (t) => `Kauzl found: ${t}`, todo: (t) => t };
 function dayStory(scope, date) {
   const d = day(scope, date), than = S.cal.cmp === 'week' ? `last ${wdName(date)}` : `a usual ${wdName(date)}`;
   const ch = (k) => d.v[k] / Math.max(1e-9, baseOf(scope, date, k)) - 1;
@@ -2101,7 +2368,7 @@ function dayPanel(scope, date, inline) {
   const cur = S.cal.dtab || (LEADS[S.cal.lens] ? LEADS[S.cal.lens].key : 'pages');
   const list = d[cur].slice(0, 5).map((x) => {
     const b = baseShare(scope, date, cur, x.p), dl = x.share - b, flat = Math.abs(dl) < 0.03;
-    const name = cur === 'pages' ? `<button type="button" class="plink" data-act="view:pages" title="${x.p}">${nameOf(x.p)}</button>` : x.p;
+    const name = cur === 'pages' ? `<button type="button" class="plink" data-act="${S._inPanel ? '' : `pclear|pday:${date}|`}ppage:${x.p}" title="${x.p}">${nameOf(x.p)}</button>` : x.p;
     return `<div class="srow" style="--c:var(--s${x.c + 1})"><span class="lbl"><span>${name}${x.isNew ? ' <span class="newtag">NEW</span>' : ''}</span><i style="width:${Math.round(x.share * 100)}%"></i></span><span class="num">${fmt(Math.round(d.v[cur === 'queries' ? 'clicks' : 'visits'] * x.share))}</span><span class="dl ${x.isNew ? 'up' : flat ? 'muted' : dl > 0 ? 'up' : 'down'}" title="${Math.round(x.share * 100)}% of the day, usually ${Math.round(b * 100)}%">${x.isNew ? 'first day' : flat ? 'as usual' : `${dl > 0 ? '+' : '−'}${Math.round(Math.abs(dl) * 100)} pts`}</span></div>`;
   }).join('');
   const tabs = `<div><div class="dtabs" role="tablist">${TABS.map(([k, l]) => `<button type="button" role="tab" aria-selected="${cur === k}" class="${cur === k ? 'on' : ''}" data-act="cal-t:${k}">${l}</button>`).join('')}</div>${list}</div>`;
@@ -2109,6 +2376,7 @@ function dayPanel(scope, date, inline) {
     const k = e[2];
     let extra = '';
     if (k === 'alert') extra = '<button type="button" class="linkish" data-act="view:inbox">Open in Inbox →</button>';
+    else if (e[4]) extra = `<button type="button" class="linkish" data-act="${S._inPanel ? '' : `pclear|pday:${date}|`}ppage:${e[4]}">Open the page’s story →</button>`;
     else if (k !== 'mention') {
       const m = k === 'deploy' ? 'signups' : 'visits', ef = effectOf(scope, date, m);
       extra = ef.early ? `<span class="muted">Too early to judge: in on ${ef.ready}</span>` : `<span>${m === 'signups' ? 'Signups' : 'Visits'} <b class="${ef.c >= 0 ? 'up' : 'down'}">${pct(ef.c)}</b> in the 3 days after</span>`;
@@ -2325,7 +2593,7 @@ function calendarBody(scope, phone, lim) {
   const ctl = `<div class="hdctl">${period}<span class="bargrp">${by}${marks}${viewSeg}</span></div>`;
   const grid = asLine ? tlLine(scope, days, ctx, phone) : zoom === 'year' ? yearGrid(scope, ctx) : zoom === 'month' ? monthGrid(scope, ctx, phone, false) : zoom === '28d' ? rollGrid(scope, days, ctx, phone, false) : zoom === '7d' ? weekView(scope, days, ctx, phone) : dayView(scope, days[0], ctx);
   const map = `<div class="map">${grid}<div class="mapkey">${asLine ? '<span class="scale">Hover to read a day · click to open it · drag across days to sum them up</span>' : scaleKey(ctx)}</div></div>`;
-  const html = head('Timeline', 'Every day: how it went, where people landed, what shipped', { phone, right: phone ? '' : ctl }) + (phone ? ctl : '') + calTiles(scope, days, ctx);
+  const html = head('Timeline', `Every day for ${scopeName(scope)}: how it went, what happened, what needs you`, { phone, right: '' }) + needsRow(scope) + askBox(scope) + ctl + calTiles(scope, days, ctx);
   if (phone) return html + map + `<div class="insp">${zoom === 'day' ? dayPanel(scope, days[0], true) : windowPanel(scope, days, ctx, zoom, true)}</div>`;
   const panel = S.srange ? rangePanel(scope, S.srange[0], S.srange[1]) : null;
   const dd = zoom === 'day' ? days[0] : C.day;
@@ -2444,8 +2712,39 @@ function rangePanel(scope, a, b) {
     ${evs.length ? `<div class="ib"><h5>What happened</h5>${evs.map((e) => `<button type="button" class="erow" data-act="cal-d:${e[1]}"><span class="muted">${fmtD(e[1], { day: 'numeric', month: 'short' })}</span><span class="${e[2] === 'alert' ? 'down' : ''}" style="display:grid">${ic(KINDS[e[2]][0], 13)}</span><span class="et">${e[3]}</span><span></span></button>`).join('')}</div>` : ''}
     <span class="chips">${S.view === 'timeline' ? '' : `<button type="button" class="chip" data-act="view:timeline|cal-z:28d|cal-end:${b}">Open in Timeline →</button>`}<button type="button" class="chip" data-act="pop:cmd">${ic('chat', 12)} Ask about these days</button></span></div>`;
 }
+/* ---------- One panel for everything you click: a day, a page, a to-do. It opens over where you are,
+   keeps a back trail, and never moves you. Only the sidebar changes the place; "Open as a full page"
+   is the one deliberate jump. Phones show the same panel as a sheet. ---------- */
+const PANEL_KINDS = {
+  day: { label: (v) => fmtD(v, { weekday: 'short', day: 'numeric', month: 'short' }), full: 'Open in the Timeline' },
+  page: { label: (v) => nameOf(v), full: 'Open the page' },
+  todo: { label: (v) => { const m = INBOX.find((x) => x.id === v); return m ? 'To-do' : 'To-do'; }, full: 'Open in the Inbox' },
+};
+const stackTop = () => S.stack[S.stack.length - 1];
+function panelBody(it, phone) {
+  S._inPanel = true;
+  let html = '';
+  if (it.k === 'day') html = dayPanel(S.scope === 'all' ? 'kauzl' : S.scope, it.v, false).replace(/data-act="cal-d:([0-9-]+)"/g, 'data-act="pswap:$1"');
+  else if (it.k === 'page') html = pageStory(S.scope, phone, it.v, true);
+  else if (it.k === 'todo') html = todoPanel(it.v);
+  S._inPanel = false;
+  // The panel draws its own header; drop the body's own close row.
+  return html.replace(/<button type="button" class="icon-btn" data-act="[^"]*(?:none|close)[^"]*"[^>]*>[\s\S]*?<\/button>/g, '');
+}
+function panel(phone) {
+  const it = stackTop(), K = PANEL_KINDS[it.k];
+  const from = Math.max(0, S.stack.length - 2);
+  const trail = (from ? `<button type="button" class="linkish" data-act="pto:${from - 1}" title="${S.stack.slice(0, from).map((x) => PANEL_KINDS[x.k].label(x.v)).join(' › ')}">…</button><span class="muted">›</span>` : '') + S.stack.slice(from).map((x, j) => { const i = from + j; return (i === S.stack.length - 1 ? `<b>${PANEL_KINDS[x.k].label(x.v)}</b>` : `<button type="button" class="linkish" data-act="pto:${i}">${PANEL_KINDS[x.k].label(x.v)}</button><span class="muted">›</span>`); }).join('');
+  return `<div class="pnl"><div class="pnl-h">
+      ${S.stack.length > 1 ? `<button type="button" class="icon-btn" data-act="pback" aria-label="Back" title="Back">${ic('back', 14)}</button>` : ''}
+      <span class="pnl-trail">${trail}</span>
+      <button type="button" class="linkish pnl-open" data-act="pfull" title="${K.full}">Open ↗</button>
+      <button type="button" class="icon-btn" data-act="pclear" aria-label="Close" title="Close">${ic('x', 14)}</button>
+    </div><div class="pnl-b insp-in">${panelBody(it, phone)}</div></div>`;
+}
 // The panel that slides in beside a Story: the clicked day, or the dragged stretch.
 function drawer() {
+  if (S.stack.length) return `<aside class="drawer${stackTop().k === 'page' ? ' wide' : ''}" aria-label="Details">${panel(false)}</aside>`;
   if (S.view === 'search' && S.q && S.scope !== 'all') return `<aside class="drawer" aria-label="Search detail">${queryPanel(S.q)}</aside>`;
   if (S.view === 'traffic' && S.src && S.scope !== 'all') return `<aside class="drawer" aria-label="${S.src}">${sourcePanel(S.src)}</aside>`;
   if (S.view === 'pages' && S.page && S.bot) return `<aside class="drawer" aria-label="How the engines read it">${botPanel(S.page)}</aside>`;
@@ -2804,7 +3103,7 @@ function metricEditor(phone) {
       <div class="mprev"><span class="muted small2">Kauzl reads now:</span><b>${preview[0]}</b><small class="muted">${preview[1]}</small></div></div>
     <div class="card mform"><h5>2 · What it is</h5>${field('mf-name', 'Name', name)}${sel('mf-good', 'Good when it', ['Goes up', 'Goes down'])}
       <div class="mrow3">${field('mf-target', 'Target (optional)', src === 'github' ? '1,500' : '')}${field('mf-by', 'By', '31 Dec')}</div></div>
-    <div class="card mform"><h5>3 · Where it shows</h5>${[['story', 'A tile on the Story'], ['timeline', 'A tile on the Timeline, to color days by it'], ['alert', 'An alert in the Inbox when it drops for 3 days']].map(([k, l]) => `<label class="mchk"><input type="checkbox" ${k !== 'alert' ? 'checked' : ''}> ${l}</label>`).join('')}</div>
+    <div class="card mform"><h5>3 · Where it shows</h5>${[['timeline', 'A tile on the Timeline, to color days by it'], ['alert', 'An alert in the Inbox when it drops for 3 days']].map(([k, l]) => `<label class="mchk"><input type="checkbox" ${k !== 'alert' ? 'checked' : ''}> ${l}</label>`).join('')}</div>
     <span class="chips"><button type="button" class="jbtn primary" data-act="msave:${src}">Save metric</button><button type="button" class="chip" data-act="madd:0">Cancel</button></span>
     <details class="myml"><summary>Saved in the site’s .sitelens.yml as</summary><pre>${yml}</pre></details>`;
 }
@@ -3070,47 +3369,544 @@ function botPanel(path) {
     <div class="bout">${out.map(([t, x, js]) => `<div class="bo ${t}${js ? ' js' : ''}"><span class="btag">${t}</span><span>${x}</span></div>`).join('')}${raw ? `<div class="bo gone"><span class="btag">…</span><span>${hidden} more blocks appear only after JavaScript</span></div>` : ''}</div>
     <div class="ib"><h5>Checks</h5>${BOT_CHECKS.map(([a, b, st]) => `<div class="bchk"><span class="${st === 'ok' ? 'up' : 'warn-t'}">${ic(st === 'ok' ? 'check' : 'bell', 13)}</span><span><b>${a}</b><small>${b}</small></span></div>`).join('')}</div></div>`;
 }
-function pageStory(scope, phone) {
-  const path = S.page, x = pageSummary(path), d = x.d, hist = PAGE_HIST[path], cyc = CYCLES[path];
-  const status = cyc ? cyc.v : x.verdict;
-  const goal = { '/pricing': ['Turn visitors into users', '4.1% of 6%', 68], '/guides/ga4-bigquery-export': ['Help people who arrive', '62% of 70% read to the end', 88], '/guides/google-analytics-mcp-server': ['Bring visitors from search', '120 of 250 clicks a month', 48], '/kauzl-vs-plausible': ['Bring visitors from search', '#16, aiming for top 5', 30] }[path];
-  const changes = hist ? hist.changes.filter((c) => c[1] !== 'cycle') : [];
-  const last = changes[0], day = (dd) => fmtD(dd, { day: 'numeric', month: 'short' });
-  // The story in two sentences: what the page does for you, then the one thing that matters now.
-  const lead = `<b>${fmt(x.clicks)}</b> search visits a month, mostly from “${x.best.r[0]}”.`;
-  const now = last && last[5] === 'early' ? `The ${day(last[0])} change is starting to work.`
-    : last && last[5] === 'down' ? `It slipped after the ${day(last[0])} change.`
-    : x.chance ? `The next <b>${fmt(x.chance.s.gain)}</b> visits a month are in “${x.chance.r[0]}”.` : '';
-  // One next step.
-  const madeFor = x.chance && changes.find((c) => c[2].toLowerCase().includes(x.chance.r[0]));
-  const judge = madeFor && (madeFor[4].match(/Judge it on ([^.]+)/) || [])[1];
-  const [step, why] = cyc && cyc.act[2] === 'wait' ? [cyc.act[0], `${cyc.why} ${cyc.act[1]}.`]
-    : cyc && cyc.act[2] === 'open' ? [cyc.act[0], cyc.why]
-    : madeFor ? [`Check “${x.chance.r[0]}” ${judge ? `on ${judge}` : 'in 3 weeks'}`, `The section went in on ${day(madeFor[0])}. Changes take about 3 weeks to show in search.`]
-    : x.chance ? [`Work “${x.chance.r[0]}” into the page`, `${fmt(x.chance.r[1])} people search it a month; the page sits at #${bestPos(x.chance.r) ? bestPos(x.chance.r).toFixed(0) : '—'}.`]
-    : ['Nothing to do right now', 'It’s doing its job.'];
-  const found = x.rows.filter((r) => r.s.k === 'top' || r.s.k === 'p1').sort((a, b) => b.r[4] - a.r[4]).slice(0, 4);
-  const could = x.rows.filter((r) => r.s.gain > 0 && !found.includes(r)).sort((a, b) => b.s.gain - a.s.gain).slice(0, 3);
-  const qbtn = (q) => `view:search|q:${encodeURIComponent(q)}`;
-  const foundCol = `<div class="pbox"><h5>Found for</h5>${found.map(({ r }) => `<button type="button" class="ff" data-act="${qbtn(r[0])}"><span>“${r[0]}”</span><span class="pchip2" title="${engDiff(r) ? engDiff(r).say : ''}">#${bestPos(r).toFixed(0)}${engDiff(r) ? `<i class="engdot" title="${engDiff(r).say}"></i>` : ''}</span><span class="num muted">${fmt(r[4])}</span></button>`).join('') || '<p class="empty small2">Nothing yet.</p>'}
-    ${could.length ? `<h5 class="h5gap">Could be found for</h5>${could.map(({ r, s }) => `<button type="button" class="ff could" data-act="${qbtn(r[0])}"><span>“${r[0]}”</span><span class="pchip2 off">${s.k === 'none' ? '—' : `#${bestPos(r).toFixed(0)}`}</span><span class="num up">+${fmt(s.gain)}</span></button>`).join('')}` : ''}</div>`;
-  const changeCol = `<div class="pbox"><h5>What changed</h5>${changes.slice(0, 2).map((c) => `<div class="chg"><span class="muted">${day(c[0])}</span><span><b>${c[2]}</b><span class="${c[5] === 'up' ? 'up' : c[5] === 'down' ? 'down' : 'muted'}">${c[4].replace(/ Judge it on [^.]+\./, '')}</span></span></div>`).join('') || '<p class="empty small2">No changes tracked yet. Add the page’s folder to .sitelens.yml to follow its commits.</p>'}
-    ${changes.length > 2 ? `<button type="button" class="linkish" data-act="pdet">All ${changes.length} changes →</button>` : ''}</div>`;
-  const details = S.pdet ? (() => {
-    const pos = (v) => (v == null ? '<span class="muted">—</span>' : `#${v.toFixed(0)}`);
-    const qrows = [...x.rows].sort((a, b) => (b.s.gain || 0) - (a.s.gain || 0) || b.r[4] - a.r[4]).map(({ r, s }) => `<div class="qrow"><span class="qn">“${r[0]}”</span><span class="num">${fmt(r[1])}</span><span class="num">${pos(r[2])}</span><span class="num">${pos(r[3])}</span><span class="num">${fmt(r[4])}</span><span class="qs"><span class="${s.cls}">${s.word}</span>${s.gain ? `<small>+${fmt(s.gain)} a month in the top 3</small>` : ''}</span></div>`).join('');
-    return `<div class="card"><h4>Every search</h4><div class="qrow qhead"><span>Search</span><span class="num">Searches a month</span><span class="num">Google</span><span class="num">Bing</span><span class="num">Clicks</span><span>Where it stands</span></div>${qrows}</div>${pageChanges(path, true)}${cycleCard(path)}${d.ai ? `<div class="card"><h4>In AI answers</h4><p>${d.ai}</p></div>` : ''}`;
+/* ---------- A page's story, as one timeline: what you changed, what the engines did, what Kauzl found, then Now ---------- */
+// Each moment: [date, who, what, detail, evidence, tone]. Click a moment to open its evidence under it.
+// The last step is Now: the one thing to do. Other ideas fold under it. In the app this list is assembled
+// from commits, title changes, search positions, index checks, content checks, cycles and to-dos.
+const WHO = { visitors: ['Visitors', 'V', 'you'], you: ['You', 'A', 'you'], kauzl: ['Kauzl', 'K', 'kauzl'], google: ['Google', 'G', 'g'], bing: ['Bing', 'B', 'g'], cc: ['Claude Code', 'C', 'cc'], cursor: ['Cursor', 'Cu', 'cursor'] };
+const TL = {
+  '/guides/what-is-a-utm-code': {
+    m: [['2026-08-28', 'you', 'Added a UTM builder link', 'No change in search.', 'changes', 'muted'],
+      ['2026-09-30', 'you', 'Shortened the intro', 'Took out the first paragraph and the example table.', 'changes', ''],
+      ['2026-10-28', 'google', 'Dropped it from #4 to #10', '“what is a utm code”, over four weeks. Clicks −38%. Bing kept it at #6.', 'searches', 'down'],
+      ],
+    now: ['Put the definition and the example table back at the top', 'Undoes the 30 Sep cut. Back at #4 is about 260 more visits a month.', 't4', '+260'],
+    plan: { where: 'The opening · what-is-a-utm-code.md', was: 'Opens with the history of UTM codes; the definition is in the third paragraph.', to: 'A UTM code is a tag on a link that tells your analytics where a visit came from. Then the example table.', because: ['Shortened the intro', 'Dropped it from', 'Content check'], cells: [['If it works', '+260', 'visits a month, back at #4', 'up'], ['The work', 'Intro + 1 table', 'put back, not rewritten', ''], ['Checked', '2 weeks', 'after Google reads it', '']] },
+    more: [['Name a section “UTM parameters”', '+440'], ['Link to a UTM builder, or write one', '+1,089']],
+  },
+  '/guides/ga4-bigquery-export': {
+    m: [['2026-10-28', 'you', 'New title', '“How to export GA4 to BigQuery (free, step by step)”, replacing “GA4 to BigQuery: export guide”.', 'changes', ''],
+      ['2026-11-12', 'you', 'Added a “GA4 raw data” section', '“ga4 raw data” #14 → #11 in five days.', 'searches', 'up'],
+      ['2026-11-17', 'google', 'Picked a different address for it', 'Google shows the version with a trailing slash, so the page’s visits are split in two.', 'tool:index', 'warn']],
+    now: ['Redirect the slash address and fix the 14 links that use it', 'Puts all of the page’s visits and rank back on one address.', null, ''],
+    plan: { where: 'Its address', was: 'Two addresses: /guides/ga4-bigquery-export and …/ga4-bigquery-export/ — Google shows the second.', to: 'One address. The slash version redirects (301) to it, and the 14 links point straight at it.', because: ['Picked a different address'], cells: [['If it works', 'One address', 'visits and rank no longer split', 'up'], ['The work', '1 redirect, 14 links', 'one commit', ''], ['Checked', 'Next index check', 'tonight after it goes live', '']] },
+    more: [['Render the guide on the server, so AI crawlers get more than 210 words', ''], ['Shrink the 1.4 MB screenshot at the top (3.6 s on phones)', '']],
+  },
+  '/guides/google-analytics-mcp-server': {
+    m: [['2026-11-04', 'you', 'Published', '', 'changes', ''],
+      ['2026-11-07', 'google', 'Showed it at #9 for “google analytics mcp”', 'Now #7 for “ga4 mcp server”, and climbing.', 'searches', 'up'],
+      ],
+    now: ['Say which assistants it works with, Claude first', 'In the lead and one heading. Nothing of yours shows up for that search yet.', null, '+110'],
+    plan: { where: 'The lead · google-analytics-mcp-server.md', was: 'A Model Context Protocol server for Google Analytics 4.', to: 'Ask Claude, Cursor or ChatGPT about your GA4 data. Plus a heading: “Use it with Claude Desktop”.', because: ['Content check', 'Showed it at #9'], cells: [['If it works', '+110', 'search visits a month', 'up'], ['The work', 'Lead + 1 heading', 'two sentences', ''], ['Checked', '2 weeks', 'after Google reads it', '']] },
+    more: [['Load the three videos after the text (4.4 s on phones)', ''], ['Show an “updated” date', '']],
+  },
+  '/pricing': {
+    m: [['2026-11-04', 'you', 'New pricing page', 'Search visits up 2.9× since.', 'changes', 'up'],
+      ['2026-11-14', 'kauzl', 'Nightly search check: a weak title', '“analytics for small sites”: #9 with half the clicks that spot usually gets. The search words come last and are cut off on phones.', 'searches', 'warn']],
+    now: ['Approve the new title', 'Expect about 18 more visits a week once Google recrawls.', 't1', '+78'],
+    plan: { where: 'The title · /pricing', was: 'Kauzl pricing: plans and prices', to: 'Simple analytics for small sites · Kauzl pricing', because: ['a weak title', 'Proposed a new title'], cells: [['If it works', '+78', 'visits a month', 'up'], ['The work', 'Approve', 'Claude Code already wrote it', ''], ['Checked', '2 weeks', 'after Google reads it', '']] },
+    more: [['Fix the sign-up button on phones', ''], ['Cut “simply”, “just” and “easily” (7 times)', '']],
+  },
+  '/kauzl-vs-plausible': {
+    m: [['2026-11-15', 'you', 'Published', '28% of landings on its first day came to it.', 'changes', 'up'],
+      ['2026-11-16', 'google', 'Read it and chose not to show it yet', 'Bing hasn’t read it at all. Nothing on the site links to it.', 'tool:index', 'down']],
+    now: ['Link to it from Home and Pricing, then ask both engines to look again', 'A page nothing links to is often left out.', null, ''],
+    plan: { where: 'Links to /kauzl-vs-plausible', was: 'No page on the site links here.', to: 'A link from Home and from Pricing, then ask Google and Bing to read it again.', because: ['chose not to show it', 'New source'], cells: [['If it works', 'Shown', 'by Google and Bing', 'up'], ['The work', '2 links', 'and two clicks to ask', ''], ['Checked', 'Next index check', 'the night after', '']] },
+    more: [['Say in the first line that we make Kauzl', ''], ['Add a side-by-side table (2,900 searches a month at #22)', '']],
+  },
+};
+// Which Timeline kind a moment is: your edits are page changes, Google and Bing are search moves,
+// Kauzl's checks are "found", and agents' work is a to-do. The same marks show on the site Timeline.
+const momentKind = (w) => (w === 'you' ? 'content' : w === 'google' || w === 'bing' ? 'search' : w === 'kauzl' ? 'found' : 'todo');
+const MON = { Jan: '01', Feb: '02', Mar: '03', Apr: '04', May: '05', Jun: '06', Jul: '07', Aug: '08', Sep: '09', Oct: '10', Nov: '11', Dec: '12' };
+const isoAt = (at) => (/^Today/.test(at) ? LAST : /^Yesterday/.test(at) ? addD(LAST, -1) : (([d, m]) => `2026-${MON[m]}-${String(d).padStart(2, '0')}`)(at.split(' ')));
+// A page's to-dos, as moments: made, proposed or changed by an agent, seen live by Kauzl.
+function todoMoments(path) {
+  return Object.entries(TODOS).filter(([, T]) => T.page === path).flatMap(([id, T]) => T.entries.map((e) => {
+    const title = (INBOX.find((m) => m.id === id) || {}).t || 'A to-do';
+    if (e.by === 'you') return [isoAt(e.at), 'you', 'Made a to-do', title, `todo:${id}`, '', 'todo'];
+    if (e.auto) return [isoAt(e.at), 'kauzl', 'Saw the change go live', e.auto.split('. ').slice(1).join('. '), `todo:${id}`, '', 'todo'];
+    if (e.changed) return [isoAt(e.at), e.by, T.stage === 'proposed' ? (e.changed.kind === 'title' ? 'Proposed a new title' : 'Proposed a change') : `Changed it: ${e.changed.new}`, e.changed.kind === 'title' && T.stage === 'proposed' ? `“${e.changed.new}”` : `PR ${e.changed.pr}`, `todo:${id}`, '', 'todo'];
+    return null;
+  }).filter(Boolean));
+}
+// Pages without a written timeline get one from their changes, cycle and checks.
+function tlBase(path, x) {
+  if (TL[path]) return TL[path];
+  const h = PAGE_HIST[path], cyc = CYCLES[path], r = READS[path], ix = ixFor(path);
+  const m = [
+    ...(h ? h.changes.filter((c) => c[1] !== 'cycle').map((c) => [c[0], 'you', c[2], c[4] ? c[4].replace(/ Judge it on [^.]+\./, '') : '', 'changes', c[5] === 'muted' ? 'muted' : c[5] === 'down' ? 'down' : c[5] === 'up' ? 'up' : '']) : []),
+  ];
+  if (!m.length) m.push([LAST, 'kauzl', cyc ? `Content cycle: ${cyc.v}` : `Mostly found for “${x.best.r[0]}”`, cyc ? cyc.why : `${fmt(x.clicks)} search visits a month.`, cyc ? 'cycle' : 'searches', cyc && cyc.v === 'Grow' ? 'up' : '']);
+  const now = cyc && cyc.act[2] === 'open' ? [cyc.act[0], 'This cycle’s one thing to do.', null, '']
+    : x.chance && x.chance.s.gain >= 20 ? [`Work “${x.chance.r[0]}” into the page`, `${fmt(x.chance.r[1])} people search it a month.`, null, `+${fmt(x.chance.s.gain)}`]
+    : ['Nothing to do right now', 'It’s doing its job. Kauzl keeps watching.', null, ''];
+  return { m, now, more: [] };
+}
+function tlFor(path, x) {
+  const b = tlBase(path, x);
+  const m = [...b.m, ...runMoments(path), ...todoMoments(path), ...visitMoments(path), ...spikeMoments(path), ...extraMoments(path)].sort((p, q) => p[0].localeCompare(q[0]));
+  // A check that only repeats what an earlier event on the same track already said is not news:
+  // say "no change since", and let it fold with the quiet ones.
+  m.forEach((mm, i) => {
+    if (!mm[4].startsWith('tool:')) return;
+    const key = (mm[2].match(/\d[\d.,]*\s?(?:s|%|problems?|words)?/) || [mm[2].split(': ')[1]])[0], tr = trackOf(mm[4], mm[1]);
+    const prev = m.slice(0, i).reverse().find((q) => q[4] !== mm[4] && trackOf(q[4], q[1]) === tr && `${q[2]} ${q[3]}`.includes(key));
+    if (prev) m[i] = [mm[0], mm[1], `${mm[2].split(': ')[0]}: no change`, `Still ${key.trim()}, as on ${fmtD(prev[0], { day: 'numeric', month: 'short' })}`, mm[4], 'muted', mm[6]];
+  });
+  return { ...b, m };
+}
+// Every written page moment is also a mark on the site Timeline (EVENTS), so both tell the same story.
+// Runs once, after READS and the to-dos exist (see the call under contentSection).
+function syncPageEvents() {
+for (const [p, t] of Object.entries(TL)) {
+  for (const [dd, w, what] of t.m) {
+    const k = momentKind(w);
+    const dup = EVENTS.some((e) => e[0] === 'kauzl' && e[1] === dd && (what === 'Published' ? e[2] === 'content' : e[3].toLowerCase().includes(what.toLowerCase())));
+    if (!dup) EVENTS.push(['kauzl', dd, k, `${nameOf(p)}: ${what === 'Found why' || what === 'Found a gap' ? (READS[p] ? READS[p][0][1] : what) : what}`, p]);
+  }
+}
+for (const [, e] of Object.entries(EVX)) EVENTS.push(['kauzl', e[1], e[6] === 'goal' || e[6] === 'link' || e[6] === 'ai' || e[6] === 'cycle' ? 'found' : e[6], `${nameOf(e[0])}: ${e[3]}`, e[0]]);
+for (const [dd, p, t, by, fresh] of RUNS) if (by !== 'kauzl' || fresh) EVENTS.push(['kauzl', dd, 'found', `${nameOf(p)}: ${toolName(t).toLowerCase()} · ${toolSummary(t, p)}`, p]);
+for (const [id, T] of Object.entries(TODOS)) {
+  const m = INBOX.find((x) => x.id === id);
+  if (m && m.site === 'kauzl') for (const e of T.entries) if (e.by !== 'you') EVENTS.push(['kauzl', isoAt(e.at), 'todo', `${AGENTS[e.by][0]}: ${m.t}`, T.page]);
+}
+for (const e of EVENTS) if (!e[4]) { const p = Object.keys(TL).find((q) => e[3].includes(nameOf(q)) || (q === '/pricing' && /pricing page/i.test(e[3]))); if (p) e.push(p); }
+}
+function evBody(path, phone, x, k) {
+  const d = x.d, sp = SPEED.find((s) => s[0] === path), ix = ixFor(path);
+  const pos = (v) => (v == null ? '<span class="muted">—</span>' : `#${v.toFixed(0)}`);
+  if (k.startsWith('todo:')) return `<div class="card">${todoPanel(k.slice(5))}</div>`;
+  if (k.startsWith('tool:')) return toolResult(k.slice(5), path, phone);
+  if (k.startsWith('visits:')) return visitsBody(path, k.slice(7));
+  if (k === 'searches') return `<div class="card"><div class="qrow qhead"><span>Search</span><span class="num">A month</span><span class="num">Google</span><span class="num">Bing</span><span class="num">Clicks</span><span>Where it stands</span></div>${[...x.rows].sort((a, b) => (b.s.gain || 0) - (a.s.gain || 0) || b.r[4] - a.r[4]).map(({ r: q, s }) => `<div class="qrow"><span class="qn">“${q[0]}”</span><span class="num">${fmt(q[1])}</span><span class="num">${pos(q[2])}</span><span class="num">${pos(q[3])}</span><span class="num">${fmt(q[4])}</span><span class="qs"><span class="${s.cls}">${s.word}</span>${s.gain ? `<small>+${fmt(s.gain)} a month in the top 3</small>` : ''}</span></div>`).join('')}</div>`;
+  if (k === 'changes') return pageChanges(path, false);
+  if (k === 'bots') return (ix && !ix.onPurpose ? ixNote(path, phone) : '') + botCard(path, phone);
+  if (k === 'reads') return readsCard(path, phone);
+  if (k === 'speed') return `<div class="card"><h4>Speed</h4>${sp ? `<p class="m0">${sp[2].toFixed(1)} s on phones, ${sp[3].toFixed(1)} s on computers. Fast is under 2.5 s.${sp[4] ? ` ${sp[4]}.` : ''}</p>` : '<p class="muted m0">Not measured for this page yet.</p>'}</div>`;
+  if (k === 'ai') return `<div class="card"><h4>AI answers</h4><p class="m0">${d.ai || 'No AI answer cites it for the questions Kauzl asks.'}</p></div>`;
+  if (k === 'cycle') return cycleCard(path);
+  return '';
+}
+/* ---------- Tools: run a check on any page. A page never shows tools; it shows the runs, as moments. ---------- */
+// [key, name, what it does, icon]. Results are the same views the tools always drew; only where they live changed.
+const TOOLS = [
+  ['content', 'Content check', 'How the page reads to people and AI answers: the answer first, the words people search, long sentences.', 'doc'],
+  ['bot', 'As Googlebot and GPTBot', 'Fetch the page the way crawlers do, with and without JavaScript, and see what they get.', 'search'],
+  ['index', 'Index status', 'Ask Google and Bing whether they show the page, and if not, why.', 'layers'],
+  ['speed', 'Speed', 'How long real visitors wait for the page on phones and computers.', 'pulse'],
+  ['ai', 'AI answers', 'Ask ChatGPT, Perplexity and Gemini your questions and see whether they cite the page.', 'chat'],
+];
+const toolName = (k) => TOOLS.find((t) => t[0] === k)[1];
+const RAN = { content: ['a content check', 'content check'], bot: ['the Googlebot and GPTBot fetch', 'Googlebot fetch'], index: ['an index check', 'index check'], speed: ['a speed test', 'speed test'], ai: ['the AI answers check', 'AI answers check'] };
+function toolSummary(k, path) {
+  const r = READS[path], ix = ixFor(path), sp = SPEED.find((s) => s[0] === path), d = PAGE_Q[path] || {};
+  if (k === 'content') return r ? `${r.length} ${r.length > 1 ? 'problems' : 'problem'} · worst: ${r[0][1].replace(/^./, (c) => c.toLowerCase())}` : 'Nothing to fix in the words';
+  if (k === 'bot') return path === '/guides/ga4-bigquery-export' ? 'Only 210 of 1,840 words are there without JavaScript' : 'All of the text is there without JavaScript';
+  if (k === 'index') return ix && !ix.onPurpose ? `${IXP[ix.k][0]}` : 'Google and Bing both show it';
+  if (k === 'speed') return sp ? `${sp[2].toFixed(1)} s on phones${sp[2] > 2.5 ? ` · ${sp[4] || 'slow'}` : ' · fast'}` : 'Not measured yet';
+  if (k === 'ai') return d.ai || 'No AI answer cites it yet';
+  return '';
+}
+function toolResult(k, path, phone) {
+  const x = pageSummary(path), ix = ixFor(path);
+  if (k === 'content') return readsCard(path, phone);
+  if (k === 'bot') return botCard(path, phone);
+  if (k === 'index') return ix && !ix.onPurpose ? `<div class="card">${ixPanel(path).replace(/<button type="button" class="icon-btn" data-act="ix:none\|close"[^>]*>[\s\S]*?<\/button>/, '')}</div>` : '<div class="card"><h4>Index status</h4><p class="m0">Google and Bing both show the page. Last checked tonight.</p></div>';
+  return evBody(path, phone, x, k);
+}
+// Runs: yours, an agent's, or Kauzl's nightly ones. Nightly runs reach a timeline only when they find something new.
+// [date, page, tool, by, new?]
+const RUNS = [
+  ['2026-11-17', '/guides/what-is-a-utm-code', 'content', 'kauzl', true],
+  ['2026-11-14', '/guides/ga4-bigquery-export', 'bot', 'you', false],
+  ['2026-11-12', '/guides/google-analytics-mcp-server', 'speed', 'you', false],
+  ['2026-11-17', '/guides/google-analytics-mcp-server', 'content', 'kauzl', true],
+  ['2026-11-15', '/pricing', 'ai', 'you', false],
+  ['2026-11-16', '/guides/what-is-a-utm-code', 'speed', 'kauzl', false],
+];
+const allRuns = () => [...RUNS, ...S.runs.map((r) => [r.d, r.p, r.t, 'you', false, true])];
+function runMoments(path) {
+  return allRuns().filter((r) => r[1] === path && (r[3] !== 'kauzl' || r[4])).map(([dd, , t, by, , fresh]) =>
+    { const [hd, ...rest] = toolSummary(t, path).split(' · '), nm = RAN[t][1].replace(/^./, (c) => c.toUpperCase());
+      // The title is the result; who ran it is the sender, and how is in the line under it.
+      return [dd, by, `${nm}: ${hd.replace(/^worst: /, '').replace(/^(Only|All|Nothing|No|Not) /, (w) => w.toLowerCase())}`, [...rest, by === 'kauzl' ? 'found in the nightly run' : fresh ? 'you ran it just now' : 'you ran it'].join(' · '), `tool:${t}`, toolTone(t, path) || 'muted', 'found']; });
+}
+// Visitors, a day at a time: one line per day that has something in it, opening into each session.
+// Session: [time, source, how they arrived, what they did, outcome, tone]
+const VISITS = {
+  '/guides/what-is-a-utm-code': [['2026-11-17', 12, '1 signed up · 3 from ChatGPT', [
+    ['10:42', 'Google', '“utm parameters”', 'Read 80%, skipped the history', 'Left', ''],
+    ['11:15', 'ChatGPT', 'a cited answer', 'Read to the end → Pricing', 'Signed up', 'up'],
+    ['13:03', 'Google', '“what is a utm code”', 'Read 20%: the definition was too far down', 'Left in 14 s', 'down'],
+    ['16:40', 'ChatGPT', 'a cited answer', 'Copied the example link', 'Left', '']]],
+    ['2026-11-11', 9, 'none signed up · 6 left in under 15 s', [['09:12', 'Google', '“what is a utm code”', 'Read 15%', 'Left in 9 s', 'down'], ['15:30', 'Bing', '“utm code meaning”', 'Read 40%', 'Left', '']]]],
+  '/pricing': [['2026-11-17', 18, '2 signed up · 1 from Reddit', [
+    ['08:55', 'Google', '“kauzl pricing”', 'Switched to yearly', 'Signed up', 'up'],
+    ['12:20', 'Reddit', 'r/analytics thread', 'Read the plans', 'Left', ''],
+    ['14:05', 'Direct', '', 'Tapped Sign up twice on a phone: the button moved', 'Left', 'down'],
+    ['19:48', 'Google', '“analytics for small sites”', 'Compared plans', 'Signed up', 'up']]]],
+  '/guides/ga4-bigquery-export': [['2026-11-17', 61, '1 signed up · 4 from ChatGPT', [
+    ['07:30', 'Google', '“ga4 bigquery export”', 'Copied the SQL', 'Left', ''],
+    ['10:02', 'ChatGPT', 'a cited answer', 'Read to the end → Home', 'Signed up', 'up'],
+    ['17:44', 'Google', '“ga4 raw data”', 'Read the new section', 'Left', '']]]],
+  '/guides/google-analytics-mcp-server': [['2026-11-17', 21, 'none signed up · 1 from Hacker News', [
+    ['11:11', 'Hacker News', 'a comment', 'Waited for the videos, then left', 'Left in 6 s', 'down'],
+    ['15:20', 'Google', '“ga4 mcp server”', 'Copied the setup command', 'Left', '']]]],
+  '/kauzl-vs-plausible': [['2026-11-17', 9, '28% of first visits to the site', [
+    ['09:40', 'Direct', '', 'Read the comparison → Pricing', 'Left', ''],
+    ['13:15', 'Reddit', 'r/analytics', 'Read 60%', 'Left', '']]]],
+};
+function visitMoments(path) {
+  return (VISITS[path] || []).map(([dd, n, say]) => [dd, 'visitors', `${n} visitors`, say, `visits:${dd}`, /signed up/.test(say) && !/^none/.test(say) ? 'up' : /left in under/.test(say) ? 'down' : '', 'visits']);
+}
+function visitsBody(path, dd) {
+  const day0 = (VISITS[path] || []).find((v) => v[0] === dd);
+  if (!day0) return '';
+  return `<div class="card sessl">${day0[3].map(([t, src, how, did, out, tone]) => `<div class="sess"><span class="muted">${t}</span><span class="sessb"><span><b>${src}</b>${how ? ` <span class="muted">· ${how}</span>` : ''}</span><span>${did} <span class="${tone}">→ ${out}</span></span></span></div>`).join('')}<p class="muted small2 m0">${day0[1] - day0[3].length} more visits that day were short and alike.</p></div>`;
+}
+// How each check stands on a page right now: the same tone the page's tracker uses.
+function toolTone(k, path) {
+  if (k === 'bot') return path === '/guides/ga4-bigquery-export' ? 'down' : 'up';
+  const t = trackReading({ content: 'content', index: 'index', speed: 'speed', ai: 'ai' }[k], path)[2];
+  return t === 'muted' ? '' : t;
+}
+function toolsBody(scope, phone) {
+  const pages = Object.keys(PAGE_Q).filter((p) => p !== '/');
+  const p = S.tpage, res = S.tres;
+  const day = (dd) => (dd === LAST ? 'Today' : fmtD(dd, { day: 'numeric', month: 'short' }));
+  const lastRun = (k) => allRuns().filter((x) => x[1] === p && x[2] === k).sort((a, b) => b[0].localeCompare(a[0]))[0];
+  const dot = (t) => `<i class="cdot2 ${t === 'down' ? 'down' : t === 'up' ? 'up' : t ? 'warn' : ''}"></i>`;
+  const av = (w) => `<span class="tlav a-${WHO[w][2]}">${WHO[w][1]}</span>`;
+  // The checks: one list, one row each. The reading is how the page stands now; Run posts a new event.
+  const rows = TOOLS.map(([k, n, d, i]) => {
+    const r = lastRun(k), when = r ? `${day(r[0])} · ${r[3] === 'kauzl' ? 'nightly' : 'you'}` : 'From tonight’s data · not run by hand';
+    return `<div class="dgr${res === k ? ' on' : ''}"><span class="aci">${ic(i, 14)}</span><span class="dgn"><b>${n}</b><small>${d}</small></span><span class="dgv">${dot(toolTone(k, p))}<span>${toolSummary(k, p)}</span><small>${when}</small></span><button type="button" class="chip dgrun" data-act="trun:${k}">${ic('play', 11)}Run</button></div>`;
+  }).join('');
+  // A run's result is an event, drawn exactly as it will sit on the page's timeline.
+  const result = res ? (() => {
+    const ev = `tool:${res}`, e = entryFor(p, ev, LAST), [att] = attachmentOf(p, ev, LAST);
+    return `<div class="ev ev-o dgres"><div class="ev-hd">${av('you')}<span class="mm-who"><b>You</b><small>to ${nameOf(p)} · just now</small></span></div>
+      <b class="mm-s">${dot(toolTone(res, p))}You ran ${RAN[res][0]}</b><p>${toolSummary(res, p)}.</p>
+      ${attachmentView(e, `${att}`, LAST, p, ev)}
+      <div class="ent-a"><button type="button" class="jbtn primary" data-act="ppage:${p}">See it on the page’s timeline</button>${e.actions.filter(([l]) => l !== 'Run again').map(([l, a]) => `<button type="button" class="chip" data-act="${a}">${l}</button>`).join('')}<button type="button" class="chip" data-act="tres:none">Close</button></div></div>`;
   })() : '';
-  return `<button type="button" class="linkish" data-act="pg:none">← All pages</button>
-    <div class="head"><div><h3>${nameOf(path)} <span class="pstat ${VCLS[status] || VERDICT_CLS[status] || ''}">${status}</span></h3><div class="sub2">${path}</div></div><div class="head-r">${phone ? '' : rangeCtl(false)}</div></div>
-    <p class="lede">${lead} ${now}</p>
-    ${ixNote(path, phone)}
-    <div class="card pchart"><div class="chhead"><h4>Search visits <span class="muted">· last 90 days${changes.length ? ', with each change marked' : ''}</span></h4>${goal ? `<span class="pgl"><span class="muted">Goal: ${goal[1]}</span><span class="prog"><i style="width:${goal[2]}%"></i></span></span>` : ''}</div>${pageChart(path)}</div>
-    <div class="pcols">${foundCol}${changeCol}</div>
-    ${botCard(path, phone)}
-    <div class="nextstep"><span class="nsl">Next</span><span class="nsb"><b>${step}</b><small>${why}</small></span><span class="chips"><button type="button" class="chip" data-act="noop">+ To-do</button><button type="button" class="chip" data-act="pop:cmd">${ic('chat', 12)} Ask</button></span></div>
-    <button type="button" class="linkish pdet" data-act="pdet">${S.pdet ? 'Hide the details' : 'Details: every search, every change, content cycle, AI answers'}</button>
-    ${details}`;
+  // Recent runs, as the same timeline a page uses.
+  const recent = allRuns().filter((r) => r[3] !== 'kauzl' || r[4]).sort((a, b) => b[0].localeCompare(a[0])).slice(0, 6);
+  const tl = `<ol class="tl dgtl">${recent.map(([dd, q, k, by]) => `<li class="tlm"><span class="tld">${day(dd)}</span><span class="tlic k-found">${ic(TOOLS.find((t) => t[0] === k)[3], 12)}</span><button type="button" class="ev ev-c" data-act="ppage:${q}"><span class="ev-l">${av(by === 'kauzl' ? 'kauzl' : 'you')}<b>${nameOf(q)}</b></span><span class="ev-s">${dot(toolTone(k, q))}<b>${by === 'kauzl' ? `Nightly ${RAN[k][1]}` : `You ran ${RAN[k][0]}`}</b><span class="muted"> — ${toolSummary(k, q)}</span></span></button></li>`).join('')}</ol>`;
+  return head('Diagnose', 'Run a check on a page. Each run is posted on that page’s timeline.', { phone, right: '' }) +
+    `<div class="dgpick"><span class="muted small2">Page</span><div class="seg dgseg">${pages.map((q) => `<button type="button" class="${q === p ? 'on' : ''}" data-act="tpage:${q}|tres:none">${nameOf(q)}</button>`).join('')}</div><button type="button" class="linkish small2" data-act="ppage:${p}">Open its timeline</button></div>
+    ${result}
+    <div class="card dgl">${rows}</div>
+    <section class="tsec"><div class="tsh"><h3>Recent runs</h3><p>Yours, and nightly runs that found something new</p></div>${tl}</section>`;
+}
+/* ---------- A page is a tracker. Six tracks, one timeline, and every entry in one shape:
+   readings (label, value, against before), findings (dot, line, note), actions. Whatever made the
+   entry (an edit, Google, a tool run, visitors, an agent) it opens the same way. ---------- */
+const TRACKS = [['goals', 'Goal'], ['search', 'Search'], ['content', 'Content'], ['speed', 'Speed'], ['index', 'Index'], ['ai', 'AI answers'], ['visitors', 'Visitors'], ['work', 'Your work']];
+// Which track a moment belongs to.
+function trackOf(ev, w) {
+  if (ev.startsWith('x:')) return EVX[ev.slice(2)][5];
+  if (ev.startsWith('tool:')) return { content: 'content', bot: 'index', index: 'index', speed: 'speed', ai: 'ai' }[ev.slice(5)];
+  if (ev.startsWith('visits:') || ev.startsWith('spike:')) return 'visitors';
+  if (ev.startsWith('todo:') || ev === 'changes') return 'work';
+  if (ev === 'searches') return 'search';
+  return w === 'google' || w === 'bing' ? 'search' : 'work';
+}
+// The tracker's header: each track's reading now, in the same cell.
+function trackReading(k, path) {
+  const x = pageSummary(path), r = READS[path], sp = SPEED.find((s) => s[0] === path), ix = ixFor(path), v = (VISITS[path] || [])[0], b = x.best;
+  if (k === 'goals') { const g = PAGE_GOALS[path]; return g ? [`${g[2]}%`, g[1], g[2] >= 80 ? 'up' : g[2] < 50 ? 'down' : 'warn'] : ['No goal', 'set one on the page', 'muted']; }
+  if (k === 'search') { const p = bestPos(b.r), fell = (TL[path] ? TL[path].m : []).some((mm) => (mm[1] === 'google' || mm[1] === 'bing') && mm[5] === 'down'); return [p ? `#${p.toFixed(0)}` : '—', `“${b.r[0]}”`, fell ? 'down' : p && p <= 3.5 ? 'up' : '']; }
+  if (k === 'content') return r ? [`${r.length} ${r.length > 1 ? 'problems' : 'problem'}`, r[0][1], r[0][0] === 'high' ? 'down' : 'warn'] : ['Fine', 'nothing to fix', 'up'];
+  if (k === 'speed') return sp ? [`${sp[2].toFixed(1)} s`, 'on phones', sp[2] > 4 ? 'down' : sp[2] > 2.5 ? 'warn' : 'up'] : ['—', 'not measured', ''];
+  if (k === 'index') return ix && !ix.onPurpose ? [ix.g[1], `Bing: ${ix.b[1].toLowerCase()}`, ix.g[0] === 'bad' ? 'down' : 'warn'] : ['Shown', 'Google and Bing', 'up'];
+  if (k === 'ai') return x.d.ai && !/not|doesn/i.test(x.d.ai) ? ['Cited', x.d.ai.split(' cite')[0], 'up'] : ['Not cited', 'by AI answers', 'muted'];
+  if (k === 'visitors') return v ? [`${v[1]} today`, v[2].split(' · ')[0], /signed up/.test(v[2]) && !/^none/.test(v[2]) ? 'up' : ''] : [`${fmt(x.clicks)}`, 'search visits a month', ''];
+  const T = Object.values(TODOS).find((t) => t.page === path);
+  return T ? [STAGE_PILL[T.stage][0], 'a to-do', STAGE_PILL[T.stage][1]] : ['Nothing open', 'no to-do', 'muted'];
+}
+function trackerHead(path) {
+  const on = S.ptrack;
+  return `<div class="trk">${TRACKS.map(([k, l]) => { const [v, sub, tone] = trackReading(k, path); return `<button type="button" class="trkc${on === k ? ' on' : ''}" data-act="ptrack:${k}" aria-pressed="${on === k}"><small>${l}</small><b class="${tone}">${v}</b><span>${sub}</span></button>`; }).join('')}</div>`;
+}
+// Build one entry: { readings: [[label, value, against, tone]], findings: [[sev, text, note]], actions: [[label, act, primary]] }.
+function entryFor(path, ev, dd) {
+  if (ev.startsWith('x:')) { const e = EVX[ev.slice(2)]; return { readings: e[10], findings: e[11], actions: e[7] === 'down' || e[7] === 'warn' ? [['+ To-do', 'noop', true], ['Hand to Claude Code', 'noop']] : [['See this day on the Timeline', `pday:${dd}`]] }; }
+  const x = pageSummary(path), d = x.d, sp = SPEED.find((s) => s[0] === path), ix = ixFor(path), r = READS[path];
+  const toTodo = [['+ To-do', 'noop', true], ['Hand to Claude Code', 'noop']];
+  const runAgain = (t) => ['Run again', `view:tools|tpage:${path}|trun:${t}`];
+  if (ev === 'changes') {
+    const c = (PAGE_HIST[path] ? PAGE_HIST[path].changes : []).find((cc) => cc[0] === dd);
+    return { readings: c && /→/.test(c[4]) ? [['After the change', c[4].split('.')[0], 'in search', c[5] === 'down' ? 'down' : c[5] === 'up' ? 'up' : '']] : [], findings: c ? [['', c[3], c[1] === 'commit' ? 'from the commit' : 'title change'], ...(c[4] ? [[c[5] === 'down' ? 'high' : c[5] === 'up' ? 'ok' : '', c[4].replace(/ Judge it on [^.]+\./, ''), 'what happened after']] : [])] : [], actions: [['Open the commit', 'noop'], ['See this day on the Timeline', `pday:${dd}`]] };
+  }
+  if (ev === 'searches') {
+    const rows = [...x.rows].sort((a, b) => b.r[1] - a.r[1]).slice(0, 4);
+    const top = x.best.r;
+    return { readings: [['Google', top[2] ? `#${top[2].toFixed(0)}` : '—', `“${top[0]}”`, ''], ['Bing', top[3] ? `#${top[3].toFixed(0)}` : '—', '', ''], ['Search visits', fmt(x.clicks), 'a month', '']],
+      findings: rows.map(({ r: q, s }) => [s.k === 'top' ? 'ok' : s.k === 'none' ? 'mid' : s.gain ? 'low' : '', `“${q[0]}” · ${q[2] ? `#${q[2].toFixed(0)}` : 'not showing up'}`, s.gain ? `+${fmt(s.gain)} a month in the top 3` : `${fmt(q[1])} searches a month`]),
+      actions: [['Open in Search', `view:search|q:${encodeURIComponent(top[0])}`]] };
+  }
+  if (ev.startsWith('tool:')) {
+    const t = ev.slice(5);
+    if (t === 'content') return { readings: [['Problems', r ? `${r.length}` : '0', '', r ? 'warn' : 'up'], ['Worst', r ? { high: 'High', mid: 'Medium', low: 'Low' }[r[0][0]] : '—', '', r && r[0][0] === 'high' ? 'down' : ''], ['At stake', READS_AT[path] ? fmt(READS_AT[path]) : '—', 'searches a month', '']],
+      findings: (r || []).map(([sev, tt, , stake, , why]) => [sev, tt, `${stake} · ${why.split('. ')[0].replace(/\.$/, '')}`]), actions: [...toTodo, runAgain('content')] };
+    if (t === 'bot') { const js = path === '/guides/ga4-bigquery-export'; return { readings: [['Without JavaScript', js ? '210 words' : 'All text', '', js ? 'down' : 'up'], ['After JavaScript', js ? '1,840 words' : 'Same', '', ''], ['Checks', `${BOT_CHECKS.filter((c) => c[2] === 'ok').length} of ${BOT_CHECKS.length} fine`, '', '']],
+      findings: [...(js ? [['high', 'GPTBot and most AI crawlers get only the first 210 words', 'they don’t run JavaScript']] : []), ...BOT_CHECKS.filter((c) => c[2] !== 'ok').map(([a, b]) => ['mid', a, b])], actions: [...toTodo, ['See it as Googlebot', `bot:view`], runAgain('bot')] }; }
+    if (t === 'index') return ix && !ix.onPurpose ? { readings: [['Google', ix.g[1], '', ix.g[0] === 'bad' ? 'down' : 'warn'], ['Bing', ix.b[1], '', ix.b[0] === 'ok' ? 'up' : 'warn'], ['Visits at stake', fmt(ix.visits), 'a month', '']],
+      findings: [['high', IXP[ix.k][0], IXP[ix.k][1]], ['', ix.why, 'why'], ['ok', ix.fix, 'the fix']], actions: [...toTodo, ['Ask the engines to look again', 'noop'], runAgain('index')] }
+      : { readings: [['Google', 'Shown', '', 'up'], ['Bing', 'Shown', '', 'up']], findings: [], actions: [runAgain('index')] };
+    if (t === 'speed') return { readings: sp ? [['Phones', `${sp[2].toFixed(1)} s`, 'fast is under 2.5 s', sp[2] > 4 ? 'down' : sp[2] > 2.5 ? 'warn' : 'up'], ['Computers', `${sp[3].toFixed(1)} s`, '', ''], ['Visits', fmt(sp[1]), 'a month', '']] : [],
+      findings: sp && sp[4] ? [[sp[2] > 2.5 ? 'mid' : 'low', sp[4], 'most of the wait']] : [], actions: sp && sp[2] > 2.5 ? [...toTodo, runAgain('speed')] : [runAgain('speed')] };
+    if (t === 'ai') { const cited = d.ai && !/not|doesn/i.test(d.ai); return { readings: [['Questions asked', '2', 'from .sitelens.yml', ''], ['Cited', cited ? 'Yes' : 'No', '', cited ? 'up' : 'muted'], ['Engines', '3', 'ChatGPT, Perplexity, Gemini', '']], findings: [[cited ? 'ok' : 'low', d.ai || 'No AI answer cites the page yet', 'the latest answers']], actions: [runAgain('ai')] }; }
+  }
+  if (ev.startsWith('spike:')) {
+    const [sd, n, u, why, src] = SPIKES[path].find((q) => q[0] === ev.slice(6));
+    return { readings: [['Visits that day', `${n}`, '', 'up'], ['Usually', `${u}`, `on a ${wdName(sd)}`, ''], ['Change', `+${Math.round((n / u - 1) * 100)}%`, '', 'up']],
+      findings: [['ok', why, 'why'], ...src.map(([sname, c]) => ['', `${sname} · ${c} visits`, `${Math.round((c / n) * 100)}% of the day`])], actions: [['See this day on the Timeline', `pday:${sd}`]] };
+  }
+  if (ev.startsWith('visits:')) {
+    const v = (VISITS[path] || []).find((q) => q[0] === ev.slice(7));
+    const num = (re, fb) => { const m = v[2].match(re); return m ? Number(m[1]) : fb; };
+    const signed = /^none/.test(v[2]) ? 0 : num(/(\d+) signed up/, v[3].filter((s) => /Signed up/.test(s[4])).length), ai = num(/(\d+) from (?:ChatGPT|AI)/, v[3].filter((s) => /ChatGPT|Perplexity/.test(s[1])).length);
+    return { readings: [['Visitors', `${v[1]}`, '', ''], ['Signed up', `${signed}`, '', signed ? 'up' : 'muted'], ['From AI answers', `${ai}`, '', '']],
+      findings: v[3].map(([t, src, how, did, out, tone]) => [tone === 'up' ? 'ok' : tone === 'down' ? 'mid' : '', `${t} · ${src}${how ? ` (${how})` : ''} · ${did}`, out]), actions: [['See this day on the Timeline', `pday:${v[0]}`]] };
+  }
+  if (ev.startsWith('todo:')) {
+    const id = ev.slice(5), T = TODOS[id], rep = [...T.entries].reverse().find((e) => e.changed);
+    return { readings: [['Stage', STAGE_PILL[T.stage][0], '', STAGE_PILL[T.stage][1]], ['Expect', rep ? rep.expected.split('. ')[0].split(' within')[0] : '—', '', ''], ['Check on', rep ? rep.check : '—', '', '']],
+      findings: [...(rep && rep.changed.old ? [['', `Now: ${rep.changed.old}`, 'before']] : []), ...(rep ? [['ok', `New: ${rep.changed.new}`, rep.changed.where]] : [['', T.why, 'why']])],
+      actions: T.stage === 'proposed' ? [['Approve and open the PR', 'noop', true], ['Try another', 'noop']] : T.stage === 'open' ? [['Hand to Claude Code', 'noop', true], ['Other agent', 'noop']] : [['Open in the Inbox', `ptodo:${id}`]] };
+  }
+  return { readings: [], findings: [], actions: [] };
+}
+const SEV_DOT = { high: 'down', mid: 'warn', low: 'muted', ok: 'up', '': '' };
+function entryHtml(e) {
+  const rd = e.readings.length ? `<div class="ent-r">${e.readings.map(([l, v, a, tone]) => `<span><small>${l}</small><b class="${tone || ''}">${v}</b>${a ? `<em>${a}</em>` : ''}</span>`).join('')}</div>` : '';
+  const fd = e.findings.length ? `<ul class="ent-f">${e.findings.slice(0, 4).map(([sev, t, n]) => `<li><i class="cdot2 ${SEV_DOT[sev] || ''}"></i><span>${t}${n ? `<small>${n}</small>` : ''}</span></li>`).join('')}${e.findings.length > 4 ? `<li class="muted small2">${e.findings.length - 4} more</li>` : ''}</ul>` : '';
+  const ac = e.actions.length ? `<div class="ent-a">${e.actions.map(([l, a, p]) => `<button type="button" class="${p ? 'jbtn primary' : 'chip'}" data-act="${a}">${l}</button>`).join('')}</div>` : '';
+  return `<div class="ent">${rd}${fd}${ac}</div>`;
+}
+// Spikes Kauzl spotted in a page's own visits: [date, how much, usual, why, sources].
+const SPIKES = {
+  '/guides/what-is-a-utm-code': [['2026-11-15', 41, 13, 'A post on r/analytics linked to it', [['Reddit', 24], ['Google', 9], ['ChatGPT', 5], ['Direct', 3]]]],
+  '/pricing': [['2026-11-15', 96, 31, 'The r/analytics post sent readers on to Pricing', [['Reddit', 52], ['Google', 22], ['Direct', 14], ['ChatGPT', 8]]]],
+  '/guides/ga4-bigquery-export': [['2026-10-29', 140, 88, 'The new title from 28 Oct started getting clicks', [['Google', 104], ['ChatGPT', 18], ['Bing', 12], ['Direct', 6]]]],
+};
+function spikeMoments(path) {
+  return (SPIKES[path] || []).map(([dd, n, u, why]) => [dd, 'kauzl', `Visits spiked to ${(n / u).toFixed(1)}× usual`, `${n} visits, usually ${u}. ${why}.`, `spike:${dd}`, 'up', 'visits']);
+}
+// A page's daily numbers, so every attachment can show the days around its event.
+function pageSeries(path, d, metric) {
+  const h = PAGE_HIST[path], n = Math.round((tOf(d) - tOf(addD(LAST, -90))) / DAYMS);
+  const base = h ? h.curve(n, d) : pageSummary(path).clicks / 30;
+  const wk = [0.7, 1.08, 1.12, 1.1, 1.05, 0.95, 0.7][new Date(tOf(d)).getUTCDay()];
+  const sp = (SPIKES[path] || []).find((s) => s[0] === d);
+  const v = base * wk * (0.9 + rnd(n * 5.3 + path.length) * 0.2) * (metric === 'visits' ? 2.4 : 1);
+  return sp && metric === 'visits' ? sp[1] : sp ? v * 2.2 : v;
+}
+function proofChart(path, ev, dd) {
+  const metric = ev.startsWith('x:') ? EVX[ev.slice(2)][9] : ev.startsWith('visits:') || ev.startsWith('spike:') ? 'visits' : 'clicks';
+  const end = dd >= addD(LAST, -10) ? LAST : addD(dd, 10), days = [];
+  for (let d = addD(end, -27); d <= end; d = addD(d, 1)) days.push(d);
+  const vals = days.map((d) => (ev === `visits:${d}` ? ((VISITS[path] || []).find((q) => q[0] === d) || [0, 0])[1] : pageSeries(path, d, metric))), mx = Math.max(...vals) * 1.15, W = 300, H = 56;
+  const X = (i) => (i / (days.length - 1)) * W, Y = (v) => H - (v / mx) * H;
+  const line = vals.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const ei = days.indexOf(dd), ex = ei >= 0 ? X(ei) : null;
+  const lab = (d) => fmtD(d, { day: 'numeric', month: 'short' });
+  return `<div class="pf"><div class="pf-h"><small>${metric === 'visits' ? 'Visits' : 'Search clicks'} a day, 4 weeks</small>${ei >= 0 ? `<small><b>${Math.round(vals[ei])}</b> on ${lab(dd)}</small>` : ''}</div>
+    <svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" class="pf-s" role="img" aria-label="${metric} around ${lab(dd)}"><path d="${line} L${W},${H} L0,${H} Z" fill="var(--accent-soft)"/><path d="${line}" fill="none" stroke="var(--accent)" stroke-width="1.5" vector-effect="non-scaling-stroke"/>${ex != null ? `<line x1="${ex}" x2="${ex}" y1="0" y2="${H}" stroke="var(--text-3)" stroke-dasharray="3 3" vector-effect="non-scaling-stroke"/>` : ''}</svg>
+    <div class="pf-x">${(() => { const f = ex != null ? ei / (days.length - 1) : -1, nearS = f >= 0 && f < 0.15, nearE = f > 0.85; return `${nearS ? '<small></small>' : `<small>${lab(days[0])}</small>`}${f >= 0 ? `<small style="left:${(f * 100).toFixed(1)}%;transform:translateX(${nearE ? '-100%' : nearS ? '0' : '-50%'})">${lab(dd)}</small>` : ''}${nearE ? '<small></small>' : `<small>${lab(end)}</small>`}`; })()}</div></div>`;
+}
+// Every other kind of page event, as data. Each carries its own proof, so it opens like any other event.
+// Rules for what may be posted: goals reached or behind, milestones, page changes, to-do stages,
+// search moves of 3+ places held 3 days, new searches with 100+ impressions, click-rate changes of 30%+,
+// index changes and recrawls, visit spikes (2× or ½× usual, 20+ visits), first-time sources (10+ visits),
+// AI answers starting or stopping to cite, new problems or fixes, speed crossing 2.5 s or 4 s, mentions
+// and links, cycle verdicts, and checks you ran. Never ordinary days or nightly runs that found nothing.
+const PAGE_GOALS = { '/pricing': ['Turn visitors into users', '4.1% of 6%', 68], '/guides/ga4-bigquery-export': ['Help people who arrive', '62% of 70% read to the end', 88], '/guides/google-analytics-mcp-server': ['Bring visitors from search', '120 of 250 clicks a month', 48], '/kauzl-vs-plausible': ['Bring visitors from search', '#16, aiming for top 5', 30] };
+const EVX = {
+  // UTM guide
+  'utm-crawl': ['/guides/what-is-a-utm-code', '2026-10-05', 'google', 'Read the shortened intro', 'Google recrawled the page 5 days after the 30 Sep change.', 'index', 'search', '', ['Recrawl', 'Crawled 5 Oct · change made 30 Sep'], 'clicks',
+    [['Changed', '30 Sep', ''], ['Google read it', '5 Oct', '5 days later'], ['Bing read it', '2 Oct', '']], [['', 'From here on, search sees the version without the example table', 'what changed for Google']]],
+  'utm-ctr': ['/guides/what-is-a-utm-code', '2026-11-09', 'kauzl', 'Click rate fell to 1.4% at #9', 'Usually 3% at that position. The snippet no longer shows the definition.', 'search', 'search', 'down', ['Click rate', '1.4% at #9 · usual 3%'], 'clicks',
+    [['Click rate', '1.4%', 'was 3.1% at #4', 'down'], ['Position', '#9', '“what is a utm code”', ''], ['Usual at #9', '3%', '', '']], [['mid', 'Google shows the history paragraph as the snippet', 'it quotes the opening'], ['', 'The title still promises a definition', '']]],
+  'utm-link': ['/guides/what-is-a-utm-code', '2026-11-15', 'kauzl', 'Linked from r/analytics', '“Stop guessing your traffic sources” linked to the guide. 24 visits came from it that day.', 'visitors', 'link', 'up', ['The post', 'r/analytics · 24 visits'], 'visits',
+    [['Visits from the post', '24', 'that day', 'up'], ['Upvotes', '212', '', ''], ['Comments', '38', '', '']], [['ok', '“Stop guessing your traffic sources”', 'r/analytics · 15 Nov'], ['', '3 of them went on to Pricing', 'what they did next']]],
+  'utm-cycle': ['/guides/what-is-a-utm-code', '2026-11-04', 'kauzl', 'Content cycle: Grow → Improve', 'Three weeks of fewer visits moved it out of Grow. It needs a rewrite, not new links.', 'content', 'cycle', 'warn', ['The cycle', 'Improve · 4 Nov – 2 Dec'], 'clicks',
+    [['This cycle', 'Improve', 'last cycle: Grow', 'warn'], ['Google', '#10', 'was #4', 'down'], ['AI answers', 'Not cited', '', 'muted']], [['mid', 'Put the example table back and update the date', 'this cycle’s one thing to do']]],
+  // Pricing
+  'pr-milestone': ['/pricing', '2026-11-08', 'kauzl', '100th sign-up that started on Pricing', 'The page has brought in 100 sign-ups since the new design on 4 Nov.', 'goals', 'goal', 'up', ['Sign-ups from Pricing', '100 since 4 Nov'], 'visits',
+    [['Sign-ups', '100', 'since 4 Nov', 'up'], ['Rate', '4.4%', 'of visits', ''], ['Days', '4', '', '']], [['ok', 'The 100th came from Google, “kauzl pricing”', 'on a phone']]],
+  'pr-button': ['/pricing', '2026-11-10', 'you', 'Moved the sign-up button', 'The button moved below the plan switch on phones.', 'work', 'content', '', ['The change', 'site/src/pages/pricing.astro'], 'visits',
+    [['Sign-up rate after', '4.1%', 'was 4.6%', 'down'], ['On phones', '2.8%', 'was 4.2%', 'down'], ['On computers', '5.2%', 'unchanged', '']], [['mid', 'Phone visitors tap where the button used to be', 'from the sessions'], ['', 'Commit 7c2e91 · “Move CTA under plans”', 'site/src/pages/pricing.astro']]],
+  'pr-goal': ['/pricing', '2026-11-12', 'kauzl', 'Goal fell behind: 4.1% sign up', 'Aiming for 6%. It slipped after the 10 Nov change, mostly on phones.', 'goals', 'goal', 'down', ['The goal', 'Turn visitors into users · 4.1% of 6%'], 'visits',
+    [['Now', '4.1%', 'of visitors sign up', 'down'], ['Goal', '6%', 'by 30 Nov', ''], ['Pace', 'Behind', 'since 10 Nov', 'down']], [['mid', 'The drop is on phones only', 'computers are on pace'], ['', 'Same day as “Moved the sign-up button”', '10 Nov']]],
+  'pr-speed': ['/pricing', '2026-11-16', 'kauzl', 'Got slower on phones: 2.6 s', 'Crossed 2.5 s, the line for fast. The plan switch shifts the page as it loads.', 'speed', 'found', 'warn', ['Speed', '2.6 s on phones · was 2.2 s'], null,
+    [['Phones', '2.6 s', 'was 2.2 s', 'warn'], ['Computers', '1.4 s', '', ''], ['Fast is under', '2.5 s', '', '']], [['mid', 'The plan switch shifts the page as it loads', 'most of the wait']]],
+  // GA4 BigQuery guide
+  'ga-ai': ['/guides/ga4-bigquery-export', '2026-11-03', 'kauzl', 'Perplexity started citing it', 'For “how to export GA4 to BigQuery”. ChatGPT already did.', 'ai', 'ai', 'up', ['The answer', 'Perplexity · “how to export GA4 to BigQuery”'], 'visits',
+    [['Cited by', '2 engines', 'ChatGPT, Perplexity', 'up'], ['Questions', '1 of 2', 'from .sitelens.yml', ''], ['AI visits', '+40%', 'the week after', 'up']], [['ok', '“…the GA4 BigQuery export guide on kauzl.com walks through the setup…”', 'Perplexity, 3 Nov']]],
+  'ga-ctr': ['/guides/ga4-bigquery-export', '2026-11-05', 'kauzl', 'Click rate up: 2.1% → 3.4% at #2', 'Same position, more clicks, since the new title on 28 Oct.', 'search', 'search', 'up', ['Click rate', '3.4% at #2 · was 2.1%'], 'clicks',
+    [['Click rate', '3.4%', 'was 2.1%', 'up'], ['Position', '#2', 'unchanged', ''], ['Clicks', '+41%', '3 weeks after', 'up']], [['ok', 'The new title names the search: “How to export GA4 to BigQuery”', '28 Oct']]],
+  'ga-fixed': ['/guides/ga4-bigquery-export', '2026-11-13', 'kauzl', 'Problem fixed: “raw data” is now in a heading', 'The nightly content check no longer finds it.', 'content', 'found', 'up', ['Content check', '1 problem fixed · 1 left'], 'clicks',
+    [['Fixed', '1', '', 'up'], ['Left', '1', 'FAQ answers start with “It”', ''], ['Fixed by', 'You', '12 Nov', '']], [['ok', 'Never said “raw data” in a heading', 'fixed 12 Nov']]],
+  'ga-newq': ['/guides/ga4-bigquery-export', '2026-11-14', 'google', 'New search: “ga4 raw data”', 'Shows at #11 for a search with 1,300 a month, two days after the new section.', 'search', 'search', 'up', ['The search', '“ga4 raw data” · #11 · 1,300 a month'], 'clicks',
+    [['Position', '#11', 'was not showing', 'up'], ['Searches', '1,300', 'a month', ''], ['In the top 3', '+180', 'a month', 'up']], [['ok', 'Came from the “GA4 raw data” section', '12 Nov']]],
+  'ga-goal': ['/guides/ga4-bigquery-export', '2026-11-15', 'kauzl', 'Goal back on track: 62% read to the end', 'Aiming for 70%. The new section kept readers going.', 'goals', 'goal', 'up', ['The goal', 'Help people who arrive · 62% of 70%'], 'visits',
+    [['Now', '62%', 'read to the end', 'up'], ['Goal', '70%', 'by 31 Dec', ''], ['Pace', 'On track', 'since 15 Nov', 'up']], [['ok', 'Readers who reach “GA4 raw data” finish the guide', 'from scroll depth']]],
+  // GA4 MCP guide
+  'mcp-speed': ['/guides/google-analytics-mcp-server', '2026-11-10', 'kauzl', 'Slow on phones: 4.4 s', 'Crossed 4 s. Three videos load before the text.', 'speed', 'found', 'down', ['Speed', '4.4 s on phones'], null,
+    [['Phones', '4.4 s', 'slow is over 4 s', 'down'], ['Computers', '2.3 s', '', ''], ['Left before it loaded', '31%', 'of phone visits', 'down']], [['high', 'Three videos load before the text', 'most of the wait']]],
+  'mcp-link': ['/guides/google-analytics-mcp-server', '2026-11-12', 'kauzl', 'Linked from Hacker News', 'A comment in “Ask HN: analytics for side projects” linked here.', 'visitors', 'link', 'up', ['The comment', 'Hacker News · 58 visits'], 'visits',
+    [['Visits', '58', 'from the comment', 'up'], ['Read to the end', '22%', '', ''], ['Signed up', '1', '', 'up']], [['ok', '“Ask HN: analytics for side projects”', 'news.ycombinator.com · 12 Nov']]],
+  'mcp-half': ['/guides/google-analytics-mcp-server', '2026-11-16', 'kauzl', 'Halfway to its goal', '120 of 250 search clicks a month, 12 days after publishing.', 'goals', 'goal', '', ['The goal', 'Bring visitors from search · 120 of 250'], 'clicks',
+    [['Now', '120', 'clicks a month', ''], ['Goal', '250', 'by 31 Dec', ''], ['Pace', 'On track', '', 'up']], [['', 'Most from “ga4 mcp server” (#7)', '']]],
+  // Kauzl vs Plausible
+  'vs-source': ['/kauzl-vs-plausible', '2026-11-16', 'kauzl', 'New source: Bing', 'First visits from Bing, though Bing hasn’t indexed the page yet: they came through Bing Copilot.', 'visitors', 'link', 'up', ['The source', 'Bing Copilot · 12 visits'], 'visits',
+    [['Visits', '12', 'first ever', 'up'], ['From', 'Copilot', 'in Bing', ''], ['Went to Pricing', '3', '', 'up']], [['ok', 'Copilot cites the page for “plausible vs kauzl”', '16 Nov']]],
+};
+function extraMoments(path) {
+  return Object.entries(EVX).filter(([, e]) => e[0] === path).map(([id, e]) => [e[1], e[2], e[3], e[4], `x:${id}`, e[7], e[6]]);
+}
+// What actually changed in the page, as a diff: `${path}|${date}` → { where, src, lines: [[op, text]] }.
+// op: '-' removed, '+' added, ' ' kept for context, '…' skipped lines. In the app this comes from the commit
+// (GitHub, files matched by content/** in .sitelens.yml) or from the title Google last read.
+const DIFFS = {
+  '/guides/what-is-a-utm-code|2026-09-30': { where: 'content/guides/what-is-a-utm-code.md', src: 'commit 4e1a9c2', lines: [
+    [' ', '# What is a UTM code?'],
+    ['-', 'A UTM code is a tag on a link that tells your analytics where a visit came from.'],
+    ['-', '| Tag | Example | What it says |'],
+    ['-', '| utm_source | newsletter | who sent the visit |'],
+    ['…', '4 more table rows removed'],
+    [' ', 'UTM codes began at Urchin, a web analytics company Google bought in 2005…']] },
+  '/guides/what-is-a-utm-code|2026-08-28': { where: 'content/guides/what-is-a-utm-code.md', src: 'commit 91b03fe', lines: [
+    [' ', '## How to make one'],
+    ['+', 'Or skip the typing: [build a UTM link](/tools/utm-builder).']] },
+  '/guides/ga4-bigquery-export|2026-10-28': { prose: true, where: 'The title', src: 'as Google read it on 30 Oct', lines: [
+    ['-', 'GA4 to BigQuery: export guide'],
+    ['+', 'How to export GA4 to BigQuery (free, step by step)']] },
+  '/guides/ga4-bigquery-export|2026-11-12': { where: 'content/guides/ga4-bigquery-export.md', src: 'commit c7d2e10', lines: [
+    [' ', '## Schedule the export'],
+    ['+', '## GA4 raw data: what lands in BigQuery'],
+    ['+', 'Every event arrives as one row, with its parameters nested inside it…'],
+    ['…', '+340 words in all']] },
+  '/guides/google-analytics-mcp-server|2026-11-04': { where: 'content/guides/google-analytics-mcp-server.md', src: 'new file', lines: [
+    ['+', '# A GA4 MCP server'],
+    ['+', 'A Model Context Protocol server for Google Analytics 4.'],
+    ['…', '1,240 words, 6 headings, 3 videos']] },
+  '/pricing|2026-11-04': { where: 'app/pricing/page.tsx', src: 'commit 0a8f4d1', lines: [
+    ['-', '<h1>Plans for every team</h1>'],
+    ['+', '<h1>Simple analytics, one price</h1>'],
+    ['+', '<PlanTable plans={plans} />'],
+    ['…', 'page rewritten · 212 lines']] },
+  '/pricing|2026-11-10': { where: 'app/pricing/page.tsx', src: 'commit 5be27a3', lines: [
+    ['-', '<SignUpButton />'],
+    [' ', '<PlanSwitch />'],
+    [' ', '<PlanTable plans={plans} />'],
+    ['+', '<SignUpButton />']] },
+};
+// Only "page changed" events carry a diff: commits, title changes, and work events.
+const diffFor = (path, ev, dd) => (ev === 'changes' || (ev.startsWith('x:') && EVX[ev.slice(2)][5] === 'work') ? DIFFS[`${path}|${dd}`] : null);
+const escH = (t) => String(t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+const diffCount = (d) => [d.lines.filter((l) => l[0] === '+').length, d.lines.filter((l) => l[0] === '-').length];
+// One diff block for the whole flow: the proposal (Now), the change (page changed event), the same look.
+function diffView(d, label) {
+  const [a, r] = diffCount(d);
+  return `<div class="dif${d.prose ? ' dif-p' : ''}"><div class="dif-h">${ic('doc', 12)}<b>${d.where}</b><span>${label || d.src}</span><em><i class="up">+${a}</i> <i class="down">−${r}</i></em></div>${d.lines.map(([op, t]) => `<div class="dl ${op === '+' ? 'dl-a' : op === '-' ? 'dl-d' : op === '…' ? 'dl-s' : ''}"><i>${op === '…' ? '⋯' : op === ' ' ? '' : op === '-' ? '−' : '+'}</i><code>${escH(t)}</code></div>`).join('')}</div>`;
+}
+// The evidence a message carries, named like an attachment: [title, what's in it].
+function attachmentOf(path, ev, dd) {
+  if (ev.startsWith('x:')) return EVX[ev.slice(2)][8];
+  if (ev === 'changes') { const c = (PAGE_HIST[path] ? PAGE_HIST[path].changes : []).find((cc) => cc[0] === dd); return ['The change', c ? c[3].split(' · ')[0] : 'What changed in the page']; }
+  if (ev.startsWith('spike:')) { const sp = SPIKES[path].find((q) => q[0] === ev.slice(6)); return ['Visits that day', `${sp[1]} visits, usually ${sp[2]} · by source`]; }
+  if (ev === 'searches') return ['Search positions', `${pageSummary(path).d.q.length} searches · Google and Bing`];
+  if (ev.startsWith('tool:')) return [`${toolName(ev.slice(5))} result`, toolSummary(ev.slice(5), path)];
+  if (ev.startsWith('visits:')) { const v = (VISITS[path] || []).find((q) => q[0] === ev.slice(7)); return ['Sessions', `${v[3].length} of ${v[1]} visits, one line each`]; }
+  if (ev.startsWith('todo:')) { const T = TODOS[ev.slice(5)]; return ['The to-do', `${STAGE_PILL[T.stage][0]} · ${T.entries.length} ${T.entries.length > 1 ? 'updates' : 'update'}`]; }
+  return ['Details', ''];
+}
+// Does this evidence carry the 4-week chart? Not for to-dos, speed, or events that name no metric.
+const hasChart = (path, ev) => !!path && !ev.startsWith('todo:') && ev !== 'tool:speed' && !(ev.startsWith('x:') && !EVX[ev.slice(2)][9]);
+// The closed attachment: a thumbnail of what's inside and a list of its parts, never a repeat of the message.
+function attChip(path, ev, dd, e, title, act) {
+  let thumb;
+  const df = diffFor(path, ev, dd);
+  if (df) { const [a, r] = diffCount(df); thumb = `<span class="dfn"><i class="up">+${a}</i><i class="down">−${r}</i></span>`; }
+  else if (hasChart(path, ev)) {
+    const metric = ev.startsWith('x:') ? EVX[ev.slice(2)][9] : ev.startsWith('visits:') || ev.startsWith('spike:') ? 'visits' : 'clicks';
+    const end = dd >= addD(LAST, -10) ? LAST : addD(dd, 10), days = [];
+    for (let d = addD(end, -27); d <= end; d = addD(d, 1)) days.push(d);
+    const v = days.map((d) => (ev === `visits:${d}` ? ((VISITS[path] || []).find((q) => q[0] === d) || [0, 0])[1] : pageSeries(path, d, metric))), mx = Math.max(...v) * 1.15, W = 56, H = 30;
+    const X = (i) => (i / (days.length - 1)) * W, Y = (y) => H - 2 - (y / mx) * (H - 4), ei = days.indexOf(dd);
+    thumb = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" aria-hidden="true"><path d="${v.map((y, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(y).toFixed(1)}`).join(' ')}" fill="none" stroke="var(--accent)" stroke-width="1.4"/>${ei >= 0 ? `<line x1="${X(ei)}" x2="${X(ei)}" y1="0" y2="${H}" stroke="var(--text-3)" stroke-dasharray="2 2"/><circle cx="${X(ei)}" cy="${Y(v[ei])}" r="2.4" fill="var(--text)"/>` : ''}</svg>`;
+  } else if (e.readings.length) {
+    const [, val, , tone] = e.readings[0];
+    thumb = `<b class="att-num ${tone || ''}">${val}</b>`;
+  } else thumb = ic('doc', 16);
+  const parts = [df ? 'diff' : '', hasChart(path, ev) ? (df ? 'what happened after' : '4-week chart') : '', e.readings.length ? `${e.readings.length} ${e.readings.length > 1 ? 'numbers' : 'number'}` : '', e.findings.length ? `${e.findings.length} ${e.findings.length > 1 ? 'findings' : 'finding'}` : ''].filter(Boolean).join(' · ');
+  return `<button type="button" class="att" data-act="${act}" aria-expanded="false"><span class="att-th">${thumb}</span><span><b>${title}</b><small>${parts || 'details'}</small></span>${ic('fwd', 14)}</button>`;
+}
+// The attachment viewer: one shape for every kind of evidence.
+function attachmentView(e, title, dd, path, ev) {
+  const rd = e.readings.length ? `<div class="att-r">${e.readings.map(([l, v, a, tone]) => `<div><small>${l}</small><b class="${tone || ''}">${v}</b>${a ? `<span>${a}</span>` : ''}</div>`).join('')}</div>` : '';
+  const fd = e.findings.length ? `<ul class="ent-f">${e.findings.slice(0, 5).map(([sev, t, n]) => `<li><i class="cdot2 ${SEV_DOT[sev] || ''}"></i><span>${t}${n ? `<small>${n}</small>` : ''}</span></li>`).join('')}</ul>` : '';
+  return `<div class="att-v"><div class="att-vh">${ic('doc', 13)}<b>${title}</b><span class="muted">${dd === LAST ? 'today' : fmtD(dd, { day: 'numeric', month: 'short' })}</span></div>${diffFor(path, ev, dd) ? diffView(diffFor(path, ev, dd)) : ''}${hasChart(path, ev) ? proofChart(path, ev, dd) : ''}${rd}${fd}</div>`;
+}
+function pageStory(scope, phone, pathArg, inPanel) {
+  const path = pathArg || S.page, x = pageSummary(path), cyc = CYCLES[path];
+  const status = cyc ? cyc.v : x.verdict;
+  const t = tlFor(path, x), day = (dd) => (dd === LAST ? 'Today' : fmtD(dd, { day: 'numeric', month: 'short' }));
+  const want = S.pev && S.pev.startsWith('ev-') ? t.m.findIndex((mm) => mm[4] === S.pev.slice(3) || mm[4] === `tool:${S.pev.slice(3)}`) : -1;
+  const shown = t.m.map((mm, i) => [mm, i]).filter(([[, w, , , ev]]) => !S.ptrack || trackOf(ev, w) === S.ptrack);
+  const lastI = shown.length ? shown[shown.length - 1][1] : -1;
+  const av = (w) => `<span class="tlav a-${WHO[w] ? WHO[w][2] : 'cc'}">${WHO[w] ? WHO[w][1] : AGENTS[w] ? AGENTS[w][1] : '?'}</span>`;
+  const name = (w) => (WHO[w] ? WHO[w][0] : AGENTS[w] ? AGENTS[w][0] : w);
+  // Each event: a dated point on the timeline, drawn as a message. Open it for its attachment, the proof.
+  const items = shown.map(([[dd, w, what, det, ev, tone, kind], i]) => {
+    const open = S.pev ? S.pev === `m${i}` || want === i : i === lastI;
+    const k = kind || momentKind(w), tcls = tone ? ` t-${tone}` : '';
+    const dot = tone && tone !== 'muted' ? `<i class="cdot2 ${tone === 'down' ? 'down' : tone === 'up' ? 'up' : 'warn'}"></i>` : '';
+    const card = !open
+      ? `<button type="button" class="ev ev-c" data-act="pev:m${i}"><span class="ev-l">${av(w)}<b>${name(w)}</b></span><span class="ev-s">${dot}<b>${what}</b>${det ? `<span class="muted"> — ${det}</span>` : ''}</span></button>`
+      : (() => {
+        const e = entryFor(path, ev, dd), [att] = attachmentOf(path, ev, dd), attOpen = S.patt === `m${i}`;
+        return `<div class="ev ev-o"><button type="button" class="ev-hd" data-act="pev:${i === lastI && !S.pev ? 'none' : `m${i}`}">${av(w)}<span class="mm-who"><b>${name(w)}</b><small>to ${nameOf(path)}</small></span></button>
+          <b class="mm-s">${dot}${what}</b>${det ? `<p>${det}</p>` : ''}
+          ${attOpen ? attachmentView(e, att, dd, path, ev).replace('<div class="att-vh">', `<div class="att-vh" role="button" tabindex="0" data-act="patt:m${i}" title="Close">`).replace(/(<span class="muted">[^<]*<\/span>)<\/div>/, `$1<span class="muted small2">Close</span></div>`) : attChip(path, ev, dd, e, att, `patt:m${i}`)}
+          ${e.actions.length ? `<div class="ent-a">${e.actions.map(([l, a, p]) => `<button type="button" class="${p ? 'jbtn primary' : 'chip'}" data-act="${a}">${l}</button>`).join('')}</div>` : ''}</div>`;
+      })();
+    return [`<li class="tlm${tcls}"><span class="tld">${day(dd)}</span><span class="tlic k-${k}" title="${KINDS[k][1]}">${ic(KINDS[k][0], 12)}</span>${card}</li>`, tone === 'muted' && !open];
+  }).reduce((out, [html, quiet], j, all) => {
+    // Quiet events (no clear change) fold into one line between the ones that matter.
+    if (!quiet || S.pquiet) return out + html;
+    const prevQuiet = j > 0 && all[j - 1][1];
+    if (prevQuiet) return out;
+    let n = 0; while (all[j + n] && all[j + n][1]) n++;
+    return out + `<li class="tlm tlq"><span class="tld"></span><span class="tlic k-quiet">·</span><button type="button" class="linkish tlqb" data-act="pquiet">${n} quieter ${n > 1 ? 'events' : 'event'}</button></li>`;
+  }, '');
+  // Now: the last point. One proposal from Kauzl: the change (before → after), the events it rests on,
+  // what it should bring, and one row of actions. The stages appear once it is a to-do.
+  const [nt, nw, todo, gain] = t.now, T = todo && TODOS[todo], plan = (TL[path] || {}).plan;
+  const at = T ? TSTAGES.findIndex(([k]) => k === T.stage) : -1;
+  const stages = T ? `<ol class="tstages">${TSTAGES.map(([k, l], i) => `<li class="${i < at ? 'done' : i === at ? 'now' : ''}">${l}</li>`).join('')}</ol>` : '';
+  const because = plan ? plan.because.map((b) => { const i = t.m.findIndex((mm) => mm[2].includes(b)); return i < 0 ? '' : `<button type="button" class="nwhy" data-act="pev:m${i}"><span class="muted">${day(t.m[i][0])}</span> ${t.m[i][2]}</button>`; }).filter(Boolean).join('') : '';
+  const draft = plan ? diffView({ prose: true, where: plan.where || 'The page', lines: [['-', plan.was], ['+', plan.to]] }, T && T.stage === 'proposed' ? 'proposed · needs your OK' : 'Kauzl suggests') : '';
+  const cells = plan ? `<div class="att-r">${plan.cells.map(([l, v, a, tone]) => `<div><small>${l}</small><b class="${tone || ''}">${v}</b><span>${a}</span></div>`).join('')}</div>` : '';
+  const act = T ? `<button type="button" class="jbtn primary" data-act="ptodo:${todo}">${T.stage === 'proposed' ? 'Review the proposal' : T.stage === 'open' ? 'Hand to Claude Code' : 'Open in the Inbox'}</button><span class="muted small2">In the Inbox since ${T.entries[0].at.replace(/^(Today|Yesterday)/, (w) => w.toLowerCase())}</span>`
+    : nt.startsWith('Nothing') ? '' : `<button type="button" class="jbtn primary" data-act="noop">Add to the Inbox</button><button type="button" class="chip" data-act="noop">Hand to Claude Code</button>`;
+  const more = t.more.length ? `<button type="button" class="linkish small2 nmore" data-act="pmore" aria-expanded="${!!S.pmore}">${S.pmore ? 'Hide other ideas' : `${t.more.length} other ${t.more.length > 1 ? 'ideas' : 'idea'}`}</button>` : '';
+  const moreList = S.pmore && t.more.length ? `<div class="tlmore"><ul>${t.more.map(([m, g]) => `<li><span>${m}</span>${g ? `<b class="up">${g}</b>` : ''}<button type="button" class="chip" data-act="noop">Add to the Inbox</button></li>`).join('')}</ul></div>` : '';
+  const nstat = T ? STAGE_PILL[T.stage][0].toLowerCase() : nt.startsWith('Nothing') ? 'Nothing to do' : 'draft · not in the Inbox yet';
+  const now = `<li class="tlm tlnow"><span class="tld">Now</span><span class="tlic k-now"></span><div class="ev ev-o ev-now"><div class="ev-hd">${av('kauzl')}<span class="mm-who"><b>Kauzl</b><small>next step · ${nstat}</small></span></div>
+    <b class="mm-s">${nt}</b>${plan ? '' : `<p>${nw}</p>`}
+    ${draft}${because ? `<div class="nbec"><small>Because</small>${because}</div>` : ''}${cells}${stages}
+    ${act || more ? `<div class="ent-a">${act}${more}</div>` : ''}${moreList}</div></li>`;
+  return `${inPanel ? '' : '<button type="button" class="linkish" data-act="pg:none">← All pages</button>'}
+    <div class="head"><div><h3>${nameOf(path)} <span class="pstat ${VCLS[status] || VERDICT_CLS[status] || ''}">${status}</span></h3><div class="sub2">${path} · ${fmt(x.clicks)} search visits a month</div></div>${inPanel ? '' : `<div class="head-r"><button type="button" class="chip" data-act="view:tools|tpage:${path}">${ic('terminal', 12)} Diagnose this page</button></div>`}</div>
+    ${trackerHead(path)}${S.ptrack ? `<p class="muted small2 m0">Only ${TRACKS.find((q) => q[0] === S.ptrack)[1].toLowerCase()} · <button type="button" class="linkish" data-act="ptrack:${S.ptrack}">Show everything</button></p>` : ''}
+    <ol class="tl">${items}${S.ptrack ? '' : now}</ol>`;
 }
 // Search, the other way round: every search, with the page that answers it.
 function searchList() {
@@ -3216,9 +4012,23 @@ const ASKS = [
 const hasWh = (scope) => scope === 'all' || site(scope).wh !== false;
 const shownViews = () => VIEWS.filter(([k]) => k !== 'journeys' || hasWh(S.scope));
 
+// What's waiting on you, as one row on the Timeline: to-dos, alerts, goals behind. Each opens in the panel.
+function needsRow(scope) {
+  const ms = inboxFor(scope), items = [];
+  for (const m of ms) {
+    const T = m.id && TODOS[m.id];
+    if (T && T.stage === 'proposed') items.push([`Review: ${m.t}`, `pclear|ptodo:${m.id}`, 'warn']);
+    else if (T && T.stage === 'open') items.push([m.t, `pclear|ptodo:${m.id}`, '']);
+    else if (m.k === 'alert') items.push([m.t, m.go || 'view:inbox', 'down']);
+  }
+  const behind = goalsFor(scope).filter((g) => g.st === 'behind');
+  if (behind.length) items.push([`${behind.length} ${behind.length > 1 ? 'goals' : 'goal'} behind`, 'view:inbox|inboxF:goal', 'down']);
+  if (!items.length) return '';
+  return `<div class="needs-row"><b>Needs you · ${items.length}</b><span class="needs-list">${items.slice(0, 4).map(([t, a, tone]) => `<button type="button" class="chip" data-act="${a}">${tone ? `<i class="cdot2 ${tone}"></i>` : ''}${t}</button>`).join('')}</span>${items.length > 4 ? `<button type="button" class="linkish" data-act="view:inbox">${items.length - 4} more in the Inbox →</button>` : `<button type="button" class="linkish" data-act="view:inbox">Inbox →</button>`}</div>`;
+}
 function askBox(scope) {
   const a = S.ask != null ? ASKS[S.ask] : null;
-  return `<div class="card ask-card"><div class="askin">${ic('chat', 16)}<span class="${a ? '' : 'muted'}">${a ? a[0] : `Ask anything about ${site(scope).label}…`}</span>${a ? `<button type="button" class="linkish" data-act="ask:-1" style="margin-left:auto">Clear</button>` : ''}</div>${a ? `<p class="answer">${a[1]}</p><span class="muted" style="font-size:12px">Example answer. Claude reads the same numbers the MCP server gives it.</span>` : `<div class="chips">${ASKS.map(([q], i) => `<button type="button" class="chip" data-act="ask:${i}">${q}</button>`).join('')}</div>`}</div>`;
+  return `<div class="card ask-card"><div class="askin">${ic('chat', 16)}<span class="${a ? '' : 'muted'}">${a ? a[0] : `Ask anything about ${scopeName(scope)}…`}</span>${a ? `<button type="button" class="linkish" data-act="ask:-1" style="margin-left:auto">Clear</button>` : ''}</div>${a ? `<p class="answer">${a[1]}</p><span class="muted" style="font-size:12px">Example answer. Claude reads the same numbers the MCP server gives it.</span>` : `<div class="chips">${ASKS.map(([q], i) => `<button type="button" class="chip" data-act="ask:${i}">${q}</button>`).join('')}</div>`}</div>`;
 }
 function pickSite(title, sub, phone, view) {
   const list = SITES.filter((s) => view !== 'journeys' || s.wh !== false);
@@ -3295,9 +4105,70 @@ const YML = [
   ['funnels', 'Journeys', ['Journeys', 'view:journeys'], ['funnels:', '  - name: Sign up', '    steps: [page:/pricing, page:/signup, event:sign_up]', '  - name: Install the extension', '    steps: [event:store_click, event:extension_installed]']],
   ['alerts', 'Alerts', ['The Inbox', 'view:inbox'], ['alerts:', '  traffic: { pct: 40 }']],
   ['search', 'Search topics and AI questions', ['Search', 'view:search'], ['search:', '  brand: [kauzl]', '  competitors: [plausible, fathom]', '  topics:', '    - name: GA4 BigQuery', '      page: /guides/ga4-bigquery-export', '      targets: [ga4 bigquery export, ga4 raw data]', '    - name: GA4 MCP', '      page: /guides/google-analytics-mcp-server', '      targets: [google analytics mcp]', '  ask_ai:', '    - Is there a local dashboard for GA4 and Search Console?', '    - What’s a simple alternative to GA4?']],
+  ['content', 'Content checks', ['Pages · How it reads', 'view:pages|pg:/guides/what-is-a-utm-code'], ['content:', '  rules:', '    passive: off   # the docs are written this way on purpose', '    title: { max: 65 }', '  skip: [/changelog/*, /legal/*]']],
   ['metrics', 'Your numbers', ['Goals · Your numbers', 'view:goals'], ['metrics:', '  - name: GitHub stars', '    source: github', '    repo: kauzl/kauzl', '    count: stars', '  - name: Waitlist', '    source: http', '    url: https://api.kauzl.com/stats', '    path: data.waitlist']],
 ];
-const YML_SUM = { goals: '2 goals, 2 steps · 1 warning', funnels: '2 journeys', alerts: 'Traffic swings over 40%', search: '2 topics · 2 AI questions', metrics: 'GitHub stars, Waitlist' };
+const YML_SUM = { goals: '2 goals, 2 steps · 1 warning', funnels: '2 journeys', alerts: 'Traffic swings over 40%', search: '2 topics · 2 AI questions', content: '1 rule off, 1 limit changed, 2 paths skipped', metrics: 'GitHub stars, Waitlist' };
+
+/* ---------- Content checks: how a page reads to people and AI answers, ranked by what's at stake ---------- */
+// Per page, worst first: [severity, problem, kind · rule, at stake, the passage, why, fix]. Rules run on the
+// page's source and its live HTML; the order comes from the page's own searches and AI answer checks.
+const READS = {
+  '/guides/what-is-a-utm-code': [
+    ['high', 'The definition comes in the third paragraph', 'AI answers · answer first', '6,600 searches a month · was #4',
+      '<mark>“Marketers have argued about attribution for years. Before we get to the answer, a little history…”</mark>',
+      'Google’s snippet and AI answers quote the opening. Two paragraphs of history sit before the answer.', 'Open with one sentence that says what a UTM code is, then the history.'],
+    ['mid', 'Never says “UTM parameters” in a heading', 'Search words · query terms', '4,400 searches a month · #18',
+      'Headings: “What is a UTM code?” · “How to build one” · “Common mistakes”',
+      'People search “utm parameters” more than any wording the page uses.', 'Name a section “The five UTM parameters”.'],
+    ['low', 'A 44-word sentence', 'Readability · long sentence', 'Most-read section',
+      '<mark>“Because analytics tools read the source, medium and campaign from the link itself, and because they treat capital letters as different values, a link tagged Email in one place and email in another will show up as two separate sources in your reports.”</mark>',
+      'Over 25 words is hard to follow on a phone, where 68% of this guide’s visits are.', 'Split it after “link itself”.'],
+  ],
+  '/guides/google-analytics-mcp-server': [
+    ['high', 'Never says “Claude”', 'Search words · query terms', '1,000 searches a month · not showing up',
+      'Title, description and headings mention “MCP”, “GA4” and “AI assistant”, never “Claude”.',
+      '“claude google analytics” is searched 1,000 times a month and nothing on the site shows up for it.', 'Say which assistants it works with, Claude first, in the lead and one heading.'],
+    ['mid', 'No visible “updated” date', 'AI answers · dates', 'Not cited by AI tools yet',
+      'Published 3 Nov · <mark>no updated date</mark> · dateModified missing',
+      'The guide changed on 14 Nov, but nothing tells readers or AI tools it is current.', 'Show “Updated 14 Nov 2026” under the title and set dateModified.'],
+  ],
+  '/kauzl-vs-plausible': [
+    ['high', 'Doesn’t say who wrote it', 'AI answers · disclosure', 'Gemini skips it for “Plausible alternative”',
+      '<mark>“Kauzl and Plausible both promise simple, private analytics…”</mark>',
+      'A comparison by one of the two products reads as an ad unless it says so; AI tools trust disclosed comparisons more.', 'Say in the first line that we make Kauzl.'],
+    ['mid', 'Thin for its search: 420 words', 'Content · thin', '2,900 searches a month · #22',
+      '420 words · 2 sections · no table',
+      'Pages that rank for “plausible alternative” cover pricing, privacy and setup.', 'Add a short side-by-side table and a section on moving from Plausible.'],
+  ],
+  '/pricing': [
+    ['mid', '“Simply”, “just” and “easily” 7 times', 'Wording · hedges', 'Whole page',
+      'It’s <mark>simply</mark> a matter of connecting GA4. You <mark>just</mark> pick a plan…',
+      'Filler words make plans harder to compare and less quotable.', 'Cut them; the sentences say the same without.'],
+  ],
+  '/guides/ga4-bigquery-export': [
+    ['low', '4 FAQ answers start with “It”', 'AI answers · answers stand alone', '6 questions people search',
+      'Q: How long does the export take? A: <mark>It</mark> can take up to 24 hours…',
+      'An answer quoted on its own needs its subject.', 'Start with “The GA4 export…”.'],
+  ],
+};
+const READS_AT = { '/guides/what-is-a-utm-code': 11000, '/guides/google-analytics-mcp-server': 2900, '/kauzl-vs-plausible': 4200, '/pricing': 1700, '/guides/ga4-bigquery-export': 640 };
+function readsCard(path, phone) {
+  const list = READS[path];
+  if (!list) return `<div class="card"><div class="chhead"><h4>How it reads</h4><span class="muted small2">Checked today</span></div><p class="muted small2" style="margin:0">Nothing to fix in the words. The checks follow the rules in ${ymlTag('content', phone)}.</p></div>`;
+  const rows = list.map(([sev, t, rule, stake, quote, why, fix], i) => {
+    const on = S.cp === i;
+    return `<button type="button" class="crow${on ? ' on' : ''}" data-act="cp:${i}" aria-expanded="${on}"><i class="cdot ${sev}"></i><span class="lname"><b>${t}</b><small>${rule}</small></span><span class="cst">${stake}</span></button>${on ? `<div class="cdet"><div class="cq">${quote}</div><p class="small2"><b>Why</b> ${why}</p><p class="small2"><b>Fix</b> ${fix}</p><span class="chips"><button type="button" class="jbtn primary" data-act="noop">+ To-do</button><button type="button" class="chip" data-act="noop">Copy prompt for Claude Code</button><button type="button" class="chip" data-act="noop">Not a problem here</button></span></div>` : ''}`;
+  }).join('');
+  return `<div class="card"><div class="chhead"><h4>How it reads</h4><span class="muted small2">${list.length} ${list.length > 1 ? 'problems' : 'problem'} in the words · worst first</span></div><div class="clist">${rows}</div><p class="muted small2" style="margin:0">Ranked by the searches and AI answers each one touches. Rules and limits come from ${ymlTag('content', phone)}.</p></div>`;
+}
+function contentSection(phone) {
+  const rows = Object.entries(READS).map(([p, l]) => ({ p, l, at: READS_AT[p] })).sort((a, b) => b.at - a.at);
+  const n = rows.reduce((s, r) => s + r.l.length, 0);
+  const pill = (sev) => (sev === 'high' ? 'bad' : sev === 'mid' ? 'warn' : 'off');
+  return `<section class="tsec"><div class="tsh"><h3>Is the writing ready?</h3><p>${n} problems on ${rows.length} pages, from Kauzl’s content rules. Most searches at stake first.</p></div>
+    <div class="card ixlist">${rows.map((r) => `<button type="button" class="ixrow" data-act="view:pages|pg:${r.p}|pev:ev-content"><span class="lname"><b>${nameOf(r.p)}</b><small>${r.l[0][1]}</small></span><span class="ixe"><small>Problems</small><span class="ixp ${pill(r.l[0][0])}">${r.l.length}</span></span><span class="ixe"><small>At stake</small><span class="small2">${fmt(r.at)} a month</span></span>${ic('fwd', 13)}</button>`).join('')}</div></section>`;
+}
 // A small tag on anything the file defines; it opens Setup with that block lit.
 const ymlTag = (key, phone) => `<button type="button" class="ymltag" data-act="view:setup|yf:${key}" title="Set in the site’s .sitelens.yml">${ic('doc', 11)}.sitelens.yml</button>`;
 // Each site's file as Account shows it: [state, line].
@@ -3396,7 +4267,7 @@ function speedBody(phone) {
   const ixBad = IX.filter((x) => !x.onPurpose), canon = ixFor('/guides/ga4-bigquery-export');
   const lede = `<p class="lede"><b>${ixBad.length} pages</b> can’t show up properly in search, and the one that matters most is <b>${nameOf(canon.p)}</b>: Google picked a different address for it. On phones, <b>${slow.length} pages</b> are slow.</p>`;
   const dead = DEAD.map(([p, n, from, to]) => `<div class="sdead"><span class="lname"><b>${p}</b><small>${n} visits this month hit a missing page · from ${from}</small></span><button type="button" class="chip" data-act="noop">Send them to ${to}</button></div>`).join('');
-  return `${lede}${indexSection(phone)}
+  return `${lede}${indexSection(phone)}${contentSection(phone)}
     <section class="tsec"><div class="tsh"><h3>Speed on phones and computers</h3><p>${nameOf(worst[0])} takes ${worst[2]} s on phones. ${worst[4]} is most of it.</p></div><span class="chips"><button type="button" class="chip" data-act="noop">+ To-do: shrink that screenshot</button><button type="button" class="chip" data-act="pop:cmd">${ic('chat', 12)} Why is it slow?</button></span></section>
     <section class="tsec"><div class="tsh"><h3>Across the site</h3><p>What 3 in 4 real visitors get, from Chrome’s own measurements</p></div>${tiles}</section>
     <section class="tsec"><div class="tsh"><h3>Each page</h3><p>Filled dot: phones · hollow: computers · busiest slow pages first</p></div><div class="card spcard">${head}${list}</div></section>
@@ -3454,22 +4325,23 @@ function rawBody(scope, phone) {
     ? `<div class="card"><pre class="sql">SELECT event_name, COUNT(*) AS n
 FROM events
 WHERE date >= '2026-10-21'
-GROUP BY 1 ORDER BY n DESC</pre></div><p class="muted" style="font-size:13px">Most questions are quicker in plain words: <button type="button" class="linkish" data-act="view:story|ask:0">Ask Claude</button></p>`
+GROUP BY 1 ORDER BY n DESC</pre></div><p class="muted" style="font-size:13px">Most questions are quicker in plain words: <button type="button" class="linkish" data-act="view:timeline|ask:0">Ask Claude</button></p>`
     : `<div class="card"><div class="rows">${row(['page_view', '18,204', ''])}${row(['sign_up', '212', ''])}${row(['checkout_start', '96', ''])}</div></div>`;
   return head(r[1], r[2], { phone, crumb: ['Journeys', 'view:journeys', 'Raw data'] }) + body;
 }
 
 function goAfter(kind, arg) {
-  return kind === 'site' ? `scope:${arg}|view:story` : kind === 'inbox' ? 'view:inbox' : kind === 'report' ? 'view:traffic|tab:campaigns' : '';
+  return kind === 'site' ? `scope:${arg}|view:timeline` : kind === 'inbox' ? 'view:inbox' : kind === 'report' ? 'view:traffic|tab:campaigns' : '';
 }
 function afterBody(phone) {
   const v = S.view, sc = S.scope;
   if (v === 'account') return accountBody(phone);
   if (v === 'setup') return setupBody(sc, phone);
-  if (v === 'story') return storyBody(sc, phone, goAfter, true);
+  if (v === 'story') return calendarBody(sc, phone, false);
   if (v === 'inbox') return inboxBody(sc, phone);
   if (v === 'live') return liveBody(sc, phone, goAfter);
   if (v === 'timeline') return calendarBody(sc, phone, false);
+  if (v === 'tools') return toolsBody(sc, phone);
   if (v === 'raw') return sc === 'all' ? pickSite('Raw data', 'Pick a site:', phone, 'journeys') : rawBody(sc, phone);
   if (v === 'journeys' && sc !== 'all') return journeysBody(sc, phone);
   if (v === 'traffic' && sc !== 'all') return trafficBody(sc, phone);
@@ -3503,7 +4375,7 @@ function userPop() {
   return `<div class="pop user"><button type="button" class="row" data-act="noop">${ic('plug')}Integrations</button><button type="button" class="row" data-act="noop">${ic('terminal')}MCP</button><button type="button" class="row" data-act="noop">${ic('moon')}Theme</button><hr><button type="button" class="row" data-act="noop">${ic('out')}Sign out</button></div>`;
 }
 // Phone "More": Live up top, then a tile per view with one live fact each, then the rest as rows.
-const MORE_VIEWS = [['timeline', 'calendar', 'Timeline', 'Tue 11 Nov was the busiest day'], ['traffic', 'arrows', 'Traffic', 'Google 44% · AI answers rising'], ['journeys', 'route', 'Journeys', '1 in 30 sign up'], ['goals', 'target', 'Goals', '']];
+const MORE_VIEWS = [['traffic', 'arrows', 'Traffic', 'Google 44% · AI answers rising'], ['journeys', 'route', 'Journeys', '1 in 30 sign up'], ['goals', 'target', 'Goals', ''], ['tools', 'terminal', 'Diagnose', 'Check any page']];
 function morePop() {
   const n = liveFor(S.scope), behind = S.scope === 'all' ? 0 : goalsFor(S.scope).filter((g) => g.st === 'behind').length;
   const views = MORE_VIEWS.filter(([k]) => k !== 'journeys' || hasWh(S.scope));
@@ -3521,9 +4393,9 @@ function cmdResults(q) {
   const cur = S.scope === 'all' ? 'kauzl' : S.scope;
   const cl = site(cur).label;
   const list = [
-    ...ASKS.map(([t], i) => ({ t, m: 'Ask Claude', a: `scope:${cur}|view:story|ask:${i}`, i: 'chat' })),
-    ...SITES.map((s) => ({ t: s.label, m: 'Site', a: `scope:${s.id}|view:story`, i: 'grid' })),
-    { t: 'All sites', m: 'Scope', a: 'scope:all|view:story', i: 'grid' },
+    ...ASKS.map(([t], i) => ({ t, m: 'Ask Claude', a: `scope:${cur}|view:timeline|ask:${i}`, i: 'chat' })),
+    ...SITES.map((s) => ({ t: s.label, m: 'Site', a: `scope:${s.id}|view:timeline`, i: 'grid' })),
+    { t: 'All sites', m: 'Scope', a: 'scope:all|view:timeline', i: 'grid' },
     ...shownViews().map(([k, l, i]) => ({ t: l, m: scopeName(S.scope), a: `view:${k}`, i })),
     { t: 'Live', m: scopeName(S.scope), a: 'view:live', i: 'pulse' },
     ...Object.entries(SECTIONS).filter(([k]) => k !== 'journeys' || hasWh(cur)).flatMap(([k, sec]) => sec.tabs.map(([tk, tl]) => ({ t: tl, m: `${sec.l} · ${cl}`, a: `scope:${cur}|view:${k}|tab:${tk}`, i: 'layers' }))),
@@ -3538,7 +4410,7 @@ function cmdResults(q) {
 
 function afterDesktop() {
   const dr = drawer();
-  return `<div class="app d${dr ? ' has-drawer' : ''}">
+  return `<div class="app d${dr ? (S.stack.length && stackTop().k === 'page' ? ' has-wide' : ' has-drawer') : ''}">
     <aside class="sb">
       ${scopeBtn(false)}
       ${S.pop === 'scopes' ? `<div class="pop scopes">${scopeRows()}</div>` : ''}
@@ -3555,10 +4427,10 @@ function afterDesktop() {
     ${S.pop === 'cmd' ? cmdBox() : ''}
   </div>`;
 }
-const PHONE_TABS = [['story', 'Story', 'sparkles'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['more', 'More', 'more']];
+const PHONE_TABS = [['timeline', 'Timeline', 'calendar'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['more', 'More', 'more']];
 function afterPhone() {
   const n = inboxCount(S.scope);
-  const inMore = ['timeline', 'traffic', 'journeys', 'goals', 'live', 'raw', 'account', 'setup'].includes(S.view) || S.pop === 'more';
+  const inMore = ['traffic', 'journeys', 'goals', 'live', 'raw', 'account', 'setup'].includes(S.view) || S.pop === 'more';
   const sheet = (inner) => `<div class="scrim" data-act="close"></div><div class="sheet pop" style="position:absolute"><span class="grab"></span>${inner}</div>`;
   return `<div class="app p">
     <header class="pt">
@@ -3579,6 +4451,7 @@ function afterPhone() {
     ${S.pop === 'bot' && S.bot && S.page ? sheet(botPanel(S.page)) : ''}
     ${S.pop === 'q' && S.q ? sheet(queryPanel(S.q)) : ''}
     ${S.pop === 'user' ? sheet(userPop().replace('<div class="pop user">', '<div style="display:grid;gap:1px">')) : ''}
+    ${S.stack.length ? `<div class="scrim" data-act="pclear"></div><div class="sheet pop" style="position:absolute"><span class="grab"></span>${panel(true)}</div>` : ''}
     ${S.pop === 'cmd' ? cmdBox() : ''}
   </div>`;
 }
@@ -3705,8 +4578,28 @@ function run(acts) {
     const [k, v] = a.split(':');
     if (k === 'mode') { S.mode = v; S.pop = null; S.bMenu = false; }
     else if (k === 'device') { S.device = v; S.pop = null; S.bMenu = false; try { localStorage.setItem('kz-nav-device', v); } catch (e) {} }
-    else if (k === 'scope') { S.scope = v; S.ask = null; S.cal.focus = null; if (!hasWh(v) && (S.view === 'journeys' || S.view === 'raw')) S.view = 'story'; }
-    else if (k === 'view') { S.view = v; S.tab = null; S.ask = null; S.inboxF = 'all'; S.srange = null; S.cal.day = null; S.jleak = null; S.jedit = false; S.page = null; S.src = null; S.q = null; S.madd = false; S.msrc = null; S.todo = null; S.yf = null; }
+    else if (k === 'scope') { S.scope = v; S.ask = null; S.cal.focus = null; if (!hasWh(v) && (S.view === 'journeys' || S.view === 'raw')) S.view = 'timeline'; }
+    else if (k === 'pday' || k === 'ppage' || k === 'ptodo') {
+      const it = { k: k.slice(1), v };
+      const top = S.stack[S.stack.length - 1];
+      if (top && top.k === it.k && top.v === it.v) {} else S.stack.push(it);
+      S.pev = null; S.pmore = false; S.pall = false; S.ptrack = null;
+    }
+    else if (k === 'pswap') { if (S.stack.length) S.stack[S.stack.length - 1] = { k: 'day', v }; }
+    else if (k === 'pback') { S.stack.pop(); S.pev = null; }
+    else if (k === 'pto') { S.stack.length = Number(v) + 1; S.pev = null; }
+    else if (k === 'ptrack') { S.ptrack = S.ptrack === v ? null : v; S.pev = null; }
+    else if (k === 'tpage') { S.tpage = v; S.tres = null; }
+    else if (k === 'tres') S.tres = null;
+    else if (k === 'trun') { S.runs.push({ d: LAST, p: S.tpage, t: v }); S.tres = v; }
+    else if (k === 'pclear') { S.stack = []; S.pop = null; }
+    else if (k === 'pfull') {
+      const it = S.stack[S.stack.length - 1];
+      if (it.k === 'page') { S.view = 'pages'; S.tab = 'pages'; S.page = it.v; S.stack = []; }
+      else if (it.k === 'day') { S.view = 'timeline'; S.tab = null; S.page = null; S.cal.month = it.v.slice(0, 7); S.cal.day = it.v; S.cal.zoom = 'month'; S.stack = []; }
+      else if (it.k === 'todo') { S.view = 'inbox'; S.tab = null; S.page = null; S.stack = [it]; }
+    }
+    else if (k === 'view') { S.stack = []; S.view = v; S.tab = null; S.ask = null; S.inboxF = 'all'; S.srange = null; S.cal.day = null; S.jleak = null; S.jedit = false; S.page = null; S.src = null; S.q = null; S.madd = false; S.msrc = null; S.todo = null; S.yf = null; }
     else if (k === 'tab') S.tab = v;
     else if (k === 'raw') { S.view = 'raw'; S.raw = v; }
     else if (k === 'ask') S.ask = +v < 0 ? null : +v;
@@ -3719,8 +4612,14 @@ function run(acts) {
     else if (k === 'cal-mo') { const i = YEAR_MONTHS.indexOf(S.cal.month) + Number(v); if (i >= 0 && i < 12) S.cal.month = YEAR_MONTHS[i]; }
     else if (k === 'cal-d') { S.cal.day = v === 'none' ? null : v; S.srange = null; if (S.cal.day) followDay(S.cal.day); }
     else if (k === 'ch-m') S.chartMode = v;
-    else if (k === 'pg') { S.page = v === 'none' ? null : v; S.pdet = false; S.bot = null; }
+    else if (k === 'pg') { S.page = v === 'none' ? null : v; S.pdet = false; S.bot = null; S.cp = null; S.pev = null; S.pmore = false; S.pall = false; S.ptrack = null; }
+    else if (k === 'pev') { S.pev = S.pev === v ? 'none' : v; S.patt = null; }
+    else if (k === 'patt') S.patt = S.patt === v ? null : v;
+    else if (k === 'pmore') S.pmore = !S.pmore;
+    else if (k === 'pquiet') S.pquiet = !S.pquiet;
+    else if (k === 'pall') { S.pall = !S.pall; if (!S.pall) S.pev = null; }
     else if (k === 'pdet') S.pdet = !S.pdet;
+    else if (k === 'cp') S.cp = S.cp === Number(v) ? null : Number(v);
     else if (k === 'src') S.src = v === 'none' ? null : v;
     else if (k === 'todo') { S.todo = v === 'none' ? null : v; S.thist = false; }
     else if (k === 'thist') S.thist = !S.thist;
@@ -3828,5 +4727,6 @@ document.addEventListener('keydown', (e) => {
     run(S.cal.zoom === 'day' ? `cal-end:${nd}` : `cal-d:${nd}`);
   }
 });
+syncPageEvents();
 render();
 </script>

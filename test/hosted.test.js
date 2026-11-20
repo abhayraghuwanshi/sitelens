@@ -503,7 +503,7 @@ const waitlisted = () => gateway.db.prepare('SELECT email, source FROM waitlist 
 test('anyone can join the waitlist from the home page; bad emails, bots and other sites are turned away', async () => {
   const home = await call('/');
   assert.match(home.body, /<form class="join" method="post" action="\/waitlist">/);
-  assert.match(home.body, /href="\/waitlist">Get early access/);
+  assert.match(home.body, /href="#early-access">Get early access/);
 
   const ok = await postForm('/waitlist', { email: ' New.Person@Example.com ', from: 'home' }, { ip: '203.0.113.1' });
   assert.equal(ok.status, 303);
