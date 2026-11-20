@@ -410,7 +410,7 @@ function QueryPanel({ site, r, eng, onClose }) {
 // A search over 13 weeks, as two small panels on the same weeks: how many searched it (Google, and
 // Bing's US data when it has any), and where you ranked on Google (#1 at the top). The headline numbers
 // sit above; each line is labelled at its ends; one hover reads out a week across both.
-function QueryTrend({ days, to, bingWeeks, loading }) {
+function QueryTrend({ days, to, bingWeeks, loading, market = 'US' }) {
   if (!days) return loading ? <div class="qt qt-load" aria-hidden="true" /> : null;
   if (!days.length) return null;
   const DAYMS = 86_400_000;
@@ -463,12 +463,12 @@ function QueryTrend({ days, to, bingWeeks, loading }) {
   return (
     <section class="qt" aria-label="Trend, 13 weeks">
       <div class="qt-stats">
-        <div><small>Searches a week</small><b>{f(gNow / 4)}</b><span class={change == null ? 'muted' : change >= 10 ? 'good' : change <= -10 ? 'bad' : 'muted'}>{!gNow && !gBefore ? 'none for your site on Google' : change == null ? 'new' : `${change > 0 ? '↑' : change < 0 ? '↓' : ''}${Math.abs(change)}% vs 4 weeks before`}</span>{hasBing && <span class="muted">Bing (US): about {f(sum(N - 4, N, 'b') / 4)} a week</span>}</div>
+        <div><small>Searches a week</small><b>{f(gNow / 4)}</b><span class={change == null ? 'muted' : change >= 10 ? 'good' : change <= -10 ? 'bad' : 'muted'}>{!gNow && !gBefore ? 'none for your site on Google' : change == null ? 'new' : `${change > 0 ? '↑' : change < 0 ? '↓' : ''}${Math.abs(change)}% vs 4 weeks before`}</span>{hasBing && <span class="muted">Bing ({market}): about {f(sum(N - 4, N, 'b') / 4)} a week</span>}</div>
         <div><small>Your Google position</small><b>{lastP != null ? `#${Math.round(lastP)}` : '—'}</b><span class={firstP != null && lastP != null && firstP - lastP >= 1 ? 'good' : firstP != null && lastP != null && lastP - firstP >= 1 ? 'bad' : 'muted'}>{firstP != null && lastP != null ? (Math.abs(firstP - lastP) >= 1 ? `was #${Math.round(firstP)} 13 weeks ago` : 'held for 13 weeks') : ''}</span></div>
       </div>
       <div class="qt-panels">
         <div class="qt-p">
-          <small class="qt-pl">Searches a week{hasBing ? <> · <i class="qt-key g" />Google <i class="qt-key b" />Bing (US keyword data)</> : ' · Google · Bing’s US keyword data has none'}</small>
+          <small class="qt-pl">Searches a week{hasBing ? <> · <i class="qt-key g" />Google <i class="qt-key b" />Bing ({market} keyword data)</> : ` · Google · Bing’s ${market} keyword data has none`}</small>
           <div class="qt-box">
             <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
               <polygon points={`0,100 ${gLine} 100,100`} class="qt-ga" />
@@ -518,16 +518,29 @@ export function trendIdeas(pages, brand = '') {
   return out;
 }
 
+const MARKETS = [['us/en-US', 'US'], ['gb/en-GB', 'UK'], ['in/en-IN', 'India'], ['ca/en-CA', 'Canada'], ['au/en-AU', 'Australia'], ['de/de-DE', 'Germany']];
+const GENERIC = new Set(['app', 'apps', 'best', 'free', 'online', 'download', 'for', 'the', 'a', 'to', 'how', 'what', 'and', 'of', 'in', 'on', 'with', 'vs']);
+
 function TrendLookup({ site, pages, known }) {
   const brand = String(site.label || '').replace(/[^\w]/g, '');
   const ideas = trendIdeas(pages, brand);
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
+  const [market, setMarket] = usePersistent('trendMarket', 'us/en-US');
   const trend = useAsync(() => (q ? api.get(`/sites/${site.id}/query-trend${qs({ q })}`).catch(() => null) : null), [site.id, q]);
-  const kw = useAsync(() => (q ? api.get(`/search/keywords${qs({ q })}`).catch(() => null) : null), [q]);
+  const kw = useAsync(() => (q ? api.get(`/search/keywords${qs({ q, market })}`).catch(() => null) : null), [q, market]);
   const go = (v) => { const t = String(v || '').trim().toLowerCase(); if (t) { setText(t); setQ(t); } };
-  const bingWeeks = kw.data?.keywords?.[0]?.weeks;
-  const none = q && trend.data && !trend.data.days?.length && !(bingWeeks || []).some((w) => w.impressions || w.broad);
+  const k = kw.data?.keywords?.[0];
+  const bingWeeks = k?.weeks || [];
+  // Search Console returns a row for every day, zeros included: only days with impressions count as data.
+  const googleDays = (trend.data?.days || []).filter((d) => d.impressions > 0);
+  const bingHas = bingWeeks.some((w) => w.impressions || w.broad);
+  const where = MARKETS.find(([m]) => m === market)?.[1] || 'US';
+  // Related wordings Bing has numbers for, only when they share a real word with this one.
+  const words = String(q).split(/\s+/).filter((w) => w && !GENERIC.has(w));
+  const related = (k?.related || []).filter((r) => words.some((w) => r.keyword.toLowerCase().split(/\s+/).some((x) => x.startsWith(w.slice(0, 4))))).slice(0, 6);
+  const loading = trend.loading || kw.loading;
+  const trendsLink = `https://trends.google.com/trends/explore?date=today%203-m&q=${encodeURIComponent(q)}`;
   return (
     <section class="tlk" aria-label="Look up a search’s trend">
       <form class="tlk-f" onSubmit={(e) => { e.preventDefault(); go(text); }}>
@@ -535,6 +548,10 @@ function TrendLookup({ site, pages, known }) {
         <label class="sr-only" for="tlk-q">Look up a search’s trend</label>
         <input id="tlk-q" type="search" list="tlk-ideas" autocomplete="off" maxLength={120} value={text} placeholder="Look up any search’s trend, e.g. “dock for windows”" onInput={(e) => setText(e.currentTarget.value)} />
         <datalist id="tlk-ideas">{ideas.map((x) => <option key={x.q} value={x.q} />)}</datalist>
+        <label class="sr-only" for="tlk-m">Country for Bing’s numbers</label>
+        <select id="tlk-m" class="tlk-m" value={market} onChange={(e) => setMarket(e.currentTarget.value)} title="Country for Bing’s search numbers">
+          {MARKETS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
+        </select>
         <button type="submit" class="btn primary" disabled={!text.trim()}>Trend</button>
         {q && <button type="button" class="nx-link" onClick={() => { setQ(''); setText(''); }}>Clear</button>}
       </form>
@@ -543,11 +560,20 @@ function TrendLookup({ site, pages, known }) {
       )}
       {q && (
         <div class="tlk-r">
-          <div class="tlk-rh"><b>“{q}”</b>{known.has(q) && <a class="todo-link small" href={hrefWith('q', q)}>Open its full detail →</a>}</div>
-          {trend.loading || kw.loading ? <div class="qt qt-load" aria-hidden="true" />
-            : none ? <p class="muted small m-0">No one searched this in Bing’s US data, and your site hasn’t shown for it on Google in 13 weeks. Try a shorter or more common wording.</p>
-            : <QueryTrend days={trend.data?.days?.length ? trend.data.days : [{ date: trend.data?.to || new Date().toISOString().slice(0, 10), impressions: 0 }]} to={trend.data?.to || new Date().toISOString().slice(0, 10)} bingWeeks={bingWeeks} />}
-          <p class="muted small m-0">Google: how often your site showed for it, and where. Bing: everyone searching it in the US.</p>
+          <div class="tlk-rh"><b>“{q}”</b><span class="tlk-links">{known.has(q) && <a class="todo-link small" href={hrefWith('q', q)}>Open its full detail →</a>}<a class="todo-link small" href={trendsLink} target="_blank" rel="noopener noreferrer">See it on Google Trends ↗</a></span></div>
+          {loading ? <div class="qt qt-load" aria-hidden="true" />
+            : !googleDays.length && !bingHas ? (
+              <div class="tlk-none">
+                <p class="m-0"><b>No numbers for this wording.</b></p>
+                <ul class="tlk-why">
+                  <li><b>Google:</b> your site hasn’t shown for it in 13 weeks. Kauzl only sees Google searches your site appears in (there’s no public Google Trends API), so check <a href={trendsLink} target="_blank" rel="noopener noreferrer">Google Trends ↗</a> for everyone’s.</li>
+                  <li><b>Bing ({where}):</b> too few people search it for Bing to report. Try another country, or a shorter, more common wording.</li>
+                </ul>
+                {related.length > 0 && <div class="tlk-ideas"><small class="muted">Bing has numbers for:</small>{related.map((r) => <button key={r.keyword} type="button" class="nx-chip" onClick={() => go(r.keyword)}>{r.keyword} <span>{Math.round((r.impressions || r.broad) / 13).toLocaleString('en-US')}/wk</span></button>)}</div>}
+              </div>
+            )
+            : <QueryTrend days={googleDays.length ? trend.data.days : [{ date: trend.data?.to || new Date().toISOString().slice(0, 10), impressions: 0 }]} to={trend.data?.to || new Date().toISOString().slice(0, 10)} bingWeeks={bingWeeks} market={where} />}
+          <p class="muted small m-0">Google: how often your site showed for it, and where. Bing: everyone searching it in {where === 'US' ? 'the US' : where === 'UK' ? 'the UK' : where}.</p>
         </div>
       )}
     </section>

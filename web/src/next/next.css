@@ -1805,3 +1805,8 @@ a.qp-chip:hover { text-decoration: none; }
 .tlk-r { display: grid; gap: 8px; }
 .tlk-rh { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
 .tlk-rh b { font-family: var(--display); font-size: var(--text-lg); font-weight: 650; }
+.tlk-m { font: inherit; font-size: var(--text-sm); padding: 7px 8px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text); }
+.tlk-links { display: inline-flex; flex-wrap: wrap; gap: 4px 14px; }
+.tlk-none { display: grid; gap: 8px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-sm); }
+.tlk-why { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text-2); line-height: 1.5; }
+.tlk-ideas .nx-chip span { color: var(--text-3); margin-left: 4px; font-variant-numeric: tabular-nums; }
