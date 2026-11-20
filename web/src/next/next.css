@@ -1657,7 +1657,7 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .qt-key { display: inline-block; width: 12px; height: 0; border-top: 2px solid var(--accent); }
 .qt-key.b { border-top: 2px dashed var(--series-2); }
 .qt-box { position: relative; height: 64px; margin: 0 30px; }
-.qt-box.pos { height: 52px; }
+.qt-box.pos { height: 64px; }
 .qt-box svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .qt-ga { fill: color-mix(in srgb, var(--accent) 16%, transparent); }
 .qt-gl { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; }
@@ -1783,3 +1783,4 @@ a.ps-row:hover { background: var(--surface-hover); }
 .ps-spark { position: relative; }
 .lv-bars, .qt-pos, .pt-thw { position: relative; }
 .pt-thw { display: block; width: 56px; height: 30px; }
+.qt-box.pos { margin-top: 6px; }

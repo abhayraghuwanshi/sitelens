@@ -447,7 +447,15 @@ function QueryTrend({ days, to, bingWeeks, loading }) {
   const pTop = 1, pBottom = Math.max(5, Math.ceil(Math.max(...ps.map((w) => w.p), 1)));
   const PY = (p) => ((p - pTop) / (pBottom - pTop)) * 100;
   const pLine = W.map((w, i) => (w.p == null ? null : `${X(i)},${PY(w.p)}`)).filter(Boolean).join(' ');
-  const guides = [...new Set([1, 3, 10, 20].filter((g) => g < pBottom).concat(pBottom))];
+  // Guide lines with labels: #1 and the bottom always; #3/#10/#20 only with room (22px apart at the panel’s 64px).
+  const POS_H = 64, GAP = 22;
+  const guides = [1, pBottom];
+  for (const g of [3, 10, 20]) {
+    if (g >= pBottom) continue;
+    const y = (PY(g) / 100) * POS_H;
+    if (guides.every((o) => Math.abs((PY(o) / 100) * POS_H - y) >= GAP)) guides.push(g);
+  }
+  guides.sort((a, b) => a - b);
   const tip = (i) => [`Week of ${short(W[i].start)}`, `${f(W[i].g)} Google searches`, hasBing ? `${f(W[i].b)} Bing` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ');
   const endLabel = (val, y, cls = '') => <span class={`qt-end ${cls}`} style={`top:${y}%`}>{val}</span>;
 
