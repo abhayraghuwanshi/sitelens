@@ -19,7 +19,7 @@ import { createCache, openCacheDb, requestContext } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { fetchTopics, demoTopics } from './search-topics.mjs';
-import { fetchDayTrends } from './day-trends.mjs';
+import { fetchDayTrends, fetchQueryTrend } from './day-trends.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
 import { createFunnelSuggest, funnelSuggestRoutes, linkedRepos, siteRepos } from './funnel-suggest.mjs';
@@ -529,6 +529,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       if (site.demo) return { date, verdict: 'The sample site has no Search Console data.', queries: [] };
       if (!site.searchSite) throw new EngineError('Pick a Search Console property for this site in Settings.', { kind: 'needs-search' });
       return sourceCache.wrap(`day-trends:${site.id}:${date}`, 60 * 60_000, query.has('fresh'), async () => fetchDayTrends({ token: await auth.token(), site, date }));
+    }],
+    // One search over 90 days: clicks, impressions and position per day (Google).
+    ['GET', /^\/api\/sites\/([\w-]+)\/query-trend$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const q = String(query.get('q') || '').trim().slice(0, 200);
+      if (!q) throw new ValidationError('Give a search: ?q=…');
+      if (site.demo || !site.searchSite) return { query: q, days: [] };
+      return sourceCache.wrap(`query-trend:${site.id}:${q}`, 60 * 60_000, query.has('fresh'), async () => fetchQueryTrend({ token: await auth.token(), site, query: q }));
     }],
     // How each search topic in the site's .sitelens.yml does in Google.
     ['GET', /^\/api\/sites\/([\w-]+)\/search-topics$/, async ({ match, query }) => {

@@ -338,10 +338,11 @@ function QueryPanel({ site, r, eng, onClose }) {
   const ix = useAsync(() => (r.d && r.page ? api.get(`/sites/${site.id}/index-status${qs({ path: r.page })}`).catch(() => null) : null), [site.id, r.key]);
   // How many people search this exact wording on Bing at all (Bing keyword research, US): often the
   // real reason Bing has no row is that nobody searches it there.
-  const kw = useAsync(() => (r.d?.bad === 'Bing' ? api.get(`/search/keywords${qs({ q: r.key })}`).catch(() => null) : null), [r.key]);
+  const kw = useAsync(() => api.get(`/search/keywords${qs({ q: r.key })}`).catch(() => null), [r.key]);
+  const trend = useAsync(() => api.get(`/sites/${site.id}/query-trend${qs({ q: r.key })}`).catch(() => null), [site.id, r.key]);
   const demand = (() => {
     const k = kw.data?.keywords?.[0];
-    if (!k) return '';
+    if (!k || r.d?.bad !== 'Bing') return '';
     const weeks = (k.weeks || []).slice(-8);
     const exact = weeks.reduce((n, w) => n + (w.impressions || 0), 0), broad = weeks.reduce((n, w) => n + (w.broad || 0), 0);
     if (!weeks.length || (!exact && !broad)) return { main: 'None', note: 'no searches at all in Bing’s US data' };
@@ -386,6 +387,7 @@ function QueryPanel({ site, r, eng, onClose }) {
           {r.d.bad === 'Bing' && !r.d.near && !unsearched && <p class="muted small m-0">ChatGPT search and Copilot lean on Bing, so this also costs AI answers.</p>}
         </section>
       )}
+      <QueryTrend days={trend.data?.days} from={trend.data?.from} to={trend.data?.to} bingWeeks={kw.data?.keywords?.[0]?.weeks} loading={trend.loading} />
       <table class="nx-mini-table">
         <thead><tr><th /><th>Position</th><th>Seen</th><th>Clicks</th><th>Click rate</th></tr></thead>
         <tbody>
@@ -400,5 +402,66 @@ function QueryPanel({ site, r, eng, onClose }) {
         <AddTodo site={site} todo={{ title: `Move up for “${r.key}”${r.page ? ` (${r.page})` : ''}`, from: `search:${r.key}`, subject: { kind: 'query', key: r.key }, link: r.page ? `#/site/${site.id}/pages?article=${encodeURIComponent(r.page)}` : '' }} label="To-do: move it up" />
       </div>
     </Drawer>
+  );
+}
+
+// A search over 13 weeks: how many people searched it on Google (impressions) and on Bing (Bing's
+// keyword data, longer searches that contain it included), and where you ranked on Google.
+// Reading demand and rank together says whether a move is the trend or you.
+function QueryTrend({ days, from, to, bingWeeks, loading }) {
+  if (!days) return loading ? <div class="qt qt-load" aria-hidden="true" /> : null;
+  if (!days.length) return null;
+  const DAYMS = 86_400_000;
+  const N = 13;
+  const end = Date.parse(`${to}T00:00:00Z`);
+  const weekOf = (d) => N - 1 - Math.floor((end - Date.parse(`${d}T00:00:00Z`)) / (7 * DAYMS));
+  const W = Array.from({ length: N }, (_, i) => ({ start: new Date(end - (N - 1 - i) * 7 * DAYMS - 6 * DAYMS).toISOString().slice(0, 10), g: 0, pos: 0, b: null }));
+  for (const d of days) {
+    const i = weekOf(d.date);
+    if (i < 0 || i >= N) continue;
+    W[i].g += d.impressions || 0;
+    W[i].pos += (d.position || 0) * (d.impressions || 0);
+  }
+  for (const w of W) w.p = w.g ? w.pos / w.g : null;
+  for (const bw of bingWeeks || []) {
+    const i = weekOf(new Date(Date.parse(`${bw.week}T00:00:00Z`) + 6 * DAYMS).toISOString().slice(0, 10));
+    if (i >= 0 && i < N) W[i].b = (W[i].b || 0) + Math.max(bw.broad || 0, bw.impressions || 0);
+  }
+  // Bing answered (even with no weeks in this window): its line is drawn, at 0 where it has nothing.
+  const hasBing = Array.isArray(bingWeeks);
+  const sum = (a, b, k) => W.slice(a, b).reduce((n, w) => n + (w[k] || 0), 0);
+  const gNow = sum(N - 4, N, 'g'), gBefore = sum(N - 8, N - 4, 'g');
+  const gChange = gBefore ? Math.round((gNow / gBefore - 1) * 100) : null;
+  const firstP = W.find((w) => w.p != null)?.p, lastP = [...W].reverse().find((w) => w.p != null)?.p;
+  const mx = Math.max(1, ...W.map((w) => Math.max(w.g, w.b || 0)));
+  const X = (i) => ((i + 0.5) / N) * 100;
+  const pMin = Math.min(...W.filter((w) => w.p != null).map((w) => w.p)), pMax = Math.max(...W.filter((w) => w.p != null).map((w) => w.p));
+  const PY = (p) => (pMax === pMin ? 50 : 8 + ((p - pMin) / (pMax - pMin)) * 84); // #1 at the top
+  const pPath = W.map((w, i) => (w.p == null ? null : `${X(i)},${PY(w.p)}`)).filter(Boolean);
+  const bPath = W.map((w, i) => `${X(i)},${99 - ((w.b || 0) / mx) * 91}`);
+  const bNow = sum(N - 4, N, 'b');
+  const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  const say = [
+    gChange == null ? (gNow ? 'Google searches only recently' : 'Hardly any Google searches') : `Google searches ${gChange >= 10 ? `up ${gChange}%` : gChange <= -10 ? `down ${-gChange}%` : 'steady'} in the last 4 weeks`,
+    hasBing ? (bNow ? `about ${Math.round(bNow / 4)} a week on Bing in the US` : 'none in Bing’s US data') : '',
+    firstP != null && lastP != null && Math.abs(firstP - lastP) >= 1 ? `you moved from #${Math.round(firstP)} to #${Math.round(lastP)}` : lastP != null ? `you held around #${Math.round(lastP)}` : '',
+  ].filter(Boolean).join('; ');
+  return (
+    <section class="qt" aria-label="Trend, 13 weeks">
+      <div class="qt-h"><b>Trend</b><span class="muted">13 weeks · {say}.</span></div>
+      <div class="qt-key"><span><i class="qt-g" />Google searches</span>{hasBing && <span><i class="qt-b" />Bing searches (US)</span>}<span><i class="qt-p" />Your Google position</span></div>
+      <div class="qt-plot">
+        <div class="qt-bars">{W.map((w, i) => <span key={i} title={`Week of ${short(w.start)}: ${w.g} Google searches${w.b != null ? `, ${w.b} on Bing` : ''}${w.p != null ? `, #${w.p.toFixed(1)}` : ''}`}><i style={`height:${(w.g / mx) * 92}%`} /></span>)}</div>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+          {hasBing && <polyline points={bPath.join(' ')} class="qt-bl" vector-effect="non-scaling-stroke" />}
+        </svg>
+      </div>
+      <div class="qt-pos">
+        <small>#{Math.round(pMin)}</small>
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">{pPath.length > 1 && <polyline points={pPath.join(' ')} class="qt-pl" vector-effect="non-scaling-stroke" />}</svg>
+        <small>#{Math.round(pMax)}</small>
+      </div>
+      <div class="qt-x"><span>{short(W[0].start)}</span><span>{short(to)}</span></div>
+    </section>
   );
 }

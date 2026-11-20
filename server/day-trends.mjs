@@ -94,3 +94,17 @@ export async function fetchDayTrends({ token, site, date }) {
   if (!flat.some((r) => r.date === date)) return { date, pending: true, verdict: 'Search Console hasn’t reported this day yet: it usually takes 2–3 days.', queries: [] };
   return explainDay(flat, date);
 }
+
+// One search over time (a search's panel → Trend): its clicks, impressions and position per day,
+// from Search Console, for the site's pages.
+export async function fetchQueryTrend({ token, site, query, days = 91, end = new Date(Date.now() - 2 * DAY).toISOString().slice(0, 10) }) {
+  const filter = hostPageFilter(site.searchSite, site.host, { includeSubdomains: site.includeSubdomains });
+  const rows = await querySearchAnalytics({
+    token, siteUrl: site.searchSite,
+    body: {
+      startDate: addDays(end, -(days - 1)), endDate: end, dimensions: ['date'], rowLimit: 1000,
+      dimensionFilterGroups: [{ groupType: 'and', filters: [{ dimension: 'query', operator: 'equals', expression: query }, ...(filter ? [filter] : [])] }],
+    },
+  });
+  return { query, from: addDays(end, -(days - 1)), to: end, days: rows.map((r) => ({ date: r.keys[0], clicks: r.clicks, impressions: r.impressions, position: r.position })) };
+}

@@ -1642,3 +1642,25 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .qp-chip:hover { border-color: var(--border-strong); }
 .qp-chip i { font-style: normal; font-weight: 600; color: var(--text-2); font-variant-numeric: tabular-nums; }
 @media (max-width: 640px) { .qp-facts { grid-template-columns: minmax(0, 1fr); gap: 2px 0; } .qp-facts dd { margin-bottom: 8px; } }
+
+/* A search's 13-week trend (SearchView QueryTrend): searches as bars (Google) and a line (Bing), position below. */
+.qt { display: grid; gap: 6px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); }
+.qt-load { min-height: 150px; background: var(--surface-2); }
+.qt-h { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: baseline; font-size: var(--text-sm); }
+.qt-key { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: var(--text-xs); color: var(--text-3); }
+.qt-key span { display: inline-flex; align-items: center; gap: 5px; }
+.qt-key i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; }
+.qt-g { background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.qt-b { background: var(--series-2); height: 2px !important; border-radius: 0 !important; }
+.qt-p { background: var(--text-2); height: 2px !important; border-radius: 0 !important; }
+.qt-plot { position: relative; height: 90px; }
+.qt-bars { position: absolute; inset: 0; display: flex; align-items: flex-end; gap: 3px; }
+.qt-bars span { flex: 1; height: 100%; display: flex; align-items: flex-end; }
+.qt-bars i { display: block; width: 100%; min-height: 1px; border-radius: 2px 2px 0 0; background: color-mix(in srgb, var(--accent) 55%, transparent); }
+.qt-plot svg, .qt-pos svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.qt-bl { fill: none; stroke: var(--series-2); stroke-width: 2; }
+.qt-pos { position: relative; height: 34px; margin-left: 26px; border-top: 1px dashed var(--border); }
+.qt-pos small { position: absolute; left: -26px; font-size: var(--text-xs); color: var(--text-3); font-variant-numeric: tabular-nums; }
+.qt-pos small:first-child { top: 0; } .qt-pos small:last-of-type { bottom: 0; }
+.qt-pl { fill: none; stroke: var(--text-2); stroke-width: 1.6; }
+.qt-x { display: flex; justify-content: space-between; font-size: var(--text-xs); color: var(--text-3); }
