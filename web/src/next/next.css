@@ -1692,3 +1692,8 @@ a.ps-row:hover { background: var(--surface-hover); }
 .ps-tabs button.on { background: var(--surface-2); color: var(--text); font-weight: 600; }
 .ps-tabs button.on b { color: inherit; }
 .ps-h { align-items: center; }
+/* A problem line with its own To-do: the button sits at the end of the line. */
+.pt-finds li { align-items: baseline; }
+.pt-finds li > span:nth-child(2) { flex: 1; }
+.pt-ftodo { flex: none; margin-left: 8px; font-size: var(--text-sm); white-space: nowrap; }
+.pt-ftodo .todo-link { display: inline-flex; align-items: center; gap: 4px; }

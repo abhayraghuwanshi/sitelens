@@ -173,7 +173,7 @@ export function checkEvents({ checks = [], series, today }) {
     tool: c.tool, key: c.key ?? null,
     title: `${CHECK_NAMES[c.tool] || c.tool}: ${c.headline || c.key || 'done'}`,
     detail: c.detail || (c.by === 'you' ? 'You ran it.' : 'Found in the nightly run.'), tone: c.tone || '',
-    attachment: { title: `${CHECK_NAMES[c.tool] || c.tool} result`, cells: (c.cells || []).slice(0, 3), findings: (c.findings || []).slice(0, 4), series: c.tool === 'speed' ? null : seriesWindow(series, c.date, today) },
+    attachment: { title: `${CHECK_NAMES[c.tool] || c.tool} result`, cells: (c.cells || []).slice(0, 3), findings: (c.findings || []).slice(0, 12), series: c.tool === 'speed' ? null : seriesWindow(series, c.date, today) },
   }));
 }
 

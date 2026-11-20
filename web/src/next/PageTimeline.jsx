@@ -4,6 +4,8 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { pushPanel } from './Panel.jsx';
+import { AddTodo } from '../components/Todos.jsx';
+import { runTodo, findingTodo, isProblem } from './checkTodo.js';
 
 // A page's timeline (docs/redesign/prototype.html → a page): every event from
 // GET /sites/:id/page-timeline, oldest first, as a vertical line of mail-style
@@ -98,7 +100,10 @@ function Avatar({ who }) {
 function EventCard({ e, site, path, att, setAtt, onClose }) {
   const a = e.attachment;
   const parts = [a.diff && 'diff', a.series && (a.diff ? 'what happened after' : '4-week chart'), a.cells?.length && `${a.cells.length} ${a.cells.length > 1 ? 'numbers' : 'number'}`, a.findings?.length && `${a.findings.length} ${a.findings.length > 1 ? 'findings' : 'finding'}`].filter(Boolean);
+  // A check that found problems can become a to-do: the whole run here, one problem from its line.
+  const problems = e.kind === 'check' && !e.quiet ? (a.findings || []).filter(isProblem) : [];
   const actions = [
+    problems.length > 0 && <AddTodo key="todo" site={site} class="btn primary" label="To-do" todo={runTodo({ site, path, tool: e.tool, headline: e.title.replace(/^[^:]+:\s*/, ''), findings: a.findings, date: fmtD(e.date) })} />,
     e.attachment.diff?.url && <a key="c" class="btn" href={e.attachment.diff.url} target="_blank" rel="noopener noreferrer"><Icon name="github" size={13} /> Open the commit</a>,
     e.todo && <a key="t" class="btn" href={pushPanel({ kind: 'todo', key: e.todo })}>Open the to-do</a>,
     <a key="d" class="btn ghost" href={pushPanel({ kind: 'day', key: e.date })}>See this day</a>,
@@ -111,7 +116,7 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
       </button>
       <h3 class="pt-title">{e.tone && e.tone !== 'muted' && <i class={`pt-dot ${e.tone}`} />}{e.title}</h3>
       {e.detail && <p class="pt-body">{e.detail}</p>}
-      {parts.length > 0 && (att ? <Attachment a={a} date={e.date} onClose={() => setAtt(null)} /> : (
+      {parts.length > 0 && (att ? <Attachment a={a} date={e.date} onClose={() => setAtt(null)} todoOf={problems.length > 1 ? (f) => (isProblem(f) ? findingTodo({ site, path, tool: e.tool, finding: f }) : null) : null} site={site} /> : (
         <button type="button" class="pt-att" onClick={() => setAtt(e.id)} aria-expanded="false">
           <span class="pt-th"><Thumb a={a} /></span>
           <span class="pt-attn"><b>{a.title}</b><small>{parts.join(' · ')}</small></span>
@@ -141,7 +146,7 @@ function Thumb({ a }) {
   return <Icon name="pages" size={16} />;
 }
 
-export function Attachment({ a, date, onClose }) {
+export function Attachment({ a, date, onClose, todoOf = null, site = null }) {
   return (
     <div class="pt-attv">
       <div class="pt-attvh"><Icon name="pages" size={13} /><b>{a.title}</b><span class="muted">{fmtD(date)}</span>{onClose && <button type="button" class="todo-link" onClick={onClose}>Close</button>}</div>
@@ -151,7 +156,13 @@ export function Attachment({ a, date, onClose }) {
         <div class="pt-cells">{a.cells.map((c, i) => <div key={i}><small>{c.label}</small><b class={c.tone === 'up' ? 'good' : c.tone === 'down' ? 'bad' : c.tone === 'muted' ? 'muted' : ''}>{c.value}</b>{c.note && <span>{c.note}</span>}</div>)}</div>
       )}
       {a.findings?.length > 0 && (
-        <ul class="pt-finds">{a.findings.map((f, i) => <li key={i}><i class={`pt-dot ${SEV[f.sev] || 'muted'}`} />{/^https:\/\//.test(f.note || '') ? <span><a href={f.note} target="_blank" rel="noopener noreferrer">{f.text} ↗</a></span> : <span>{f.text}{f.note && <small>{f.note}</small>}</span>}</li>)}</ul>
+        <ul class="pt-finds">{a.findings.map((f, i) => {
+          const todo = todoOf && site ? todoOf(f) : null;
+          return (
+            <li key={i}><i class={`pt-dot ${SEV[f.sev] || 'muted'}`} />{/^https:\/\//.test(f.note || '') ? <span><a href={f.note} target="_blank" rel="noopener noreferrer">{f.text} ↗</a></span> : <span>{f.text}{f.note && <small>{f.note}</small>}</span>}
+              {todo && <span class="pt-ftodo"><AddTodo site={site} class="todo-link" label="To-do" todo={todo} /></span>}</li>
+          );
+        })}</ul>
       )}
     </div>
   );

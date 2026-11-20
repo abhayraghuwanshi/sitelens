@@ -5,6 +5,8 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
 import { Attachment } from './PageTimeline.jsx';
+import { AddTodo } from '../components/Todos.jsx';
+import { runTodo, findingTodo, isProblem } from './checkTodo.js';
 
 // Diagnose (docs/redesign/prototype.html → Diagnose): pick a page, run a check
 // on it. Each run is kept and posted on that page's timeline (server/diagnose.mjs
@@ -63,8 +65,11 @@ export function DiagnoseView({ site, params }) {
         <div class="pt-card dg-res" aria-live="polite">
           <div class="pt-hd"><span class="pt-av you">A</span><span class="pt-from"><b>You</b><small>to {result.path} · just now</small></span></div>
           <h3 class="pt-title">{result.tone && result.tone !== 'muted' && <i class={`pt-dot ${result.tone}`} />}{NAME[result.tool]}: {result.headline}</h3>
-          <Attachment a={{ title: `${NAME[result.tool]} result`, cells: result.cells, findings: result.findings }} date={result.date} />
-          <div class="nx-btns"><a class="btn" href={timeline}>See it on the page’s timeline</a><button type="button" class="btn ghost" onClick={() => setResult(null)}>Close</button></div>
+          <Attachment a={{ title: `${NAME[result.tool]} result`, cells: result.cells, findings: result.findings }} date={result.date} site={site}
+            todoOf={(result.findings || []).filter(isProblem).length > 1 ? (f) => (isProblem(f) ? findingTodo({ site, path: result.path, tool: result.tool, finding: f }) : null) : null} />
+          <div class="nx-btns">
+            {(result.findings || []).some(isProblem) && <AddTodo site={site} class="btn primary" label="To-do" todo={runTodo({ site, path: result.path, tool: result.tool, headline: result.headline, findings: result.findings, date: fmtD(result.date) })} />}
+            <a class="btn" href={timeline}>See it on the page’s timeline</a><button type="button" class="btn ghost" onClick={() => setResult(null)}>Close</button></div>
         </div>
       )}
       {failed && <p class="nx-note-line warn" role="alert"><Icon name="triangle" size={14} /><span><b>{NAME[failed.tool] || 'The check'} couldn’t run.</b> {failed.findings?.[0]?.text}</span></p>}

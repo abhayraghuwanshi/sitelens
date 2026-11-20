@@ -46,7 +46,7 @@ export function contentRun(checks = []) {
       { label: 'Problems', value: String(problems.length), note: bad ? 'one is serious' : '', tone: bad ? 'down' : problems.length ? 'warn' : 'up' },
       ...(words ? [{ label: 'Words', value: words.text.match(/^[\d,]+/)[0], note: words.level === 'warn' ? 'thin' : '', tone: words.level === 'warn' ? 'warn' : '' }] : []),
     ],
-    findings: problems.slice(0, 4).map((c) => ({ sev: SEV[c.level] || '', text: c.text, note: c.query ? 'from Search Console' : '' })),
+    findings: problems.slice(0, 12).map((c) => ({ sev: SEV[c.level] || '', text: c.text, note: c.query ? 'from Search Console' : '' })),
   };
 }
 

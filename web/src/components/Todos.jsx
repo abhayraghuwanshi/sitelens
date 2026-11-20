@@ -31,9 +31,11 @@ export const todoApi = {
 };
 
 // "Add to to-dos" for something Studio suggested; once added, a link to the list.
-export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls = 'btn' }) {
+export function AddTodo({ site, todo, added: given, label = 'Add to to-dos', class: cls = 'btn' }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [made, setMade] = useState(null);
+  const added = given || made;
   if (added) {
     return <a class={`${cls.replace(" primary", "")} done`} href={`#/site/${site.id}/todos`}>{added.status === 'done' ? `✓ Done ${short(added.doneAt)}` : '✓ In your to-dos'}</a>;
   }
@@ -41,7 +43,7 @@ export function AddTodo({ site, todo, added, label = 'Add to to-dos', class: cls
     setBusy(true);
     setError('');
     try {
-      await todoApi.add({ site: site.id, ...todo });
+      setMade(await todoApi.add({ site: site.id, ...todo }));
     } catch (err) {
       setError(err.message);
     } finally {
