@@ -1784,3 +1784,7 @@ a.ps-row:hover { background: var(--surface-hover); }
 .lv-bars, .qt-pos, .pt-thw { position: relative; }
 .pt-thw { display: block; width: 56px; height: 30px; }
 .qt-box.pos { margin-top: 6px; }
+/* Whole-row links (a page's searches) highlight the row on hover; no underline on every piece of text. */
+a.ps-row, a.ps-row:hover, a.ps-row:focus-visible { text-decoration: none; }
+a.ps-row:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+a.qp-chip:hover { text-decoration: none; }
