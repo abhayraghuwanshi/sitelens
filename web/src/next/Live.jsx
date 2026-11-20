@@ -183,10 +183,10 @@ export function LivePage({ site }) {
       {people ? <People people={people} wins={data.wins} /> : <Feed data={data} streamed={streamed} reason={crowd.data?.reason} loading={streamed && !crowd.data && !crowd.error} />}
 
       <section class="card card-plain lv-grid" aria-label="Breakdown">
-        <Mini title="Reading now" rows={data.pages.map((p) => ({ name: p.title, users: p.users }))} empty="Nobody right now" />
-        <Mini title="Countries" rows={data.countries} empty="None yet" />
-        <Mini title="Sources" rows={people ? tally(people.map((p) => SOURCE_NAME(p.source))) : data.sources?.map((r) => ({ ...r, name: SOURCE_NAME(r.name) }))} empty={people || data.sources ? 'None yet' : 'Not given live for this property'} />
-        <Mini title="Devices" rows={data.devices.map((d) => ({ ...d, name: cap(d.name) }))} empty="None yet" />
+        <Mini title="Reading now" icon="pages" kind="page" rows={data.pages.map((p) => ({ name: p.title, users: p.users }))} empty="Nobody reading" />
+        <Mini title="Countries" icon="globe" kind="country" rows={data.countries} empty="Nobody yet" />
+        <Mini title="Sources" icon="arrows" kind="source" rows={people ? tally(people.map((p) => p.source || '(not set)')) : data.sources} empty={people || data.sources ? 'Nobody yet' : 'Google doesn’t give this live'} />
+        <Mini title="Devices" icon="monitor" kind="device" rows={data.devices} empty="Nobody yet" />
       </section>
 
       {!data.scopedByStream && !site.demo && (
@@ -213,16 +213,19 @@ function Feed({ data, streamed, reason, loading }) {
     <section class="lv-sec" aria-label="Just now">
       <div class="lv-sh"><h2 class="nx-h2">Just now</h2><p class="muted">Everyone in the last 30 minutes, newest first, grouped by place and page</p></div>
       <div class="card card-plain lv-feed">
-        {!items.length && <p class="muted m-0">Nobody in the last 30 minutes.</p>}
+        {!items.length && <p class="muted lv-empty">Nobody in the last 30 minutes.</p>}
         {shown.map((x, i) => (x.kind === 'win' ? (
-          <div class="lv-fi win" key={`w${i}`}>
-            <span class="lv-tok win" aria-hidden="true">★</span>
+          <div class="lv-fi lv-person win" key={`w${i}`}>
+            <span class="lv-who lv-owl goal fresh" aria-hidden="true"><Owl seed={`${x.event}${i}`} awake /><span class="lv-badge"><Icon name="check" size={9} /></span></span>
             <span class="lv-fw"><span><b>{EVENT_NAME(x.event)}</b>{x.count > 1 ? <span class="muted"> · {x.count} times</span> : ''}</span><small>A goal on the site</small></span>
             <span class="lv-fo"><span class="nx-pill good">Goal</span><small>{minAgo(x.ago)}</small></span>
           </div>
         ) : (
-          <div class="lv-fi" key={`v${i}`}>
-            <span class={`lv-tok ${sourceKind(x.source)}${x.ago < 5 ? ' fresh' : ''}`} title={x.source ? `From ${SOURCE_NAME(x.source)}` : ''}>{x.code || '··'}</span>
+          <div class="lv-fi lv-person" key={`v${i}`}>
+            <span class={`lv-who lv-owl src-${sourceKind(x.source)}${x.ago < 5 ? ' fresh' : ''}`} title={`${x.source ? `From ${SOURCE_NAME(x.source)}` : 'Source not given'} · ${x.ago < 5 ? 'in the last 5 minutes' : 'earlier'}`}>
+              <Owl seed={`${x.city}${x.country}${x.page}${x.ago}`} awake={x.ago < 5} />
+              {DEVICE_ICON[x.device] && <span class="lv-dev"><Icon name={DEVICE_ICON[x.device]} size={10} /></span>}
+            </span>
             <span class="lv-fw">
               <span><b>{x.city || x.country}</b>{x.city && <span class="muted"> {x.country}</span>}</span>
               <small>{x.page}{x.source ? ` · from ${SOURCE_NAME(x.source)}` : ''}{x.device ? ` · ${cap(x.device)}` : ''}</small>
@@ -237,8 +240,8 @@ function Feed({ data, streamed, reason, loading }) {
         : 'Google’s live data only gives counts. To see each visitor with their browser and every page, link this site’s GA4 BigQuery export with streaming on (Edit site → BigQuery).'}</p>}
       {data.feed.some((r) => r.source) && (
         <div class="lv-legend">
-          {[['search', 'Search'], ['ai', 'AI answers'], ['social', 'Social'], ['direct', 'Direct'], ['link', 'Other sites']].filter(([k]) => kinds.has(k)).map(([k, l]) => <span key={k}><span class={`lv-tok ${k}`} />{l}</span>)}
-          <span class="muted">· bright: in the last 5 minutes</span>
+          {[['search', 'Search'], ['ai', 'AI answers'], ['social', 'Social'], ['direct', 'Direct'], ['link', 'Other sites']].filter(([k]) => kinds.has(k)).map(([k, l]) => <span key={k}><span class={`lv-who lv-owl sm src-${k} fresh`}><Owl seed={k} awake still /></span>{l}</span>)}
+          <span class="muted">· eyes shut: not in the last 5 minutes</span>
         </div>
       )}
     </section>
@@ -294,6 +297,37 @@ function doing(p) {
 }
 const DEVICE_ICON = { mobile: 'phone', tablet: 'tablet', desktop: 'monitor' };
 
+// One small Kauzl owl per visitor, in the colour of what they're doing. Awake
+// (active in the last 5 minutes) it looks around and blinks; idle, it dozes.
+// Each visitor's owl tilts its head and looks its own way, from their id.
+function Owl({ seed = '', awake, still }) {
+  let h = 0;
+  for (const c of String(seed)) h = (h * 31 + c.charCodeAt(0)) >>> 0;
+  const tilt = still ? 0 : (h % 17) - 8;
+  const dx = still ? 0 : ((h >> 5) % 5) - 2;
+  const dy = still ? 0 : ((h >> 9) % 3) - 1;
+  const delay = `-${(h % 40) / 10}s`;
+  return (
+    <svg class="lv-owl-svg" viewBox="0 0 64 64" aria-hidden="true" style={{ transform: `rotate(${tilt}deg)` }}>
+      <path class="lv-owl-body" d="M11 26 L12 6 L25 15 Q32 13 39 15 L52 6 L53 26 Q56 34 56 38 Q56 58 32 58 Q8 58 8 38 Q8 34 11 26 Z" />
+      <circle class="lv-owl-disc" cx="22.5" cy="34" r="10" />
+      <circle class="lv-owl-disc" cx="41.5" cy="34" r="10" />
+      {awake ? (
+        <g class="lv-owl-eyes" style={{ animationDelay: delay }}>
+          <circle cx={22.5 + dx} cy={34 + dy} r="4.6" class="lv-owl-ring" />
+          <circle cx={41.5 + dx} cy={34 + dy} r="5.2" class="lv-owl-amber" />
+        </g>
+      ) : (
+        <g class="lv-owl-shut">
+          <path d="M16.5 35 Q22.5 39 28.5 35" />
+          <path d="M35.5 35 Q41.5 39 47.5 35" />
+        </g>
+      )}
+      <path class="lv-owl-amber" d="M32 44.5 L29 48 L32 52 L35 48 Z" />
+    </svg>
+  );
+}
+
 // Everyone in the last 30 minutes, one row each, newest first.
 function People({ people }) {
   const [all, setAll] = useState(false);
@@ -303,7 +337,7 @@ function People({ people }) {
     <section class="lv-sec" aria-label="Just now">
       <div class="lv-sh"><h2 class="nx-h2">Just now</h2><p class="muted">Everyone in the last 30 minutes, newest first · from the BigQuery stream, about a minute behind</p></div>
       <div class="card card-plain lv-feed">
-        {!people.length && <p class="muted m-0">Nobody in the last 30 minutes.</p>}
+        {!people.length && <p class="muted lv-empty">Nobody in the last 30 minutes.</p>}
         {shown.map((p) => {
           const goal = p.did.find((d) => d.kind === 'goal');
           const intent = p.did.filter((d) => d.kind === 'intent').sort((a, b) => /download|install/.test(b.name) - /download|install/.test(a.name))[0];
@@ -313,8 +347,9 @@ function People({ people }) {
           const isOpen = open === p.id;
           return (
             <div class={`lv-fi lv-person${goal ? ' win' : ''}`} key={p.id}>
-              <span class={`lv-who ${state.tone}${fresh ? ' fresh' : ''}`} title={`${state.label} · ${cap(p.device) || 'Unknown device'} · from ${SOURCE_NAME(p.source)}`}>
-                <Icon name={state.icon} size={15} />
+              <span class={`lv-who lv-owl ${state.tone}${fresh ? ' fresh' : ''}`} title={`${state.label} · ${cap(p.device) || 'Unknown device'} · from ${SOURCE_NAME(p.source)}`}>
+                <Owl seed={p.id} awake={fresh} />
+                {(state.tone === 'goal' || state.tone === 'intent') && <span class="lv-badge"><Icon name={state.icon} size={9} /></span>}
                 {DEVICE_ICON[p.device] && <span class="lv-dev"><Icon name={DEVICE_ICON[p.device]} size={10} /></span>}
               </span>
               <span class="lv-fw">
@@ -342,26 +377,48 @@ function People({ people }) {
         })}
         {people.length > 12 && <button type="button" class="link-btn lv-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${people.length}`}</button>}
       </div>
-      <div class="lv-legend">
-        {[['check', 'goal', 'Reached a goal'], ['download', 'intent', 'Clicked to download'], ['download', 'look', 'Looking at downloads'], ['pages', 'browse', 'Browsing'], ['eye', 'read', 'Reading']].map(([icon, tone, l]) => <span key={tone}><span class={`lv-who sm ${tone} fresh`}><Icon name={icon} size={9} /></span>{l}</span>)}
-        <span class="muted">· corner: phone or desktop · faded: not active in the last 5 minutes · click a row for every step</span>
-      </div>
+      {people.length > 0 && <div class="lv-legend">
+        {[['check', 'goal', 'Reached a goal'], ['download', 'intent', 'Clicked to download'], ['download', 'look', 'Looking at downloads'], ['pages', 'browse', 'Browsing'], ['eye', 'read', 'Reading']].map(([icon, tone, l]) => <span key={tone}><span class={`lv-who lv-owl sm ${tone} fresh`}><Owl seed={tone} awake still /></span>{l}</span>)}
+        <span class="muted">· corner: phone or desktop · eyes shut: not active in the last 5 minutes · click a row for every step</span>
+      </div>}
     </section>
   );
 }
 
-function Mini({ title, rows, empty }) {
-  const total = Math.max(1, ...(rows || []).map((r) => r.users));
+// One column of the breakdown: what each row is, its share of everyone, and a
+// thin bar for that share. Empty, a dozing owl says so.
+const FLAG = (code) => (code && /^[A-Z]{2}$/.test(code) ? String.fromCodePoint(...[...code].map((c) => 0x1f1a5 + c.charCodeAt(0))) : '');
+function Mini({ title, icon, kind, rows, empty }) {
+  const list = (rows || []).filter((r) => r.users > 0);
+  const sum = list.reduce((n, r) => n + r.users, 0) || 1;
+  const lead = (r) => {
+    if (kind === 'country') return <span class="lv-mflag" aria-hidden="true">{FLAG(REGION[r.name]) || <Icon name="globe" size={13} />}</span>;
+    if (kind === 'device') return <span class="lv-mico" aria-hidden="true"><Icon name={DEVICE_ICON[String(r.name).toLowerCase()] || 'monitor'} size={13} /></span>;
+    if (kind === 'source') return <span class={`lv-mdot src-${sourceKind(r.name)}`} aria-hidden="true" />;
+    return <span class="lv-mico" aria-hidden="true"><Icon name="pages" size={13} /></span>;
+  };
+  const label = (r) => (kind === 'device' ? cap(r.name) : kind === 'source' ? SOURCE_NAME(r.name) : r.name);
   return (
     <div class="lv-mbox">
-      <h3>{title}</h3>
-      {rows?.length ? rows.slice(0, 4).map((r) => (
-        <div class="lv-mrow" key={r.name} title={`${r.name}: ${fmt(r.users)}`}>
-          <span>{r.name}</span>
-          <span class="lv-mini"><i style={{ width: `${(r.users / total) * 100}%` }} /></span>
-          <b>{fmt(r.users)}</b>
-        </div>
-      )) : <p class="muted small m-0">{empty}</p>}
+      <div class="lv-mhead">
+        <span class="lv-mhi"><Icon name={icon} size={13} /></span>
+        <h3>{title}</h3>
+        {list.length > 0 && <span class="lv-mtot">{fmt(sum)}</span>}
+      </div>
+      {list.length ? list.slice(0, 4).map((r) => {
+        const pct = Math.round((r.users / sum) * 100);
+        return (
+          <div class="lv-mrow" key={r.name} title={`${label(r)}: ${people(r.users)} · ${pct}%`}>
+            {lead(r)}
+            <span class="lv-mname">{label(r)}</span>
+            <span class="lv-mnum"><b>{fmt(r.users)}</b><small>{pct}%</small></span>
+            <span class="lv-mbar"><i style={{ width: `${pct}%` }} /></span>
+          </div>
+        );
+      }) : (
+        <div class="lv-mempty"><span class="lv-who lv-owl read" aria-hidden="true"><Owl seed={title} still /></span><span>{empty}</span></div>
+      )}
+      {list.length > 4 && <small class="muted">and {list.length - 4} more</small>}
     </div>
   );
 }

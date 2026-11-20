@@ -78,6 +78,23 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const waiting = (id) => openTodos(id) + unread(id) + behindFor(id);
   const liveFor = (id) => (id ? live.bySite[id] : live.total);
   const scopeId = site?.id || 'all';
+  // Reports are for one site. With All sites in scope they open the last site
+  // you looked at (or the first one) instead of asking you to pick.
+  const reportSite = (v) => {
+    const ok = sites.filter((s) => (v !== 'journeys' && v !== 'raw') || hasWarehouse(s));
+    return ok.find((s) => s.id === lastSite) || ok[0] || null;
+  };
+  const linkFor = (v) => {
+    if (site || !SECTIONS[v]) return hrefFor(scopeId, v);
+    const s = reportSite(v);
+    return s ? hrefFor(s.id, v) : hrefFor('all', v);
+  };
+  const autoSite = scope === 'all' && SECTIONS[view] ? reportSite(view) : null;
+  useEffect(() => {
+    if (!autoSite) return;
+    const q = route.params.toString();
+    location.replace(hrefFor(autoSite.id, view) + (q ? `?${q}` : ''));
+  }, [autoSite?.id, view, where]);
   const editHref = (s) => `#/account?tab=sites&edit=${encodeURIComponent(s.id)}`;
 
   let body;
@@ -93,7 +110,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
   else if (view === 'setup' && site) body = <Page title="What Kauzl measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
-  else if (SECTIONS[view] && !site) body = <PickSite view={view} sites={sites} />;
+  else if (SECTIONS[view] && !site) body = autoSite ? null : <PickSite view={view} sites={sites} />;
   else if (SECTIONS[view] && (view === 'journeys' || view === 'raw') && !hasWarehouse(site)) body = <Page title={SECTIONS[view].label}><p class="muted">{view === 'raw' ? 'Raw data' : 'Journeys'} need the site’s GA4 BigQuery export. Connect it in the <a href={editHref(site)}>site’s settings</a>.</p></Page>;
   else if (SECTIONS[view]) body = <Section key={`${site.id}:${view}`} view={view} tab={tab} site={site} params={route.params} auth={auth} ranges={state.ranges} />;
   else if (view === 'health') body = <Page title="Site health"><Health sites={sites} params={route.params} /></Page>;
@@ -115,7 +132,8 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const keep = view === 'account' || view === 'alert-settings' || view === 'health' || view === 'setup' || WIDE[view] ? 'story' : view;
   const scopeHref = (id) => {
     const s = sites.find((x) => x.id === id);
-    const v = (keep === 'journeys' || keep === 'raw') && s && !hasWarehouse(s) ? 'story' : keep;
+    // All sites has no reports; it goes to the Sites list.
+    const v = (id === 'all' && SECTIONS[keep]) || ((keep === 'journeys' || keep === 'raw') && s && !hasWarehouse(s)) ? 'story' : keep;
     return hrefFor(id, v, v === view ? tab : '');
   };
   const views = viewsFor(site);
@@ -185,7 +203,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
       </a>
       <div class="nx-mtiles">
         {MORE_VIEWS.filter((v) => !v.warehouse || hasWarehouse(site)).map((v) => (
-          <a key={v.key} class={`nx-mtile${view === v.key ? ' on' : ''}`} href={hrefFor(scopeId, v.key)}>
+          <a key={v.key} class={`nx-mtile${view === v.key ? ' on' : ''}`} href={linkFor(v.key)}>
             <span class="nx-mti"><Icon name={v.icon} size={18} /></span><b>{v.label}</b><small>{v.fact}</small>
           </a>
         ))}
@@ -222,7 +240,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           {views.map((v) => (
             <Fragment key={v.key}>
               {v.key === 'pages' && <span class="nx-label">Reports</span>}
-              <NavItem href={hrefFor(scopeId, v.key)} icon={v.icon} active={view === v.key || (v.key === 'journeys' && view === 'raw')}>
+              <NavItem href={linkFor(v.key)} icon={v.icon} active={view === v.key || (v.key === 'journeys' && view === 'raw')}>
                 {v.key === 'story' && !site ? 'Sites' : v.label}
                 {v.key === 'inbox' && inboxN ? <span class="nx-count">{inboxN}</span> : null}
               </NavItem>
@@ -251,7 +269,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
         {PHONE_TABS.map((k) => {
           const v = views.find((x) => x.key === k);
           return (
-            <a key={k} href={hrefFor(scopeId, k)} class={view === k ? 'on' : undefined} aria-current={view === k ? 'page' : undefined}>
+            <a key={k} href={linkFor(k)} class={view === k ? 'on' : undefined} aria-current={view === k ? 'page' : undefined}>
               <Icon name={v.icon} size={21} />
               {k === 'inbox' && inboxN ? <span class="nx-badge">{inboxN}</span> : null}
               <span>{k === 'story' && !site ? 'Sites' : v.label}</span>
