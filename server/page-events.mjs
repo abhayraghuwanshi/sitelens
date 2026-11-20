@@ -105,6 +105,7 @@ export function changeEvents({ commits = [], edits = [], series, today }) {
     const d = parsePatch(c.patch);
     const e = effectOf(series, c.date, today);
     return {
+      badge: c.status === 'added' ? 'New' : `+${c.additions ?? d.additions} −${c.deletions ?? d.deletions}`,
       id: `change:${c.sha.slice(0, 7)}`, date: c.date, who: /\[bot\]|claude|cursor/i.test(c.author) ? 'agent' : 'you', kind: 'change', track: 'work',
       title: c.status === 'added' ? 'Published' : c.message || 'Changed the page',
       detail: c.status === 'added' ? `${lines(c.additions ?? d.additions)} in ${c.file.split('/').pop()} · ${c.message}` : `${lines(c.additions ?? d.additions)} added, ${c.deletions ?? d.deletions} removed in ${c.file.split('/').pop()}`,
@@ -123,7 +124,7 @@ export function changeEvents({ commits = [], edits = [], series, today }) {
       ? { where: u.field || 'The page', src: 'edited in Kauzl', prose: true, additions: u.after ? 1 : 0, deletions: u.before ? 1 : 0, lines: [...(u.before ? [['-', u.before]] : []), ...(u.after ? [['+', u.after]] : [])] }
       : null;
     return {
-      id: `edit:${u.date}:${i}`, date: u.date, who: 'you', kind: 'change', track: 'work',
+      badge: 'Edit', id: `edit:${u.date}:${i}`, date: u.date, who: 'you', kind: 'change', track: 'work',
       title: u.label || 'Edited in Kauzl', detail: u.after ? `Now: “${u.after}”` : '', tone: '',
       attachment: { title: 'The change', diff, cells: [effectCell(e, 'visits')], findings: [], series: seriesWindow(series, u.date, today) },
     };
@@ -147,7 +148,7 @@ export function spikeEvents({ series = [], today, factor = 2.5, min = 10 }) {
       prev.detail = `${prev.firstDetail} Still above usual for ${prev.run} days, to ${dayLabel(r.date)}.`;
       return;
     }
-    out.push({ lastDate: r.date, run: 1, firstDetail: `${fmt(r.visits)} visits; usually ${fmt(usual)}.`,
+    out.push({ lastDate: r.date, run: 1, firstDetail: `${fmt(r.visits)} visits; usually ${fmt(usual)}.`, badge: x ? `${x.toFixed(1)}×` : `${fmt(r.visits)}`, size: x ? Math.min(1, (x - 2) / 6) : 0.5,
       id: `spike:${r.date}`, date: r.date, who: 'kauzl', kind: 'spike', track: 'visitors',
       title: x ? `Visits spiked to ${x.toFixed(1)}× usual` : `${fmt(r.visits)} visits, from almost none`,
       detail: `${fmt(r.visits)} visits; usually ${fmt(usual)}.`, tone: 'up',
@@ -162,6 +163,14 @@ export function spikeEvents({ series = [], today, factor = 2.5, min = 10 }) {
   return out.map(({ lastDate, run, firstDetail, ...e }) => e);
 }
 
+// A check's result in a word or two, for the row's badge.
+function checkBadge(c) {
+  const k = String(c.key ?? '');
+  if (c.tool === 'index') return /^Shown \/ Shown$/.test(k) ? 'Shown' : k.split(' / ')[0] || 'Checked';
+  if (c.tool === 'bots') return /couldn|HTTP|stay away/i.test(k) ? 'Blocked' : (k.split(' / ')[0] || '').replace(' words', ' w');
+  return k.length <= 12 ? k : (c.headline || '').split(/[·:]/)[0].trim().slice(0, 12);
+}
+
 // Diagnose runs. check: { date, tool, by: 'you' | 'nightly', key, headline, cells, findings }
 // `key` is what decides "no change": the run's main reading as a short string ("4.4 s", "2 problems").
 export function checkEvents({ checks = [], series, today }) {
@@ -170,7 +179,7 @@ export function checkEvents({ checks = [], series, today }) {
   for (const c of checks) latest.set(`${c.tool}|${c.date}`, c);
   return [...latest.values()].map((c, i) => ({
     id: `check:${c.tool}:${c.date}:${i}`, date: c.date, who: c.by === 'you' ? 'you' : 'kauzl', kind: 'check', track: CHECK_TRACK[c.tool] || 'content',
-    tool: c.tool, key: c.key ?? null,
+    tool: c.tool, key: c.key ?? null, badge: checkBadge(c),
     title: `${CHECK_NAMES[c.tool] || c.tool}: ${c.headline || c.key || 'done'}`,
     detail: c.detail || (c.by === 'you' ? 'You ran it.' : 'Found in the nightly run.'), tone: c.tone || '',
     attachment: { title: `${CHECK_NAMES[c.tool] || c.tool} result`, cells: (c.cells || []).slice(0, 3), findings: (c.findings || []).slice(0, 12), series: c.tool === 'speed' ? null : seriesWindow(series, c.date, today) },
@@ -201,8 +210,8 @@ export function crawlEvents({ index, changes = [], from = '', today, series }) {
     return s ? `The first crawl since your ${dayLabel(s.c.date)} change: ${who} now has the new version.` : '';
   };
   const out = [];
-  const ev = (id, date, who, title, detail, tone, cells, findings) => out.push({
-    id, date, who, kind: 'crawl', track: 'index', title, detail, tone,
+  const ev = (id, date, who, title, detail, tone, cells, findings, badge) => out.push({
+    id, date, who, kind: 'crawl', track: 'index', title, detail, tone, badge,
     attachment: { title: `What ${who === 'google' ? 'Google' : 'Bing'} said`, cells, findings, series: null },
   });
   if (g.lastCrawled && !g.note) {
@@ -210,12 +219,12 @@ export function crawlEvents({ index, changes = [], from = '', today, series }) {
     ev(`crawl:google:${g.lastCrawled}`, g.lastCrawled, 'google', `Google crawled it: ${shown ? 'indexed' : String(g.coverage || 'not indexed').toLowerCase()}`,
       sinceLine(g.lastCrawled, 'Google') || (shown ? 'It can show in Google’s results.' : 'It isn’t in Google’s results.'), shown ? 'up' : 'down',
       [{ label: 'Google', value: shown ? 'Indexed' : 'Not indexed', note: g.coverage || '', tone: shown ? 'up' : 'down' }, { label: 'Crawled', value: dayLabel(g.lastCrawled), note: 'last time Google read it', tone: '' }],
-      g.link ? [{ sev: '', text: 'Google’s full answer, in Search Console', note: g.link }] : []);
+      g.link ? [{ sev: '', text: 'Google’s full answer, in Search Console', note: g.link }] : [], shown ? 'Indexed' : 'Not indexed');
   }
-  if (b.known && b.discovered && !b.note) ev(`crawl:bing-found:${b.discovered}`, b.discovered, 'bing', 'Bing found it', 'Bing knows the page exists; it shows in Bing once crawled.', '', [{ label: 'Found', value: dayLabel(b.discovered), note: '', tone: '' }], []);
+  if (b.known && b.discovered && !b.note) ev(`crawl:bing-found:${b.discovered}`, b.discovered, 'bing', 'Bing found it', 'Bing knows the page exists; it shows in Bing once crawled.', '', [{ label: 'Found', value: dayLabel(b.discovered), note: '', tone: '' }], [], 'Found');
   if (b.known && b.lastCrawled && !b.note && b.lastCrawled !== b.discovered) {
     ev(`crawl:bing:${b.lastCrawled}`, b.lastCrawled, 'bing', 'Bing crawled it', sinceLine(b.lastCrawled, 'Bing') || 'It can show in Bing’s results.', 'up',
-      [{ label: 'Bing', value: 'Crawled', note: b.httpStatus ? `HTTP ${b.httpStatus}` : '', tone: 'up' }, { label: 'Crawled', value: dayLabel(b.lastCrawled), note: 'last time Bing read it', tone: '' }], []);
+      [{ label: 'Bing', value: 'Crawled', note: b.httpStatus ? `HTTP ${b.httpStatus}` : '', tone: 'up' }, { label: 'Crawled', value: dayLabel(b.lastCrawled), note: 'last time Bing read it', tone: '' }], [], 'Crawled');
   }
   return out.filter((e) => (!from || e.date >= from) && e.date <= today);
 }
@@ -225,10 +234,10 @@ export function markEvents({ marks = [], path, file = '', series, today }) {
   const names = (t) => path !== '/' && (String(t || '').includes(path) || (file && String(t || '').includes(file)));
   return marks.filter((m) => m.date && (names(m.label) || names(m.url))).map((m) => (/^Article update: /.test(m.label || '') ? {
     // An edit made in Kauzl's article editor: a change, not a note.
-    id: `mark:${m.id || m.date}`, date: m.date, who: 'you', kind: 'change', track: 'work', title: 'Edited in Kauzl', detail: m.body ? String(m.body).split('\n')[0].slice(0, 200) : '', tone: '',
+    badge: 'Edit', id: `mark:${m.id || m.date}`, date: m.date, who: 'you', kind: 'change', track: 'work', title: 'Edited in Kauzl', detail: m.body ? String(m.body).split('\n')[0].slice(0, 200) : '', tone: '',
     attachment: { title: 'The change', cells: [effectCell(effectOf(series, m.date, today), 'visits')], findings: [], series: seriesWindow(series, m.date, today) },
   } : {
-    id: `mark:${m.id || m.date}`, date: m.date, who: m.kind === 'claude' ? 'claude' : m.source === 'github' ? 'you' : m.author === 'claude' ? 'claude' : 'you',
+    badge: /trial/i.test(m.label || '') ? 'Trial' : 'Note', id: `mark:${m.id || m.date}`, date: m.date, who: m.kind === 'claude' ? 'claude' : m.source === 'github' ? 'you' : m.author === 'claude' ? 'claude' : 'you',
     kind: 'mark', track: m.kind === 'post' || m.kind === 'mention' ? 'visitors' : 'work',
     title: markTitle(m.label, path), detail: m.body ? String(m.body).split('\n')[0].slice(0, 200) : '', tone: '',
     attachment: { title: 'The note', cells: [], findings: m.url ? [{ sev: '', text: m.url, note: 'link' }] : [], series: seriesWindow(series, m.date, today) },
@@ -254,17 +263,17 @@ export function todoEvents({ todos = [], path = '', today }) {
   return todos.flatMap((t) => {
     const title = bare(t.title, path);
     const made = new Date(t.createdAt).toISOString().slice(0, 10);
-    const out = [{ id: `todo:${t.id}:open`, date: made, who: t.from ? 'kauzl' : 'you', kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
+    const out = [{ badge: 'To-do', id: `todo:${t.id}:open`, date: made, who: t.from ? 'kauzl' : 'you', kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
     for (const e of t.entries || []) {
       if (!e.changes) continue;
       const d = new Date(e.at).toISOString().slice(0, 10);
-      out.push({ id: `todo:${t.id}:${e.id}`, date: d, who: e.author === 'claude' ? 'agent' : 'you', kind: 'todo', track: 'work', todo: t.id,
+      out.push({ badge: 'Proposed', id: `todo:${t.id}:${e.id}`, date: d, who: e.author === 'claude' ? 'agent' : 'you', kind: 'todo', track: 'work', todo: t.id,
         title: `Proposed: ${String(e.changes).split('\n')[0].slice(0, 140)}`, detail: e.expected ? `Expected: ${String(e.expected).split('\n')[0].slice(0, 160)}` : '', tone: '',
         attachment: { title: 'The proposal', cells: [], findings: [...(e.summary ? [{ sev: '', text: String(e.summary).slice(0, 200), note: 'found' }] : []), ...(e.expected ? [{ sev: '', text: String(e.expected).slice(0, 200), note: 'expected' }] : [])], series: null } });
     }
     if (t.status === 'done' && t.doneAt) {
       const d = new Date(t.doneAt).toISOString().slice(0, 10);
-      out.push({ id: `todo:${t.id}:done`, date: d, who: 'you', kind: 'todo', track: 'work', todo: t.id, title: `Done: ${title}`, detail: `Kauzl checks it on ${dayLabel(addDays(d, LIVE_DAYS))}.`, tone: 'up', attachment: { title: 'The to-do', cells: [], findings: [], series: null } });
+      out.push({ badge: 'Done', id: `todo:${t.id}:done`, date: d, who: 'you', kind: 'todo', track: 'work', todo: t.id, title: `Done: ${title}`, detail: `Kauzl checks it on ${dayLabel(addDays(d, LIVE_DAYS))}.`, tone: 'up', attachment: { title: 'The to-do', cells: [], findings: [], series: null } });
     }
     return out;
   });
@@ -295,7 +304,7 @@ export function foldRepeats(events) {
     if (!prev) return e;
     if (String(prev.key) !== String(e.key)) return { ...e, detail: `Was ${prev.key} on ${dayLabel(prev.date)}. ${e.detail || ''}`.trim(), changed: true };
     const name = CHECK_NAMES[e.tool] || e.tool;
-    return { ...e, title: `${name}: no change`, detail: `Still ${e.key}, as on ${dayLabel(prev.date)}.`, tone: 'muted', quiet: true };
+    return { ...e, title: `${name}: no change`, detail: `Still ${e.key}, as on ${dayLabel(prev.date)}.`, tone: 'muted', quiet: true, badge: 'Same' };
   });
 }
 

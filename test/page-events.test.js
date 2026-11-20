@@ -232,3 +232,19 @@ test('two checks on one track are not compared with each other', () => {
   ] });
   assert.ok(t.events.every((e) => !/^Was /.test(e.detail)));
 });
+
+test('every event has a short badge: the result in a word or a number', () => {
+  const t = buildTimeline({ path: '/p', today: TODAY, series: days('2026-10-01', 50, (i) => (i === 30 ? 60 : 10)),
+    commits: [{ sha: 'abcdef12', date: '2026-10-20', message: 'x', author: 'me', file: 'p.md', additions: 2, deletions: 1, patch: '' }],
+    checks: [{ date: '2026-11-10', tool: 'speed', by: 'you', key: '3.5 s', headline: '3.5 s on phones' }, { date: '2026-11-12', tool: 'index', by: 'you', key: 'Shown / Shown', headline: 'shown by Google and Bing' }],
+    index: { google: { indexed: true, coverage: 'Submitted and indexed', lastCrawled: '2026-11-14' }, bing: {} },
+    todos: [{ id: 'a', title: 'Do x', status: 'open', createdAt: Date.parse('2026-11-15T00:00:00Z') }] });
+  const by = Object.fromEntries(t.events.map((e) => [e.kind + ':' + (e.tool || ''), e.badge]));
+  assert.equal(by['change:'], '+2 −1');
+  assert.equal(by['spike:'], '6.0×');
+  assert.equal(by['check:speed'], '3.5 s');
+  assert.equal(by['check:index'], 'Shown');
+  assert.equal(by['crawl:'], 'Indexed');
+  assert.equal(by['todo:'], 'To-do');
+  assert.ok(t.events.every((e) => e.badge), 'no event without a badge');
+});

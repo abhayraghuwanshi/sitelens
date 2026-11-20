@@ -78,9 +78,11 @@ export function PageTimeline({ site, path }) {
             {open === e.id
               ? <EventCard e={e} site={site} path={path} att={att} setAtt={setAtt} onClose={() => toggle(e.id)} />
               : (
-                <button type="button" class="pt-ev" onClick={() => toggle(e.id)} aria-expanded="false">
-                  <span class="pt-who"><Avatar who={e.who} /><b>{(WHO[e.who] || [e.who])[0]}</b></span>
+                <button type="button" class={`pt-ev ${e.quiet ? 'quiet' : ''}`} onClick={() => toggle(e.id)} aria-expanded="false">
+                  <span class="pt-who" title={(WHO[e.who] || [e.who])[0]}><Avatar who={e.who} /></span>
+                  <span class={`pt-badge ${e.tone || ''}${e.size >= 0.5 ? ' big' : ''}`} style={e.size != null ? `--s:${e.size}` : undefined}>{e.badge}</span>
                   <span class="pt-sub"><b class={`pt-st ${e.tone || ''}`}>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
+                  <Spark s={e.attachment?.series} tone={e.tone} />
                   <Icon name="chevron" size={14} class="pt-go" />
                 </button>
               )}
@@ -96,6 +98,22 @@ export function PageTimeline({ site, path }) {
       </ol>
       {notes.length > 0 && <p class="muted small pt-notes">{notes.map(([k, v]) => <span key={k}>{v} </span>)}</p>}
     </div>
+  );
+}
+
+// The page's visits over the 4 weeks around an event, the day marked: a glance at what happened around it.
+function Spark({ s, tone }) {
+  if (!s?.days?.length) return <span class="pt-spark" aria-hidden="true" />;
+  const v = s.days, W = 72, H = 22, mx = Math.max(1, ...v);
+  const X = (i) => (i / (v.length - 1)) * W, Y = (y) => H - 2 - (y / mx) * (H - 4);
+  const mi = Math.round((Date.parse(s.mark) - Date.parse(s.from)) / 86_400_000);
+  const line = v.map((y, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(y).toFixed(1)}`).join(' ');
+  return (
+    <svg class={`pt-spark ${tone || ''}`} viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true">
+      <path d={`${line} L${W},${H} L0,${H} Z`} class="a" />
+      <path d={line} class="l" />
+      {mi >= 0 && mi < v.length && <><line x1={X(mi)} x2={X(mi)} y1="0" y2={H} class="m" /><circle cx={X(mi)} cy={Y(v[mi])} r="2.2" class="d" /></>}
+    </svg>
   );
 }
 
