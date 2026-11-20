@@ -7,6 +7,7 @@ import { Icon } from '../components/icons.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { TimelineAdd } from '../pages/Calendar.jsx';
 import { Page } from './Page.jsx';
+import { Ask, Waiting, SetupNote } from './TimelineTop.jsx';
 import { Drawer } from './Drawer.jsx';
 
 // Timeline (docs/redesign → Timeline): every day of a site as a map, with an
@@ -48,7 +49,7 @@ export function usualOf(map, date, k) {
   return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
 }
 
-export function Timeline({ site, sites, params }) {
+export function Timeline({ site, sites, params, waiting = null }) {
   const scope = site ? site.id : 'all';
   const last = iso(Date.now() - DAY); // whole days only: yesterday is the latest
   const zoom = ['day', '7d', '28d', 'month', 'year'].includes(params.get('z')) ? params.get('z') : 'month';
@@ -194,6 +195,7 @@ export function Timeline({ site, sites, params }) {
 
   return (
     <Page title="Timeline" sub={`Every day: how it went, where people landed, what shipped${site ? '' : ' · all sites'}`} actions={controls}>
+      {site && <><Ask site={site} span={null} /><Waiting site={site} waiting={waiting} /><SetupNote site={site} /></>}
       {adding && <TimelineAdd site={scope} sites={sites} date={picked || last} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); events.reload(); }} />}
       {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
         : loading ? <Loading height={420} owl label="Reading every day…" />

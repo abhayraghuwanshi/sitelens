@@ -1,15 +1,16 @@
 // Where everything lives in the app (docs/redesign/README.md → Navigation).
 // One scope (a site, or All sites) and one view. Routes:
 //   All sites:  #/ (Sites) · #/inbox · #/timeline · #/live · #/<report> (pick a site)
-//   One site:   #/site/<id> (Story) · #/site/<id>/<view>[?tab=<tab>]
+//   One site:   #/site/<id> (its Timeline, the site's home) · #/site/<id>/<view>[?tab=<tab>]
 // Older links (#/todos, #/alerts, #/calendar, #/site/<id>/<old report>…) land in
 // the right view and tab through LEGACY below.
 
 // The sidebar, in order. `report` items sit under the "Reports" label.
 export const VIEWS = [
-  { key: 'story', label: 'Story', icon: 'sparkles' },
-  { key: 'inbox', label: 'Inbox', icon: 'inbox' },
+  // 'story' is All sites' home: the Sites list. A site's home is its Timeline (Story was removed 2026-11-20).
+  { key: 'story', label: 'Sites', icon: 'grid', allOnly: true },
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
+  { key: 'inbox', label: 'Inbox', icon: 'inbox' },
   { key: 'pages', label: 'Pages', icon: 'pages', report: true },
   { key: 'search', label: 'Search', icon: 'search', report: true },
   { key: 'traffic', label: 'Traffic', icon: 'arrows', report: true },
@@ -42,7 +43,8 @@ export const LEGACY = {
   demand: ['search', 'queries'],
   ai: ['search', 'ai'],
   campaigns: ['traffic', 'sources'],
-  overview: ['story', ''],
+  overview: ['timeline', ''],
+  story: ['timeline', ''],
   posts: ['traffic', 'sources'],
   mentions: ['traffic', 'sources'],
   sessions: ['raw', 'paths'],
@@ -63,7 +65,7 @@ const VIEW_KEYS = new Set([...VIEWS.map((v) => v.key), 'live', 'raw', 'setup']);
 export function resolve(parts, params) {
   const [section, siteId, rawView] = parts;
   if (section === 'site') {
-    let view = rawView || 'story';
+    let view = rawView === 'story' ? 'timeline' : rawView || 'timeline';
     let tab = params.get('tab') || '';
     // Pages' old searches view (?view=searches) is Search now.
     if (view === 'pages' && params.get('view') === 'searches') [view, tab] = ['search', 'queries'];
@@ -91,19 +93,19 @@ export function hrefFor(scope, view, tab = '') {
   const q = tab ? `?tab=${encodeURIComponent(tab)}` : '';
   if (view === 'account') return '#/account';
   if (scope === 'all') return view === 'story' ? '#/' : `#/${view}${q}`;
-  return view === 'story' ? `#/site/${scope}` : `#/site/${scope}/${view}${q}`;
+  return view === 'story' || (view === 'timeline' && !q) ? `#/site/${scope}` : `#/site/${scope}/${view}${q}`;
 }
 
 // Views a site shows: Journeys and Raw data need its BigQuery export.
 export const hasWarehouse = (site) => !site || site.modes?.warehouse !== false;
 export function viewsFor(site) {
-  return VIEWS.filter((v) => !v.warehouse || hasWarehouse(site));
+  return VIEWS.filter((v) => (!v.warehouse || hasWarehouse(site)) && !(v.allOnly && site));
 }
 
 // Phone: four views in the tab bar, the rest in More.
-export const PHONE_TABS = ['story', 'inbox', 'pages', 'search'];
+export const PHONE_TABS = ['timeline', 'inbox', 'pages', 'search'];
 export const MORE_VIEWS = [
-  { key: 'timeline', icon: 'calendar', label: 'Timeline', fact: 'Every day, and what shipped on it' },
+  { key: 'story', icon: 'grid', label: 'Sites', fact: 'Every site at a glance', allOnly: true },
   { key: 'traffic', icon: 'arrows', label: 'Traffic', fact: 'Where people come from' },
   { key: 'journeys', icon: 'route', label: 'Journeys', fact: 'What people do once here', warehouse: true },
   { key: 'goals', icon: 'target', label: 'Goals', fact: 'Is it working' },

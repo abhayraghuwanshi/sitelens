@@ -5,7 +5,7 @@ import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Page } from './Page.jsx';
-import { Results, SectionHead } from './Story.jsx';
+import { Results, SectionHead } from './Results.jsx';
 
 // One site's outcomes (server/outcomes.mjs), in the order you'd act on them:
 // what it led to, what stands out, where people drop off, and which
