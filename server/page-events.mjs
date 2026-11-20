@@ -185,6 +185,41 @@ const markTitle = (label, path) => {
   if (!rest || rest === path || rest.replace(/\/$/, '') === path) return /trial/i.test(m[1]) ? `${m[1]} started` : m[1];
   return rest;
 };
+// When Google and Bing last read the page, from their own answers (search-hub.indexStatus):
+// Google's last crawl with whether it's indexed, Bing's first sighting and last crawl. A crawl
+// after one of your changes says the engine now has the new version.
+// index: { google: { indexed, coverage, lastCrawled, link }, bing: { known, discovered, lastCrawled } }
+export function crawlEvents({ index, changes = [], from = '', today, series }) {
+  if (!index) return [];
+  const g = index.google || {}, b = index.bing || {};
+  const since = (d) => {
+    const c = changes.filter((x) => x.date < d).sort((x, y) => y.date.localeCompare(x.date))[0];
+    return c ? { c, first: !changes.some((x) => x.date > c.date && x.date < d) } : null;
+  };
+  const sinceLine = (d, who) => {
+    const s = since(d);
+    return s ? `The first crawl since your ${dayLabel(s.c.date)} change: ${who} now has the new version.` : '';
+  };
+  const out = [];
+  const ev = (id, date, who, title, detail, tone, cells, findings) => out.push({
+    id, date, who, kind: 'crawl', track: 'index', title, detail, tone,
+    attachment: { title: `What ${who === 'google' ? 'Google' : 'Bing'} said`, cells, findings, series: null },
+  });
+  if (g.lastCrawled && !g.note) {
+    const shown = g.indexed;
+    ev(`crawl:google:${g.lastCrawled}`, g.lastCrawled, 'google', `Google crawled it: ${shown ? 'indexed' : String(g.coverage || 'not indexed').toLowerCase()}`,
+      sinceLine(g.lastCrawled, 'Google') || (shown ? 'It can show in Google’s results.' : 'It isn’t in Google’s results.'), shown ? 'up' : 'down',
+      [{ label: 'Google', value: shown ? 'Indexed' : 'Not indexed', note: g.coverage || '', tone: shown ? 'up' : 'down' }, { label: 'Crawled', value: dayLabel(g.lastCrawled), note: 'last time Google read it', tone: '' }],
+      g.link ? [{ sev: '', text: 'Google’s full answer, in Search Console', note: g.link }] : []);
+  }
+  if (b.known && b.discovered && !b.note) ev(`crawl:bing-found:${b.discovered}`, b.discovered, 'bing', 'Bing found it', 'Bing knows the page exists; it shows in Bing once crawled.', '', [{ label: 'Found', value: dayLabel(b.discovered), note: '', tone: '' }], []);
+  if (b.known && b.lastCrawled && !b.note && b.lastCrawled !== b.discovered) {
+    ev(`crawl:bing:${b.lastCrawled}`, b.lastCrawled, 'bing', 'Bing crawled it', sinceLine(b.lastCrawled, 'Bing') || 'It can show in Bing’s results.', 'up',
+      [{ label: 'Bing', value: 'Crawled', note: b.httpStatus ? `HTTP ${b.httpStatus}` : '', tone: 'up' }, { label: 'Crawled', value: dayLabel(b.lastCrawled), note: 'last time Bing read it', tone: '' }], []);
+  }
+  return out.filter((e) => (!from || e.date >= from) && e.date <= today);
+}
+
 // Calendar notes that name the page (by path or by its source file).
 export function markEvents({ marks = [], path, file = '', series, today }) {
   const names = (t) => path !== '/' && (String(t || '').includes(path) || (file && String(t || '').includes(file)));
@@ -253,9 +288,12 @@ export function foldRepeats(events) {
   const last = new Map();
   return [...events].sort((a, b) => a.date.localeCompare(b.date)).map((e) => {
     if (e.kind !== 'check' || e.key == null) return e;
-    const prev = last.get(e.track);
-    last.set(e.track, e);
-    if (!prev || String(prev.key) !== String(e.key)) return e;
+    // The same check only: two checks can share a track (index status and the bot fetch both sit under Index).
+    const k = `${e.track}|${e.tool || ''}`;
+    const prev = last.get(k);
+    last.set(k, e);
+    if (!prev) return e;
+    if (String(prev.key) !== String(e.key)) return { ...e, detail: `Was ${prev.key} on ${dayLabel(prev.date)}. ${e.detail || ''}`.trim(), changed: true };
     const name = CHECK_NAMES[e.tool] || e.tool;
     return { ...e, title: `${name}: no change`, detail: `Still ${e.key}, as on ${dayLabel(prev.date)}.`, tone: 'muted', quiet: true };
   });
@@ -283,9 +321,11 @@ export function nowOf({ todos = [], events, path = '', today }) {
 }
 
 // Everything above, in order. Inputs are plain data so this stays pure and testable.
-export function buildTimeline({ path, file = '', today, series = [], commits = [], edits = [], checks = [], marks = [], todos = [] }) {
+export function buildTimeline({ path, file = '', today, from = '', series = [], commits = [], edits = [], checks = [], marks = [], todos = [], index = null }) {
+  const changes = changeEvents({ commits, edits, series, today });
   const all = [
-    ...changeEvents({ commits, edits, series, today }),
+    ...changes,
+    ...crawlEvents({ index, changes, from, today, series }),
     ...spikeEvents({ series, today }),
     ...checkEvents({ checks, series, today }),
     ...markEvents({ marks, path, file, series, today }),
@@ -316,10 +356,11 @@ export function todoIsFor(t, path) {
 export function createPageEvents({ sources, today = () => new Date().toLocaleDateString('en-CA') }) {
   async function timeline(site, path, { days = 90 } = {}) {
     const to = today(), from = addDays(to, -(days - 1));
-    const names = ['series', 'commits', 'edits', 'marks', 'todos', 'checks'];
+    const names = ['series', 'commits', 'edits', 'marks', 'todos', 'checks', 'index'];
     const calls = {
       series: () => sources.series?.(site, path, from, to), commits: () => sources.commits?.(site, path, from), edits: () => sources.edits?.(site, path),
       marks: () => sources.marks?.(site, from, to), todos: () => sources.todos?.(site, path), checks: () => sources.checks?.(site, path, from),
+      index: () => sources.index?.(site, path),
     };
     const got = await Promise.allSettled(names.map((n) => Promise.resolve().then(calls[n])));
     const data = {}, notes = {};
@@ -330,7 +371,7 @@ export function createPageEvents({ sources, today = () => new Date().toLocaleDat
       if (r.status === 'fulfilled' && r.value?.note) notes[n] = r.value.note;
     });
     const file = data.commits?.[0]?.file || '';
-    const out = buildTimeline({ path, file, today: to, ...data, edits: (data.edits || []).filter((u) => u.date >= from), marks: data.marks || [] });
+    const out = buildTimeline({ path, file, today: to, from, ...data, index: Array.isArray(data.index) ? null : data.index, edits: (data.edits || []).filter((u) => u.date >= from), marks: data.marks || [] });
     return { ...out, from, notes };
   }
   return { timeline };

@@ -15,7 +15,7 @@ import { pushPanel } from './Panel.jsx';
 const fmtD = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const WHO = { you: ['You', 'A'], kauzl: ['Kauzl', 'K'], agent: ['Claude Code', 'C'], claude: ['Claude', 'C'], google: ['Google', 'G'], bing: ['Bing', 'B'] };
-const KIND_ICON = { change: 'github', spike: 'trend', check: 'search', mark: 'star', todo: 'check' };
+const KIND_ICON = { change: 'github', spike: 'trend', check: 'search', mark: 'star', todo: 'check', crawl: 'globe' };
 const TRACK_LABEL = { goals: 'Goal', search: 'Search', content: 'Content', speed: 'Speed', index: 'Index', ai: 'AI answers', visitors: 'Visitors', work: 'Your work' };
 const STAGE_LABEL = { open: 'Open', proposed: 'Proposed', changed: 'Changed', live: 'Live', checked: 'Checked' };
 const SEV = { high: 'down', mid: 'warn', low: 'warn', ok: 'up' };
@@ -151,7 +151,7 @@ export function Attachment({ a, date, onClose }) {
         <div class="pt-cells">{a.cells.map((c, i) => <div key={i}><small>{c.label}</small><b class={c.tone === 'up' ? 'good' : c.tone === 'down' ? 'bad' : c.tone === 'muted' ? 'muted' : ''}>{c.value}</b>{c.note && <span>{c.note}</span>}</div>)}</div>
       )}
       {a.findings?.length > 0 && (
-        <ul class="pt-finds">{a.findings.map((f, i) => <li key={i}><i class={`pt-dot ${SEV[f.sev] || 'muted'}`} /><span>{f.text}{f.note && <small>{f.note}</small>}</span></li>)}</ul>
+        <ul class="pt-finds">{a.findings.map((f, i) => <li key={i}><i class={`pt-dot ${SEV[f.sev] || 'muted'}`} />{/^https:\/\//.test(f.note || '') ? <span><a href={f.note} target="_blank" rel="noopener noreferrer">{f.text} ↗</a></span> : <span>{f.text}{f.note && <small>{f.note}</small>}</span>}</li>)}</ul>
       )}
     </div>
   );

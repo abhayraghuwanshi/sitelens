@@ -1627,3 +1627,4 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .tl-dtabs { overflow-x: auto; scrollbar-width: none; }
 .tl-dtabs { justify-content: space-between; gap: 0; }
 .tl-dtabs button { padding: 5px 4px; font-size: var(--text-sm); white-space: nowrap; flex: none; }
+.pt-av.google, .pt-av.bing { background: var(--surface); border: 1px solid var(--border); color: var(--text); }

@@ -194,3 +194,41 @@ test('a to-do is on a page only when it names that exact page', async () => {
   assert.equal(todoIsFor({ title: 'Home', subject: { kind: 'page', key: '/' } }, '/'), true);
   assert.equal(todoIsFor({ title: 'Fix (/pricing)' }, '/pricing'), true);
 });
+
+test('crawls show up on their own: Google with its verdict, Bing found and crawled, and whether the engine has your change', async () => {
+  const { crawlEvents } = await import('../server/page-events.mjs');
+  const index = {
+    google: { indexed: true, coverage: 'Submitted and indexed', lastCrawled: '2026-11-14', link: 'https://search.google.com/search-console/inspect?id=x' },
+    bing: { known: true, discovered: '2026-10-13', lastCrawled: '2026-11-19' },
+  };
+  const evs = crawlEvents({ index, changes: [{ date: '2026-11-12' }, { date: '2026-10-26' }], from: '2026-08-23', today: TODAY });
+  assert.deepEqual(evs.map((e) => [e.date, e.who, e.title]), [
+    ['2026-11-14', 'google', 'Google crawled it: indexed'],
+    ['2026-10-13', 'bing', 'Bing found it'],
+    ['2026-11-19', 'bing', 'Bing crawled it'],
+  ]);
+  assert.equal(evs[0].detail, 'The first crawl since your 12 Nov change: Google now has the new version.');
+  assert.equal(evs[0].tone, 'up');
+  assert.match(evs[0].attachment.findings[0].note, /^https:/);
+  const not = crawlEvents({ index: { google: { indexed: false, coverage: 'Crawled - currently not indexed', lastCrawled: '2026-11-10' }, bing: { known: false } }, today: TODAY });
+  assert.equal(not[0].title, 'Google crawled it: crawled - currently not indexed');
+  assert.equal(not[0].tone, 'down');
+  assert.equal(not.length, 1, 'nothing from Bing when it doesn’t know the page');
+});
+
+test('a check whose result changed says what it was', () => {
+  const t = buildTimeline({ path: '/p', today: TODAY, checks: [
+    { date: '2026-11-05', tool: 'index', by: 'you', key: 'Not shown / Shown', headline: 'crawled, not indexed' },
+    { date: '2026-11-18', tool: 'index', by: 'nightly', key: 'Shown / Shown', headline: 'shown by Google and Bing' },
+  ] });
+  assert.equal(t.events[1].title, 'Index status: shown by Google and Bing');
+  assert.match(t.events[1].detail, /^Was Not shown \/ Shown on 5 Nov\./);
+});
+
+test('two checks on one track are not compared with each other', () => {
+  const t = buildTimeline({ path: '/p', today: TODAY, checks: [
+    { date: '2026-11-20', tool: 'bots', by: 'you', key: '900 words / 900 words', headline: 'both crawlers get 900 words' },
+    { date: '2026-11-20', tool: 'index', by: 'you', key: 'Shown / Shown', headline: 'shown by Google and Bing' },
+  ] });
+  assert.ok(t.events.every((e) => !/^Was /.test(e.detail)));
+});

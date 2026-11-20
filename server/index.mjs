@@ -197,6 +197,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     },
     commits: (site, path, since) => editor.commits(site, path, { since }),
     checks: async (site, path, since) => ({ checks: await diagnose.runs(site, { path, since }) }),
+    index: (site, path) => searchHub.indexStatus(site, { path }),
     marks: async (site, from, to) => ({ marks: (await calendar.events({ site: site.id, from, to })).events || [] }),
     todos: async (site, path) => ({ todos: ((await todos.list({ site: site.id })).todos || []).filter((t) => todoIsFor(t, path)) }),
   } });
