@@ -264,3 +264,24 @@ test('an engine that times out is named in the notes, not silently missing', asy
   assert.match(t.notes.google, /^Google didn’t answer this time \(The operation was aborted due to timeout\)/);
   assert.ok(!t.events.some((e) => e.kind === 'crawl'));
 });
+
+test('a to-do Claude added through MCP is from the agent; a Claude note tied to a page shows on that page', () => {
+  const t = buildTimeline({ path: '/pricing', today: TODAY,
+    todos: [{ id: 'c1', title: 'Shorten the title', status: 'open', createdAt: Date.parse('2026-11-18T00:00:00Z'), subject: { kind: 'page', key: '/pricing' }, createdBy: { author: 'claude', client: 'claude-code', model: 'Claude Opus 5.5' } }],
+    marks: [{ id: 'n1', date: '2026-11-19', label: 'Title is cut off on phones', kind: 'claude', author: 'claude', page: '/pricing', body: 'The title is 72 characters.' }, { id: 'n2', date: '2026-11-19', label: 'Elsewhere', kind: 'claude', page: '/other' }] });
+  const todo = t.events.find((e) => e.kind === 'todo');
+  assert.equal(todo.who, 'agent');
+  assert.equal(todo.byLabel, 'claude-code');
+  assert.equal(todo.byModel, 'Claude Opus 5.5');
+  const note = t.events.find((e) => e.kind === 'mark');
+  assert.equal(note.title, 'Title is cut off on phones');
+  assert.equal(note.badge, 'Analysis');
+  assert.equal(t.events.filter((e) => e.kind === 'mark').length, 1, 'a note about another page stays off this one');
+});
+
+test('a crawl after a to-do was marked done says the engine has the change', async () => {
+  const t = buildTimeline({ path: '/p', today: TODAY,
+    todos: [{ id: 'd', title: 'Shorten the title', status: 'done', createdAt: Date.parse('2026-11-01T00:00:00Z'), doneAt: Date.parse('2026-11-10T12:00:00Z'), createdBy: { author: 'claude' } }],
+    index: { google: { indexed: true, coverage: 'Submitted and indexed', lastCrawled: '2026-11-14' }, bing: {} } });
+  assert.equal(t.events.find((e) => e.kind === 'crawl').detail, 'The first crawl since your 10 Nov change: Google now has the new version.');
+});

@@ -177,3 +177,11 @@ test('a Claude write-up keeps its client and model; yours never does', async () 
   assert.deepEqual(normalizeEntry({ author: 'claude', client: 'cursor', model: 'Opus 5.5 <b>', summary: 'x' }), { author: 'claude', client: 'cursor', model: 'Opus 5.5 b', summary: 'x' });
   assert.deepEqual(normalizeEntry({ author: 'you', client: 'cursor', summary: 'x' }), { author: 'you', summary: 'x' });
 });
+
+test('a to-do Claude adds through MCP records who made it; anyone else is rejected', async () => {
+  const { normalizeTodo } = await import('../server/todos.mjs');
+  const t = normalizeTodo({ title: 'Fix the title', author: 'claude', client: 'claude-code', model: 'Claude Opus 5.5' });
+  assert.deepEqual(t.createdBy, { author: 'claude', client: 'claude-code', model: 'Claude Opus 5.5' });
+  assert.equal(normalizeTodo({ title: 'Mine' }).createdBy, undefined);
+  assert.throws(() => normalizeTodo({ title: 'x', author: 'robot' }), /Author must be one of/);
+});

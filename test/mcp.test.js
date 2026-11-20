@@ -39,7 +39,7 @@ test('initialize, tools/list and unknown methods', async () => {
   assert.deepEqual(list.result.tools.map((t) => t.name), TOOLS.map((t) => t.name));
   assert.ok(list.result.tools.every((t) => t.inputSchema.type === 'object'));
   // Only the comment tools and to-do write-ups write; delete is the one destructive tool.
-  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment', 'report_todo']);
+  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment', 'add_todo', 'report_todo']);
   assert.equal(list.result.tools.find((t) => t.name === 'delete_comment').annotations.destructiveHint, true);
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'nope' })).error.code, -32601);
   assert.equal((await mcp.handle({ id: 5 })).error.code, -32600);
@@ -201,4 +201,16 @@ test('report_todo names the MCP client and model that wrote it', async () => {
   assert.equal(calls[0].body.client, 'claude-code');
   assert.equal(calls[0].body.model, 'Claude Opus 5.5');
   assert.equal(calls[0].body.author, 'claude');
+});
+
+test('add_todo makes a to-do marked as added by Claude, tied to the page when one is given', async () => {
+  const tool = TOOLS.find((t) => t.name === 'add_todo');
+  assert.equal(tool.write, true);
+  assert.equal(tool.path({}), '/api/todos');
+  assert.deepEqual(tool.body({ site: 's1', title: 'Shorten the title', page: '/pricing', model: 'Claude Opus 5.5' }, { client: 'claude-code' }), {
+    site: 's1', title: 'Shorten the title', link: '#/site/s1/pages?article=%2Fpricing', subject: { kind: 'page', key: '/pricing' },
+    author: 'claude', client: 'claude-code', model: 'Claude Opus 5.5',
+  });
+  const note = TOOLS.find((t) => t.name === 'add_comment').body({ date: '2026-11-21', title: 't', body: 'b', site: 's1', page: '/pricing' });
+  assert.equal(note.page, '/pricing');
 });

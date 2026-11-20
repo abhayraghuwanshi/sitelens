@@ -220,7 +220,7 @@ function Row({ item, labels, site, on }) {
     <a class={`nx-msg${on ? ' on' : ''}${item.done ? ' read' : ''}`} href={hrefWith('open', item.id)}>
       <span class="nx-k k-todo"><Icon name="check" size={14} /></span>
       <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}{t.title} <span class={`nx-pill ${tone}`}>{stage}</span></span>
-      <small>{last ? `${agentOf(last).name} · ${day(last.at)}` : `To-do · added ${day(t.createdAt)}`}{t.entries?.length > 1 ? ` · ${t.entries.length} write-ups` : ''}</small>
+      <small>{last ? `${agentOf(last).name} · ${day(last.at)}` : t.createdBy?.author === 'claude' ? `${agentOf(t.createdBy).name} added it · ${day(t.createdAt)}` : `To-do · added ${day(t.createdAt)}`}{t.entries?.length > 1 ? ` · ${t.entries.length} write-ups` : ''}</small>
     </a>
   );
 }

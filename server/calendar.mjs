@@ -705,7 +705,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const [events, alerts] = await Promise.all([eventsFor(sc, r.from, r.to), alertsFor(sc, r.from, r.to)]);
     return {
       from: r.from, to: r.to, site: sc.key,
-      events: events.map(({ id, date, label, kind, source, url, scope: sc2 }) => ({ id, date, label, kind, source, url, scope: sc2 })),
+      events: events.map(({ id, date, label, kind, source, url, scope: sc2, page, author, body }) => ({ id, date, label, kind, source, url, scope: sc2, ...(page ? { page } : {}), ...(author ? { author, body: body ? String(body).slice(0, 400) : undefined } : {}) })),
       alerts: alerts.map(({ id, day, title, detail, rule, direction, link }) => ({ id, date: day, title, detail, rule, direction, link })),
     };
   }

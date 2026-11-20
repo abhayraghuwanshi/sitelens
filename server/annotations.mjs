@@ -58,6 +58,9 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     const author = String(input.author || 'you');
     const body = String(input.body || '').trim();
     const url = String(input.url || '').trim();
+    // The page a note is about (a path on the site), so it shows on that page's timeline.
+    const page = String(input.page || '').trim();
+    if (page && !/^\/[^\s?#]{0,300}$/.test(page)) throw new ValidationError('A page is a path on the site, like /pricing.');
     if (url && (!/^https?:\/\/\S+$/.test(url) || url.length > 500)) throw new ValidationError('Links must start with http:// or https://.');
     if (!NOTE_AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${NOTE_AUTHORS.join(', ')}.`);
     if (body.length > BODY_MAX) throw new ValidationError(`Keep the write-up under ${BODY_MAX} characters.`);
@@ -68,6 +71,7 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
       id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: author === 'claude' ? 'claude' : 'note', source: 'notes',
       ...(scope ? { scope } : {}),
       ...(url ? { url } : {}),
+      ...(page ? { page } : {}),
       ...(author === 'claude' ? { author, body, via: input.via === 'app' ? 'app' : 'mcp', createdAt: new Date().toISOString(), ...(input.model ? { model: String(input.model).slice(0, 60) } : {}) } : body ? { body } : {}),
     };
     await store.update((s) => {

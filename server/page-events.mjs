@@ -237,12 +237,12 @@ export function crawlEvents({ index, changes = [], from = '', today, series }) {
 // Calendar notes that name the page (by path or by its source file).
 export function markEvents({ marks = [], path, file = '', series, today }) {
   const names = (t) => path !== '/' && (String(t || '').includes(path) || (file && String(t || '').includes(file)));
-  return marks.filter((m) => m.date && (names(m.label) || names(m.url))).map((m) => (/^Article update: /.test(m.label || '') ? {
+  return marks.filter((m) => m.date && (m.page === path || names(m.label) || names(m.url))).map((m) => (/^Article update: /.test(m.label || '') ? {
     // An edit made in Kauzl's article editor: a change, not a note.
     badge: 'Edit', id: `mark:${m.id || m.date}`, date: m.date, who: 'you', kind: 'change', track: 'work', title: 'Edited in Kauzl', detail: m.body ? String(m.body).split('\n')[0].slice(0, 200) : '', tone: '',
     attachment: { title: 'The change', cells: [effectCell(effectOf(series, m.date, today), 'visits')], findings: [], series: seriesWindow(series, m.date, today) },
   } : {
-    badge: /trial/i.test(m.label || '') ? 'Trial' : 'Note', id: `mark:${m.id || m.date}`, date: m.date, who: m.kind === 'claude' ? 'claude' : m.source === 'github' ? 'you' : m.author === 'claude' ? 'claude' : 'you',
+    badge: m.kind === 'claude' || m.author === 'claude' ? 'Analysis' : /trial/i.test(m.label || '') ? 'Trial' : 'Note', id: `mark:${m.id || m.date}`, date: m.date, who: m.kind === 'claude' ? 'claude' : m.source === 'github' ? 'you' : m.author === 'claude' ? 'claude' : 'you',
     kind: 'mark', track: m.kind === 'post' || m.kind === 'mention' ? 'visitors' : 'work',
     title: markTitle(m.label, path), detail: m.body ? String(m.body).split('\n')[0].slice(0, 200) : '', tone: '',
     attachment: { title: 'The note', cells: [], findings: m.url ? [{ sev: '', text: m.url, note: 'link' }] : [], series: seriesWindow(series, m.date, today) },
@@ -268,7 +268,8 @@ export function todoEvents({ todos = [], path = '', today }) {
   return todos.flatMap((t) => {
     const title = bare(t.title, path);
     const made = new Date(t.createdAt).toISOString().slice(0, 10);
-    const out = [{ badge: 'To-do', id: `todo:${t.id}:open`, date: made, who: t.from ? 'kauzl' : 'you', kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
+    const viaClaude = t.createdBy?.author === 'claude';
+    const out = [{ badge: 'To-do', id: `todo:${t.id}:open`, date: made, who: viaClaude ? 'agent' : t.from ? 'kauzl' : 'you', ...(viaClaude ? { byLabel: t.createdBy.client || 'Claude', byModel: t.createdBy.model || '' } : {}), kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
     for (const e of t.entries || []) {
       if (!e.changes) continue;
       const d = new Date(e.at).toISOString().slice(0, 10);
@@ -339,7 +340,8 @@ export function buildTimeline({ path, file = '', today, from = '', series = [], 
   const changes = changeEvents({ commits, edits, series, today });
   const all = [
     ...changes,
-    ...crawlEvents({ index, changes, from, today, series }),
+    // A to-do marked done (by you, or Claude through report_todo) is a change too: the next crawl says whether the engine has it.
+    ...crawlEvents({ index, changes: [...changes, ...todos.filter((t) => t.status === 'done' && t.doneAt).map((t) => ({ date: new Date(t.doneAt).toISOString().slice(0, 10) }))], from, today, series }),
     ...spikeEvents({ series, today }),
     ...checkEvents({ checks, series, today }),
     ...markEvents({ marks, path, file, series, today }),

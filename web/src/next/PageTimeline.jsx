@@ -20,6 +20,9 @@ const fmtD = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const WHO = { you: ['You', 'A'], kauzl: ['Kauzl', 'K'], agent: ['Claude Code', 'C'], claude: ['Claude', 'C'], google: ['Google', 'G'], bing: ['Bing', 'B'] };
 export const TOOL_ICON = { content: 'pages', speed: 'bolt', index: 'search', bots: 'eye' };
+// The MCP client that did it, by the name it gives (Claude Code, Cursor…).
+const CLIENT_NAME = { 'claude-code': 'Claude Code', 'claude-ai': 'Claude Desktop', claude: 'Claude', cursor: 'Cursor', 'cursor-vscode': 'Cursor', windsurf: 'Windsurf', zed: 'Zed', vscode: 'VS Code' };
+const senderOf = (e) => (e.byLabel ? CLIENT_NAME[String(e.byLabel).toLowerCase()] || e.byLabel : (WHO[e.who] || [e.who])[0]);
 const KIND_ICON = { change: 'github', spike: 'trend', check: 'search', mark: 'star', todo: 'check', crawl: 'globe' };
 const TRACK_LABEL = { goals: 'Goal', search: 'Search', content: 'Content', speed: 'Speed', index: 'Index', ai: 'AI answers', visitors: 'Visitors', work: 'Your work' };
 const STAGE_LABEL = { open: 'Open', proposed: 'Proposed', changed: 'Changed', live: 'Live', checked: 'Checked' };
@@ -82,7 +85,7 @@ export function PageTimeline({ site, path, version = 0 }) {
               ? <EventCard e={e} site={site} path={path} att={att} setAtt={setAtt} onClose={() => toggle(e.id)} />
               : (
                 <button type="button" class={`pt-ev${e.quiet ? ' quiet' : ''}${e.kind === 'check' ? ' run' : ''}`} onClick={() => toggle(e.id)} aria-expanded="false">
-                  <span class="pt-who" title={e.kind === 'check' ? `${(WHO[e.who] || [e.who])[0]} ran it` : (WHO[e.who] || [e.who])[0]}>{e.kind === 'check' ? <span class="pt-av tool"><Icon name={TOOL_ICON[e.tool] || 'search'} size={12} /></span> : <Avatar who={e.who} />}</span>
+                  <span class="pt-who" title={e.kind === 'check' ? `${senderOf(e)} ran it` : senderOf(e)}>{e.kind === 'check' ? <span class="pt-av tool"><Icon name={TOOL_ICON[e.tool] || 'search'} size={12} /></span> : <Avatar who={e.who} />}</span>
                   <span class={`pt-badge ${e.tone || ''}${e.size >= 0.5 ? ' big' : ''}`} style={e.size != null ? `--s:${e.size}` : undefined}>{e.badge}</span>
                   <span class="pt-sub"><b class={`pt-st ${e.tone || ''}`}>{e.title}</b>{e.detail && <span class="muted"> — {e.detail}</span>}</span>
                   {e.via ? <Via v={e.via} /> : <Spark s={e.attachment?.series} tone={e.tone} />}
@@ -154,7 +157,7 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
     <div class="pt-card">
       <button type="button" class="pt-hd" onClick={onClose} aria-expanded="true">
         <Avatar who={e.who} />
-        <span class="pt-from"><b>{(WHO[e.who] || [e.who])[0]}</b><small>{e.via ? <>Kauzl asked {e.via.engine === 'google' ? 'Google' : 'Bing'} · {agoOf(e.via.at)}</> : <>to {path}</>}</small></span>
+        <span class="pt-from"><b>{senderOf(e)}</b><small>{e.byLabel ? <>added it through Kauzl’s MCP server{e.byModel ? ` · ${e.byModel}` : ''}</> : e.via ? <>Kauzl asked {e.via.engine === 'google' ? 'Google' : 'Bing'} · {agoOf(e.via.at)}</> : <>to {path}</>}</small></span>
       </button>
       <Eyebrow track={e.track} tone={e.tone} />
       <h3 class="pt-title">{e.title}</h3>

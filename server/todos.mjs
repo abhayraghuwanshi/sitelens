@@ -3,7 +3,8 @@
 // one off puts a "Done:" note on the Timeline that day, so every chart shows
 // when the change went out and whether it helped; reopening removes the note.
 //
-// Todo: { id, title, detail?, site?, link?, from?, subject?, baseline?, entries?, status: 'open' | 'done', createdAt, doneAt?, noteId? }
+// Todo: { id, title, detail?, site?, link?, from?, subject?, baseline?, entries?, createdBy?, status: 'open' | 'done', createdAt, doneAt?, noteId? }
+//   createdBy: { author: 'claude', client?, model? } when Claude made it through the MCP server (add_todo); absent = you.
 //   site: a site id; link: an in-app (#/…) or https link to where the work is;
 //   from: what suggested it (e.g. 'search:/blog/x'), so a suggestion is only added once;
 //   subject: what it's about ({ kind: source|page|query|search|outcome|posts, key }), so its
@@ -71,8 +72,13 @@ export function normalizeTodo(input = {}) {
   const subject = input.subject && SUBJECTS.includes(input.subject.kind) && typeof input.subject.key === 'string' && input.subject.key.length <= 300
     ? { kind: input.subject.kind, key: input.subject.key } : null;
   const baseline = cleanBaseline(input.baseline);
+  // Who made it: you (default) or Claude through the MCP server, with its client and model.
+  const by = String(input.author || 'you');
+  if (!AUTHORS.includes(by)) throw new ValidationError(`Author must be one of: ${AUTHORS.join(', ')}.`);
+  const tag = (v) => String(v || '').trim().replace(/[^\w .:@/()+-]/g, '').slice(0, 60);
+  const createdBy = by === 'claude' ? { author: 'claude', ...(tag(input.client) ? { client: tag(input.client) } : {}), ...(tag(input.model) ? { model: tag(input.model) } : {}) } : null;
   return {
-    title, ...(detail ? { detail } : {}), ...(site ? { site } : {}), ...(link ? { link: link.slice(0, 500) } : {}), ...(from ? { from } : {}),
+    title, ...(createdBy ? { createdBy } : {}), ...(detail ? { detail } : {}), ...(site ? { site } : {}), ...(link ? { link: link.slice(0, 500) } : {}), ...(from ? { from } : {}),
     ...(subject ? { subject } : {}), ...(baseline ? { baseline } : {}),
   };
 }

@@ -101,12 +101,13 @@ export const TOOLS = [
         title: { type: 'string', maxLength: 140, description: 'One line, e.g. "HN launch drove +47% sessions".' },
         body: { type: 'string', maxLength: 4000, description: 'The analysis in plain text. Short paragraphs; lines starting with "- " show as bullets.' },
         site: { type: 'string', description: 'A site id from list_sites to show it on that site only. Omit to show it everywhere.' },
+        page: { type: 'string', pattern: '^/', maxLength: 300, description: 'The page it is about, as a path (e.g. /blog/raycast-alternatives-windows): it then also shows on that page\'s timeline in Kauzl.' },
       },
       required: ['date', 'title', 'body'],
     },
     method: 'POST',
     path: () => '/api/annotations',
-    body: (a) => ({ date: a.date, label: a.title, body: a.body, author: 'claude', via: 'mcp', scope: a.site && a.site !== 'all' ? `site:${a.site}` : '' }),
+    body: (a) => ({ date: a.date, label: a.title, body: a.body, author: 'claude', via: 'mcp', scope: a.site && a.site !== 'all' ? `site:${a.site}` : '', ...(a.page ? { page: a.page } : {}) }),
   },
   {
     name: 'list_comments',
@@ -267,6 +268,29 @@ export const TOOLS = [
     shape: (d) => ({
       ...d,
       todo: { ...d.todo, entries: (d.todo.entries || []).map((e) => ({ ...e, at: new Date(e.at).toISOString() })) },
+    }),
+  },
+  {
+    name: 'add_todo',
+    description: 'Add a to-do in Kauzl: a change you suggest the user (or you) make, shown in their Inbox marked as added by you, and, with a page, on that page\'s timeline. Check list_todos first so you don\'t repeat one. Give a short title saying what to do ("Put the definition back at the top of /guides/utm"), a detail with why and the numbers behind it, and the page it is about. Then work on it and post what you did with report_todo.',
+    write: true,
+    inputSchema: {
+      type: 'object',
+      properties: {
+        site: { type: 'string', description: 'A site id from list_sites.' },
+        title: { type: 'string', maxLength: 200, description: 'What to do, in one line.' },
+        detail: { type: 'string', maxLength: 2000, description: 'Why, with the numbers behind it, and what should happen.' },
+        page: { type: 'string', pattern: '^/', maxLength: 300, description: 'The page it is about, as a path (e.g. /pricing). Optional.' },
+        model: { type: 'string', maxLength: 60, description: 'Your model, e.g. "Claude Opus 5.5" (optional; shown with the to-do).' },
+      },
+      required: ['site', 'title'],
+    },
+    method: 'POST',
+    path: () => '/api/todos',
+    body: (a, ctx) => ({
+      site: a.site, title: a.title, ...(a.detail ? { detail: a.detail } : {}),
+      ...(a.page ? { link: `#/site/${a.site}/pages?article=${encodeURIComponent(a.page)}`, subject: { kind: 'page', key: a.page } } : {}),
+      author: 'claude', ...(ctx?.client ? { client: ctx.client } : {}), ...(a.model ? { model: a.model } : {}),
     }),
   },
   {
