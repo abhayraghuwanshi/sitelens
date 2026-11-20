@@ -26,6 +26,7 @@ import { Inbox } from './Inbox.jsx';
 import { Section, PickSite } from './Section.jsx';
 import { Jump } from './Jump.jsx';
 import { SECTIONS, resolve, hrefFor, viewsFor, hasWarehouse, PHONE_TABS, MORE_VIEWS } from './nav.js';
+import { SidePanel } from './Panel.jsx';
 import './next.css';
 
 // The app's one layout (docs/redesign/README.md). One scope switcher (a site, or
@@ -263,6 +264,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
       </header>
 
       <main class="nx-main">{state.demo && <DemoBanner site={sites.find((s) => s.showcase)} />}{body}</main>
+      <SidePanel site={site} sites={sites} params={route.params} />
 
       <nav class="nx-tabbar" aria-label="Views">
         {PHONE_TABS.map((k) => {

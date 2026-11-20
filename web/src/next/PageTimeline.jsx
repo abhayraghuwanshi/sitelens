@@ -3,6 +3,7 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { pushPanel } from './Panel.jsx';
 
 // A page's timeline (docs/redesign/prototype.html → a page): every event from
 // GET /sites/:id/page-timeline, oldest first, as a vertical line of mail-style
@@ -98,8 +99,8 @@ function EventCard({ e, site, path, att, setAtt, onClose }) {
   const parts = [a.diff && 'diff', a.series && (a.diff ? 'what happened after' : '4-week chart'), a.cells?.length && `${a.cells.length} ${a.cells.length > 1 ? 'numbers' : 'number'}`, a.findings?.length && `${a.findings.length} ${a.findings.length > 1 ? 'findings' : 'finding'}`].filter(Boolean);
   const actions = [
     e.attachment.diff?.url && <a key="c" class="btn" href={e.attachment.diff.url} target="_blank" rel="noopener noreferrer"><Icon name="github" size={13} /> Open the commit</a>,
-    e.todo && <a key="t" class="btn" href={`#/site/${site.id}/inbox?tab=todos&open=${e.todo}`}>Open the to-do</a>,
-    <a key="d" class="btn ghost" href={`#/site/${site.id}/timeline?day=${e.date}`}>See this day on the Timeline</a>,
+    e.todo && <a key="t" class="btn" href={pushPanel({ kind: 'todo', key: e.todo })}>Open the to-do</a>,
+    <a key="d" class="btn ghost" href={pushPanel({ kind: 'day', key: e.date })}>See this day</a>,
   ].filter(Boolean);
   return (
     <div class="pt-card">
@@ -216,8 +217,8 @@ function NowCard({ now, site, byId, onJump }) {
         {now.stages.map((s, i) => <li key={s} class={i < at ? 'done' : i === at ? 'on' : ''} aria-current={i === at ? 'step' : undefined}>{STAGE_LABEL[s]}</li>)}
       </ol>
       <div class="pt-nowa">
-        <a class="btn primary" href={`#/site/${site.id}/inbox?tab=todos&open=${now.todo}`}>{now.stage === 'proposed' ? 'Review the proposal' : 'Open the to-do'}</a>
-        {now.more.length > 0 && <details class="pt-more"><summary>{now.more.length} other {now.more.length > 1 ? 'ideas' : 'idea'}</summary><ul>{now.more.map((m) => <li key={m.todo}><a href={`#/site/${site.id}/inbox?tab=todos&open=${m.todo}`}>{m.title}</a></li>)}</ul></details>}
+        <a class="btn primary" href={pushPanel({ kind: 'todo', key: now.todo })}>{now.stage === 'proposed' ? 'Review the proposal' : 'Open the to-do'}</a>
+        {now.more.length > 0 && <details class="pt-more"><summary>{now.more.length} other {now.more.length > 1 ? 'ideas' : 'idea'}</summary><ul>{now.more.map((m) => <li key={m.todo}><a href={pushPanel({ kind: 'todo', key: m.todo })}>{m.title}</a></li>)}</ul></details>}
       </div>
     </div>
   );

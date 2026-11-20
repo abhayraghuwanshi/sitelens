@@ -8,6 +8,7 @@ import { useTodos, todoApi, NewTodo, TodoData, WriteUp, TodoGoal, CHANGED } from
 import { Page } from './Page.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
 import { hrefFor } from './nav.js';
+import { pushPanel, pageOfLink } from './Panel.jsx';
 
 // Inbox: what is waiting on you, for one site or every site. Alerts (what
 // moved) and to-dos (changes to make) in one list, newest first; read alerts
@@ -265,7 +266,13 @@ function AlertPanel({ group, label, site, onClose, onRead }) {
 
 // A to-do as a thread: one line on where it stands, the latest change (what
 // changed, why, what to expect), what to do next, and the history folded.
-function TodoThread({ todo: t, sites, onClose }) {
+function TodoThread({ todo, sites, onClose }) {
+  return <Drawer title={todo.title} onClose={onClose}><TodoBody todo={todo} sites={sites} onClose={onClose} /></Drawer>;
+}
+
+// The thread itself, also shown in the shared side panel (Panel.jsx). The page link opens
+// the page in that panel when it's one of this site's pages.
+export function TodoBody({ todo: t, sites, onClose }) {
   const [hist, setHist] = useState(false);
   const [numbers, setNumbers] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -279,7 +286,7 @@ function TodoThread({ todo: t, sites, onClose }) {
   const copy = () => { navigator.clipboard?.writeText(ask); setCopied(true); };
 
   return (
-    <Drawer title={t.title} onClose={onClose}>
+    <>
       <p class="nx-lead-line">
         {done ? <><span class="nx-pill up">Done</span> {day(t.doneAt)}, marked on the Timeline</>
           : report ? <><Agent entry={report} small /> {report.author === 'claude' ? (report.changes ? 'made or proposes a change' : 'wrote up what it found') : 'added a note'} · {day(report.at)}</>
@@ -310,7 +317,7 @@ function TodoThread({ todo: t, sites, onClose }) {
         <button type="button" class={`btn${report && !done ? ' primary' : ''}`} onClick={() => run(() => todoApi.update(t.id, { status: done ? 'open' : 'done' }))}>
           {done ? 'Reopen' : 'Mark done: it’s live'}
         </button>
-        {t.link && <a class="btn" href={t.link} {...(t.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>Open the page</a>}
+        {t.link && <a class="btn" href={pageOfLink(t.link) ? pushPanel({ kind: 'page', key: pageOfLink(t.link) }) : t.link} {...(t.link.startsWith('https:') ? { target: '_blank', rel: 'noreferrer' } : {})}>Open the page</a>}
         {report && !done && <button type="button" class="btn ghost" onClick={copy}>{copied ? 'Prompt copied' : 'Send back to an agent'}</button>}
       </div>
       {error && <p class="nx-error small" role="alert">{error}</p>}
@@ -331,7 +338,7 @@ function TodoThread({ todo: t, sites, onClose }) {
       )}
       {numbers && <Numbers id={t.id} site={t.site} />}
       <WriteUp id={t.id} />
-    </Drawer>
+    </>
   );
 }
 

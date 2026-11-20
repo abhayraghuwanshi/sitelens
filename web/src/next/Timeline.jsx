@@ -8,6 +8,7 @@ import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { TimelineAdd } from '../pages/Calendar.jsx';
 import { Page } from './Page.jsx';
 import { Ask, Waiting, SetupNote } from './TimelineTop.jsx';
+import { pushPanel } from './Panel.jsx';
 import { Drawer } from './Drawer.jsx';
 
 // Timeline (docs/redesign → Timeline): every day of a site as a map, with an
@@ -685,7 +686,7 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
               const fresh = gain !== null && !x.expected && x.value > 0;
               return (
                 <div key={x.label} class="tl-srow">
-                  <span class="tl-sl"><span>{tab === 'page' ? pageName(x.label) : x.label}</span><i style={`width:${listTotal ? Math.max(2, Math.round((x.value / listTotal) * 100)) : 0}%`} /></span>
+                  <span class="tl-sl">{tab === 'page' && scope !== 'all' && x.label.startsWith('/') ? <a href={pushPanel({ kind: 'page', key: x.label })}>{pageName(x.label)}</a> : <span>{tab === 'page' ? pageName(x.label) : x.label}</span>}<i style={`width:${listTotal ? Math.max(2, Math.round((x.value / listTotal) * 100)) : 0}%`} /></span>
                   <b>{fmt(x.value)}</b>
                   <span class={gain === null ? 'muted' : fresh ? 'good' : flat ? 'muted' : gain > 0 ? 'good' : 'bad'}>{gain === null ? '' : fresh ? 'new' : flat ? 'as usual' : `${gain > 0 ? '+' : '−'}${fmt(Math.abs(gain))}`}</span>
                 </div>
