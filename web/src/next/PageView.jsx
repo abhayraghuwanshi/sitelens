@@ -51,7 +51,7 @@ export function PageView({ site, path, back }) {
 
   return (
     <Page title={<>{r.title || path} <span class={`nx-pill ${tone} pv-stat`} title={cyc?.why || r.reason}>{word}</span></>} sub={path} back={back}
-      actions={<a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a>}>
+      actions={<span class="nx-btns"><a class="btn" href={`#/site/${site.id}/diagnose?path=${encodeURIComponent(path)}`}><Icon name="terminal" size={13} /> Diagnose this page</a><a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a></span>}>
       <p class="nx-answer">
         <b>{fmt(r.visits)}</b> visits in 90 days{r.google?.clicks ? <>, <b>{fmt(r.google.clicks)}</b> from Google search</> : ''}{best ? <>, mostly from “{best.query}”</> : ''}.{chance ? <> The next <b>{fmt(chance.gain)}</b> visits are in “{chance.query}”.</> : ''}
       </p>

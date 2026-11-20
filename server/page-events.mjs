@@ -27,7 +27,7 @@
 const DAY = 86_400_000;
 export const TRACKS = ['goals', 'search', 'content', 'speed', 'index', 'ai', 'visitors', 'work'];
 export const STAGES = ['open', 'proposed', 'changed', 'live', 'checked'];
-const CHECK_NAMES = { content: 'Content check', speed: 'Speed test', index: 'Index status', bots: 'As Googlebot', ai: 'AI answers' };
+const CHECK_NAMES = { content: 'Content check', speed: 'Speed test', index: 'Index status', bots: 'As Googlebot and GPTBot', ai: 'AI answers' };
 const CHECK_TRACK = { content: 'content', speed: 'speed', index: 'index', bots: 'index', ai: 'ai' };
 const LIVE_DAYS = 21; // how long a done to-do is "live · checking" before it's judged
 
@@ -165,7 +165,10 @@ export function spikeEvents({ series = [], today, factor = 2.5, min = 10 }) {
 // Diagnose runs. check: { date, tool, by: 'you' | 'nightly', key, headline, cells, findings }
 // `key` is what decides "no change": the run's main reading as a short string ("4.4 s", "2 problems").
 export function checkEvents({ checks = [], series, today }) {
-  return checks.map((c, i) => ({
+  // Run twice on one day: the later run is the day's answer (rule 2 keeps one per day).
+  const latest = new Map();
+  for (const c of checks) latest.set(`${c.tool}|${c.date}`, c);
+  return [...latest.values()].map((c, i) => ({
     id: `check:${c.tool}:${c.date}:${i}`, date: c.date, who: c.by === 'you' ? 'you' : 'kauzl', kind: 'check', track: CHECK_TRACK[c.tool] || 'content',
     tool: c.tool, key: c.key ?? null,
     title: `${CHECK_NAMES[c.tool] || c.tool}: ${c.headline || c.key || 'done'}`,

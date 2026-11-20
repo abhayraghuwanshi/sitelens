@@ -175,3 +175,11 @@ test('to-do titles drop the page path on its own timeline', () => {
   assert.equal(t.events[0].title, 'To-do: Get 78% of readers to stay');
   assert.equal(t.now.title, 'Get 78% of readers to stay');
 });
+
+test('two runs of a check on one day: the later one is the day’s event', () => {
+  const t = buildTimeline({ path: '/p', today: TODAY, checks: [
+    { date: '2026-11-20', tool: 'speed', by: 'you', key: '4.4 s', headline: '4.4 s on phones' },
+    { date: '2026-11-20', tool: 'speed', by: 'you', key: '3.5 s', headline: '3.5 s on phones' },
+  ] });
+  assert.deepEqual(t.events.map((e) => e.title), ['Speed test: 3.5 s on phones']);
+});

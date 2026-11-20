@@ -1537,3 +1537,26 @@ a.nx-needs:hover { background: color-mix(in srgb, var(--warning) 20%, var(--surf
 .pt-card, .pt-bec { min-width: 0; max-width: 100%; }
 .pt-why { min-width: 0; }
 @media (max-width: 640px) { .pt-stages { font-size: 0.92em; } .pt-card { padding: 10px 12px; } }
+
+/* ---------- Diagnose (DiagnoseView.jsx): a page picker, one row per check, recent runs ---------- */
+.dg-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+.dg-pl { font-size: var(--text-sm); font-weight: 600; color: var(--text-2); }
+.dg-sel { font: inherit; min-width: 0; max-width: 100%; flex: 0 1 420px; padding: 6px 10px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--surface); color: var(--text); }
+.dg-res { margin: 0; }
+.dg-list { padding: 0; gap: 0; }
+.dg-row { display: grid; grid-template-columns: 32px minmax(0, 1.1fr) minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px 16px; border-top: 1px solid var(--border); }
+.dg-row:first-child { border-top: 0; }
+.dg-ic { width: 32px; height: 32px; display: grid; place-items: center; border-radius: var(--radius-sm); background: var(--surface-2); color: var(--text-2); }
+.dg-nm, .dg-v > span { display: grid; gap: 1px; min-width: 0; }
+.dg-nm small, .dg-v small { color: var(--text-3); font-size: var(--text-xs); }
+.dg-v { display: flex; align-items: baseline; gap: 2px; min-width: 0; }
+.dg-v b { font-weight: 600; overflow-wrap: anywhere; }
+.dg-run { white-space: nowrap; }
+.dg-recent { display: grid; gap: 6px; }
+.dg-runs { list-style: none; margin: 0; padding: 0; display: grid; }
+.dg-runs li { display: grid; grid-template-columns: 56px auto minmax(0, 1fr); align-items: baseline; gap: 4px; padding: 6px 0; border-top: 1px solid var(--border); font-size: var(--text-sm); }
+.dg-runs li:first-child { border-top: 0; }
+@media (max-width: 640px) {
+  .dg-row { grid-template-columns: 32px minmax(0, 1fr) auto; }
+  .dg-v { grid-column: 2 / -1; grid-row: 2; }
+}

@@ -139,10 +139,10 @@ function Thumb({ a }) {
   return <Icon name="pages" size={16} />;
 }
 
-function Attachment({ a, date, onClose }) {
+export function Attachment({ a, date, onClose }) {
   return (
     <div class="pt-attv">
-      <div class="pt-attvh"><Icon name="pages" size={13} /><b>{a.title}</b><span class="muted">{fmtD(date)}</span><button type="button" class="todo-link" onClick={onClose}>Close</button></div>
+      <div class="pt-attvh"><Icon name="pages" size={13} /><b>{a.title}</b><span class="muted">{fmtD(date)}</span>{onClose && <button type="button" class="todo-link" onClick={onClose}>Close</button>}</div>
       {a.diff && <Diff d={a.diff} />}
       {a.series && <ProofChart s={a.series} />}
       {a.cells?.length > 0 && (

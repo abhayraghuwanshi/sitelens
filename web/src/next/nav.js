@@ -15,6 +15,7 @@ export const VIEWS = [
   { key: 'traffic', label: 'Traffic', icon: 'arrows', report: true },
   { key: 'journeys', label: 'Journeys', icon: 'route', report: true, warehouse: true },
   { key: 'goals', label: 'Goals', icon: 'target', report: true },
+  { key: 'diagnose', label: 'Diagnose', icon: 'terminal', report: true },
 ];
 
 // Each report's question and its tabs. Components are attached in Section.jsx.
@@ -24,6 +25,7 @@ export const SECTIONS = {
   traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Traffic']] },
   journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys']] },
   goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals'], ['results', 'Results']] },
+  diagnose: { label: 'Diagnose', q: 'Run a check on a page', tabs: [['run', 'Diagnose']] },
   raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['paths', 'Sessions'], ['sql', 'SQL']] },
 };
 
@@ -105,4 +107,5 @@ export const MORE_VIEWS = [
   { key: 'traffic', icon: 'arrows', label: 'Traffic', fact: 'Where people come from' },
   { key: 'journeys', icon: 'route', label: 'Journeys', fact: 'What people do once here', warehouse: true },
   { key: 'goals', icon: 'target', label: 'Goals', fact: 'Is it working' },
+  { key: 'diagnose', icon: 'terminal', label: 'Diagnose', fact: 'Run a check on a page' },
 ];

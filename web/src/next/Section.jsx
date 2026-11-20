@@ -17,6 +17,7 @@ import { HealthView } from './HealthView.jsx';
 import { SearchView, EngineSwitch, engineOf, engineSub } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
 import { OutcomesPage } from './Outcomes.jsx';
+import { DiagnoseView } from './DiagnoseView.jsx';
 import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
 
 // The reports: Pages, Search, Traffic, Journeys, Goals and Raw data. Each is one
@@ -44,6 +45,9 @@ const TABS = {
   goals: {
     numbers: { mode: 'api', component: GoalsView },
     results: { own: OutcomesPage },
+  },
+  diagnose: {
+    run: { own: DiagnoseView },
   },
   raw: {
     events: { mode: 'warehouse', component: Events },
