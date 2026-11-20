@@ -3,6 +3,7 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { Logo } from '../components/Logo.jsx';
 import { pushPanel } from './Panel.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { runTodo, findingTodo, isProblem } from './checkTodo.js';
@@ -117,7 +118,9 @@ function Spark({ s, tone }) {
   );
 }
 
+// Kauzl's own events carry its owl; everyone else gets their initial.
 function Avatar({ who }) {
+  if (who === 'kauzl') return <span class="pt-av kauzl owl"><Logo size={22} title="Kauzl" /></span>;
   return <span class={`pt-av ${who}`}>{(WHO[who] || ['', '?'])[1]}</span>;
 }
 

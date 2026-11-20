@@ -1736,3 +1736,5 @@ a.ps-row:hover { background: var(--surface-hover); }
   .pt-ev .pt-sub { grid-column: 1 / 3; grid-row: 2; }
   .pt-ev .pt-go { grid-column: 3; grid-row: 1 / span 2; }
 }
+.pt-av.owl { background: none; padding: 0; overflow: hidden; }
+.pt-av.owl svg { display: block; width: 100%; height: 100%; }
