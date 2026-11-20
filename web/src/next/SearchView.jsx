@@ -335,6 +335,19 @@ function aiLine(d, site) {
 function QueryPanel({ site, r, eng, onClose }) {
   // When one engine reports nothing, say whether it has even read the page, rather than guess.
   const ix = useAsync(() => (r.d && r.page ? api.get(`/sites/${site.id}/index-status${qs({ path: r.page })}`).catch(() => null) : null), [site.id, r.key]);
+  // How many people search this exact wording on Bing at all (Bing keyword research, US): often the
+  // real reason Bing has no row is that nobody searches it there.
+  const kw = useAsync(() => (r.d?.bad === 'Bing' ? api.get(`/search/keywords${qs({ q: r.key })}`).catch(() => null) : null), [r.key]);
+  const demand = (() => {
+    const k = kw.data?.keywords?.[0];
+    if (!k) return '';
+    const weeks = (k.weeks || []).slice(-8);
+    const exact = weeks.reduce((n, w) => n + (w.impressions || 0), 0), broad = weeks.reduce((n, w) => n + (w.broad || 0), 0);
+    if (!weeks.length || (!exact && !broad)) return 'Bing’s keyword data has no searches for it at all in the US.';
+    const a = (n) => Math.round(n / 8);
+    return !exact ? `Almost nobody searches this exact wording on Bing: 0 searches a week in the US${broad ? ` (about ${a(broad) || '<1'} a week for longer searches that contain it)` : ''}.`
+      : `About ${a(exact) || '<1'} searches a week on Bing in the US.`;
+  })();
   const crawl = (() => {
     if (!r.d || !ix.data) return '';
     if (r.d.bad === 'Bing') {
@@ -355,7 +368,7 @@ function QueryPanel({ site, r, eng, onClose }) {
           : <>{r.page ? pageName(r.page) : 'The site'} shows up {[r.google && <>at <b>{rank(r.google.position)}</b> on Google</>, r.bing && <>at <b>{rank(r.bing.position)}</b> on Bing</>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' and ', x] : [x]), [])}, and got {fmt(clicksOf(r, 'both'))} clicks.
             {r.s.gain ? <> In the top 3 it would get about <b>{fmt(r.s.gain)}</b> more.</> : null}</>}
       </p>
-      {r.d && <p class={`nx-note-line${r.d.near ? '' : ' warn'}`}><b>{r.d.word}.</b> <span>{r.d.why}{crawl ? ` ${crawl}` : ''}{r.d.bad === 'Bing' && !r.d.near ? ' ChatGPT search and Copilot lean on Bing, so this also costs AI answers.' : ''}</span></p>}
+      {r.d && <p class={`nx-note-line${r.d.near ? '' : ' warn'}`}><b>{r.d.word}.</b> <span>{demand ? `${demand} ` : ''}{r.d.why}{crawl ? ` ${crawl}` : ''}{r.d.bad === 'Bing' && !r.d.near ? ' ChatGPT search and Copilot lean on Bing, so this also costs AI answers.' : ''}</span></p>}
       <table class="nx-mini-table">
         <thead><tr><th /><th>Position</th><th>Seen</th><th>Clicks</th><th>Click rate</th></tr></thead>
         <tbody>
