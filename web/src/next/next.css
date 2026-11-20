@@ -1794,3 +1794,14 @@ a.qp-chip:hover { text-decoration: none; }
 .pt-card .pt-title, .sp-title { font-family: var(--display); font-weight: 650; letter-spacing: -0.015em; }
 .qt-stats b, .tl-tile b, .lv-stat b, .nx-answer > b:first-child { font-family: var(--display); font-weight: 700; letter-spacing: -0.02em; }
 .nx-h2 { font-family: var(--display); font-weight: 650; letter-spacing: -0.01em; }
+
+/* Search → look up any search's trend (SearchView TrendLookup). */
+.tlk { display: grid; gap: 10px; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); margin-bottom: 16px; }
+.tlk-f { display: flex; align-items: center; gap: 10px; }
+.tlk-f > svg { color: var(--accent-ink); flex: none; }
+.tlk-f input { flex: 1; min-width: 0; font: inherit; font-size: var(--text-md); padding: 8px 12px; border: 1px solid var(--border); border-radius: var(--radius-control); background: var(--bg); color: var(--text); }
+.tlk-f input:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tlk-ideas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.tlk-r { display: grid; gap: 8px; }
+.tlk-rh { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 6px 12px; }
+.tlk-rh b { font-family: var(--display); font-size: var(--text-lg); font-weight: 650; }

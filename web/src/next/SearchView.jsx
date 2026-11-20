@@ -117,6 +117,7 @@ export function SearchView({ site, range, params }) {
 
   return (
     <div class="nx-search">
+      <TrendLookup site={site} pages={review.data?.rows || []} known={new Set(rows.map((r) => r.key))} />
       {errors.length > 0 && <p class="nx-note-line warn">{errors.map(([name, e]) => `${name}: ${e.message}`).join(' · ')}</p>}
       {rows.length ? (
         <p class="nx-answer">
@@ -462,7 +463,7 @@ function QueryTrend({ days, to, bingWeeks, loading }) {
   return (
     <section class="qt" aria-label="Trend, 13 weeks">
       <div class="qt-stats">
-        <div><small>Searches a week</small><b>{f(gNow / 4)}</b><span class={change == null ? 'muted' : change >= 10 ? 'good' : change <= -10 ? 'bad' : 'muted'}>{change == null ? 'new' : `${change > 0 ? '↑' : change < 0 ? '↓' : ''}${Math.abs(change)}% vs 4 weeks before`}</span></div>
+        <div><small>Searches a week</small><b>{f(gNow / 4)}</b><span class={change == null ? 'muted' : change >= 10 ? 'good' : change <= -10 ? 'bad' : 'muted'}>{!gNow && !gBefore ? 'none for your site on Google' : change == null ? 'new' : `${change > 0 ? '↑' : change < 0 ? '↓' : ''}${Math.abs(change)}% vs 4 weeks before`}</span>{hasBing && <span class="muted">Bing (US): about {f(sum(N - 4, N, 'b') / 4)} a week</span>}</div>
         <div><small>Your Google position</small><b>{lastP != null ? `#${Math.round(lastP)}` : '—'}</b><span class={firstP != null && lastP != null && firstP - lastP >= 1 ? 'good' : firstP != null && lastP != null && lastP - firstP >= 1 ? 'bad' : 'muted'}>{firstP != null && lastP != null ? (Math.abs(firstP - lastP) >= 1 ? `was #${Math.round(firstP)} 13 weeks ago` : 'held for 13 weeks') : ''}</span></div>
       </div>
       <div class="qt-panels">
@@ -494,6 +495,61 @@ function QueryTrend({ days, to, bingWeeks, loading }) {
         </div>
       </div>
       <div class="qt-x"><span>{short(W[0].start)}</span><span>{short(to)}</span></div>
+    </section>
+  );
+}
+
+// Look up any search's trend, at the top of Search. Ideas come from the site's sitemap: each page's
+// title (before " — " or ":") and the words in its address, busiest pages first. The trend is the
+// same chart as a search's panel: Google = how often your site showed for it and where; Bing = how
+// many people search it in the US (Bing's keyword data), so it works for wordings you don't rank for yet.
+export function trendIdeas(pages, brand = '') {
+  const strip = (t) => String(t || '').split(/\s+[—–|:-]\s+|:\s/)[0].replace(/\(\d{4}\)/g, '').replace(new RegExp(`\\b${brand}\\b`, 'ig'), '').replace(/\s+/g, ' ').trim().toLowerCase();
+  const fromPath = (p) => (p === '/' ? '' : p.split('/').filter(Boolean).pop().replace(/[-_]+/g, ' ').toLowerCase());
+  const seen = new Set();
+  const out = [];
+  for (const r of [...pages].filter((x) => x.inSitemap !== false).sort((a, b) => (b.visits || 0) - (a.visits || 0))) {
+    for (const t of [strip(r.title), fromPath(r.path)]) {
+      if (t.split(' ').length < 2 || t.length > 60 || seen.has(t)) continue;
+      seen.add(t);
+      out.push({ q: t, path: r.path });
+    }
+  }
+  return out;
+}
+
+function TrendLookup({ site, pages, known }) {
+  const brand = String(site.label || '').replace(/[^\w]/g, '');
+  const ideas = trendIdeas(pages, brand);
+  const [text, setText] = useState('');
+  const [q, setQ] = useState('');
+  const trend = useAsync(() => (q ? api.get(`/sites/${site.id}/query-trend${qs({ q })}`).catch(() => null) : null), [site.id, q]);
+  const kw = useAsync(() => (q ? api.get(`/search/keywords${qs({ q })}`).catch(() => null) : null), [q]);
+  const go = (v) => { const t = String(v || '').trim().toLowerCase(); if (t) { setText(t); setQ(t); } };
+  const bingWeeks = kw.data?.keywords?.[0]?.weeks;
+  const none = q && trend.data && !trend.data.days?.length && !(bingWeeks || []).some((w) => w.impressions || w.broad);
+  return (
+    <section class="tlk" aria-label="Look up a search’s trend">
+      <form class="tlk-f" onSubmit={(e) => { e.preventDefault(); go(text); }}>
+        <Icon name="trend" size={16} />
+        <label class="sr-only" for="tlk-q">Look up a search’s trend</label>
+        <input id="tlk-q" type="search" list="tlk-ideas" autocomplete="off" maxLength={120} value={text} placeholder="Look up any search’s trend, e.g. “dock for windows”" onInput={(e) => setText(e.currentTarget.value)} />
+        <datalist id="tlk-ideas">{ideas.map((x) => <option key={x.q} value={x.q} />)}</datalist>
+        <button type="submit" class="btn primary" disabled={!text.trim()}>Trend</button>
+        {q && <button type="button" class="nx-link" onClick={() => { setQ(''); setText(''); }}>Clear</button>}
+      </form>
+      {!q && ideas.length > 0 && (
+        <div class="tlk-ideas"><small class="muted">From your sitemap:</small>{ideas.slice(0, 6).map((x) => <button key={x.q} type="button" class="nx-chip" onClick={() => go(x.q)} title={x.path}>{x.q}</button>)}</div>
+      )}
+      {q && (
+        <div class="tlk-r">
+          <div class="tlk-rh"><b>“{q}”</b>{known.has(q) && <a class="todo-link small" href={hrefWith('q', q)}>Open its full detail →</a>}</div>
+          {trend.loading || kw.loading ? <div class="qt qt-load" aria-hidden="true" />
+            : none ? <p class="muted small m-0">No one searched this in Bing’s US data, and your site hasn’t shown for it on Google in 13 weeks. Try a shorter or more common wording.</p>
+            : <QueryTrend days={trend.data?.days?.length ? trend.data.days : [{ date: trend.data?.to || new Date().toISOString().slice(0, 10), impressions: 0 }]} to={trend.data?.to || new Date().toISOString().slice(0, 10)} bingWeeks={bingWeeks} />}
+          <p class="muted small m-0">Google: how often your site showed for it, and where. Bing: everyone searching it in the US.</p>
+        </div>
+      )}
     </section>
   );
 }
