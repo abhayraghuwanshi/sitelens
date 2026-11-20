@@ -6,6 +6,7 @@ import { Icon } from '../components/icons.jsx';
 import { DecisionSelect, LABELS } from '../pages/PageReview.jsx';
 import { Page } from './Page.jsx';
 import { PageTimeline, TOOL_ICON } from './PageTimeline.jsx';
+import { HoverLayer, dayOf, shortDay } from './HoverChart.jsx';
 
 // One page (docs/redesign/prototype.html → a page): its title and one status
 // word, one sentence on what it does for you, then its timeline (PageTimeline:
@@ -109,6 +110,9 @@ function PageSearches({ site, path, bingPage }) {
   const on = eng || (google.length ? 'google' : 'bing');
   const list = on === 'google' ? google : bing;
   const shown = all ? list : list.slice(0, 8);
+  // Week 0 starts 13 weeks before the data's last day.
+  const lastDay = on === 'google' ? res.data?.to : new Date().toISOString().slice(0, 10);
+  const weekFrom = lastDay ? dayOf(lastDay, -(13 * 7 - 1)) : dayOf(new Date().toISOString().slice(0, 10), -90);
   const enough = list.filter((q) => q.impressions >= 10);
   const up = enough.filter((q) => q.change != null && q.change >= 0.15).length, down = enough.filter((q) => q.change != null && q.change <= -0.15).length;
   const pick = (k) => { setEng(k); setAll(false); };
@@ -132,7 +136,9 @@ function PageSearches({ site, path, bingPage }) {
         return (
           <a key={q.query} class="ps-row" href={`#/site/${site.id}/search?range=90d${on === 'bing' ? '&eng=bing' : ''}&q=${encodeURIComponent(q.query)}`}>
             <span class="ps-q">“{q.query}”<small>{fmt(q.impressions)} {q.impressions === 1 ? 'view' : 'views'}</small></span>
-            <span class="ps-spark" title={q.weeks.map((w) => w.impressions).join(', ')}>{q.weeks.map((w, i) => <i key={i} style={`height:${Math.max(6, (w.impressions / mx) * 100)}%`} class={i >= q.weeks.length - 4 ? 'now' : ''} />)}</span>
+            <span class="ps-spark">{q.weeks.map((w, i) => <i key={i} style={`height:${Math.max(6, (w.impressions / mx) * 100)}%`} class={i >= q.weeks.length - 4 ? 'now' : ''} />)}
+              <HoverLayer count={q.weeks.length} guide={false} x={(i) => ((i + 0.5) / q.weeks.length) * 100}
+                text={(i) => `Week of ${shortDay(dayOf(weekFrom, i * 7), { day: 'numeric', month: 'short' })} · ${fmt(q.weeks[i].impressions)} ${q.weeks[i].impressions === 1 ? 'search' : 'searches'}${q.weeks[i].position != null ? ` · #${q.weeks[i].position.toFixed(1)}` : ''}`} /></span>
             <span class={`nx-num ${ch === 'few' ? 'muted' : ch === 'new' || ch >= 15 ? 'good' : ch <= -15 ? 'bad' : 'muted'}`} title={ch === 'few' ? 'Too few views to call a trend' : undefined}>{ch === 'few' ? 'few' : ch === 'new' ? 'new' : `${ch > 0 ? '↑' : ch < 0 ? '↓' : ''}${Math.abs(ch)}%`}</span>
             <span class="nx-num">{rank(q.position)}{moved && <small class={moved === 'up' ? 'good' : 'bad'}>{moved === 'up' ? '▲' : '▼'} {rank(q.was)}</small>}</span>
             <span class="nx-num">{fmt(q.clicks)}</span>

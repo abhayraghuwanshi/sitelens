@@ -5,6 +5,7 @@ import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
+import { HoverLayer } from './HoverChart.jsx';
 
 // Search: the short answer, then a ladder (one row per search, from Top 3 to
 // Not showing, a dot where it ranks now, a ring where Google and Bing disagree),
@@ -455,6 +456,7 @@ function QueryTrend({ days, from, to, bingWeeks, loading }) {
         <svg viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
           {hasBing && <polyline points={bPath.join(' ')} class="qt-bl" vector-effect="non-scaling-stroke" />}
         </svg>
+        <HoverLayer count={N} x={X} text={(i) => [`Week of ${short(W[i].start)}`, `Google ${W[i].g.toLocaleString('en-US')}`, hasBing ? `Bing ${W[i].b || 0}` : '', W[i].p != null ? `#${W[i].p.toFixed(1)}` : 'not shown'].filter(Boolean).join(' · ')} />
       </div>
       <div class="qt-pos">
         <small>#{Math.round(pMin)}</small>

@@ -4,6 +4,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Logo } from '../components/Logo.jsx';
+import { HoverLayer, dayOf, shortDay } from './HoverChart.jsx';
 import { pushPanel } from './Panel.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { runTodo, findingTodo, isProblem } from './checkTodo.js';
@@ -111,11 +112,14 @@ function Spark({ s, tone }) {
   const mi = Math.round((Date.parse(s.mark) - Date.parse(s.from)) / 86_400_000);
   const line = v.map((y, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(y).toFixed(1)}`).join(' ');
   return (
+    <span class="pt-sparkw">
     <svg class={`pt-spark ${tone || ''}`} viewBox={`0 0 ${W} ${H}`} width={W} height={H} aria-hidden="true">
       <path d={`${line} L${W},${H} L0,${H} Z`} class="a" />
       <path d={line} class="l" />
       {mi >= 0 && mi < v.length && <><line x1={X(mi)} x2={X(mi)} y1="0" y2={H} class="m" /><circle cx={X(mi)} cy={Y(v[mi])} r="2.2" class="d" /></>}
     </svg>
+    <HoverLayer count={v.length} text={(i) => `${shortDay(dayOf(s.from, i))} · ${fmt(v[i])} ${v[i] === 1 ? 'visit' : 'visits'}`} />
+    </span>
   );
 }
 
@@ -241,6 +245,7 @@ function ProofChart({ s }) {
           <path d={line} fill="none" stroke="var(--accent)" stroke-width="1.6" vector-effect="non-scaling-stroke" />
         </svg>
         {mi >= 0 && mi < n && <span class="pt-mark" style={`left:${pos}`} />}
+        <HoverLayer count={n} text={(i) => `${shortDay(dayOf(s.from, i))} · ${fmt(v[i])} ${v[i] === 1 ? 'visit' : 'visits'}`} />
       </div>
       <div class="pt-x">
         {!near(mi, 0) && <span style="left:0">{fmtD(s.from)}</span>}
