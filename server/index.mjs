@@ -45,6 +45,7 @@ import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
 import { createSiteHealth, siteHealthRoutes } from './site-health.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
+import { createPageEvents, pageEventRoutes } from './page-events.mjs';
 import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
 import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
 import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
@@ -183,6 +184,17 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   // Calendar days are local, so the story's "today" is too.
   const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
   const todos = createTodos({ store, annotations, context: createTodoContext({ calendar, engines, outcomes, store, today: () => new Date().toLocaleDateString('en-CA') }) });
+  // A page's timeline (server/page-events.mjs): its visits, commits, notes and to-dos as one list of events.
+  const pageEvents = createPageEvents({ sources: {
+    series: async (site, path, from, to) => {
+      const b = await calendar.breakdown({ site: site.id, from, to, by: 'page', daily: true, key: path, limit: 200 });
+      const row = b.rows?.[0];
+      return { series: (b.dates || []).map((date, i) => ({ date, visits: row?.days?.[i] || 0 })) };
+    },
+    commits: (site, path, since) => editor.commits(site, path, { since }),
+    marks: async (site, from, to) => ({ marks: (await calendar.events({ site: site.id, from, to })).events || [] }),
+    todos: async (site, path) => ({ todos: ((await todos.list({ site: site.id })).todos || []).filter((t) => (t.link || '').includes(encodeURIComponent(path)) || (t.from || '').endsWith(`:${path}`) || (t.subject?.kind === 'page' && t.subject.key === path) || (path !== '/' && t.title.includes(path))) }),
+  } });
   function githubDb() {
     if (!github.hasDb()) {
       throw new SourceError('No GitHub data yet.', {
@@ -222,6 +234,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
     ...siteHealthRoutes({ health: siteHealth, siteOr404 }),
     ...pageReviewRoutes({ review: pageReview, siteOr404 }),
+    ...pageEventRoutes({ pageEvents, siteOr404 }),
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
     ...firebaseRoutes({ firebase }),
