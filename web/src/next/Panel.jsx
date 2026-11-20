@@ -118,7 +118,7 @@ function DayBody({ scope, site, date }) {
   const pages = (x.sites || []).flatMap((s) => (s.pages || []).map((p) => ({ ...p, site: s.id }))).sort((a, b) => b.value - a.value).slice(0, 6);
   return (
     <div class="sp-day">
-      <p class={`sp-head ${String(x.tone || '').startsWith('up') ? 'good' : String(x.tone || '').startsWith('down') ? 'bad' : ''}`}><b>{x.headline}</b></p>
+      <p class={`sp-dhead ${String(x.tone || '').startsWith('up') ? 'good' : String(x.tone || '').startsWith('down') ? 'bad' : ''}`}><b>{x.headline}</b></p>
       {x.lines?.length > 0 && <ul class="sp-lines">{x.lines.map((l, i) => <li key={i}>{l.text}</li>)}</ul>}
       {pages.length > 0 && (
         <section aria-label="Where people landed">

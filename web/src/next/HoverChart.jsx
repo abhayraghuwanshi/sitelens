@@ -9,12 +9,12 @@ export function HoverLayer({ count, text, x = (i) => (count > 1 ? (i / (count - 
   if (!count) return null;
   const left = at >= 0 ? x(at) : 0;
   return (
-    <span class="hv" onMouseLeave={() => setAt(-1)} aria-hidden="true">
-      {Array.from({ length: count }, (_, i) => <span key={i} class="hv-c" onMouseEnter={() => setAt(i)} />)}
+    <span class="hvr" onMouseLeave={() => setAt(-1)} aria-hidden="true">
+      {Array.from({ length: count }, (_, i) => <span key={i} class="hvr-c" onMouseEnter={() => setAt(i)} />)}
       {at >= 0 && (
         <>
-          {guide && <i class="hv-line" style={`left:${left}%`} />}
-          <b class={`hv-tip${left > 70 ? ' r' : left < 30 ? ' l' : ''}`} style={`left:${left}%`}>{text(at)}</b>
+          {guide && <i class="hvr-line" style={`left:${left}%`} />}
+          <b class={`hvr-tip${left > 70 ? ' r' : left < 30 ? ' l' : ''}`} style={`left:${left}%`}>{text(at)}</b>
         </>
       )}
     </span>
