@@ -169,3 +169,9 @@ test('a goal to-do has no diff in Now: its baseline holds numbers', () => {
   const t = buildTimeline({ path: '/p', today: TODAY, todos: [{ id: 'g', title: 'Get 78% of readers to stay', status: 'open', createdAt: Date.parse('2026-11-16T00:00:00Z'), baseline: { was: 0.68, to: 0.78 } }] });
   assert.equal(t.now.diff, null);
 });
+
+test('to-do titles drop the page path on its own timeline', () => {
+  const t = buildTimeline({ path: '/blog/x', today: TODAY, todos: [{ id: 'a', title: 'Get 78% of readers to stay (/blog/x)', status: 'open', createdAt: Date.parse('2026-11-16T00:00:00Z') }] });
+  assert.equal(t.events[0].title, 'To-do: Get 78% of readers to stay');
+  assert.equal(t.now.title, 'Get 78% of readers to stay');
+});

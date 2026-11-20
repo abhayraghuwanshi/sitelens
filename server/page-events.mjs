@@ -209,10 +209,14 @@ export function stageOf(t, today) {
   return 'open';
 }
 
-export function todoEvents({ todos = [], today }) {
+// On the page's own timeline, a to-do title needn't name the page: "Fix X (/blog/x)" → "Fix X".
+const bare = (title, path) => (path ? String(title).replace(` (${path})`, '').replace(new RegExp(`\\s*[:·—-]?\\s*${path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`), '') : String(title)) || String(title);
+
+export function todoEvents({ todos = [], path = '', today }) {
   return todos.flatMap((t) => {
+    const title = bare(t.title, path);
     const made = new Date(t.createdAt).toISOString().slice(0, 10);
-    const out = [{ id: `todo:${t.id}:open`, date: made, who: t.from ? 'kauzl' : 'you', kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${t.title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
+    const out = [{ id: `todo:${t.id}:open`, date: made, who: t.from ? 'kauzl' : 'you', kind: 'todo', track: 'work', todo: t.id, title: `To-do: ${title}`, detail: t.detail ? String(t.detail).split('\n')[0].slice(0, 200) : '', tone: '', attachment: { title: 'The to-do', cells: [], findings: [], series: null } }];
     for (const e of t.entries || []) {
       if (!e.changes) continue;
       const d = new Date(e.at).toISOString().slice(0, 10);
@@ -222,7 +226,7 @@ export function todoEvents({ todos = [], today }) {
     }
     if (t.status === 'done' && t.doneAt) {
       const d = new Date(t.doneAt).toISOString().slice(0, 10);
-      out.push({ id: `todo:${t.id}:done`, date: d, who: 'you', kind: 'todo', track: 'work', todo: t.id, title: `Done: ${t.title}`, detail: `Kauzl checks it on ${dayLabel(addDays(d, LIVE_DAYS))}.`, tone: 'up', attachment: { title: 'The to-do', cells: [], findings: [], series: null } });
+      out.push({ id: `todo:${t.id}:done`, date: d, who: 'you', kind: 'todo', track: 'work', todo: t.id, title: `Done: ${title}`, detail: `Kauzl checks it on ${dayLabel(addDays(d, LIVE_DAYS))}.`, tone: 'up', attachment: { title: 'The to-do', cells: [], findings: [], series: null } });
     }
     return out;
   });
@@ -255,7 +259,7 @@ export function foldRepeats(events) {
 }
 
 // Rule 5: Now. The page's open to-do (or the most recent live one), with the events that led to it.
-export function nowOf({ todos = [], events, today }) {
+export function nowOf({ todos = [], events, path = '', today }) {
   const open = todos.filter((t) => t.status === 'open');
   const t = open[0] || todos.find((x) => stageOf(x, today) === 'live');
   if (!t) return null;
@@ -268,10 +272,10 @@ export function nowOf({ todos = [], events, today }) {
   const text = (v) => (typeof v === 'string' && v.trim() ? v : null);
   const was = text(t.baseline?.was), to = text(t.baseline?.to);
   return {
-    todo: t.id, title: t.title, detail: t.detail || '', stage, stages: STAGES, because,
+    todo: t.id, title: bare(t.title, path), detail: t.detail || '', stage, stages: STAGES, because,
     diff: was != null || to != null ? { where: t.baseline?.where || 'The page', src: stage === 'proposed' ? 'proposed · needs your OK' : 'Kauzl suggests', prose: true, additions: to ? 1 : 0, deletions: was ? 1 : 0, lines: [...(was ? [['-', was]] : []), ...(to ? [['+', to]] : [])] } : null,
     proposal: proposal ? { by: proposal.author === 'claude' ? 'agent' : 'you', changes: proposal.changes, expected: proposal.expected || '' } : null,
-    more: open.slice(1, 6).map((x) => ({ todo: x.id, title: x.title })),
+    more: open.slice(1, 6).map((x) => ({ todo: x.id, title: bare(x.title, path) })),
   };
 }
 
@@ -282,11 +286,11 @@ export function buildTimeline({ path, file = '', today, series = [], commits = [
     ...spikeEvents({ series, today }),
     ...checkEvents({ checks, series, today }),
     ...markEvents({ marks, path, file, series, today }),
-    ...todoEvents({ todos, today }),
+    ...todoEvents({ todos, path, today }),
   ];
   const events = foldRepeats(onePerDay(all.sort((a, b) => a.date.localeCompare(b.date))));
   const counts = Object.fromEntries(TRACKS.map((k) => [k, events.filter((e) => e.track === k && !e.quiet).length]));
-  return { path, today, events, quiet: events.filter((e) => e.quiet).length, tracks: counts, now: nowOf({ todos, events, today }) };
+  return { path, today, events, quiet: events.filter((e) => e.quiet).length, tracks: counts, now: nowOf({ todos, events, path, today }) };
 }
 
 /* --- gathering: real data in, timeline out --- */
