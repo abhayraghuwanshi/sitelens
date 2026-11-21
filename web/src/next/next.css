@@ -1810,3 +1810,75 @@ a.qp-chip:hover { text-decoration: none; }
 .tlk-none { display: grid; gap: 8px; padding: 12px 14px; border: 1px dashed var(--border-strong); border-radius: var(--radius-md); font-size: var(--text-sm); }
 .tlk-why { margin: 0; padding-left: 18px; display: grid; gap: 4px; color: var(--text-2); line-height: 1.5; }
 .tlk-ideas .nx-chip span { color: var(--text-3); margin-left: 4px; font-variant-numeric: tabular-nums; }
+
+/* Timeline day panel: that day's visitors, drawn like Live's people. */
+.lv-badge.goal { background: var(--good-ink); }
+.lv-badge.intent { background: var(--warning-ink); }
+.lv-day .lv-feed { padding: 0; }
+.lv-day .lv-legend { margin-top: 8px; }
+
+/* Timeline day map: an owl per country on Live's night map. */
+.tl-daymap { padding: 12px 12px 8px; gap: 6px; }
+.tl-daymap-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; font-size: var(--text-sm); }
+.tl-daymap-head b { color: var(--ink-strong); font-weight: 650; }
+.tl-daymap-head small, .tl-daymap .lv-legend { color: var(--ink-dim); font-size: var(--text-xs); }
+.tl-daymap .link-btn { color: var(--brand-amber); }
+.tl-mowl { --lv-c: var(--ink-text); }
+.tl-mowl.pick { cursor: pointer; }
+.tl-mowl.dim { opacity: .35; }
+.tl-mowl.src-search { --lv-c: var(--series-1); }
+.tl-mowl.src-ai { --lv-c: var(--series-7); }
+.tl-mowl.src-social { --lv-c: var(--series-2); }
+.tl-mowl.src-direct { --lv-c: var(--series-5); }
+.tl-mowl.src-link { --lv-c: var(--series-4); }
+.tl-mowl-body { fill: var(--lv-c); }
+.tl-mowl-disc { fill: var(--ink-bg); }
+.tl-mowl-shut path { fill: none; stroke: var(--lv-c); stroke-width: 3; stroke-linecap: round; }
+.tl-mowl-goal { fill: var(--good-ink); stroke: var(--ink-bg); stroke-width: 3; }
+.tl-mowl-ring { fill: none; stroke: var(--brand-amber); stroke-width: 3; }
+.tl-mowl.pick:hover .tl-mowl-body { filter: brightness(1.2); }
+.tl-mlab { transform: translate(12px, -50%); }
+.tl-mlab.flip { transform: translate(calc(-100% - 12px), -50%); }
+.tl-mowl-hit { fill: transparent; }
+
+/* Timeline on a phone: one day first (swipe for others), the calendar below picks it. */
+.tl-phone { gap: 12px; }
+.tl-phone .tl-today { padding: 14px 14px 10px; scroll-margin-top: 64px; touch-action: pan-y; }
+.tl-phone .tl-today .tl-in-h { position: sticky; top: 0; }
+.tl-phone > .tl-ctl { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tl-phone .tl-tiles { display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; margin: 0 -14px; padding: 0 14px; }
+.tl-phone .tl-tiles::-webkit-scrollbar { display: none; }
+.tl-phone .tl-tile { flex: 0 0 136px; scroll-snap-align: start; }
+.tl-phone .nx-ask .nx-chips { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+.tl-phone > .tl-ctl { scroll-margin-top: 64px; }
+.tl-phone .tl-today .tl-in-h .nx-chip { margin-left: auto; }
+.tl-phone .tl-today .tl-in-h .nx-chip svg { transform: rotate(90deg); }
+
+/* Inbox: swipe an alert left to mark it read (phones). */
+.nx-swipe { position: relative; border-radius: var(--radius); overflow: hidden; }
+.nx-swipe-act { position: absolute; inset: 0 0 0 auto; width: 130px; display: grid; place-items: center end; padding: 0 20px; border: 0; background: var(--accent); color: var(--on-accent, var(--surface)); font: inherit; font-weight: 650; cursor: pointer; }
+.nx-swipe-row { position: relative; transition: transform .2s ease; touch-action: pan-y; }
+.nx-swipe-row.drag { transition: none; }
+.nx-swipe-row > .nx-msg { display: grid; }
+
+/* Live map: pins take a tap (bigger target than the dot) and pick a country. */
+.lv-pin.pick { cursor: pointer; }
+.lv-pin-hit { fill: transparent; }
+.lv-pin-sel { fill: none; stroke: var(--brand-amber); stroke-width: 1; }
+.lv-pin.dim { opacity: .35; }
+.lv-pick { justify-self: start; color: var(--brand-amber); font-size: var(--text-sm); }
+
+/* Page timeline rows on a phone (after the column rule above, which applies at every width):
+   badge and sparkline on top, the title under them, the chevron at the end. */
+@media (max-width: 640px) {
+  .pt-ev { grid-template-columns: auto minmax(0, 1fr) 14px; row-gap: 4px; }
+  .pt-ev > .pt-who { display: none; }
+  .pt-ev > .pt-badge { grid-column: 1; grid-row: 1; }
+  .pt-ev > .pt-sparkw, .pt-ev > .pt-spark, .pt-ev > .pt-via { grid-column: 2; grid-row: 1; justify-self: end; }
+  .pt-ev > .pt-sub { grid-column: 1 / 3; grid-row: 2; }
+  .pt-ev > .pt-go { grid-column: 3; grid-row: 1 / span 2; align-self: center; }
+}
+/* A page opened in the panel takes the whole phone screen, like an iOS full-height sheet. */
+@media (max-width: 820px) {
+  .nx-drawer.sp.wide { top: max(10px, env(safe-area-inset-top)); max-height: none; }
+}

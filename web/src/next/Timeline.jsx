@@ -9,7 +9,9 @@ import { TimelineAdd } from '../pages/Calendar.jsx';
 import { Page } from './Page.jsx';
 import { Ask, Waiting, SetupNote } from './TimelineTop.jsx';
 import { pushPanel } from './Panel.jsx';
-import { Drawer } from './Drawer.jsx';
+import { useSiteProduct } from '../product.js';
+import { People, REGION } from './Live.jsx';
+import { DayMap, dayPlaces } from './DayMap.jsx';
 
 // Timeline (docs/redesign → Timeline): every day of a site as a map, with an
 // inspector beside it. One bar of controls in the header: the period (a menu,
@@ -32,7 +34,7 @@ const shiftMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); return
 const METRICS = [['sessions', 'Visits'], ['users', 'People'], ['views', 'Page views'], ['clicks', 'Search clicks'], ['spent', 'Ad spend'], ['earned', 'Ad earnings']];
 // Money metrics (Traffic → Ad money): shown only for sites with any, in the GA4 currency.
 const MONEY = new Set(['spent', 'earned']);
-const LENSES = { page: { name: 'Landing pages', one: 'page', of: 'sessions' }, source: { name: 'Sources', one: 'source', of: 'sessions' }, query: { name: 'Searches', one: 'search', of: 'clicks' } };
+const LENSES = { page: { name: 'Landing pages', one: 'page', of: 'sessions' }, source: { name: 'Sources', one: 'source', of: 'sessions' }, query: { name: 'Searches', one: 'search', of: 'clicks' }, goal: { name: 'Goals', one: 'goal', of: 'sessions', unit: 'people reaching it' } };
 const ZOOMS = { day: 1, '7d': 7, '28d': 28 };
 // Marks: what you did and what happened, by kind.
 const KINDS = { deploy: ['rocket', 'Deploys'], release: ['github', 'Releases'], post: ['megaphone', 'Posts'], ad: ['target', 'Ads'], mention: ['chat', 'Mentions'], note: ['star', 'Notes'], alert: ['bell', 'Alerts'] };
@@ -134,7 +136,27 @@ export function Timeline({ site, sites, params, waiting = null }) {
   // A metric's value as text: money in the currency, counts as counts (vk: short).
   const vf = (v, k = metric) => (v === null || v === undefined ? '—' : MONEY.has(k) ? money(v) : fmt(v));
   const vk = (v, k = metric) => (MONEY.has(k) && v !== null && v !== undefined ? money(v) : kfmt(v));
-  const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked, L, phone, go, vf, vk, today: iso(Date.now()) };
+  // Phones lead with one day (the picked one, else yesterday); the calendar below picks it.
+  const phoneDay = picked && picked <= last ? picked : last;
+  const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today: iso(Date.now()) };
+  const todayRef = useRef(null);
+  const touch = useRef(null);
+  useEffect(() => {
+    if (phone && picked) todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [phone, picked]);
+  const swipe = {
+    onTouchStart: (e) => { const t = e.touches[0]; touch.current = [t.clientX, t.clientY]; },
+    onTouchEnd: (e) => {
+      if (!touch.current) return;
+      const t = e.changedTouches[0];
+      const dx = t.clientX - touch.current[0];
+      const dy = t.clientY - touch.current[1];
+      touch.current = null;
+      if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx) * 0.6) return;
+      const to = addD(phoneDay, dx < 0 ? 1 : -1);
+      if (to <= last) go({ day: to === last ? '' : to });
+    },
+  };
 
   // Header controls.
   const periodLabel = zoom === 'day' ? (end === last ? 'Yesterday' : fmtD(end, { weekday: 'short', day: 'numeric', month: 'short' }))
@@ -192,7 +214,35 @@ export function Timeline({ site, sites, params, waiting = null }) {
 
   const loading = !metrics.data || (L && !lead.data && !lead.error);
   const err = metrics.error || events.error || lead.error;
-  const dayDetail = zoom === 'day' ? end : picked;
+
+  if (phone && zoom !== 'day') {
+    return (
+      <div class="nx-page tl-phone">
+        {site && <Waiting site={site} waiting={waiting} />}
+        {adding && <TimelineAdd site={scope} sites={sites} date={phoneDay} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); events.reload(); }} />}
+        <section class="tl-today card card-plain" ref={todayRef} aria-label="One day" {...swipe}>
+          <DayPanel key={phoneDay} site={site} scope={scope} date={phoneDay} ctx={ctx} onMonth={() => document.querySelector('.tl-phone > .tl-ctl')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
+        </section>
+        {controls}
+        {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
+          : loading ? <Loading height={320} owl label="Reading every day…" />
+          : (
+            <>
+              <Tiles days={days} ctx={ctx} />
+              <div class="tl-map card card-plain">
+                {asLine ? <LineView days={days} items={items} ctx={ctx} evList={evList} />
+                  : zoom === 'year' ? <YearGrid days={days} ctx={ctx} />
+                  : zoom === '7d' ? <WeekView days={days} ctx={ctx} />
+                  : <MonthGrid days={days} zoom={zoom} ctx={ctx} />}
+                <ScaleKey ctx={ctx} asLine={asLine} />
+              </div>
+              <section class="tl-insp card card-plain"><WindowPanel days={days} zoom={zoom} label={periodLabel} items={items} ctx={ctx} evList={evList} /></section>
+            </>
+          )}
+        {site && <><Ask site={site} span={null} /><SetupNote site={site} /></>}
+      </div>
+    );
+  }
 
   return (
     <Page title="Timeline" sub={`Every day: how it went, where people landed, what shipped${site ? '' : ' · all sites'}`} actions={controls}>
@@ -206,7 +256,7 @@ export function Timeline({ site, sites, params, waiting = null }) {
             <Tiles days={days} ctx={ctx} />
             <div class={`tl-split${zoom === 'day' ? ' one' : ''}`}>
               <div class="tl-map card card-plain">
-                {zoom === 'day' ? <DayPanel scope={scope} date={end} ctx={ctx} inline />
+                {zoom === 'day' ? <DayPanel site={site} scope={scope} date={end} ctx={ctx} inline />
                   : asLine ? <LineView days={days} items={items} ctx={ctx} evList={evList} />
                   : zoom === 'year' ? <YearGrid days={days} ctx={ctx} />
                   : zoom === '7d' ? <WeekView days={days} ctx={ctx} />
@@ -215,19 +265,11 @@ export function Timeline({ site, sites, params, waiting = null }) {
               </div>
               {zoom !== 'day' && !phone && (
                 <aside class="tl-insp card card-plain" aria-label={picked ? 'Day' : 'Period'}>
-                  {picked ? <DayPanel scope={scope} date={picked} ctx={ctx} onClose={() => go({ day: '' })} />
+                  {picked ? <DayPanel site={site} scope={scope} date={picked} ctx={ctx} onClose={() => go({ day: '' })} />
                     : <WindowPanel days={days} zoom={zoom} label={periodLabel} items={items} ctx={ctx} evList={evList} />}
                 </aside>
               )}
             </div>
-            {zoom !== 'day' && phone && (
-              <section class="tl-insp card card-plain"><WindowPanel days={days} zoom={zoom} label={periodLabel} items={items} ctx={ctx} evList={evList} /></section>
-            )}
-            {phone && dayDetail && zoom !== 'day' && (
-              <Drawer title={fmtD(dayDetail, { weekday: 'long', day: 'numeric', month: 'long' })} onClose={() => go({ day: '' })}>
-                <DayPanel scope={scope} date={dayDetail} ctx={ctx} inline />
-              </Drawer>
-            )}
           </>
         )}
     </Page>
@@ -522,7 +564,7 @@ const niceTop = (v) => { const p = 10 ** Math.floor(Math.log10(v)); return (Math
 
 function ScaleKey({ ctx, asLine }) {
   if (asLine) return <p class="tl-scale">Each point is a day; click one to open it.</p>;
-  if (ctx.focused) return <p class="tl-scale"><b>{ctx.focused.key}</b>: its {ctx.L.of === 'clicks' ? 'clicks' : 'visits'} each day; darker is a bigger share. <button type="button" class="todo-link" onClick={() => ctx.go({ f: '' })}>Stop</button></p>;
+  if (ctx.focused) return <p class="tl-scale"><b>{ctx.focused.key}</b>: its {ctx.L.unit || (ctx.L.of === 'clicks' ? 'clicks' : 'visits')} each day; darker is a bigger share. <button type="button" class="todo-link" onClick={() => ctx.go({ f: '' })}>Stop</button></p>;
   if (ctx.L) return <p class="tl-scale">A day is named when something starts: a new {ctx.L.one}, or one rising to 2× its usual share.</p>;
   if (ctx.lens === 'amount' || MONEY.has(ctx.metric)) return <p class="tl-scale">{MONEY.has(ctx.metric) ? 'Less' : 'Fewer'} <i style="background:color-mix(in srgb, var(--accent) 10%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 38%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 70%, var(--surface))" /> More</p>;
   return (
@@ -600,10 +642,10 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
 
 // One day: what happened in a sentence, its numbers against a usual (or last) same weekday,
 // where visits came from and landed, and what was marked that day.
-export function DayPanel({ scope, date, ctx, onClose, inline }) {
+export function DayPanel({ site, scope, date, ctx, onClose, inline, onMonth }) {
   const d = useAsync(() => api.get(`/calendar/day${qs({ site: scope, date })}`), [scope, date]);
   const [cmp, setCmp] = usePersistent('tl-cmp', 'usual');
-  const [tab, setTab] = useState(ctx.L ? ctx.lens : 'page');
+  const [tab, setTab] = useState(['page', 'source', 'query'].includes(ctx.lens) ? ctx.lens : 'page');
   const [adding, setAdding] = useState(false);
   const [asking, setAsking] = useState(false);
   const [hh, setHh] = useState(-1);
@@ -640,6 +682,7 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
           <b>{fmtD(date, { weekday: 'short', day: 'numeric', month: 'short' })}</b>
           <button type="button" class="nx-icon-btn" aria-label="Day after" disabled={next > ctx.last} onClick={() => ctx.go({ day: next, ...(inline && !onClose ? { end: next } : {}) })}><Icon name="chevron" size={14} /></button>
         </span>
+        {onMonth && <button type="button" class="nx-chip" onClick={onMonth}>Month <Icon name="chevron" size={11} class="down" /></button>}
         {onClose && <button type="button" class="nx-icon-btn" aria-label="Back to the whole period" title="Back to the whole period" onClick={onClose}><Icon name="x" size={14} /></button>}
       </div>
       {d.error ? <ErrorState error={d.error} onRetry={d.reload} /> : !d.data ? <Loading height={200} /> : (
@@ -693,6 +736,7 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
               );
             }) : <p class="muted small m-0">{tab === 'query' ? 'Search Console hasn’t reported this day yet, or nothing came from search.' : 'Nothing recorded.'}</p>}
           </div>
+          <DayGoalsAndRetention site={site} scope={scope} date={date} countries={lists?.country} phone={ctx.phone} />
           <div class="tl-sec">
             <h3 class="nx-label-sm">What happened</h3>
             {marks.map((e, i) => (
@@ -734,6 +778,122 @@ export function DayPanel({ scope, date, ctx, onClose, inline }) {
         </>
       )}
     </div>
+  );
+}
+
+const REGION_OF = (p) => REGION[p.country] || '';
+
+// Goals and new-vs-returning visits for one day, from the site's BigQuery export.
+// Sites without the export (or a day it hasn't reached) get one quiet line, not a card.
+const WAREHOUSE_LINKS = { 'needs-warehouse': '#/settings?tab=sites', auth: '#/settings?i=google' };
+
+function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
+  const single = scope !== 'all';
+  const [place, setPlace] = useState('');
+  useEffect(() => setPlace(''), [scope, date]);
+  const config = useAsync(() => (single ? api.get(`/sites/${scope}/config`) : null), [scope]);
+  const product = useSiteProduct(site || { id: '', demo: true });
+  const goals = config.data?.config?.goals?.length ? config.data.config.goals : product.data?.goals || [];
+  const trackedGoals = goals.filter((g) => (g.source === 'event' || g.source === 'page') && g.match)
+    .map((g) => ({ ...g, key: `${g.source}:${g.match}` }));
+  const keys = [...new Set(trackedGoals.map((g) => g.key))];
+  const ready = !config.loading && !product.loading;
+  const activity = useAsync(
+    () => (single && ready ? api.get(`/sites/${scope}/warehouse/day-summary${qs({ date, goals: keys.join(',') })}`) : null),
+    [scope, date, ready, keys.join(',')],
+  );
+  const summary = activity.data?.summary;
+  const visits = useAsync(
+    () => (single && summary?.sessions ? api.get(`/sites/${scope}/warehouse/day-sessions${qs({ date })}`) : null),
+    [scope, date, Boolean(summary?.sessions)],
+  );
+  // The map: every site from GA4's countries; with BigQuery, from each visit.
+  const people = visits.data?.people || null;
+  const places = dayPlaces(people, countries);
+  const pickedName = place && places.find((p) => (p.code || p.country) === place)?.country;
+  const mapSec = places.length > 0 && (
+    <div class="tl-sec">
+      <div class="lv-night tl-daymap">
+        <div class="tl-daymap-head">
+          <span><b>Where they were</b> · {places.length} {places.length === 1 ? 'country' : 'countries'}</span>
+          {pickedName ? <button type="button" class="link-btn" onClick={() => setPlace('')}>{pickedName} · show all</button>
+            : <small>{people ? 'Click an owl for its visitors' : 'Visits by country'}</small>}
+        </div>
+        <DayMap places={places} detailed={Boolean(people)} picked={place} onPick={people ? setPlace : undefined} phone={phone} />
+        {people && <p class="lv-legend m-0">Colour: where most came from · eyes open: most stayed · green dot: a goal reached</p>}
+      </div>
+    </div>
+  );
+  if (!single) return mapSec || null;
+  const counts = new Map((summary?.goals || []).map((g) => [g.key, g]));
+  const err = config.error || product.error || activity.error;
+  const quiet = (text, link) => (
+    <>{mapSec}<div class="tl-sec">
+      <h3 class="nx-label-sm">Goals · returning visits</h3>
+      <p class="muted small m-0">{text}{link}</p>
+    </div></>
+  );
+
+  if (err?.kind === 'needs-warehouse') {
+    return quiet('Daily goals and returning visits come from the GA4 BigQuery export. ', <a href={WAREHOUSE_LINKS[err.kind]}>Connect it →</a>);
+  }
+  if (err?.kind === 'no-data') return quiet(err.message, null);
+  if (err?.kind === 'auth') return quiet(`${err.message} `, <a href={WAREHOUSE_LINKS.auth}>Sign in →</a>);
+  if (err) {
+    return (
+      <>{mapSec}<div class="tl-sec">
+        <h3 class="nx-label-sm">Goals · returning visits</h3>
+        <ErrorState error={err} onRetry={() => { config.reload(); product.reload(); activity.reload(); }} />
+      </div></>
+    );
+  }
+  if (!ready || activity.loading || !summary) {
+    return <>{mapSec}<div class="tl-sec"><h3 class="nx-label-sm">Goals</h3><Loading height={54} /></div></>;
+  }
+  if (!summary.sessions) return quiet('The BigQuery export has no visits for this day yet — it usually lands a day later.', null);
+
+  const otherGoals = goals.some((g) => g.source !== 'event' && g.source !== 'page');
+  const shownPeople = people && place ? people.filter((p) => (REGION_OF(p) || p.country) === place) : people;
+  return (
+    <>
+      {mapSec}
+      <div class="tl-sec">
+        <h3 class="nx-label-sm">Goals</h3>
+        {!goals.length ? <p class="muted small m-0">No goals are set up. <a href={`#/site/${scope}/setup`}>Set up goals →</a></p>
+          : (
+            <>
+              {trackedGoals.map((goal) => {
+                const result = counts.get(goal.key);
+                return (
+                  <div key={goal.key} class="tl-srow">
+                    <span class="tl-sl"><span>{goal.label || goal.match}</span></span>
+                    <b>{fmt(result?.completions || 0)}</b>
+                    <span class="muted">{fmt(result?.people || 0)} people</span>
+                  </div>
+                );
+              })}
+              {otherGoals && (
+                <p class="muted small m-0">{trackedGoals.length ? 'Store and GitHub goals aren’t counted per day here. ' : 'This site’s goals are store or GitHub goals, which aren’t counted per day here. '}
+                  <a href={`#/site/${scope}/outcomes`}>See all goals →</a></p>
+              )}
+            </>
+          )}
+      </div>
+      <div class="tl-sec">
+        <h3 class="nx-label-sm">Returning visits</h3>
+        <div class="tl-nums">
+          <div class="tl-num"><span>New</span><b>{fmt(Math.max(0, summary.sessions - summary.returning))}</b></div>
+          <div class="tl-num"><span>Returning</span><b>{fmt(summary.returning)}</b></div>
+          <div class="tl-num"><span>Share returning</span><b>{Math.round((summary.returning / summary.sessions) * 100)}%</b></div>
+        </div>
+        <p class="muted small m-0">Returning: their first visit was before this day. <a href={`#/site/${scope}/journeys?tab=retention`}>Weekly cohorts →</a></p>
+      </div>
+      <div class="tl-sec">
+        {visits.error ? <><h3 class="nx-label-sm">Who came</h3><p class="muted small m-0">{visits.error.message}</p></>
+          : !visits.data ? <><h3 class="nx-label-sm">Who came</h3><Loading height={120} /></>
+            : <People key={place} day narrow={phone} people={shownPeople} head={<h3 class="nx-label-sm">Who came · {pickedName ? `${fmt(shownPeople.length)} from ${pickedName}` : `${fmt(people.length)}${people.length < summary.sessions ? ` of ${fmt(summary.sessions)}` : ''}`}, newest first</h3>} />}
+      </div>
+    </>
   );
 }
 

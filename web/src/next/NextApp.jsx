@@ -36,7 +36,7 @@ import './next.css';
 // Search, More); the scope list, More and the account menu open as sheets.
 // Routes are in nav.js; older links still land in the right place.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
-const MORE_KEYS = new Set(['timeline', 'traffic', 'journeys', 'goals', 'live', 'raw', 'account']);
+const MORE_KEYS = new Set(['story', 'traffic', 'journeys', 'goals', 'diagnose', 'live', 'raw', 'account']);
 
 export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const { sites, auth } = state;

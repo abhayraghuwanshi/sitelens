@@ -110,7 +110,7 @@ export function sourceKind(src) {
   if (/reddit|twitter|x\.com|t\.co|facebook|instagram|linkedin|youtube|ycombinator|threads|bsky|mastodon|tiktok|pinterest|discord/.test(s)) return 'social';
   return 'link';
 }
-const SOURCE_NAME = (s) => (s === '(direct)' ? 'Direct' : s === '(not set)' ? 'Unknown' : /^[a-z]+$/.test(s || '') ? cap(s) : s);
+export const SOURCE_NAME = (s) => (s === '(direct)' ? 'Direct' : s === '(not set)' ? 'Unknown' : /^[a-z]+$/.test(s || '') ? cap(s) : s);
 const EVENT_NAME = (e) => ({ sign_up: 'Signed up', purchase: 'Bought', file_download: 'Downloaded', section_view: 'Scrolled through sections', downloads_section_view: 'Saw the downloads section', form_start: 'Started a form', form_submit: 'Sent a form', video_start: 'Played a video', view_search_results: 'Searched the site', generate_lead: 'Left their details', begin_checkout: 'Started checkout', add_to_cart: 'Added to cart', login: 'Logged in' }[e]
   || clicked(e)
   || e.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()));
@@ -132,6 +132,9 @@ export function LivePage({ site }) {
   const streamed = Boolean(site.bq && !site.demo);
   const crowd = usePoll(`/sites/${site.id}/live/people`, PEOPLE_POLL, streamed);
   const people = crowd.data?.available ? crowd.data.people : null;
+  const [picked, setPlace] = useState('');
+  // Once nobody from the picked country is left in the window, show everyone again.
+  const place = picked && people?.some((p) => REGION[p.country] === picked) ? picked : '';
   const updated = useAgo(at);
   const phone = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 640px)').matches;
   if (!data && error) return <ErrorState error={error} />;
@@ -164,7 +167,8 @@ export function LivePage({ site }) {
             </div>
           </div>
         </div>
-        {people ? <LiveMap feed={people.map(personPlace)} phone={phone} /> : data.feed && <LiveMap feed={data.feed} phone={phone} />}
+        {people ? <LiveMap feed={people.map(personPlace)} phone={phone} picked={place} onPick={setPlace} /> : data.feed && <LiveMap feed={data.feed} phone={phone} />}
+        {people && place && <button type="button" class="link-btn lv-pick" onClick={() => setPlace('')}>Showing {people.find((p) => REGION[p.country] === place)?.country || place} · show everyone</button>}
         <p class="lv-meta">Updates every 30 seconds{updated ? ` · checked ${updated}` : ''}{error ? ' · the last refresh failed, showing the one before' : ''}</p>
       </section>
 
@@ -183,7 +187,7 @@ export function LivePage({ site }) {
         </section>
       )}
 
-      {people ? <People people={people} wins={data.wins} /> : <Feed data={data} streamed={streamed} reason={crowd.data?.reason} loading={streamed && !crowd.data && !crowd.error} />}
+      {people ? <People people={place ? people.filter((p) => REGION[p.country] === place) : people} wins={data.wins} narrow={phone} /> : <Feed data={data} streamed={streamed} reason={crowd.data?.reason} loading={streamed && !crowd.data && !crowd.error} />}
 
       <section class="card card-plain lv-grid" aria-label="Breakdown">
         <Mini title="Reading now" icon="pages" kind="page" rows={data.pages.map((p) => ({ name: p.title, users: p.users }))} empty="Nobody reading" />
@@ -252,7 +256,7 @@ function Feed({ data, streamed, reason, loading }) {
 }
 
 // GA4's country name → its code, for the map and the badge.
-const REGION = (() => {
+export const REGION = (() => {
   const out = {};
   try {
     const names = new Intl.DisplayNames(['en'], { type: 'region' });
@@ -331,56 +335,68 @@ function Owl({ seed = '', awake, still }) {
   );
 }
 
-// Everyone in the last 30 minutes, one row each, newest first.
-function People({ people }) {
+const clock = (ms) => new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+// A past visit "stayed" when it saw more than one page or lasted 10 seconds.
+const stayed = (p) => p.pages.length > 1 || p.last - p.first >= 10_000;
+const DAY_SOURCES = [['search', 'Search'], ['ai', 'AI answers'], ['social', 'Social'], ['direct', 'Direct'], ['link', 'Other sites']];
+
+// Everyone in the last 30 minutes, one row each, newest first. `day`: one past
+// day's visits (Timeline), each owl in the colour of where they came from, eyes
+// open when they stayed, with clock times instead of "min ago".
+export function People({ people, day = false, head = null, narrow = false }) {
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState('');
-  const shown = all ? people : people.slice(0, 12);
+  const shown = all ? people : people.slice(0, day ? 8 : 12);
   return (
-    <section class="lv-sec" aria-label="Just now">
-      <div class="lv-sh"><h2 class="nx-h2">Just now</h2><p class="muted">Everyone in the last 30 minutes, newest first · from the BigQuery stream, about a minute behind</p></div>
-      <div class="card card-plain lv-feed">
-        {!people.length && <p class="muted lv-empty">Nobody in the last 30 minutes.</p>}
+    <section class={day ? 'lv-day' : 'lv-sec'} aria-label={day ? 'Who came' : 'Just now'}>
+      {head || <div class="lv-sh"><h2 class="nx-h2">Just now</h2><p class="muted">Everyone in the last 30 minutes, newest first · from the BigQuery stream, about a minute behind</p></div>}
+      <div class={`lv-feed${day ? '' : ' card card-plain'}`}>
+        {!people.length && <p class="muted lv-empty">{day ? 'Nobody came this day.' : 'Nobody in the last 30 minutes.'}</p>}
         {shown.map((p) => {
           const goal = p.did.find((d) => d.kind === 'goal');
           const intent = p.did.filter((d) => d.kind === 'intent').sort((a, b) => /download|install/.test(b.name) - /download|install/.test(a.name))[0];
-          const fresh = minsAgo(p.last) < 5;
+          const fresh = day ? stayed(p) : minsAgo(p.last) < 5;
           const state = doing(p);
+          const tone = day ? `src-${sourceKind(p.source)}` : state.tone;
           const on = [p.browser, OS[p.os] || p.os].filter(Boolean).join(' on ');
           const isOpen = open === p.id;
           return (
             <div class={`lv-fi lv-person${goal ? ' win' : ''}`} key={p.id}>
-              <span class={`lv-who lv-owl ${state.tone}${fresh ? ' fresh' : ''}`} title={`${state.label} · ${cap(p.device) || 'Unknown device'} · from ${SOURCE_NAME(p.source)}`}>
+              <span class={`lv-who lv-owl ${tone}${fresh ? ' fresh' : ''}`} title={`${state.label} · ${cap(p.device) || 'Unknown device'} · from ${SOURCE_NAME(p.source)}`}>
                 <Owl seed={p.id} awake={fresh} />
-                {(state.tone === 'goal' || state.tone === 'intent') && <span class="lv-badge"><Icon name={state.icon} size={9} /></span>}
+                {(state.tone === 'goal' || state.tone === 'intent') && <span class={`lv-badge ${state.tone}`}><Icon name={state.icon} size={9} /></span>}
                 {DEVICE_ICON[p.device] && <span class="lv-dev"><Icon name={DEVICE_ICON[p.device]} size={10} /></span>}
               </span>
               <span class="lv-fw">
                 <span><b>{p.city || p.country || 'Somewhere'}</b>{p.city && p.country && <span class="muted"> {p.country}</span>}{p.new && <span class="nx-pill lv-new">New</span>}</span>
-                <small>{[on, cap(p.device), `from ${SOURCE_NAME(p.source)}`].filter(Boolean).join(' · ')}</small>
+                <small>{[on, !narrow && cap(p.device), `from ${SOURCE_NAME(p.source)}`].filter(Boolean).join(' · ')}</small>
                 <button type="button" class="lv-path" aria-expanded={isOpen} onClick={() => setOpen(isOpen ? '' : p.id)} title="Every page and event">
-                  {p.pages.length ? p.pages.map(shortTitle).join(' → ') : 'No page view yet'}
+                  {p.pages.length ? p.pages.map(shortTitle).join(' → ') : day ? 'No page view recorded' : 'No page view yet'}
                   {p.did.filter((d) => d.kind !== 'other' || p.did.length <= 2).slice(0, 3).map((d) => <span key={d.name} class={`nx-pill${d.kind === 'goal' ? ' good' : ''}`}>{EVENT_NAME(d.name)}</span>)}
                 </button>
                 {isOpen && (
                   <ol class="lv-steps">
-                    {[...p.pages.map((pg) => ({ ms: pg.ms, text: `Opened ${shortTitle(pg)}`, sub: pg.path })), ...p.did.map((d) => ({ ms: d.ms, text: EVENT_NAME(d.name), sub: d.kind === 'goal' ? 'goal' : '' }))]
+                    {[...p.pages.map((pg) => ({ ms: pg.ms, text: `Opened ${shortTitle(pg)}`, sub: pg.title ? pg.path : '' })), ...p.did.map((d) => ({ ms: d.ms, text: EVENT_NAME(d.name), sub: d.kind === 'goal' ? 'goal' : '' }))]
                       .sort((a, b) => a.ms - b.ms).map((x, i) => (
-                        <li key={i}><span class="muted">{new Date(x.ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span> {x.text}{x.sub && <span class="muted"> · {x.sub}</span>}</li>
+                        <li key={i}><span class="muted">{clock(x.ms)}</span> {x.text}{x.sub && <span class="muted"> · {x.sub}</span>}</li>
                       ))}
                   </ol>
                 )}
               </span>
               <span class="lv-fo">
-                {goal ? <span class="nx-pill good">{EVENT_NAME(goal.name)}</span> : intent ? <span class="nx-pill">{EVENT_NAME(intent.name)}</span> : <span class={fresh ? 'good' : 'muted'}>{fresh ? `${state.tone === 'browse' ? 'Browsing' : state.tone === 'look' ? 'Looking at downloads' : 'Reading'} now` : `${p.pages.length || 1} page${p.pages.length === 1 ? '' : 's'}`}</span>}
-                <small>{minAgo(minsAgo(p.last))}{forHow(p) ? ` · ${forHow(p)}` : ''}</small>
+                {goal ? <span class="nx-pill good">{EVENT_NAME(goal.name)}</span> : intent ? <span class="nx-pill">{EVENT_NAME(intent.name)}</span> : <span class={fresh && !day ? 'good' : 'muted'}>{fresh && !day ? `${state.tone === 'browse' ? 'Browsing' : state.tone === 'look' ? 'Looking at downloads' : 'Reading'} now` : `${p.pages.length || 1} page${(p.pages.length || 1) === 1 ? '' : 's'}`}</span>}
+                <small>{day ? clock(p.first) : minAgo(minsAgo(p.last))}{forHow(p) ? ` · ${forHow(p)}` : ''}</small>
               </span>
             </div>
           );
         })}
-        {people.length > 12 && <button type="button" class="link-btn lv-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${people.length}`}</button>}
+        {people.length > (day ? 8 : 12) && <button type="button" class="link-btn lv-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${people.length}`}</button>}
       </div>
-      {people.length > 0 && <div class="lv-legend">
+      {day && people.length > 0 && <div class="lv-legend">
+        {DAY_SOURCES.filter(([k]) => people.some((p) => sourceKind(p.source) === k)).map(([k, l]) => <span key={k}><span class={`lv-who lv-owl sm src-${k} fresh`}><Owl seed={k} awake still /></span>{l}</span>)}
+        <span class="muted">· eyes shut: left within 10 seconds · corner: <span class="good">✓</span> goal reached · click a row for every step</span>
+      </div>}
+      {!day && people.length > 0 && <div class="lv-legend">
         {[['check', 'goal', 'Reached a goal'], ['download', 'intent', 'Clicked to download'], ['download', 'look', 'Looking at downloads'], ['pages', 'browse', 'Browsing'], ['eye', 'read', 'Reading']].map(([icon, tone, l]) => <span key={tone}><span class={`lv-who lv-owl sm ${tone} fresh`}><Owl seed={tone} awake still /></span>{l}</span>)}
         <span class="muted">· corner: phone or desktop · eyes shut: not active in the last 5 minutes · click a row for every step</span>
       </div>}

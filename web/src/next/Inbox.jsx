@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { formatRelative } from '@shared/format.js';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
@@ -117,7 +117,12 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
   const opened = items.find((x) => x.id === open);
   const failed = feed.data?.lastRun?.errors?.length || 0;
 
-  const row = (x) => <Row key={x.id} item={x} labels={feed.data?.labels || {}} site={!site && sites.find((s) => s.id === (x.todo?.site || x.group?.[0].site))} on={open === x.id} />;
+  const markRead = (ids) => run('read', () => api.post('/alerts/read', { ids }));
+  const row = (x) => {
+    const r = <Row key={x.id} item={x} labels={feed.data?.labels || {}} site={!site && sites.find((s) => s.id === (x.todo?.site || x.group?.[0].site))} on={open === x.id} />;
+    // On a phone, swipe an unread alert left to mark it read.
+    return x.kind === 'alert' && !x.done ? <Swipe key={x.id} label="Read" onAct={() => markRead(x.group.map((a) => a.id))}>{r}</Swipe> : r;
+  };
 
   return (
     <Page title="Inbox" sub={site ? `What is waiting on you for ${site.label}` : 'What is waiting on you, on every site'}
@@ -127,6 +132,9 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
             onClick={() => run('check', () => api.post('/alerts/run', { digest: true }), (r) => `Checked: ${r.fired.length ? `${r.fired.length} new` : 'nothing new'}${r.errors.length ? `, ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} failed` : ''}.`)}>
             <Icon name="refresh" size={15} />
           </button>
+          {!loading && waitingOf('alert') > 1 && (
+            <button type="button" class="btn" disabled={Boolean(busy)} onClick={() => markRead(items.filter((x) => x.kind === 'alert' && !x.done).flatMap((x) => x.group.map((a) => a.id)))}>Read all</button>
+          )}
           <a class="nx-icon-btn" href="#/alerts?view=settings" title="Alert settings" aria-label="Alert settings"><Icon name="bell" size={15} /></a>
           <a class="btn primary" href={hrefWith('add', '1')}><Icon name="plus" size={13} /> To-do</a>
         </>
@@ -178,7 +186,7 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
       {opened?.kind === 'todo' && <TodoThread todo={opened.todo} sites={sites} onClose={close} />}
       {opened?.kind === 'alert' && (
         <AlertPanel group={opened.group} label={feed.data.labels[opened.group[0].rule]} site={sites.find((s) => s.id === opened.group[0].site)} onClose={close}
-          onRead={() => run('read', () => api.post('/alerts/read', { ids: opened.group.map((a) => a.id) }))} />
+          onRead={() => markRead(opened.group.map((a) => a.id))} />
       )}
       {open === 'checks' && feed.data && (
         <Drawer title="Sources that couldn’t be read" onClose={close}>
@@ -187,6 +195,41 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
         </Drawer>
       )}
     </Page>
+  );
+}
+
+// A row that slides left under a finger to show one action; past 80px, letting
+// go does it. A vertical drag scrolls as usual; a drag never counts as a tap.
+function Swipe({ label, onAct, children }) {
+  const [dx, setDx] = useState(0);
+  const start = useRef(null);
+  const moved = useRef(false);
+  const last = useRef(0); // the latest offset, read on release (state may lag a frame)
+  return (
+    <div class="nx-swipe">
+      <button type="button" class="nx-swipe-act" tabIndex={-1} aria-hidden="true" onClick={onAct}>{label}</button>
+      <div class={`nx-swipe-row${start.current ? ' drag' : ''}`} style={dx ? `transform:translateX(${dx}px)` : ''}
+        onTouchStart={(e) => { const t = e.touches[0]; start.current = { x: t.clientX, y: t.clientY, side: null }; moved.current = false; }}
+        onTouchMove={(e) => {
+          const s = start.current;
+          if (!s) return;
+          const t = e.touches[0];
+          const x = t.clientX - s.x;
+          const y = t.clientY - s.y;
+          if (s.side === null) {
+            if (Math.abs(x) < 8 && Math.abs(y) < 8) return;
+            s.side = Math.abs(x) > Math.abs(y);
+          }
+          if (!s.side) return;
+          moved.current = true;
+          last.current = Math.max(-130, Math.min(0, x));
+          setDx(last.current);
+        }}
+        onTouchEnd={() => { const go = last.current < -80; start.current = null; last.current = 0; setDx(0); if (go) onAct(); }}
+        onClickCapture={(e) => { if (moved.current) { e.preventDefault(); e.stopPropagation(); moved.current = false; } }}>
+        {children}
+      </div>
+    </div>
   );
 }
 
@@ -257,7 +300,10 @@ function AlertPanel({ group, label, site, onClose, onRead }) {
       {earlier.length > 0 && (
         <div class="nx-drawer-sec">
           <h3 class="nx-label-sm">Earlier · {earlier.length}</h3>
-          <ol class="nx-hist">{earlier.map((x) => <li key={x.id}><span class="muted">{day(x.at)}</span><span>{x.title}</span></li>)}</ol>
+          <ol class="nx-hist">{earlier.map((x) => {
+            const d = new Date(x.at).toISOString().slice(0, 10);
+            return <li key={x.id}>{site ? <a class="muted" href={`#/site/${site.id}/timeline?month=${d.slice(0, 7)}&day=${d}`}>{day(x.at)}</a> : <span class="muted">{day(x.at)}</span>}<span>{x.title}</span></li>;
+          })}</ol>
         </div>
       )}
     </Drawer>
