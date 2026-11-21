@@ -659,13 +659,18 @@ export function createAlerts({
         labels: RULE_LABELS,
       };
     },
-    // Unread count overall and per site, for the sidebar.
+    // Unread count overall and per site, for the sidebar and the phone badge.
+    // Repeats of one rule on one subject count once, as the Inbox lists them.
     async unread() {
       const s = await store.get();
       const bySite = {};
+      const seen = new Set();
       let unread = 0;
       for (const a of tagSites(s.alerts || [], s.products || [])) {
         if (a.read) continue;
+        const key = `${a.rule}:${a.subject?.type}:${a.subject?.id}:${a.site}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         unread++;
         if (a.site) bySite[a.site] = (bySite[a.site] || 0) + 1;
       }

@@ -326,6 +326,37 @@ export function demoSessionsList(range, { path = '', converted = '', limit = 50 
     }));
 }
 
+const DEMO_AUTO = new Set(['page_view', 'session_start', 'first_visit', 'user_engagement', 'scroll']);
+export function demoDaySessions(range, { limit = 200 } = {}) {
+  return sessionsIn(range)
+    .sort((a, b) => b.started_at - a.started_at)
+    .slice(0, limit)
+    .map((s) => ({
+      user_id: s.user_id, session_id: s.session_id, started_at: s.started_at, ended_at: s.ended_at,
+      device: s.device, country: s.country, visit_source: s.source || '(direct)', system: '', browser: '',
+      returning: s.first_touch_date < s.session_date,
+      steps: s.seq.filter((e) => !e.k.startsWith('event:') || !DEMO_AUTO.has(e.k.slice(6))).slice(0, 60),
+    }));
+}
+
+export function demoSessionsSummary(range, goalKeys = []) {
+  const rows = sessionsIn(range);
+  return {
+    sessions: rows.length,
+    people: new Set(rows.map((s) => s.user_id)).size,
+    returning: rows.filter((s) => s.first_touch_date < s.session_date).length,
+    goals: goalKeys.flatMap((key) => {
+      const matched = rows.flatMap((s) => s.seq.filter((e) => e.k === key).map(() => s.user_id));
+      if (!matched.length) return [];
+      return [{
+        key,
+        completions: matched.length,
+        people: new Set(matched).size,
+      }];
+    }),
+  };
+}
+
 function eventsIn(range) {
   const test = inRange(range);
   return demoWorld().events.filter((e) => test(e.date));

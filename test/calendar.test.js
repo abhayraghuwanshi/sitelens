@@ -255,3 +255,20 @@ test('calendarRoutes pass month, site and date through', async () => {
   await call('/api/calendar/day?date=2026-10-14');
   assert.deepEqual(calls, [['month', { month: '2026-10', site: 'a', fresh: true }], ['day', { date: '2026-10-14', site: 'all' }]]);
 });
+
+test('goal breakdown: people per goal per day, every goal listed even on days with none', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com', propertyId: '123' };
+  const asked = [];
+  const goalDays = async (s, from, to) => {
+    asked.push([s.id, from, to]);
+    return {
+      goals: [{ key: 'Signed up' }, { key: 'Saw pricing' }],
+      rows: [{ date: '2026-10-14', key: 'Signed up', value: 4 }, { date: '2026-10-13', key: 'Signed up', value: 1 }],
+    };
+  };
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, goalDays, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'goal', daily: true });
+  assert.equal(out.metric, 'people');
+  assert.deepEqual(out.rows.map((r) => [r.key, r.value, r.days]), [['Signed up', 5, [1, 4, 0]], ['Saw pricing', 0, [0, 0, 0]]]);
+  assert.deepEqual(asked, [['a', '2026-10-10', '2026-10-15']]);
+});

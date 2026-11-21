@@ -298,3 +298,21 @@ test('tagSites files alerts under a site directly or through its product', () =>
   ], products);
   assert.deepEqual(tagged.map((a) => a.site), ['infraplan', 'cooldesk', 'cooldesk', '', '']);
 });
+
+test('unread counts repeats of one rule on one subject once, as the Inbox groups them', async () => {
+  const alert = (id, day, extra = {}) => ({ id, key: `ext:${id}`, rule: 'extension-users', at: NOW, day, title: 'users down', subject: { type: 'extension', id: 'e1' }, ...extra });
+  const store = memoryStore({
+    sites: [trafficSite()],
+    alerts: [
+      alert('a1', '2026-10-29', { subject: { type: 'site', id: 's1' } }),
+      alert('a2', '2026-10-28', { subject: { type: 'site', id: 's1' } }),
+      alert('a3', '2026-10-27', { subject: { type: 'site', id: 's1' } }),
+      alert('b1', '2026-10-29', { rule: 'traffic', subject: { type: 'site', id: 's1' } }),
+      alert('c1', '2026-10-20', { rule: 'traffic', subject: { type: 'site', id: 's1' }, read: true }),
+    ],
+  });
+  const alerts = createAlerts({ store, engines: fakeEngines(), extensions: { list: async () => [] }, github: null, now: () => NOW, notify: fakeNotify() });
+  const out = await alerts.unread();
+  assert.equal(out.unread, 2);
+  assert.equal(out.bySite.s1, 2);
+});

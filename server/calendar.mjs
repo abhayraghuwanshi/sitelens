@@ -243,7 +243,7 @@ export function demoDay(siteId, date) {
 
 /* ---------- The service ---------- */
 
-export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, now = () => Date.now() }) {
+export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, goalDays = null, now = () => Date.now() }) {
   // Which sites, repos and extensions a view covers. 'all' = every real site
   // (the sample only when there's nothing else); a site adds its product's repos and extensions.
   async function scope(siteParam = 'all') {
@@ -644,7 +644,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
   // `key`: only that row (one page's days, for its own view).
   async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false, key: only = '' } = {}) {
-    if (!['source', 'page', 'query', 'country'].includes(by)) throw new ValidationError('by must be source, page, query or country.');
+    if (!['source', 'page', 'query', 'country', 'goal'].includes(by)) throw new ValidationError('by must be source, page, query, country or goal.');
     const r = span(from, to);
     const sc = await scope(site);
     const shift = Math.max(r.days, Math.min(366, Number(back) || 0));
@@ -658,9 +658,21 @@ export function createCalendar({ store, history, annotations, extensions = null,
     for (const s of sc.sites) {
       if (!s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
       try {
-        for (const row of await dailyBreakdown(s, by, prevFrom, r.to)) {
+        let found;
+        if (by === 'goal') {
+          // Goals: people reaching each of the site's event or page goals (GA4), listed even on a day with none.
+          const g = goalDays ? await goalDays(s, prevFrom, r.to) : { goals: [], rows: [] };
+          for (const goal of g.goals) {
+            const key = multi ? `${s.label} ${goal.key}` : goal.key;
+            cur.set(key, cur.get(key) || 0);
+          }
+          found = g.rows;
+        } else {
+          found = await dailyBreakdown(s, by, prevFrom, r.to);
+        }
+        for (const row of found) {
           const base = by === 'source' ? sourceFamily(row.key) : row.key;
-          const key = multi && by === 'page' ? `${s.label} ${base}` : base;
+          const key = multi && (by === 'page' || by === 'goal') ? `${s.label} ${base}` : base;
           const map = row.date >= r.from ? cur : row.date <= prevTo ? prev : null;
           if (!map) continue;
           map.set(key, (map.get(key) || 0) + row.value);
@@ -692,7 +704,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
     return {
       from: r.from, to: r.to, previous: { from: prevFrom, to: addDays(r.from, -1) }, site: sc.key, by,
       ...(daily ? { dates } : {}),
-      metric: by === 'query' ? 'clicks' : 'sessions',
+      metric: by === 'query' ? 'clicks' : by === 'goal' ? 'people' : 'sessions',
       note: 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
       rows,
       errors,

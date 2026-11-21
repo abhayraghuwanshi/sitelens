@@ -647,8 +647,44 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     }
   }
 
+  // The goals a site is measured by, as the Goals page picks them: its .sitelens.yml,
+  // else its product's goals, else a guess from the events it sends.
+  async function siteGoals(site) {
+    const fileGoals = (await siteConfig?.applied(site))?.goals || null;
+    if (fileGoals?.length) return fileGoals;
+    const product = (await products.list()).find((p) => p.siteId === site.id);
+    if (product?.goals?.length) return product.goals;
+    const base = await pieces.wrap(`${site.id}:28d:${historyRange('28d', now()).end}:site`, TTL, false, () => siteEvents(site, historyRange('28d', now())));
+    return autoGoals(classifyEvents(base.events), { hasStore: Boolean(product?.extensionIds?.length), hasRepos: Boolean(product?.repos?.length) });
+  }
+
+  // People reaching each event or page goal, per day: { goals: [{ key, label }], rows: [{ date, key, value }] }.
+  async function goalDays(site, from, to) {
+    if (!site || site.demo || !site.propertyId) return { goals: [], rows: [] };
+    const goals = (await siteGoals(site)).filter((g) => (g.source === 'event' || g.source === 'page') && g.match);
+    if (!goals.length) return { goals: [], rows: [] };
+    const label = (g) => g.label || g.match;
+    const sig = goals.map((g) => `${g.source}:${g.match}`).join(',');
+    return pieces.wrap(`${site.id}:goal-days:${from}:${to}:${sig}`, TTL, false, async () => {
+      const dateRanges = [{ startDate: from, endDate: to }];
+      const events = goals.filter((g) => g.source === 'event');
+      const pages = goals.filter((g) => g.source === 'page');
+      const [eventRows, ...pageRows] = await Promise.all([
+        events.length ? report(site, { dateRanges, dimensions: [{ name: 'date' }, { name: 'eventName' }], metrics: [{ name: 'totalUsers' }], dimensionFilter: eventIn(events.map((g) => g.match)), limit: 10_000 }) : [],
+        ...pages.map((g) => report(site, { dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'totalUsers' }], dimensionFilter: pageIs(g.match), limit: 1000 })),
+      ]);
+      const rows = [];
+      for (const r of eventRows) {
+        for (const g of events.filter((e) => e.match === r.eventName)) rows.push({ date: isoFromGa(r.date), key: label(g), value: n(r.totalUsers) });
+      }
+      pages.forEach((g, i) => { for (const r of pageRows[i]) rows.push({ date: isoFromGa(r.date), key: label(g), value: n(r.totalUsers) }); });
+      return { goals: goals.map((g) => ({ key: label(g), source: g.source, match: g.match })), rows };
+    });
+  }
+
   return {
     suggest,
+    goalDays,
     // Every event name the site sent in the range (GA4 API), or null without GA4.
     async eventNames(site, rangeKey = '28d') {
       if (!site || site.demo || !site.propertyId) return null;

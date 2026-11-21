@@ -85,3 +85,12 @@ test('sessions list filters by page and converting event', () => {
   assert.ok(list.every((s) => s.pages.includes('/signup') && s.conversions > 0));
   assert.ok(list[0].started_at >= list.at(-1).started_at, 'newest first');
 });
+
+test('daily session summary reports returning visits and configured goal completions', () => {
+  const day = warehouseRange('yesterday');
+  const summary = demo.demoSessionsSummary(day, ['page:/']);
+  assert.ok(summary.sessions > 0);
+  assert.ok(summary.people > 0);
+  assert.ok(summary.returning >= 0 && summary.returning <= summary.sessions);
+  assert.ok(summary.goals.some((g) => g.key === 'page:/' && g.completions >= g.people && g.people > 0));
+});

@@ -65,12 +65,12 @@ export const TOOLS = [
   },
   {
     name: 'breakdown',
-    description: 'What traffic was made of over a range, compared with the same-length window just before it: sessions by source family (by=source) or landing page (by=page), or search clicks by query (by=query). Use it to explain a change.',
+    description: 'What traffic was made of over a range, compared with the same-length window just before it: sessions by source family (by=source) or landing page (by=page), search clicks by query (by=query), or people reaching each of the site’s goals (by=goal). Use it to explain a change.',
     inputSchema: {
       type: 'object',
       properties: {
         from: DATE('First day'), to: DATE('Last day'), site: SITE,
-        by: { type: 'string', enum: ['source', 'page', 'query'] },
+        by: { type: 'string', enum: ['source', 'page', 'query', 'goal'] },
         limit: { type: 'integer', minimum: 1, maximum: 200, description: 'Rows to return (default 25).' },
       },
       required: ['from', 'to', 'by'],

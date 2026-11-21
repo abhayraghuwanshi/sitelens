@@ -182,7 +182,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
-  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays });
+  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays, goalDays: outcomes.goalDays });
   // Calendar days are local, so the story's "today" is too.
   const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
   const todos = createTodos({ store, annotations, context: createTodoContext({ calendar, engines, outcomes, store, today: () => new Date().toLocaleDateString('en-CA') }) });
@@ -588,6 +588,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         converted: query.get('converted') || '',
         outcome: query.get('outcome') || '',
       }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/day-summary$/, async ({ match, query }) =>
+      engines.daySummary(await siteOr404(match[1]), query.get('date') || '', (query.get('goals') || '').split(',').filter(Boolean), flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/day-sessions$/, async ({ match, query }) =>
+      engines.daySessions(await siteOr404(match[1]), query.get('date') || '', flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/events$/, async ({ match, query }) =>
       engines.events(await siteOr404(match[1]), query.get('range'), flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/journeys$/, async ({ match, query }) =>

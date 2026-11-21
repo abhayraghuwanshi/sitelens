@@ -36,8 +36,9 @@ export const WAREHOUSE_RANGES = [
 // endDate for static datasets such as Google's public GA4 sample.
 export function warehouseRange(rangeKey = '28d', { endDate = '', now = new Date() } = {}) {
   // `yesterday` (Story's daily check) is one day: the export already ends yesterday.
-  const option = rangeKey === 'yesterday' ? { key: 'yesterday', days: 1 } : WAREHOUSE_RANGES.find((r) => r.key === rangeKey) || WAREHOUSE_RANGES[1];
-  const end = endDate ? new Date(`${endDate}T12:00:00`) : new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
+  const exactDay = /^\d{4}-\d{2}-\d{2}$/.test(rangeKey) && !Number.isNaN(Date.parse(`${rangeKey}T00:00:00Z`));
+  const option = exactDay ? { key: rangeKey, days: 1 } : rangeKey === 'yesterday' ? { key: 'yesterday', days: 1 } : WAREHOUSE_RANGES.find((r) => r.key === rangeKey) || WAREHOUSE_RANGES[1];
+  const end = exactDay ? new Date(`${rangeKey}T12:00:00`) : endDate ? new Date(`${endDate}T12:00:00`) : new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1, 12);
   const start = new Date(end);
   start.setDate(start.getDate() - (option.days - 1));
   const range = { key: option.key, days: option.days, start: ymd(start), end: ymd(end) };
@@ -390,11 +391,32 @@ LIMIT @limit`,
   };
 }
 
+// One day's visits for the Timeline: each with its pages and own events in order
+// (automatic events left out), newest first.
+export function daySessionsSql(bq, range, { limit = 200 } = {}) {
+  const sql = withSessions(
+    bq,
+    range,
+    `SELECT user_id, session_id, started_at, ended_at, device, country,
+  IFNULL(visit_source, '(direct)') AS visit_source, ${systemGroup(bq)} AS system, ${browserOf(bq)} AS browser,
+  first_touch_date < session_date AS returning,
+  ARRAY(
+    SELECT AS STRUCT k, ts FROM UNNEST(seq)
+    WHERE NOT STARTS_WITH(k, 'event:') OR SUBSTR(k, 7) NOT IN UNNEST(@auto_events)
+    ORDER BY ts LIMIT 60
+  ) AS steps
+FROM sessions
+ORDER BY started_at DESC
+LIMIT @limit`,
+  );
+  return { sql, params: { ...sessionParams(bq), auto_events: AUTO_EVENTS, limit: clampInt(limit, 1, 500) } };
+}
+
 // What the sessions matching the list's filters add up to — all of them, not
 // just the 100 the list shows — in one pass: totals, then the top landing pages,
 // exit pages, sources, systems, browsers and countries (with how many of each
 // reached the outcome, when the site has one).
-export function sessionsSummarySql(bq, range, { path = '', converted = '', outcome = '' } = {}) {
+export function sessionsSummarySql(bq, range, { path = '', converted = '', outcome = '', goalKeys = [] } = {}) {
   const out = EVENT_NAME.test(outcome) ? `EXISTS(SELECT 1 FROM UNNEST(seq) WHERE k = 'event:${outcome}')` : 'FALSE';
   const dims = {
     landing: `IFNULL(pages[SAFE_OFFSET(0)], '(not set)')`,
@@ -418,6 +440,13 @@ export function sessionsSummarySql(bq, range, { path = '', converted = '', outco
   APPROX_QUANTILES(ended_at - started_at, 2)[OFFSET(1)] AS median_us,
   COUNTIF(${out}) AS converted,
   COUNTIF(${out} AND first_touch_date < session_date) AS converted_returning,
+  ARRAY(
+    SELECT AS STRUCT e.k AS key, COUNT(*) AS completions, COUNT(DISTINCT user_id) AS people
+    FROM sessions, UNNEST(seq) AS e
+    WHERE e.k IN UNNEST(@goal_keys)
+    GROUP BY e.k
+    ORDER BY completions DESC
+  ) AS goals,
 ${tops}
 FROM sessions
 WHERE (@path = '' OR @path IN UNNEST(pages))
@@ -425,7 +454,7 @@ WHERE (@path = '' OR @path IN UNNEST(pages))
   );
   return {
     sql,
-    params: { ...sessionParams(bq), path: String(path), converted: converted ? `event:${converted}` : '' },
+    params: { ...sessionParams(bq), path: String(path), converted: converted ? `event:${converted}` : '', goal_keys: goalKeys },
   };
 }
 
