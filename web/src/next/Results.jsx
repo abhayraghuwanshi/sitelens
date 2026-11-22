@@ -15,7 +15,8 @@ const short = (date) => new Date(`${date}T00:00:00Z`).toLocaleDateString('en-GB'
 const GOT = { installs: 'Chrome Web Store', downloads: 'GitHub files, not people', stars: 'GitHub stars gained' };
 const hasHistory = (x) => x.previous !== null && x.previous !== undefined;
 
-export function Results({ site, range, n = '5', title = 'What it led to', more = true }) {
+// usage={false}: leave the app's own numbers to the page showing them as cards (Goals).
+export function Results({ site, range, n = '5', title = 'What it led to', more = true, usage: withUsage = true }) {
   const products = useAsync(() => api.get('/products').catch(() => null), []);
   const product = products.data?.products?.find((p) => p.siteId === site.id);
   // A product carries the store/repo numbers, but its site may not have one: the
@@ -29,14 +30,14 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
   const metrics = useAsync(() => api.get(`/sites/${site.id}/metrics${qs({ range })}`).catch(() => ({ metrics: [] })), [site.id, range]);
   if (!products.data || (!out.data && out.loading)) return <section class="card card-plain"><Loading height={160} /></section>;
   const all = out.data?.goals?.list || [];
-  const outcomesHref = `#/site/${site.id}/outcomes?range=${range}`;
+  const outcomesHref = `#/site/${site.id}/goals`;
 
   // On the site: the outcome first, then the steps that lead to it, biggest first.
   const onSite = all.filter((g) => g.source === 'event' || g.source === 'page')
     .sort((a, b) => (b.role === 'outcome') - (a.role === 'outcome') || b.count - a.count);
   const got = all.filter((g) => GOT[g.source] && g.role === 'outcome')
     .sort((a, b) => hasHistory(b) - hasHistory(a));
-  const usage = (metrics.data?.metrics || []).map((m) => ({
+  const usage = (withUsage ? metrics.data?.metrics || [] : []).map((m) => ({
     id: m.id,
     label: m.label.replace(/[\s·]+$/, ''),
     count: m.error ? null : m.total,
@@ -57,14 +58,14 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
         ) : (
           <>
             {onSite.length > 0 && (
-              <OutcomeKind icon="target" title="On the site" note="Visitors, from GA4" href={outcomesHref}
+              <OutcomeKind icon="target" title="On the site" note="Visitors, from GA4" href={more ? outcomesHref : null}
                 items={onSite.map((g) => ({ id: g.id, label: g.label, count: g.unavailable ? null : g.count, previous: g.previous, note: g.unavailable || (g.role === 'step' ? 'on the way' : '') }))} />
             )}
             {got.length > 0 && (
-              <OutcomeKind icon="download" title="Got the product" note="Counted outside the site" href={outcomesHref}
+              <OutcomeKind icon="download" title="Got the product" note="Counted outside the site" href={more ? outcomesHref : null}
                 items={got.map((g) => ({ id: g.id, label: g.label, count: g.unavailable ? null : g.count, previous: g.previous, note: g.unavailable || GOT[g.source] }))} />
             )}
-            {usage.length > 0 ? (
+            {!withUsage ? null : usage.length > 0 ? (
               <OutcomeKind icon="users" title="Kept using it" note="Custom metrics" href="#/account?tab=metrics" items={usage} />
             ) : (
               <a class="nx-callout nx-okind-empty" href="#/account?tab=metrics">
@@ -82,8 +83,9 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
 // One kind of outcome: its headline number large, the rest as short rows.
 function OutcomeKind({ icon, title, note, href, items }) {
   const [lead, ...rest] = items;
+  const Box = href ? 'a' : 'div';
   return (
-    <a class="nx-okind" href={href}>
+    <Box class="nx-okind" href={href || undefined}>
       <div class="nx-label-sm"><Icon name={icon} size={12} /> {title}<span class="nx-okind-src">{note}</span></div>
       <div class="nx-okind-lead">
         <b>{amount(lead.count)}</b>
@@ -101,7 +103,7 @@ function OutcomeKind({ icon, title, note, href, items }) {
           ))}
         </ul>
       )}
-    </a>
+    </Box>
   );
 }
 

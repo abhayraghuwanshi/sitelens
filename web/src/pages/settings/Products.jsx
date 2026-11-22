@@ -141,23 +141,32 @@ export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
 // Everything a product runs on besides its GA4 site: domains, hosting, code,
 // store listings, community and goals. `form.siteId` is the site it belongs to;
 // `inSite` says the site editor holds them, so a site not saved yet still counts.
-export function ProductStages({ form, set, setup, inSite = false }) {
+// only: one stage's key (domains, hosting, code, distribution, community, goals), for editing it on its own.
+export function ProductStages({ form, set, setup, inSite = false, only = '' }) {
   const { options } = setup;
+  const show = (key) => !only || only === key;
   return (
     <>
+      {show('domains') && (
       <Stage icon="globe" title="Domains" sub="Expiry, DNS and SSL are checked from public records. No registrar login needed." done={form.domains.length > 0}>
         <Domains domains={form.domains} registrars={setup.registrars} hostingNames={Object.fromEntries(setup.hosting.map((h) => [h.key, h.label]))} onChange={(domains) => set({ domains })}
           onHostingGuess={(provider) => !form.hosting?.provider && set({ hosting: { provider } })} />
       </Stage>
+      )}
 
+      {show('hosting') && (
       <Stage icon="rocket" title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel give Kauzl a deploy feed; other hosts are recorded for context." done={hostingState(form.hosting)}>
         <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} onChange={(hosting) => set({ hosting })} />
       </Stage>
+      )}
 
+      {show('code') && (
       <Stage icon="github" title="Code & releases" sub="Ship → GitHub, Articles and Funnels read these repos, plus the Vercel project’s repo and any repo whose homepage is the site. Releases mark the timeline." done={form.repos.length > 0}>
         <Repos repos={options.repos} selected={form.repos} onChange={(repos) => set({ repos })} />
       </Stage>
+      )}
 
+      {show('distribution') && (
       <Stage icon="puzzle" title="Distribution" sub="Chrome Web Store listings: installs, users, rating and version changes." done={form.extensionIds.length > 0}>
         {options.extensions.length ? options.extensions.map((x) => (
           <label class="check" key={x.id}>
@@ -166,7 +175,9 @@ export function ProductStages({ form, set, setup, inSite = false }) {
           </label>
         )) : <small class="muted">Track one on the <a href="#/extensions">Extensions</a> page first.</small>}
       </Stage>
+      )}
 
+      {show('community') && (
       <Stage icon="chat" title="Community" sub="Posts and threads that bring traffic. The product name, domain and repos are searched automatically; add other names people use." done={form.keywords.length > 0}>
         <Keywords keywords={form.keywords} onChange={(keywords) => set({ keywords })} />
         <div class="row small">
@@ -176,10 +187,13 @@ export function ProductStages({ form, set, setup, inSite = false }) {
         </div>
         <p class="note m-0">Tip: when you post a link yourself, add <span class="mono">?utm_source=reddit&amp;utm_campaign=&lt;post&gt;</span> so GA4 can tie visits to that exact post.</p>
       </Stage>
+      )}
 
+      {show('goals') && (
       <Stage id="goals" icon="target" title="Goals" sub="What counts as progress and what counts as a result: a purchase, a sign-up, an install, a download. Outcomes measures these." done={form.goals.length > 0}>
         <GoalsEditor goals={form.goals} onChange={(goals) => set({ goals })} siteId={form.siteId} hasStore={form.extensionIds.length > 0} hasRepos={form.repos.length > 0} />
       </Stage>
+      )}
     </>
   );
 }

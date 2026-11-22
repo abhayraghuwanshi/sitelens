@@ -1,10 +1,10 @@
 import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
-import { Segmented, Loading, ErrorState } from '../components/ui.jsx';
+import { Segmented, SegmentedAsMenu, Loading, ErrorState } from '../components/ui.jsx';
 import { LineChart } from '../charts/LineChart.jsx';
 import { Icon } from '../components/icons.jsx';
-import { Page } from './Page.jsx';
+import { Page, usePhoneWidth } from './Page.jsx';
 import { Results, SectionHead } from './Results.jsx';
 
 // One site's outcomes (server/outcomes.mjs), in the order you'd act on them:
@@ -36,7 +36,7 @@ export function OutcomesPage({ site, params, back }) {
   return (
     <Page title="Goals" back={back}
       sub={`What ${site.label}’s visits led to, what stands out, and where people drop off`}
-      actions={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
+      time={<Segmented label="Period" value={range} options={RANGES} onChange={pick} />}>
       {body}
     </Page>
   );
@@ -56,7 +56,7 @@ function OutcomeBody({ site, product, range }) {
       <Actions site={site} insights={d.insights} range={range} />
       <Path funnel={d.funnel} host={d.site?.host} series={d.series} />
       <Sources d={d} />
-      <Goals d={d} site={site} onRefresh={() => data.reload({ fresh: true })} refreshing={data.loading} />
+      <GoalsMeasured d={d} site={site} onRefresh={() => data.reload({ fresh: true })} refreshing={data.loading} />
     </>
   );
 }
@@ -145,7 +145,8 @@ function Path({ funnel, host, series }) {
 }
 
 // Who converts, one cut at a time instead of four tables at once.
-function Sources({ d }) {
+export function Sources({ d }) {
+  const phone = usePhoneWidth();
   const conv = d.rateLabel;
   const cuts = [
     d.channels.length && { key: 'channels', label: 'Channels', rows: d.channels, col: conv, n: 'goalUsers', note: `Site visitors from each channel, and how many ${conv.toLowerCase()}.`, engaged: true },
@@ -161,12 +162,16 @@ function Sources({ d }) {
   return (
     <section class="card card-plain" aria-label="Who converts">
       <div class="nx-section-head">
-        <h2 class="nx-h2"><span class="nx-step" aria-hidden="true">4</span>Who converts</h2>
-        {cuts.length > 1 && <Segmented label="Split by" value={cut.key} options={cuts.map((c) => ({ key: c.key, label: c.label }))} onChange={setPick} />}
+        <h2 class="nx-h2">Who converts</h2>
+        {cuts.length > 1 && (
+          <SegmentedAsMenu.Provider value={phone}>
+            <Segmented label="Split by" value={cut.key} options={cuts.map((c) => ({ key: c.key, label: c.label }))} onChange={setPick} />
+          </SegmentedAsMenu.Provider>
+        )}
       </div>
       <p class="note">{cut.note} The best rate with at least 5 visitors is marked.</p>
       <div class={`nx-table nx-conv${cut.engaged ? ' engaged' : ''}`}>
-        <div class="nx-tr nx-th"><span /><span class="nx-num">Visitors</span><span class="nx-num">{cut.col}</span><span>Rate</span>{cut.engaged && <span class="nx-num">Engaged</span>}</div>
+        <div class="nx-tr nx-th"><span /><span class="nx-num">Visitors</span><span class="nx-num" title={cut.col}>{phone ? (cut.col === 'Installs' ? 'Installs' : 'Reached') : cut.col}</span><span>Rate</span>{cut.engaged && <span class="nx-num">Engaged</span>}</div>
         {cut.rows.slice(0, 12).map((r) => {
           const hot = r.visitors >= 5 && best > 0 && r.rate === best;
           return (
@@ -186,27 +191,33 @@ function Sources({ d }) {
 
 // The site's .sitelens.yml: on GitHub it opens in a new tab; a local or demo
 // file has no page of its own, so it opens the site's Edit page, which shows it.
-function FileLink({ file, site }) {
-  const name = file?.type === 'repo' ? `${file.repo}/${file.path}` : file?.type === 'demo' ? 'the built-in demo file' : file?.path ? file.path.split('/').pop() : 'the site’s repo file';
+// short: just ".sitelens.yml" (the full repo path is in the tooltip).
+function FileLink({ file, site, short = false }) {
+  const full = file?.type === 'repo' ? `${file.repo}/${file.path}` : file?.type === 'demo' ? 'the built-in demo file' : file?.path ? file.path.split('/').pop() : 'the site’s repo file';
+  const name = short ? '.sitelens.yml' : full;
   const stop = (e) => e.stopPropagation();
-  if (file?.url) return <a href={file.url} target="_blank" rel="noreferrer" onClick={stop} title="Open on GitHub"><code>{name}</code> <Icon name="external" size={11} /></a>;
-  return <a href={`#/site/${site.id}/setup`} onClick={stop} title={file?.path || ''}><code>{name}</code></a>;
+  if (file?.url) return <a href={file.url} target="_blank" rel="noreferrer" onClick={stop} title={`Open ${full} on GitHub`}><code>{name}</code> <Icon name="external" size={11} /></a>;
+  return <a href={`#/site/${site.id}/setup`} onClick={stop} title={file?.path || full}><code>{name}</code></a>;
 }
 
 // The goals everything above is measured against, folded away.
-function Goals({ d, site, onRefresh, refreshing }) {
+// noEdit: the page's header already has Edit goals (Goals page), so the line only unfolds and refreshes.
+export function GoalsMeasured({ d, site, onRefresh, refreshing, noEdit = false }) {
   const g = d.goals;
   const fromFile = g.from === 'file';
-  const edit = fromFile || d.product?.siteOnly ? `#/site/${site.id}/setup` : `#/settings?tab=products&edit=${d.product?.id || ''}&focus=goals`;
+  const edit = fromFile ? `#/site/${site.id}/setup` : `#/site/${site.id}/goals?edit=1`;
   return (
-    <details class="card card-plain nx-goals">
+    <details class={`card card-plain nx-goals${noEdit ? ' slim' : ''}`}>
       <summary>
         <span><b>Measured against {g.list.length} goal{g.list.length === 1 ? '' : 's'}</b>
-          <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} /></> : g.custom ? 'set by you' : 'guessed by Kauzl until you set your own'}</span></span>
-        <span class="nx-action-row">
-          <a class="btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
-          <button class="btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>
-        </span>
+          <span class="muted"> · {fromFile ? <>from <FileLink file={g.file} site={site} short={noEdit} /></> : g.custom ? 'set by you' : 'guessed by Kauzl until you set your own'}</span></span>
+        {/* On the Goals page, Edit goals is in the header and the numbers reload with the page: no buttons here. */}
+        {!noEdit && (
+          <span class="nx-action-row">
+            <a class="btn" href={edit}><Icon name="target" size={13} /> {fromFile ? 'Edit goals' : g.custom ? 'Edit goals' : 'Set goals'}</a>
+            <button class="btn" type="button" disabled={refreshing} onClick={(e) => { e.preventDefault(); onRefresh(); }}><Icon name="refresh" size={13} /> Refresh</button>
+          </span>
+        )}
       </summary>
       <div class="nx-table nx-goal-table">
         <div class="nx-tr nx-th"><span>Goal</span><span>Measured by</span><span>Counts as</span><span class="nx-num">This period</span><span class="nx-num">Before</span></div>

@@ -1,17 +1,19 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, usePersistent } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
+import { usePhoneWidth } from './Page.jsx';
 import { HoverLayer } from './HoverChart.jsx';
 
 // Search: the short answer, then a ladder (one row per search, from Top 3 to
 // Not showing, a dot where it ranks now, a ring where Google and Bing disagree),
 // the searches the engines disagree on, the three closest to paying off, and
 // every search as a list on demand. A search opens in the drawer (?q=).
-const ENGINES = [{ key: 'both', label: 'Both' }, { key: 'google', label: 'Google' }, { key: 'bing', label: 'Bing' }];
+// One engine at a time: adding Google's and Bing's numbers together read as one engine and confused.
+const ENGINES = [{ key: 'google', label: 'Google' }, { key: 'bing', label: 'Bing' }];
 const fmt = (v) => Math.round(v || 0).toLocaleString('en-US');
 const fmtDay = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }) : '');
 const rank = (p) => (p == null ? '—' : `#${Math.round(p)}`);
@@ -71,16 +73,19 @@ function stateOf(r, eng) {
 // Where on the track a position sits (%).
 const xOf = (p) => (p == null ? 91 : p <= 3 ? 2 + ((p - 1) / 2) * 14 : p <= 10 ? 20 + ((p - 4) / 6) * 28 : p <= 20 ? 52 + ((p - 11) / 9) * 26 : 80 + Math.min(p - 21, 6));
 const pageName = (path) => (path === '/' ? 'Home page' : path);
+// Where a rank sits, in words (the phone list says it instead of drawing the strip).
+const zoneOf = (p) => (p == null ? ['Not showing', 'off'] : p <= 3.5 ? ['Top 3', 'top'] : p <= 10.5 ? ['Page 1', 'p1'] : p <= 20.5 ? ['Page 2', 'p2'] : ['Past page 2', 'off']);
 
 // The engine switch, in the page header next to the period (Section puts it there).
-export const engineOf = (params) => (ENGINES.some((e) => e.key === params.get('eng')) ? params.get('eng') : 'both');
-export const engineSub = (eng) => (eng === 'google' ? 'Google only' : eng === 'bing' ? 'Bing only' : 'Google and Bing together');
+export const engineOf = (params) => (params.get('eng') === 'bing' ? 'bing' : 'google');
+export const engineSub = (eng) => (eng === 'bing' ? 'Bing search' : 'Google search');
 export function EngineSwitch({ params }) {
-  const set = (key) => { location.hash = hrefWith('eng', key === 'both' ? '' : key).slice(1); };
+  const set = (key) => { location.hash = hrefWith('eng', key === 'google' ? '' : key).slice(1); };
   return <Segmented label="Search engine" value={engineOf(params)} options={ENGINES} onChange={set} />;
 }
 
 export function SearchView({ site, range, params }) {
+  const phone = usePhoneWidth();
   const hub = useAsync(() => api.get(`/sites/${site.id}/search-hub${qs({ range })}`), [site.id, range]);
   const ai = useAsync(() => api.get(`/ai-search/sites/${site.id}/checks`).catch(() => null), [site.id]);
   // Page titles for the Next-moves cards (paths are hard to read); paths until they arrive.
@@ -97,13 +102,17 @@ export function SearchView({ site, range, params }) {
   // Comparing engines only means something when both answered.
   const both = !h.google?.error && !h.bing?.error;
   const rows = h.queries
-    .map((r) => ({ ...r, pos: posOf(r, eng), was: beforeOf(r, eng), s: stateOf(r, eng), d: eng === 'both' && both ? disagree(r, h.queries) : null, page: pageFor.get(r.key)?.path || '' }))
+    .map((r) => ({ ...r, pos: posOf(r, eng), was: beforeOf(r, eng), s: stateOf(r, eng), d: both ? disagree(r, h.queries) : null, page: pageFor.get(r.key)?.path || '' }))
     .filter((r) => eng === 'both' || (eng === 'google' ? r.google : r.bing));
   const total = rows.reduce((n, r) => n + clicksOf(r, eng), 0);
   const close = rows.filter((r) => (r.s.k === 'p1' || r.s.k === 'p2') && r.s.gain > 0).sort((a, b) => b.s.gain - a.s.gain);
   const best = [...rows].sort((a, b) => clicksOf(b, eng) - clicksOf(a, eng))[0];
   const gain = close.reduce((n, r) => n + r.s.gain, 0);
-  const split = rows.filter((r) => r.d).sort((a, b) => b.impressions - a.impressions);
+  // Missing on the other engine: this engine shows the site for it, the other doesn't at all (and no
+  // other wording of it either). The one comparison worth acting on: submit the page, check its crawl.
+  const other = eng === 'bing' ? 'Google' : 'Bing';
+  const missingOf = (r) => Boolean(r.d && !r.d.near && r.d.bad === other && r.d.word.startsWith('Missing'));
+  const split = rows.filter(missingOf).sort((a, b) => seenOf(b, eng) - seenOf(a, eng));
   // Moved: a whole place or more since the period before.
   const moveOf = (r) => (r.pos == null || r.was == null || Math.abs(r.was - r.pos) < 1 ? null : r.was > r.pos ? 'up' : 'down');
   const moved = rows.some((r) => moveOf(r));
@@ -123,13 +132,36 @@ export function SearchView({ site, range, params }) {
         <p class="nx-answer">
           <b>{fmt(total)}</b> search clicks from {engName} in this period{best && clicksOf(best, eng) ? <>, most from “{best.key}” ({rank(best.pos)})</> : null}.
           {close.length > 0 && <> <b>{close.length}</b> searches are close: the top 3 for them would bring about <b>{fmt(gain)}</b> more visits.</>}
-          {split.length > 0 && <> <b>{split.length}</b> do well on one engine and badly on the other.</>}
+          {split.length > 0 && <> <b>{split.length}</b> {split.length === 1 ? 'doesn’t' : 'don’t'} show you on {other} at all.</>}
         </p>
       ) : <p class="nx-answer">No searches from {engName} in this period yet.</p>}
 
       {rows.length > 0 && (
         <section class="card card-plain nx-ladder" aria-label="Where each search ranks">
-          <h2 class="nx-h2">Where each search ranks <span class="muted small">· further left is better{moved ? ' · arrows show the move since the period before' : ''}</span></h2>
+          <h2 class="nx-h2">Where each search ranks <span class="nx-h2-sub">{phone ? 'your place in the results, most-seen searches first' : `further left is better${moved ? ' · arrows show the move since the period before' : ''}`}</span></h2>
+          {phone ? (
+            <div class="nx-mlist nx-rlist">
+              {shown.map((r) => {
+                const [zone, zk] = zoneOf(r.pos);
+                const mv = moveOf(r);
+                return (
+                  <a key={r.key} class="nx-mrow" href={hrefWith('q', r.key)}>
+                    <span class="nx-mrow-main">
+                      <b>“{r.key}”</b>
+                      <span class="nx-mrow-sub">
+                        {mv && <span class={`nx-rmove ${mv}`}>{mv === 'up' ? '↑' : '↓'} from {rank(r.was)}</span>}
+                        <span>{fmt(seenOf(r, eng))} seen</span>
+                        {missingOf(r) && <span class="bad">missing on {other}</span>}
+                      </span>
+                    </span>
+                    <span class={`nx-rpos ${zk}`}><b>{r.pos == null ? '—' : rank(r.pos)}</b><small>{zone}</small></span>
+                    <Icon name="chevron" size={13} class="nx-mrow-go" />
+                  </a>
+                );
+              })}
+              {ladder.length > 10 && <button type="button" class="nx-mrow-more" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${ladder.length}`}</button>}
+            </div>
+          ) : <>
           <div class="nx-lrow nx-lhead" aria-hidden="true">
             <span />
             <span class="nx-ltrack-h"><span style="left:1%">Top 3</span><span style="left:19%">Page 1</span><span style="left:51%">Page 2</span><span style="left:79%">Not showing</span></span>
@@ -138,43 +170,46 @@ export function SearchView({ site, range, params }) {
           {shown.map((r) => (
             <a key={r.key} class={`nx-lrow${open === r.key ? ' on' : ''}`} href={hrefWith('q', r.key)}>
               <span class="nx-lname"><b>“{r.key}”</b>
-                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), moveOf(r) && <span class={moveOf(r) === 'up' ? 'good' : 'bad'}>{moveOf(r)} from {rank(r.was)}</span>, r.d && <span class={r.d.near ? 'muted' : 'bad'}>{r.d.word.toLowerCase()}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
+                <small>{[r.page && pageName(r.page), r.pos != null && rank(r.pos), moveOf(r) && <span class={moveOf(r) === 'up' ? 'good' : 'bad'}>{moveOf(r)} from {rank(r.was)}</span>, missingOf(r) && <span class="bad">missing on {other}</span>].filter(Boolean).reduce((acc, x, i) => (i ? [...acc, ' · ', x] : [x]), [])}</small>
               </span>
               <span class="nx-ltrack" title={r.pos == null ? 'Not in the results yet' : `${rank(r.pos)} now${r.was != null ? `, ${rank(r.was)} the period before` : ''}`}>
                 <span class="nx-lz" style="left:0;width:18%" /><span class="nx-lz alt" style="left:18%;width:32%" /><span class="nx-lz" style="left:50%;width:28%" /><span class="nx-lz alt" style="left:78%;width:22%" />
                 {moveOf(r) && <span class={`nx-larr ${moveOf(r)}`} style={`left:${Math.min(xOf(r.was), xOf(r.pos))}%;width:${Math.abs(xOf(r.was) - xOf(r.pos))}%`}><i /></span>}
-                <span class={`nx-ldot${r.pos == null ? ' gap' : ''}${r.d && !r.d.near ? ' dis' : ''}`} style={`left:${xOf(r.pos)}%`} />
+                <span class={`nx-ldot${r.pos == null ? ' gap' : ''}${missingOf(r) ? ' dis' : ''}`} style={`left:${xOf(r.pos)}%`} />
               </span>
               <span class="nx-num">{fmt(seenOf(r, eng))}</span>
             </a>
           ))}
           <div class="nx-lfoot">
-            <span class="nx-legend"><span><i class="dot" />Now</span>{moved && <><span><i class="ar up" />Moved up</span><span><i class="ar down" />Slipped</span></>}{eng === 'both' && both && <span><i class="ring" />Google and Bing disagree</span>}<span class="muted">Seen: times shown in results</span></span>
+            <span class="nx-legend"><span><i class="dot" />Now</span>{moved && <><span><i class="ar up" />Moved up</span><span><i class="ar down" />Slipped</span></>}{split.length > 0 && <span><i class="ring" />Missing on {other}</span>}<span class="muted">Seen: times shown in results</span></span>
             {ladder.length > 10 && <button type="button" class="todo-link" onClick={() => setAll(!all)}>{all ? 'Show fewer' : `Show all ${ladder.length}`}</button>}
           </div>
+          </>}
         </section>
       )}
 
       {split.length > 0 && (
-        <section class="nx-block" aria-label="Google and Bing disagree">
-          <h2 class="nx-h2">Google and Bing disagree <span class="muted small">· doing well on one engine and badly on the other</span></h2>
-          <div class="card card-plain nx-tight">
+        <section class="nx-block" aria-label={`Missing on ${other}`}>
+          <h2 class="nx-h2">Missing on {other} <span class="nx-h2-sub">{engName} shows you for these; {other} doesn’t show you at all</span></h2>
+          <div class="nx-mlist">
             {split.slice(0, 8).map((r) => (
-              <a key={r.key} class="nx-drow" href={hrefWith('q', r.key)}>
-                <span class="nx-qn">“{r.key}”</span>
-                <span class={`nx-eng${r.google ? '' : ' off'}`}>Google {rank(r.google?.position)}</span>
-                <span class={`nx-eng${r.bing ? '' : ' off'}`}>Bing {rank(r.bing?.position)}</span>
-                <b class={r.d.near ? 'muted' : 'bad'}>{r.d.word}</b>
+              <a key={r.key} class="nx-mrow" href={hrefWith('q', r.key)}>
+                <span class="nx-mrow-main">
+                  <b>“{r.key}”</b>
+                  <span class="nx-mrow-sub"><span>{rank(r.pos)} on {engName}</span>{r.page && <span class="nx-mrow-path">{pageName(r.page)}</span>}</span>
+                </span>
+                <span />
+                <Icon name="chevron" size={13} class="nx-mrow-go" />
               </a>
             ))}
-            <p class="muted small m-0">Bing matters more than its clicks: ChatGPT search and Copilot lean on Bing’s index.</p>
+            {other === 'Bing' && <p class="nx-miss-note">ChatGPT search and Copilot lean on Bing’s index, so a page Bing skips is also missing from their answers.</p>}
           </div>
         </section>
       )}
 
       {close.length > 0 && (
         <section class="nx-block" aria-label="Next moves">
-          <h2 class="nx-h2">Next moves <span class="muted small">· the {Math.min(3, close.length) === 1 ? 'search' : `${Math.min(3, close.length)} searches`} closest to paying off</span></h2>
+          <h2 class="nx-h2">Next moves <span class="nx-h2-sub">the {Math.min(3, close.length) === 1 ? 'search' : `${Math.min(3, close.length)} searches`} closest to paying off</span></h2>
           <div class="nx-moves">
             {close.slice(0, 3).map((r) => (
               <a key={r.key} class="nx-move" href={hrefWith('q', r.key)}>
@@ -306,21 +341,34 @@ function Gaps({ site }) {
     }
     return out;
   }, [key]);
+  const [pick, setPick] = useState('');
   if (!unseen.length) return null;
   const v = vol.data || {};
+  const on = unseen.find((x) => x.q === pick);
   const list = [...unseen].sort((a, b) => (v[b.q] || 0) - (v[a.q] || 0));
   const max = Math.max(1, ...list.map((x) => v[x.q] || 0));
   const size = (n) => (n ? 0.95 + 0.55 * Math.sqrt(n / max) : 0.95);
   return (
     <section class="nx-block" aria-label="Gaps">
-      <h2 class="nx-h2">Gaps <span class="muted small">· searches you aim for that nothing on your site shows up for{vol.data && Object.values(v).some(Boolean) ? ', sized by how often people search them' : ''}</span></h2>
+      <h2 class="nx-h2">Gaps <span class="nx-h2-sub">searches you aim for that nothing on your site shows up for{vol.data && Object.values(v).some(Boolean) ? ', sized by how often people search them' : ''}</span></h2>
       <div class="nx-gaps">
         {list.map((x) => (
-          <span key={x.q} class="nx-gap" style={`font-size:${size(v[x.q]).toFixed(2)}rem`} title={`${x.topic} · neither Google nor Bing shows ${site.label} for it yet${v[x.q] ? ` · about ${fmt(v[x.q])} Bing searches a month` : ''}`}>
+          <button type="button" key={x.q} class={`nx-gap${pick === x.q ? ' on' : ''}`} aria-expanded={pick === x.q} style={`font-size:${size(v[x.q]).toFixed(2)}rem`} onClick={() => setPick(pick === x.q ? '' : x.q)}
+            title={`${x.topic} · neither Google nor Bing shows ${site.label} for it yet${v[x.q] ? ` · about ${fmt(v[x.q])} Bing searches a month` : ''}`}>
             “{x.q}”{v[x.q] ? <small>{fmt(v[x.q])}</small> : null}
-          </span>
+          </button>
         ))}
       </div>
+      {on && (
+        <div class="nx-gap-card" role="region" aria-label={`Gap: ${on.q}`}>
+          <p class="m-0"><b>“{on.q}”</b> <span class="muted">· {on.topic}</span></p>
+          <p class="m-0 muted small">Neither Google nor Bing shows {site.label} for it yet{v[on.q] ? <>. About <b>{fmt(v[on.q])}</b> Bing searches a month in the US.</> : vol.loading ? '.' : '. Bing has no numbers for it, so few people search this exact wording.'} A page that answers it is the way in.</p>
+          <div class="nx-gap-act">
+            <AddTodo site={site} class="btn primary" label="To-do: write a page for it" todo={{ title: `Write a page for “${on.q}”`, from: `gap:${on.q}`, subject: { kind: 'query', key: on.q }, link: '' }} />
+            <button type="button" class="btn" onClick={() => dispatchEvent(new CustomEvent('kauzl:trend', { detail: on.q }))}><Icon name="trend" size={13} /> See its trend</button>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -524,12 +572,20 @@ const GENERIC = new Set(['app', 'apps', 'best', 'free', 'online', 'download', 'f
 function TrendLookup({ site, pages, known }) {
   const brand = String(site.label || '').replace(/[^\w]/g, '');
   const ideas = trendIdeas(pages, brand);
+  const phone = usePhoneWidth();
   const [text, setText] = useState('');
   const [q, setQ] = useState('');
   const [market, setMarket] = usePersistent('trendMarket', 'us/en-US');
   const trend = useAsync(() => (q ? api.get(`/sites/${site.id}/query-trend${qs({ q })}`).catch(() => null) : null), [site.id, q]);
   const kw = useAsync(() => (q ? api.get(`/search/keywords${qs({ q, market })}`).catch(() => null) : null), [q, market]);
   const go = (v) => { const t = String(v || '').trim().toLowerCase(); if (t) { setText(t); setQ(t); } };
+  // A gap (or anything else on the page) can ask for a search's trend: show it here, in view.
+  const box = useRef(null);
+  useEffect(() => {
+    const on = (e) => { go(e.detail); box.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }); };
+    addEventListener('kauzl:trend', on);
+    return () => removeEventListener('kauzl:trend', on);
+  }, []);
   const k = kw.data?.keywords?.[0];
   const bingWeeks = k?.weeks || [];
   // Search Console returns a row for every day, zeros included: only days with impressions count as data.
@@ -542,21 +598,21 @@ function TrendLookup({ site, pages, known }) {
   const loading = trend.loading || kw.loading;
   const trendsLink = `https://trends.google.com/trends/explore?date=today%203-m&q=${encodeURIComponent(q)}`;
   return (
-    <section class="tlk" aria-label="Look up a search’s trend">
+    <section class="tlk" ref={box} aria-label="Look up a search’s trend">
       <form class="tlk-f" onSubmit={(e) => { e.preventDefault(); go(text); }}>
         <Icon name="trend" size={16} />
         <label class="sr-only" for="tlk-q">Look up a search’s trend</label>
-        <input id="tlk-q" type="search" list="tlk-ideas" autocomplete="off" maxLength={120} value={text} placeholder="Look up any search’s trend, e.g. “dock for windows”" onInput={(e) => setText(e.currentTarget.value)} />
+        <input id="tlk-q" type="search" list="tlk-ideas" autocomplete="off" maxLength={120} value={text} placeholder={phone ? 'Look up a search’s trend' : 'Look up any search’s trend, e.g. “dock for windows”'} onInput={(e) => setText(e.currentTarget.value)} />
         <datalist id="tlk-ideas">{ideas.map((x) => <option key={x.q} value={x.q} />)}</datalist>
         <label class="sr-only" for="tlk-m">Country for Bing’s numbers</label>
         <select id="tlk-m" class="tlk-m" value={market} onChange={(e) => setMarket(e.currentTarget.value)} title="Country for Bing’s search numbers">
           {MARKETS.map(([m, l]) => <option key={m} value={m}>{l}</option>)}
         </select>
-        <button type="submit" class="btn primary" disabled={!text.trim()}>Trend</button>
+        <button type="submit" class="btn primary" disabled={!text.trim()}>{phone ? 'Go' : 'Trend'}</button>
         {q && <button type="button" class="nx-link" onClick={() => { setQ(''); setText(''); }}>Clear</button>}
       </form>
       {!q && ideas.length > 0 && (
-        <div class="tlk-ideas"><small class="muted">From your sitemap:</small>{ideas.slice(0, 6).map((x) => <button key={x.q} type="button" class="nx-chip" onClick={() => go(x.q)} title={x.path}>{x.q}</button>)}</div>
+        <div class="tlk-ideas"><small class="muted">From your sitemap:</small>{ideas.slice(0, phone ? 8 : 6).map((x) => <button key={x.q} type="button" class="nx-chip" onClick={() => go(x.q)} title={x.path}>{x.q}</button>)}</div>
       )}
       {q && (
         <div class="tlk-r">

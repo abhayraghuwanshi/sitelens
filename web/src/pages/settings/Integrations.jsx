@@ -2,6 +2,7 @@ import { api } from '../../api.js';
 import { useAsync, navigate } from '../../hooks.js';
 import { Loading, ErrorState } from '../../components/ui.jsx';
 import { Icon } from '../../components/icons.jsx';
+import { usePhoneWidth } from '../../next/Page.jsx';
 
 const has = (scopes, s) => (scopes || []).some((x) => x.endsWith(s) || x.endsWith('cloud-platform'));
 const via = (source, what) => (source === 'oauth' ? 'Connected' : source === 'env' ? `${what} from .env` : `${what} saved`);
@@ -124,15 +125,38 @@ const GROUPS = [
 ];
 
 export function IntegrationGrid({ onOpen }) {
+  const phone = usePhoneWidth();
   const data = useAsync(() => api.get('/integrations'), []);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   if (!data.data) return <Loading height={420} />;
   const d = data.data;
   const g = d.google;
   const missing = g.connected ? GOOGLE_CAPS.filter((c) => !has(g.scopes, c.scope)) : [];
+  const gOk = g.connected && !g.expired && !g.broken && !missing.length;
+  const gAction = g.connected ? (g.broken ? 'Sign in again' : missing.length ? 'Reconnect' : 'Manage') : 'Connect';
 
   return (
     <div class="stack gap-22">
+      {phone ? (
+        // Phone: the Google sign-in as one settings row like the sources under it: who's signed
+        // in, then what it allows in a line (or what's missing), and the action on the right.
+        <section class="nx-block" aria-label="Google account">
+          <h2 class="nx-h2">Sign-in</h2>
+          <div class="card card-plain nx-tight nx-conn-list">
+            <button type="button" class="nx-conn-row nx-conn-google" onClick={() => onOpen('google')}>
+              <span class="nx-hk"><Icon name="users" size={15} /></span>
+              <span class="nx-ob">
+                <b>Google account</b>
+                <small class={gOk ? 'muted' : 'bad'}><span class={`dot${gOk ? ' on' : ''}`} /> {g.connected ? (g.expired ? 'Token expired' : g.broken ? 'Needs signing in again' : g.email || 'Connected') : 'Not connected'}</small>
+                <small class={missing.length ? 'bad' : 'muted'}>{!g.connected ? 'One sign-in for GA4, Search Console, BigQuery and more'
+                  : missing.length ? `Not allowed yet: ${missing.map((c) => c.label).join(', ')}`
+                  : GOOGLE_CAPS.map((c) => c.label).join(' · ')}</small>
+              </span>
+              <span class={`btn${gOk ? ' ghost' : ' primary'}`} aria-hidden="true">{gAction}</span>
+            </button>
+          </div>
+        </section>
+      ) : (
       <section class="integration wide">
         <span class="integration-icon"><Icon name="users" size={18} /></span>
         <div class="integration-body">
@@ -154,9 +178,10 @@ export function IntegrationGrid({ onOpen }) {
           {missing.length > 0 && <p class="small" style={{ color: 'var(--warning-ink, var(--critical-ink))', margin: 0 }}>Sign in again to allow {missing.map((c) => c.label).join(', ')}.</p>}
         </div>
         <button class={`btn${g.connected && !missing.length && !g.broken ? '' : ' primary'}`} type="button" onClick={() => onOpen('google')}>
-          {g.connected ? (g.broken ? 'Sign in again' : missing.length ? 'Reconnect' : 'Manage') : 'Connect'}
+          {gAction}
         </button>
       </section>
+      )}
 
       {GROUPS.map((group) => (
         <section key={group.title} class="nx-block" aria-label={group.title}>

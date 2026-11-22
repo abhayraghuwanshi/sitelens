@@ -45,7 +45,7 @@ export function HealthView({ site, params }) {
 
       <section class="nx-block" aria-label="Can search show it?">
         <div class="hv-head">
-          <h2 class="nx-h2">Can search show it? <span class="muted small">· Google’s and Bing’s own checks of the {pages.length || ''} busiest pages</span></h2>
+          <h2 class="nx-h2">Can search show it? <span class="nx-h2-sub">Google’s and Bing’s own checks of the {pages.length || ''} busiest pages</span></h2>
           {ix.data && <button type="button" class="todo-link" disabled={ix.loading} onClick={() => ix.reload({ fresh: true })}><Icon name="refresh" size={11} /> {ix.loading ? 'Checking…' : 'Check again'}</button>}
         </div>
         {ix.error ? <ErrorState error={ix.error} onRetry={ix.reload} />
@@ -94,7 +94,7 @@ export function HealthView({ site, params }) {
       </section>
 
       <section class="nx-block" aria-label="Dead ends">
-        <h2 class="nx-h2">Dead ends <span class="muted small">· missing pages people actually reached</span></h2>
+        <h2 class="nx-h2">Dead ends <span class="nx-h2-sub">missing pages people actually reached</span></h2>
         <DeadEnds site={site} logs={logs} />
       </section>
 

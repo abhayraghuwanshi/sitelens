@@ -4,7 +4,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { DecisionSelect, LABELS } from '../pages/PageReview.jsx';
-import { Page } from './Page.jsx';
+import { Page, usePhoneWidth } from './Page.jsx';
 import { PageTimeline, TOOL_ICON } from './PageTimeline.jsx';
 import { HoverLayer, dayOf, shortDay } from './HoverChart.jsx';
 
@@ -30,6 +30,7 @@ export function PageView({ site, path, back }) {
   const cycles = useAsync(() => api.get(`/sites/${site.id}/content-cycles`).catch(() => null), [site.id]);
   const [more, setMore] = useState(false);
   const [version, setVersion] = useState(0);
+  const phone = usePhoneWidth();
 
   if (row.error) return <Page title={path} back={back}><ErrorState error={row.error} onRetry={row.reload} /></Page>;
   if (!row.data) return <Page title={path} back={back}><Loading height={420} owl label="Reading the page: its searches, visits and changes…" /></Page>;
@@ -56,7 +57,8 @@ export function PageView({ site, path, back }) {
 
   return (
     <Page title={<>{r.title || path} <span class={`nx-pill ${tone} pv-stat`} title={cyc?.why || r.reason}>{word}</span></>} sub={path} back={back}
-      actions={<span class="nx-btns"><a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a></span>}>
+      corner={phone ? <a class="nx-corner" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit</a> : null}
+      actions={phone ? null : <span class="nx-btns"><a class="btn" href={`${href}&edit=1`}><Icon name="pages" size={13} /> Edit the page</a></span>}>
       <p class="nx-answer">
         <b>{fmt(r.visits)}</b> visits in 90 days{r.google?.clicks ? <>, <b>{fmt(r.google.clicks)}</b> from Google search</> : ''}{best ? <>, mostly from “{best.query}”</> : ''}.{chance ? <> The next <b>{fmt(chance.gain)}</b> visits are in “{chance.query}”.</> : ''}
       </p>
@@ -157,6 +159,8 @@ function PageChecks({ site, path, onRan }) {
   const ov = useAsync(() => (site.demo ? null : api.get(`/sites/${site.id}/diagnose${qs({ path })}`).catch(() => null)), [site.id, path]);
   const [busy, setBusy] = useState('');
   const [error, setError] = useState('');
+  const phone = usePhoneWidth();
+  const [open, setOpen] = useState(false);
   if (!ov.data) return null;
   const run = async (tool) => {
     setBusy(tool);
@@ -173,6 +177,38 @@ function PageChecks({ site, path, onRan }) {
     }
   };
   const short = (d) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
+  // Phone: one line saying how the checks stand; tap it for the list, each with Run.
+  if (phone) {
+    const tools = ov.data.tools;
+    const n = (tone) => tools.filter((t) => t.last?.tone === tone).length;
+    const parts = [n('up') && `${n('up')} good`, n('warn') + n('down') && `${n('warn') + n('down')} to fix`, tools.filter((t) => !t.last).length && `${tools.filter((t) => !t.last).length} not run`].filter(Boolean);
+    return (
+      <section class="pc pc-phone" aria-label="Checks">
+        <button type="button" class="pc-sum" aria-expanded={open} onClick={() => setOpen(!open)}>
+          <b>Checks</b><span class="muted">{parts.join(' · ')}</span>
+          <Icon name="chevron" size={12} class={`pc-chev${open ? ' on' : ''}`} />
+        </button>
+        {open && (
+          <div class="pc-list">
+            {tools.map((t) => (
+              <div key={t.key} class="pc-li">
+                <span class={`pc-dot ${t.last?.tone || ''}`} />
+                <span class="pc-b">
+                  <b>{t.name.replace('As Googlebot and GPTBot', 'As crawlers see it')}</b>
+                  <small>{t.last ? <><span class={`pc-r ${t.last.tone || ''}`}>{t.last.headline}</span> · {short(t.last.date)}</> : 'Not run yet'}</small>
+                </span>
+                <button type="button" class="pc-go" disabled={Boolean(busy)} onClick={() => run(t.key)} aria-label={`Run ${t.name}`} aria-busy={busy === t.key}>
+                  {busy === t.key ? <span class="pc-spin" /> : 'Run'}
+                </button>
+              </div>
+            ))}
+            <a class="pc-all" href={`#/site/${site.id}/diagnose?path=${encodeURIComponent(path)}`}>All in Diagnose ›</a>
+          </div>
+        )}
+        {error && <p class="nx-error small m-0" role="alert">{error}</p>}
+      </section>
+    );
+  }
   return (
     <section class="pc" aria-label="Checks">
       <div class="pc-h"><h2 class="nx-label-sm">Checks</h2><a class="todo-link small" href={`#/site/${site.id}/diagnose?path=${encodeURIComponent(path)}`}>All in Diagnose →</a></div>

@@ -6,7 +6,7 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { TimelineAdd } from '../pages/Calendar.jsx';
-import { Page } from './Page.jsx';
+import { Page, OptionsSheet } from './Page.jsx';
 import { Ask, Waiting, SetupNote } from './TimelineTop.jsx';
 import { pushPanel } from './Panel.jsx';
 import { useSiteProduct } from '../product.js';
@@ -136,13 +136,27 @@ export function Timeline({ site, sites, params, waiting = null }) {
   // A metric's value as text: money in the currency, counts as counts (vk: short).
   const vf = (v, k = metric) => (v === null || v === undefined ? '—' : MONEY.has(k) ? money(v) : fmt(v));
   const vk = (v, k = metric) => (MONEY.has(k) && v !== null && v !== undefined ? money(v) : kfmt(v));
-  // Phones lead with one day (the picked one, else yesterday); the calendar below picks it.
+  // On a phone the calendar is the screen and one day (the picked one, else yesterday)
+  // sits in a sheet docked above the tab bar (DaySheet).
   const phoneDay = picked && picked <= last ? picked : last;
   const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today: iso(Date.now()) };
-  const todayRef = useRef(null);
   const touch = useRef(null);
+  // A day picked on a phone stays in sight above the sheet that rose to show it, as Maps
+  // keeps a picked place visible above its card.
   useEffect(() => {
-    if (phone && picked) todayRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (!phone || !picked) return undefined;
+    const t = setTimeout(() => {
+      const cell = document.querySelector('.tl-phone .sel');
+      const sheet = document.querySelector('.tl-sheet');
+      if (!cell || !sheet) return;
+      const top = document.querySelector('.nx-ptop')?.getBoundingClientRect().bottom || 0;
+      const r = cell.getBoundingClientRect();
+      const below = r.bottom - (sheet.getBoundingClientRect().top - 12);
+      const above = top + 12 - r.top;
+      if (below > 0) window.scrollBy({ top: below, behavior: 'smooth' });
+      else if (above > 0) window.scrollBy({ top: -above, behavior: 'smooth' });
+    }, 320);
+    return () => clearTimeout(t);
   }, [phone, picked]);
   const swipe = {
     onTouchStart: (e) => { const t = e.touches[0]; touch.current = [t.clientX, t.clientY]; },
@@ -160,13 +174,39 @@ export function Timeline({ site, sites, params, waiting = null }) {
 
   // Header controls.
   const periodLabel = zoom === 'day' ? (end === last ? 'Yesterday' : fmtD(end, { weekday: 'short', day: 'numeric', month: 'short' }))
-    : zoom === 'month' ? monthName(month)
+    : zoom === 'month' ? (phone ? fmtD(`${month}-01`, { month: 'short', year: 'numeric' }) : monthName(month))
     : zoom === 'year' ? 'Last 12 months'
     : end === last ? `Last ${ZOOMS[zoom]} days` : `${fmtD(first, { day: 'numeric', month: 'short' })} – ${fmtD(end, { day: 'numeric', month: 'short' })}`;
   const step = (dir) => (zoom === 'month' ? go({ month: shiftMonth(month, dir), day: '' }) : go({ end: addD(end, dir * ZOOMS[zoom]), day: '' }));
   const offNext = zoom === 'year' || (zoom === 'month' ? month >= last.slice(0, 7) : end >= last);
   const months = Array.from({ length: 6 }, (_, i) => shiftMonth(last.slice(0, 7), -i));
   const byLabel = L ? `By ${L.one}` : lens === 'amount' ? 'Amount' : 'vs usual';
+  const lensItems = (
+    <>
+      <MenuItem on={lens === 'change'} onClick={() => go({ by: '', f: '' })}>Change vs usual</MenuItem>
+      <MenuItem on={lens === 'amount'} onClick={() => go({ by: 'amount', f: '' })}>Amount</MenuItem>
+      <hr /><span class="tl-lab">Break down by</span>
+      {Object.entries(LENSES).map(([k, x]) => <MenuItem key={k} on={lens === k} onClick={() => go({ by: k, f: '' })}>{x.name}</MenuItem>)}
+    </>
+  );
+  const markRows = Object.entries(KINDS).map(([k, [ic, l]]) => {
+    const on = layers.includes(k);
+    const n = [...(events.data?.events || []).map((e) => kindOf(e.kind)), ...(events.data?.alerts || []).map(() => 'alert')].filter((x) => x === k).length;
+    return (
+      <button key={k} type="button" class="nx-pop-row" role="menuitemcheckbox" aria-checked={on}
+        onClick={() => setMarks([...(on ? layers.filter((x) => x !== k) : [...layers, k]), ...(on && k === 'ad' ? ['-ad'] : [])].join(','))}>
+        <span class={`tl-cbx${on ? ' on' : ''}`}>{on && <Icon name="check" size={11} />}</span><Icon name={ic} size={14} />{l}<span class="nx-pop-meta">{n}</span>
+      </button>
+    );
+  });
+  const marksLabel = `Marks${layers.length < Object.keys(KINDS).length ? ` ${layers.length}/${Object.keys(KINDS).length}` : ''}`;
+  const drawAs = (
+    <span class="tl-seg" role="group" aria-label="Draw as">
+      <button type="button" class={!asLine ? 'on' : ''} aria-pressed={!asLine} title="Calendar" aria-label="Calendar" onClick={() => go({ v: '' })}><Icon name="calendar" size={15} />{phone && ' Calendar'}</button>
+      <button type="button" class={asLine ? 'on' : ''} aria-pressed={asLine} title="Line" aria-label="Line" onClick={() => go({ v: 'line' })}><Icon name="chart" size={15} />{phone && ' Line'}</button>
+    </span>
+  );
+  const addBtn = <button type="button" class="nx-icon-btn" title="Add a post or note" aria-label="Add a post or note" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>;
   const controls = (
     <div class="tl-ctl">
       <div class="tl-period">
@@ -182,33 +222,23 @@ export function Timeline({ site, sites, params, waiting = null }) {
         </Menu>
         <button type="button" class="nx-icon-btn" aria-label="Later" disabled={offNext} onClick={() => step(1)}><Icon name="chevron" size={14} /></button>
       </div>
-      <span class="tl-bar">
-        <Menu name="by" open={menu} setOpen={setMenu} label={<>{byLabel} <Icon name="updown" size={11} /></>} cls="nx-chip" title="What colours the days">
-          <MenuItem on={lens === 'change'} onClick={() => go({ by: '', f: '' })}>Change vs usual</MenuItem>
-          <MenuItem on={lens === 'amount'} onClick={() => go({ by: 'amount', f: '' })}>Amount</MenuItem>
-          <hr /><span class="tl-lab">Break down by</span>
-          {Object.entries(LENSES).map(([k, x]) => <MenuItem key={k} on={lens === k} onClick={() => go({ by: k, f: '' })}>{x.name}</MenuItem>)}
-        </Menu>
-        <Menu name="marks" open={menu} setOpen={setMenu} label={<>Marks{layers.length < Object.keys(KINDS).length ? ` ${layers.length}/${Object.keys(KINDS).length}` : ''} <Icon name="updown" size={11} /></>} cls="nx-chip">
-          {Object.entries(KINDS).map(([k, [ic, l]]) => {
-            const on = layers.includes(k);
-            const n = [...(events.data?.events || []).map((e) => kindOf(e.kind)), ...(events.data?.alerts || []).map(() => 'alert')].filter((x) => x === k).length;
-            return (
-              <button key={k} type="button" class="nx-pop-row" role="menuitemcheckbox" aria-checked={on}
-                onClick={() => setMarks([...(on ? layers.filter((x) => x !== k) : [...layers, k]), ...(on && k === 'ad' ? ['-ad'] : [])].join(','))}>
-                <span class={`tl-cbx${on ? ' on' : ''}`}>{on && <Icon name="check" size={11} />}</span><Icon name={ic} size={14} />{l}<span class="nx-pop-meta">{n}</span>
-              </button>
-            );
-          })}
-        </Menu>
-        {zoom !== 'day' && (
-          <span class="tl-seg" role="group" aria-label="Draw as">
-            <button type="button" class={!asLine ? 'on' : ''} aria-pressed={!asLine} title="Calendar" aria-label="Calendar" onClick={() => go({ v: '' })}><Icon name="calendar" size={15} /></button>
-            <button type="button" class={asLine ? 'on' : ''} aria-pressed={asLine} title="Line" aria-label="Line" onClick={() => go({ v: 'line' })}><Icon name="chart" size={15} /></button>
-          </span>
-        )}
-        <button type="button" class="nx-icon-btn" title="Add a post or note" aria-label="Add a post or note" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>
-      </span>
+      {phone ? (
+        <span class="tl-bar">
+          <OptionsSheet title="Timeline view" label={`${byLabel}${asLine ? ' · Line' : ''}${layers.length < Object.keys(KINDS).length ? ` · ${marksLabel}` : ''}`}>
+            <section class="nx-opts-sec"><h3 class="nx-label-sm">Colour the days</h3><div class="nx-pop-list">{lensItems}</div></section>
+            {zoom !== 'day' && <section class="nx-opts-sec"><h3 class="nx-label-sm">Draw as</h3>{drawAs}</section>}
+            <section class="nx-opts-sec"><h3 class="nx-label-sm">Marks on the days</h3><div class="nx-pop-list">{markRows}</div></section>
+          </OptionsSheet>
+          {addBtn}
+        </span>
+      ) : (
+        <span class="tl-bar">
+          <Menu name="by" open={menu} setOpen={setMenu} label={<>{byLabel} <Icon name="updown" size={11} /></>} cls="nx-chip" title="What colours the days">{lensItems}</Menu>
+          <Menu name="marks" open={menu} setOpen={setMenu} label={<>{marksLabel} <Icon name="updown" size={11} /></>} cls="nx-chip">{markRows}</Menu>
+          {zoom !== 'day' && drawAs}
+          {addBtn}
+        </span>
+      )}
     </div>
   );
 
@@ -218,11 +248,8 @@ export function Timeline({ site, sites, params, waiting = null }) {
   if (phone && zoom !== 'day') {
     return (
       <div class="nx-page tl-phone">
-        {site && <Waiting site={site} waiting={waiting} />}
+        {/* No "waiting on you" line here: the Inbox tab's badge already says it. */}
         {adding && <TimelineAdd site={scope} sites={sites} date={phoneDay} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); events.reload(); }} />}
-        <section class="tl-today card card-plain" ref={todayRef} aria-label="One day" {...swipe}>
-          <DayPanel key={phoneDay} site={site} scope={scope} date={phoneDay} ctx={ctx} onMonth={() => document.querySelector('.tl-phone > .tl-ctl')?.scrollIntoView({ behavior: 'smooth', block: 'start' })} />
-        </section>
         {controls}
         {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
           : loading ? <Loading height={320} owl label="Reading every day…" />
@@ -236,10 +263,12 @@ export function Timeline({ site, sites, params, waiting = null }) {
                   : <MonthGrid days={days} zoom={zoom} ctx={ctx} />}
                 <ScaleKey ctx={ctx} asLine={asLine} />
               </div>
-              <section class="tl-insp card card-plain"><WindowPanel days={days} zoom={zoom} label={periodLabel} items={items} ctx={ctx} evList={evList} /></section>
             </>
           )}
         {site && <><Ask site={site} span={null} /><SetupNote site={site} /></>}
+        <DaySheet picked={picked} swipe={swipe}>
+          <DayPanel key={phoneDay} site={site} scope={scope} date={phoneDay} ctx={ctx} />
+        </DaySheet>
       </div>
     );
   }
@@ -273,6 +302,65 @@ export function Timeline({ site, sites, params, waiting = null }) {
           </>
         )}
     </Page>
+  );
+}
+
+// The phone's day sheet, docked above the tab bar like Maps' place card: peek (the
+// day's headline), half (its numbers) or full (everything). Drag the grip, or tap it
+// to step up; picking a day on the calendar lifts it to half. Swipe sideways for the
+// day before or after.
+const SNAPS = ['peek', 'half', 'full'];
+function DaySheet({ picked, swipe, children }) {
+  const [snap, setSnap] = useState('peek');
+  const [dragH, setDragH] = useState(null);
+  const start = useRef(null);
+  const body = useRef(null);
+  const sizes = () => {
+    const vh = window.innerHeight;
+    const top = document.querySelector('.nx-ptop')?.getBoundingClientRect().bottom || 60;
+    const bar = document.querySelector('.nx-tabbar')?.offsetHeight || 60;
+    const full = Math.max(320, vh - top - bar - 8);
+    return { peek: 136, half: Math.min(full, Math.round(vh * 0.52)), full, bar };
+  };
+  useEffect(() => { if (picked) setSnap((x) => (x === 'peek' ? 'half' : x)); }, [picked]);
+  useEffect(() => { if (body.current && snap === 'peek') body.current.scrollTop = 0; }, [snap]);
+  const z0 = sizes();
+  const h = dragH ?? z0[snap];
+  // The page leaves room under the calendar for the sheet, so any day can scroll above it.
+  useEffect(() => {
+    document.documentElement.style.setProperty('--tl-sheet-h', `${z0[snap]}px`);
+    return () => document.documentElement.style.removeProperty('--tl-sheet-h');
+  }, [snap]);
+  const grip = {
+    onPointerDown: (e) => { start.current = { y: e.clientY, h, t: Date.now(), moved: false }; e.currentTarget.setPointerCapture(e.pointerId); },
+    onPointerMove: (e) => {
+      const st = start.current;
+      if (!st) return;
+      const dy = e.clientY - st.y;
+      if (!st.moved && Math.abs(dy) < 6) return;
+      st.moved = true;
+      const z = sizes();
+      setDragH(Math.max(z.peek - 40, Math.min(z.full, st.h - dy)));
+    },
+    onPointerUp: (e) => {
+      const st = start.current;
+      start.current = null;
+      if (!st) return;
+      if (!st.moved) { setSnap((x) => SNAPS[(SNAPS.indexOf(x) + 1) % SNAPS.length]); return; }
+      const z = sizes();
+      const now = Math.max(z.peek, Math.min(z.full, st.h - (e.clientY - st.y)));
+      const v = (st.y - e.clientY) / Math.max(1, Date.now() - st.t); // px per ms, up is positive
+      let next = SNAPS.reduce((a, k) => (Math.abs(z[k] - now) < Math.abs(z[a] - now) ? k : a), 'peek');
+      if (Math.abs(v) > 0.5) next = SNAPS[Math.max(0, Math.min(2, SNAPS.indexOf(snap) + (v > 0 ? 1 : -1)))];
+      setDragH(null);
+      setSnap(next);
+    },
+  };
+  return (
+    <section class={`tl-sheet ${snap}${dragH != null ? ' drag' : ''}`} style={`height:${h}px;bottom:${z0.bar}px`} aria-label="The picked day">
+      <button type="button" class="tl-sheet-grip" aria-label={snap === 'full' ? 'Lower the day' : 'Raise the day'} {...grip}><span class="nx-grab" aria-hidden="true" /></button>
+      <div class="tl-sheet-body" ref={body} {...swipe}>{children}</div>
+    </section>
   );
 }
 
@@ -642,7 +730,7 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
 
 // One day: what happened in a sentence, its numbers against a usual (or last) same weekday,
 // where visits came from and landed, and what was marked that day.
-export function DayPanel({ site, scope, date, ctx, onClose, inline, onMonth }) {
+export function DayPanel({ site, scope, date, ctx, onClose, inline }) {
   const d = useAsync(() => api.get(`/calendar/day${qs({ site: scope, date })}`), [scope, date]);
   const [cmp, setCmp] = usePersistent('tl-cmp', 'usual');
   const [tab, setTab] = useState(['page', 'source', 'query'].includes(ctx.lens) ? ctx.lens : 'page');
@@ -682,7 +770,6 @@ export function DayPanel({ site, scope, date, ctx, onClose, inline, onMonth }) {
           <b>{fmtD(date, { weekday: 'short', day: 'numeric', month: 'short' })}</b>
           <button type="button" class="nx-icon-btn" aria-label="Day after" disabled={next > ctx.last} onClick={() => ctx.go({ day: next, ...(inline && !onClose ? { end: next } : {}) })}><Icon name="chevron" size={14} /></button>
         </span>
-        {onMonth && <button type="button" class="nx-chip" onClick={onMonth}>Month <Icon name="chevron" size={11} class="down" /></button>}
         {onClose && <button type="button" class="nx-icon-btn" aria-label="Back to the whole period" title="Back to the whole period" onClick={onClose}><Icon name="x" size={14} /></button>}
       </div>
       {d.error ? <ErrorState error={d.error} onRetry={d.reload} /> : !d.data ? <Loading height={200} /> : (
@@ -701,9 +788,10 @@ export function DayPanel({ site, scope, date, ctx, onClose, inline, onMonth }) {
                 const v = row?.[k] ?? null;
                 if (v === null) return null;
                 const b = baseOf(k);
+                if (MONEY.has(k) && !v && !b) return null; // no ad spend that day or usually: nothing to say
                 const c = b ? v / b - 1 : null;
                 const vf = ctx.vf || ((x, key) => (MONEY.has(key) && x != null ? x.toLocaleString('en-US', { maximumFractionDigits: 2 }) : fmt(x)));
-                return <div key={k} class="tl-num"><span>{l}</span><b>{vf(v, k)}</b><span class="muted">{vf(b, k)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span></div>;
+                return <div key={k} class="tl-num"><span>{l}</span><b>{vf(v, k)}</b><span class="muted">{vf(b, k)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{c !== null && c >= 0.95 ? `${Math.round((1 + c) * 10) / 10}×` : pct(c)}</span></div>;
               })}
             </div>
           </div>

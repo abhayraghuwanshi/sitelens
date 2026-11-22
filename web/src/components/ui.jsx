@@ -1,5 +1,5 @@
-import { Fragment } from 'preact';
-import { useEffect, useState } from 'preact/hooks';
+import { Fragment, createContext } from 'preact';
+import { useContext, useEffect, useRef, useState } from 'preact/hooks';
 import { formatDelta } from '@shared/format.js';
 import { Icon } from './icons.jsx';
 
@@ -19,7 +19,12 @@ export function Card({ title, sub, actions, children, flush = false, class: clas
   );
 }
 
+// Where this is true (a phone's page header), a Segmented draws as an iOS pull-down
+// menu: one button naming the choice, opening a small menu with a checkmark.
+export const SegmentedAsMenu = createContext(false);
+
 export function Segmented({ value, options, onChange, label }) {
+  if (useContext(SegmentedAsMenu)) return <PullDown value={value} options={options} onChange={onChange} label={label} />;
   return (
     <div class="segmented" role="group" aria-label={label}>
       {options.map((o) => (
@@ -28,6 +33,44 @@ export function Segmented({ value, options, onChange, label }) {
         </button>
       ))}
     </div>
+  );
+}
+
+// An iOS-style pull-down: the button shows the picked option; the menu floats under
+// it (frosted, a checkmark on the pick, a title line) and closes on a pick, a tap
+// elsewhere or Escape. Opens to the left when there's no room on the right.
+export function PullDown({ value, options, onChange, label, big = false }) {
+  const [open, setOpen] = useState(false);
+  const [right, setRight] = useState(false);
+  const box = useRef(null);
+  const cur = options.find((o) => o.key === value) || options[0];
+  useEffect(() => {
+    if (!open) return undefined;
+    const r = box.current?.getBoundingClientRect();
+    if (r) setRight(r.left + 230 > window.innerWidth - 8);
+    const off = (e) => { if (!box.current?.contains(e.target)) setOpen(false); };
+    const esc = (e) => e.key === 'Escape' && setOpen(false);
+    addEventListener('pointerdown', off);
+    addEventListener('keydown', esc);
+    return () => { removeEventListener('pointerdown', off); removeEventListener('keydown', esc); };
+  }, [open]);
+  return (
+    <span class={`pd${big ? ' pd-big' : ''}`} ref={box}>
+      <button type="button" class={`pd-btn${open ? ' on' : ''}`} aria-haspopup="menu" aria-expanded={open} aria-label={`${label}: ${cur?.title || cur?.label}`} onClick={() => setOpen(!open)}>
+        <span>{cur?.label}</span><Icon name="chevron" size={12} class="pd-chev" />
+      </button>
+      {open && (
+        <div class={`pd-menu${right ? ' right' : ''}`} role="menu" aria-label={label}>
+          {label && <div class="pd-title">{label}</div>}
+          {options.map((o) => (
+            <button key={o.key} type="button" role="menuitemradio" aria-checked={o.key === value} class="pd-item" onClick={() => { setOpen(false); if (o.key !== value) onChange(o.key); }}>
+              <span class="pd-check">{o.key === value && <Icon name="check" size={14} />}</span>
+              <span>{o.title && o.title !== o.label ? o.title : o.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </span>
   );
 }
 

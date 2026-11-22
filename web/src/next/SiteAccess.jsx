@@ -25,8 +25,7 @@ function DesktopNote({ site }) {
         </p>
       </div>
       <div class="nx-access-add">
-        <input type="email" placeholder="name@example.com" disabled aria-label="Email address (hosted Kauzl only)" />
-        <a class="btn primary" href={`${HOSTED}/login`} target="_blank" rel="noreferrer"><Icon name="plus" size={13} /> Share from the hosted Kauzl</a>
+        <a class="btn primary" href={`${HOSTED}/login`} target="_blank" rel="noreferrer"><Icon name="external" size={13} /> Share from the hosted Kauzl</a>
       </div>
     </section>
   );

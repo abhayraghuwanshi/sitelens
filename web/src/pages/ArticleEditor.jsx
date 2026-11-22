@@ -40,12 +40,14 @@ const WHERE = {
   lede: 'the first paragraph',
 };
 
-export function ArticleEditor({ site, range, path, onClose }) {
+// only="content": just the editing (Edit the page, from a page's own view), without the report around it.
+export function ArticleEditor({ site, range, path, onClose, only = '' }) {
   const d = useAsync(() => api.get(`/sites/${site.id}/articles/detail${qs({ path, range })}`), [site.id, path, range]);
   // Visits, engagement, Bing and AI come from the page's row in All pages.
   const page = usePageRow(site, path, range);
   const todos = useTodos({ site: site.id });
-  const [tab, setTab] = usePersistent('pageTab', 'overview');
+  const [savedTab, setTab] = usePersistent('pageTab', 'overview');
+  const tab = only || savedTab;
   const [md, setMd] = useState('');
   const [fileMeta, setFileMeta] = useState({ title: '', description: '' });
   const [mode, setMode] = useState('edit');
@@ -118,7 +120,8 @@ export function ArticleEditor({ site, range, path, onClose }) {
   const top = s ? [...s.queries].sort((x, y) => y.impressions - x.impressions).slice(0, 3).map((q) => q.query) : [];
 
   return (
-    <div class="pv">
+    <div class={`pv${only ? ' pv-only' : ''}`}>
+      {!only && <>
       <div class="pv-top">
         <button type="button" class="link-btn" onClick={onClose}>← All pages</button>
         <a href={a.url || `https://${site.host}${a.path}`} target="_blank" rel="noreferrer"><Icon name="external" size={12} /> Live page</a>
@@ -148,6 +151,7 @@ export function ArticleEditor({ site, range, path, onClose }) {
           </button>
         ))}
       </nav>
+      </>}
 
       {tab === 'overview' && (
         <div class="pv-grid">
@@ -223,7 +227,7 @@ export function ArticleEditor({ site, range, path, onClose }) {
                         {f.label}
                         <span class={`count ${tone}`}>{shown.length}{m?.cut ? ` of ${value.length} (site cuts at ${m.cut})` : ''} · aim {lo}–{hi}</span>
                       </span>
-                      <textarea rows={f.key === 'title' ? 1 : 3} value={value}
+                      <textarea rows={f.key === 'title' ? 2 : 4} value={value}
                         onInput={(e) => setField(f.key, e.currentTarget.value)} />
                       <span class="small muted">
                         {!m ? 'Read from the live page.'

@@ -25,7 +25,7 @@ export const SECTIONS = {
   search: { label: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['ai', 'AI answers']] },
   traffic: { label: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Traffic']] },
   journeys: { label: 'Journeys', q: 'What people do once they’re here', tabs: [['journeys', 'Journeys']] },
-  goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals'], ['results', 'Results']] },
+  goals: { label: 'Goals', q: 'Is it working', tabs: [['numbers', 'Goals']] },
   diagnose: { label: 'Diagnose', q: 'Run a check on a page', tabs: [['run', 'Diagnose']] },
   raw: { label: 'Raw data', q: 'Every event, and the warehouse itself', tabs: [['events', 'Events'], ['paths', 'Sessions'], ['sql', 'SQL']] },
 };
@@ -54,7 +54,7 @@ export const LEGACY = {
   retention: ['journeys', 'retention'],
   events: ['raw', 'events'],
   sql: ['raw', 'sql'],
-  outcomes: ['goals', 'results'],
+  outcomes: ['goals', 'numbers'],
   explore: ['pages', 'pages'],
 };
 

@@ -5,7 +5,7 @@ import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { useTodos, todoApi, NewTodo, TodoData, WriteUp, TodoGoal, CHANGED } from '../components/Todos.jsx';
-import { Page } from './Page.jsx';
+import { Page, usePhoneWidth } from './Page.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
 import { hrefFor } from './nav.js';
 import { pushPanel, pageOfLink } from './Panel.jsx';
@@ -56,6 +56,7 @@ function stageOf(t) {
 const lastAt = (t) => Math.max(t.createdAt || 0, t.doneAt || 0, ...(t.entries || []).map((e) => e.at || 0));
 
 export function Inbox({ site, sites, tab, params, counts, goals }) {
+  const phone = usePhoneWidth();
   const scope = site ? site.id : 'all';
   const filter = FILTERS.some(([k]) => k === tab) ? tab : 'all';
   const feed = useAsync(() => api.get(`/alerts${qs(site ? { site: site.id } : {})}`), [site?.id]);
@@ -124,21 +125,25 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
     return x.kind === 'alert' && !x.done ? <Swipe key={x.id} label="Read" onAct={() => markRead(x.group.map((a) => a.id))}>{r}</Swipe> : r;
   };
 
-  return (
-    <Page title="Inbox" sub={site ? `What is waiting on you for ${site.label}` : 'What is waiting on you, on every site'}
-      actions={(
+  // Phone: the actions sit top right as icons, like a navigation bar, so only the filters are a row.
+  const acts = (
         <>
           <button type="button" class="nx-icon-btn" title="Check for new alerts now" aria-label="Check for new alerts now" disabled={Boolean(busy)}
             onClick={() => run('check', () => api.post('/alerts/run', { digest: true }), (r) => `Checked: ${r.fired.length ? `${r.fired.length} new` : 'nothing new'}${r.errors.length ? `, ${r.errors.length} source${r.errors.length === 1 ? '' : 's'} failed` : ''}.`)}>
             <Icon name="refresh" size={15} />
           </button>
           {!loading && waitingOf('alert') > 1 && (
-            <button type="button" class="btn" disabled={Boolean(busy)} onClick={() => markRead(items.filter((x) => x.kind === 'alert' && !x.done).flatMap((x) => x.group.map((a) => a.id)))}>Read all</button>
+            <button type="button" class={phone ? 'nx-corner-txt' : 'btn'} disabled={Boolean(busy)} onClick={() => markRead(items.filter((x) => x.kind === 'alert' && !x.done).flatMap((x) => x.group.map((a) => a.id)))}>Read all</button>
           )}
           <a class="nx-icon-btn" href="#/alerts?view=settings" title="Alert settings" aria-label="Alert settings"><Icon name="bell" size={15} /></a>
-          <a class="btn primary" href={hrefWith('add', '1')}><Icon name="plus" size={13} /> To-do</a>
+          {phone ? <a class="nx-icon-btn" href={hrefWith('add', '1')} title="Add a to-do" aria-label="Add a to-do"><Icon name="plus" size={16} /></a>
+            : <a class="btn primary" href={hrefWith('add', '1')}><Icon name="plus" size={13} /> To-do</a>}
         </>
-      )}>
+  );
+  return (
+    <Page title="Inbox" sub={site ? `What is waiting on you for ${site.label}` : 'What is waiting on you, on every site'}
+      corner={phone ? <span class="nx-corner-acts">{acts}</span> : null}
+      actions={phone ? null : acts}>
       <div class="nx-chips" role="group" aria-label="Show">
         {FILTERS.map(([k, l]) => (
           <a key={k} class={`nx-chip${filter === k ? ' on' : ''}`} href={hrefFor(scope, 'inbox', k === 'all' ? '' : k)} aria-current={filter === k ? 'true' : undefined}>

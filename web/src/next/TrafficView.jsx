@@ -104,7 +104,7 @@ export function TrafficView({ site, range, params }) {
       </p>
 
       <section class="nx-block" aria-label="The mix">
-        <h2 class="nx-h2">The mix <span class="muted small">· where visits come from{avg ? ', and how often each kind reaches a key event' : ''}</span></h2>
+        <h2 class="nx-h2">The mix <span class="nx-h2-sub">where visits come from{avg ? ', and how often each kind reaches a key event' : ''}</span></h2>
         <div class="card card-plain">
           <div class="nx-mixbar" role="img" aria-label={kinds.map((k) => `${k.label} ${share(k.sessions / total)}`).join(', ')}>
             {kinds.map((k) => <span key={k.k} style={`flex:${k.sessions};background:${k.color}`} title={`${k.label}: ${fmt(k.sessions)} visits`} />)}
@@ -125,7 +125,7 @@ export function TrafficView({ site, range, params }) {
       </section>
 
       <section class="nx-block" aria-label="By source">
-        <h2 class="nx-h2">By source <span class="muted small">· open a kind for its sources, a source for its detail</span></h2>
+        <h2 class="nx-h2">By source <span class="nx-h2-sub">open a kind for its sources, a source for its detail</span></h2>
         <div class="card card-plain nx-tight">
           <div class="nx-trow nx-thead" aria-hidden="true"><span>Kind</span><span class="nx-num">Visits</span><span class="nx-num">Change</span><span>Worth it?</span></div>
           {kinds.map((k) => {
@@ -212,7 +212,7 @@ function PutOut({ site, host, range, campaigns, ads, spend, money, open }) {
   const [adding, setAdding] = useState(false);
   return (
     <section class="nx-block" aria-label="What you put out">
-      <h2 class="nx-h2">What you put out <span class="muted small">· posts, tagged links and ads, with what they brought in the 3 days after</span></h2>
+      <h2 class="nx-h2">What you put out <span class="nx-h2-sub">posts, tagged links and ads, with what they brought in the 3 days after</span></h2>
       <div class="card card-plain nx-tight">
         {data.error ? <p class="muted small m-0">Couldn’t read your posts: {data.error.message}</p>
           : !d ? <Loading height={120} />
@@ -321,7 +321,7 @@ function TalkedAbout({ site, range }) {
   }
   return (
     <section class="nx-block" aria-label="Who talked about you">
-      <h2 class="nx-h2">Who talked about you <span class="muted small">· mentions elsewhere</span></h2>
+      <h2 class="nx-h2">Who talked about you <span class="nx-h2-sub">mentions elsewhere</span></h2>
       <div class="card card-plain nx-tight">
         {data.error ? <p class="muted small m-0">Couldn’t read mentions: {data.error.message}</p>
           : !data.data ? <Loading height={90} />

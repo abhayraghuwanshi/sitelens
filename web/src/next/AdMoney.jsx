@@ -47,7 +47,7 @@ export function AdMoney({ site, d, onChanged }) {
   return (
     <section class="nx-block" aria-label="Ad money">
       <div class="am-head">
-        <h2 class="nx-h2">Ad money <span class="muted small">· what you spent on ads, what it brought, and what ads on your site earned</span></h2>
+        <h2 class="nx-h2">Ad money <span class="nx-h2-sub">what you spent on ads, what it brought, and what ads on your site earned</span></h2>
         <button type="button" class="btn" onClick={() => setEditing('new')}><Icon name="plus" size={14} /> Add ad spend</button>
       </div>
       {!spent && !earned && !rows.length ? (
@@ -137,7 +137,7 @@ function SpendForm({ site, entry, currency, onDone }) {
   };
   return (
     <section class="nx-block" aria-label={entry ? 'Edit ad spend' : 'Add ad spend'}>
-      <h2 class="nx-h2">{entry ? 'Edit ad spend' : 'Add ad spend'} <span class="muted small">· for ads GA4 can’t see the cost of: Reddit, X, Meta, LinkedIn…</span></h2>
+      <h2 class="nx-h2">{entry ? 'Edit ad spend' : 'Add ad spend'} <span class="nx-h2-sub">for ads GA4 can’t see the cost of: Reddit, X, Meta, LinkedIn…</span></h2>
       <form class="card card-plain am-form" onSubmit={save}>
         <div class="am-grid">
           <label class="field">Where
