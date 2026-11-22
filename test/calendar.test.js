@@ -85,11 +85,11 @@ test('composeStory: headline by tone, drivers only when the day moved', () => {
     github: { stars: 12, top: 'me/app' },
   });
   assert.equal(big.tone, 'up2');
-  assert.match(big.headline, /^Big day: 650 sessions, 117% above a typical Saturday/);
+  assert.equal(big.headline, 'Big day: 650 visits, 2.2× a usual Saturday (~300).');
   const text = big.lines.map((l) => l.text);
-  assert.ok(text.some((t) => /extra traffic came from Reddit \(300 sessions, usually ~10\)/.test(t)));
-  assert.ok(text.some((t) => t.startsWith('/blog/post drew 280')));
-  assert.ok(text.includes('Search: 40 clicks, top query “foo”.'));
+  assert.ok(text.includes('300 visits came from Reddit (usually ~10).'));
+  assert.ok(text.includes('/blog/post got the most extra: 280 visits started there (usually ~5).'));
+  assert.ok(text.includes('Clicks from Google and Bing results: 40. Top search: “foo”.'));
   assert.ok(text.includes('That day: Your Reddit post: hello.'));
   assert.ok(text.includes('The day before: app v1.2.'));
   assert.ok(text.includes('GitHub: +12 stars (most on me/app).'));
@@ -101,12 +101,20 @@ test('composeStory: headline by tone, drivers only when the day moved', () => {
 
   const drop = composeStory({ date: '2026-10-14', sessions: 100, baseline: 300, sites: [{ id: 'a', label: 'A', sessions: 100, baseline: 300, sources, pages, search: { pending: true } }] });
   assert.match(drop.headline, /^Quiet day/);
-  assert.ok(drop.lines.some((l) => /drop was mostly Google/.test(l.text)));
+  assert.equal(drop.headline, 'Quiet day: 100 visits, 67% fewer than a usual Wednesday (~300).');
+  assert.ok(drop.lines.some((l) => l.text === 'Fewer came from Google search: 90 visits, usually ~100.'));
   assert.ok(drop.lines.some((l) => /lags 2–3 days/.test(l.text)));
 
   const today = composeStory({ date: '2026-11-02', today: '2026-11-02', sessions: 120, baseline: 400 });
   assert.equal(today.tone, 'none');
-  assert.match(today.headline, /^So far today: 120 sessions/);
+  assert.equal(today.headline, 'So far today: 120 visits (a full Monday is usually ~400).');
+
+  // "Direct" is said in plain words, with what it means; the home page by name.
+  const direct = composeStory({ date: '2026-11-19', sessions: 133, baseline: 36,
+    sites: [{ id: 'a', label: 'A', sessions: 133, baseline: 36, sources: [{ label: 'Direct', value: 67, expected: 15, gain: 52 }], pages: [{ label: '/', value: 26, expected: 12, gain: 14 }] }] });
+  assert.equal(direct.headline, 'Big day: 133 visits, 3.7× a usual Thursday (~36).');
+  assert.equal(direct.lines[0].text, '67 visits came straight to the site (usually ~15). That’s visits with no link we can see: someone typed the address, used a bookmark, or tapped a link in an app or chat.');
+  assert.equal(direct.lines[1].text, 'The home page got the most extra: 26 visits started there (usually ~12).');
   assert.equal(composeStory({ date: '2026-11-01' }).headline, 'No traffic data for this day.');
 });
 
@@ -116,9 +124,9 @@ test('composeStory lists each site when several are in view', () => {
     sites: [{ id: 'a', label: 'A', sessions: 500, baseline: 200, sources: [{ label: 'HN', value: 300, expected: 5, gain: 295 }], pages: [] }, { id: 'b', label: 'B', sessions: 100, baseline: 200, sources: [], pages: [] }],
   });
   const text = story.lines.map((l) => l.text);
-  assert.ok(text.includes('A: 500 sessions (+150% vs usual).'));
-  assert.ok(text.includes('A: Most of the extra traffic came from HN (300 sessions, usually ~5).'));
-  assert.ok(text.includes('B: 100 sessions (−50% vs usual).'));
+  assert.ok(text.includes('A: 500 visits (150% more than usual).'));
+  assert.ok(text.includes('A: 300 visits came from HN (usually ~5).'));
+  assert.ok(text.includes('B: 100 visits (50% fewer than usual).'));
   assert.equal(story.lines[0].href, '#/site/a/overview');
 });
 

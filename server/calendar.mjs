@@ -95,20 +95,40 @@ const pct = (v) => `${Math.round(Math.abs(v) * 100)}%`;
 const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
 
 // The day as a few plain sentences. Every input is optional.
+// Plain words for the day's story: visits, not sessions; a big jump as a multiple
+// ("3.7× a usual Thursday"); where visits came from as a person would say it.
+function vsUsual(value, base, weekday) {
+  const usual = `a usual ${weekday} (~${num(base)})`;
+  const r = value / base;
+  if (r >= 1.95) return `${r >= 10 ? Math.round(r) : Math.round(r * 10) / 10}× ${usual}`;
+  if (r >= 1) return `${Math.round((r - 1) * 100)}% more than ${usual}`;
+  return `${Math.round((1 - r) * 100)}% fewer than ${usual}`;
+}
+const SEARCH_ENGINES = /^(google|bing|duckduckgo|yahoo|ecosia|brave|baidu|yandex)$/i;
+const isDirect = (label) => /^\(?direct\)?$/i.test(String(label || ''));
+function cameFrom(label) {
+  if (isDirect(label)) return 'came straight to the site';
+  if (SEARCH_ENGINES.test(label)) return `came from ${label} search`;
+  return `came from ${label}`;
+}
+const DIRECT_MEANS = 'That’s visits with no link we can see: someone typed the address, used a bookmark, or tapped a link in an app or chat.';
+const pageName = (path) => (path === '/' ? 'The home page' : path);
+
 export function composeStory({ date, today = '', sessions = null, baseline = null, sites = [], events = [], eventsBefore = [], alerts = [], github = null, extensions = [] }) {
   const lines = [];
   const weekday = weekdayName(date);
   const partial = date === today;
   const { change, tone } = dayTone(sessions, baseline);
   let headline;
+  const visits = (n) => `${num(n)} visit${n === 1 ? '' : 's'}`;
   if (sessions === null) headline = 'No traffic data for this day.';
-  else if (partial) headline = `So far today: ${num(sessions)} sessions${baseline ? ` (a full ${weekday} is usually ~${num(baseline)}).` : '.'}`;
-  else if (baseline === null || change === null) headline = `${num(sessions)} sessions.`;
-  else if (tone === 'up2') headline = `Big day: ${num(sessions)} sessions, ${pct(change)} above a typical ${weekday}.`;
-  else if (tone === 'up') headline = `Busier than usual: ${num(sessions)} sessions, ${pct(change)} above a typical ${weekday}.`;
-  else if (tone === 'down2') headline = `Quiet day: ${num(sessions)} sessions, ${pct(change)} below a typical ${weekday}.`;
-  else if (tone === 'down') headline = `Slower than usual: ${num(sessions)} sessions, ${pct(change)} below a typical ${weekday}.`;
-  else headline = `A typical ${weekday}: ${num(sessions)} sessions (usually ~${num(baseline)}).`;
+  else if (partial) headline = `So far today: ${visits(sessions)}${baseline ? ` (a full ${weekday} is usually ~${num(baseline)}).` : '.'}`;
+  else if (baseline === null || change === null || !baseline) headline = `${visits(sessions)}.`;
+  else if (tone === 'up2') headline = `Big day: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'up') headline = `Busier than usual: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'down2') headline = `Quiet day: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'down') headline = `Slower than usual: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else headline = `A typical ${weekday}: ${visits(sessions)} (usually ~${num(baseline)}).`;
 
   const moved = !partial && (tone === 'up' || tone === 'up2' || tone === 'down' || tone === 'down2');
   const up = tone === 'up' || tone === 'up2';
@@ -117,7 +137,7 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
     const where = multi ? `${s.label}: ` : '';
     const st = dayTone(s.sessions, s.baseline);
     if (multi && s.sessions !== null && s.sessions !== undefined) {
-      lines.push({ kind: 'site', tone: st.tone, href: `#/site/${s.id}/overview`, text: `${s.label}: ${num(s.sessions)} sessions${st.change !== null && Number.isFinite(st.change) && !partial ? ` (${st.change >= 0 ? '+' : '−'}${pct(st.change)} vs usual)` : ''}.` });
+      lines.push({ kind: 'site', tone: st.tone, href: `#/site/${s.id}/overview`, text: `${s.label}: ${visits(s.sessions)}${st.change !== null && Number.isFinite(st.change) && !partial ? ` (${st.change >= 0 ? `${pct(st.change)} more` : `${pct(st.change)} fewer`} than usual)` : ''}.` });
     }
     if (s.error) lines.push({ kind: 'error', text: `${where}${s.error}` });
     const siteMoved = multi ? !partial && ['up', 'up2', 'down', 'down2'].includes(st.tone) : moved;
@@ -125,21 +145,22 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
     if (siteMoved && s.sources?.length) {
       const pick = siteUp ? s.sources[0] : s.sources.at(-1);
       if (pick && Math.abs(pick.gain) >= 3) {
+        const why = isDirect(pick.label) ? ` ${DIRECT_MEANS}` : '';
         lines.push({ kind: 'source', text: siteUp
-          ? `${where}Most of the extra traffic came from ${pick.label} (${num(pick.value)} sessions, usually ~${num(pick.expected)}).`
-          : `${where}The drop was mostly ${pick.label} (${num(pick.value)} sessions, usually ~${num(pick.expected)}).` });
+          ? `${where}${visits(pick.value)} ${cameFrom(pick.label)} (usually ~${num(pick.expected)}).${why}`
+          : `${where}Fewer ${cameFrom(pick.label).replace(/^came/, 'came')}: ${visits(pick.value)}, usually ~${num(pick.expected)}.${why}` });
       }
     }
     if (siteMoved && siteUp && s.pages?.length) {
       const page = s.pages[0];
-      if (page.gain >= 3) lines.push({ kind: 'page', text: `${where}${page.label} drew ${num(page.value)} landing sessions (usually ~${num(page.expected)}).` });
+      if (page.gain >= 3) lines.push({ kind: 'page', text: `${where}${pageName(page.label)} got the most extra: ${visits(page.value)} started there (usually ~${num(page.expected)}).` });
     }
     if (s.search?.pending) lines.push({ kind: 'search', text: `${where}Search Console hasn’t reported this day yet; it lags 2–3 days.` });
     else if (s.search && s.search.clicks !== null) {
       const sc = dayTone(s.search.clicks, s.search.baseline);
-      const vs = sc.change !== null && Number.isFinite(sc.change) && sc.tone !== 'flat' ? ` (${sc.change >= 0 ? '+' : '−'}${pct(sc.change)} vs usual)` : '';
+      const vs = sc.change !== null && Number.isFinite(sc.change) && sc.tone !== 'flat' && s.search.baseline ? ` (usually ~${num(s.search.baseline)})` : '';
       const top = s.search.queries?.[0];
-      lines.push({ kind: 'search', text: `${where}Search: ${num(s.search.clicks)} click${s.search.clicks === 1 ? '' : 's'}${vs}${top ? `, top query “${top.query}”` : ''}.` });
+      lines.push({ kind: 'search', text: `${where}Clicks from Google and Bing results: ${num(s.search.clicks)}${vs}.${top ? ` Top search: “${top.query}”.` : ''}` });
     }
   }
   // Claude's comments are analysis of the day, not things that happened on it.
@@ -147,7 +168,7 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
   const happenedBefore = eventsBefore.filter((e) => e.kind !== 'claude');
   if (happened.length) lines.push({ kind: 'event', text: `That day: ${happened.map((e) => e.label).join('; ')}.` });
   if (happenedBefore.length && moved) lines.push({ kind: 'event', text: `The day before: ${happenedBefore.map((e) => e.label).join('; ')}.` });
-  if (github?.stars) lines.push({ kind: 'github', text: `GitHub: ${signed(github.stars)} stars${github.top ? ` (most on ${github.top})` : ''}.` });
+  if (github?.stars) lines.push({ kind: 'github', text: `GitHub: ${signed(github.stars)} star${Math.abs(github.stars) === 1 ? '' : 's'}${github.top ? ` (most on ${github.top})` : ''}.` });
   for (const e of extensions) {
     if (e.users === null || e.users === undefined) continue;
     lines.push({ kind: 'extension', text: `${e.label}: ${num(e.users)} users${e.delta ? ` (${signed(e.delta)} vs the day before)` : ''}.` });
