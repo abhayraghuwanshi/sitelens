@@ -94,6 +94,28 @@ test('setup.save writes the hosting choice through to Firebase and Vercel links'
   assert.ok(saved);
 });
 
+test('setup.save links the chosen Netlify site or Fly.io app to the site', async () => {
+  const calls = [];
+  const setup = createProductSetup({
+    products: { save: async (input) => normalizeProduct(input) },
+    store: {},
+    firebase: { status: async () => ({ links: [] }) },
+    vercel: {},
+    netlify: { setMatch: async (...a) => calls.push(['netlify', ...a]) },
+    fly: { setMatch: async (...a) => calls.push(['fly', ...a]) },
+    journey: { clear: () => {} },
+    mentions: {},
+  });
+  assert.deepEqual((await setup.save({ label: 'App', siteId: 's1', hosting: { provider: 'netlify', netlify: { siteId: 'abc-123' } } })).linked, ['netlify']);
+  assert.deepEqual(calls.at(-1), ['netlify', 's1', 'abc-123']);
+  assert.deepEqual((await setup.save({ label: 'App', siteId: 's1', hosting: { provider: 'fly', fly: { app: 'my-app' } } })).linked, ['fly']);
+  assert.deepEqual(calls.at(-1), ['fly', 's1', 'my-app']);
+  // Bad IDs are refused before anything is linked.
+  await assert.rejects(setup.save({ label: 'App', siteId: 's1', hosting: { provider: 'fly', fly: { app: 'Not An App' } } }), /Fly\.io app/);
+  await assert.rejects(setup.save({ label: 'App', siteId: 's1', hosting: { provider: 'netlify', netlify: { siteId: 'a b' } } }), /Netlify site/);
+  assert.equal(calls.length, 2);
+});
+
 test('guessHosting knows Fly.io from its CNAME', () => {
   assert.equal(guessHosting({ cname: ['my-app.fly.dev.'], a: [] }), 'fly');
   assert.equal(guessHosting({ cname: ['my-app.fly.dev'], a: [] }), 'fly');

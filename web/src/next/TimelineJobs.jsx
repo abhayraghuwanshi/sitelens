@@ -17,21 +17,30 @@ export function TimelineJobs({ site, sites }) {
   const own = site && !site.shared && !site.demo;
   const [creating, setCreating] = useState(false);
   return (
-    <Page title="Jobs" sub="What Kauzl collects for this site, and when." back={{ href: base, label: 'Timeline' }}
+    <Page title="Jobs" sub={own ? 'What Kauzl collects for this site, and when.' : writable.length ? 'What Kauzl collects for each site, and when. Pick a site:' : 'What Kauzl collects for each site, and when.'}
+      back={{ href: base, label: 'Timeline' }}
       actions={own && <button type="button" class="btn primary" onClick={() => setCreating(true)}><Icon name="plus" size={14} /> New job</button>}>
-      {own ? <JobManager key={site.id} site={site} base={base} creating={creating} setCreating={setCreating} /> : (
-        <section class="card card-plain stack tl-jobs">
-          <label>Choose a site
-            <select value="" onChange={(e) => {
-              const picked = writable.find((item) => item.id === e.currentTarget.value);
-              if (picked) location.hash = `#/site/${encodeURIComponent(picked.id)}/jobs`;
-            }}>
-              <option value="">{writable.length ? 'Select a site' : 'No editable sites'}</option>
-              {writable.map((item) => <option key={item.id} value={item.id}>{item.label}</option>)}
-            </select>
-          </label>
-        </section>
-      )}
+      {own ? <JobManager key={site.id} site={site} base={base} creating={creating} setCreating={setCreating} />
+        : writable.length ? (
+          // Your own sites, one click each (sample and shared sites don't run jobs).
+          <div class="nx-pick">
+            {writable.map((item) => (
+              <a key={item.id} class="nx-pick-row" href={`#/site/${encodeURIComponent(item.id)}/jobs`}>
+                <b>{item.label}</b><span class="muted">{item.host}</span>
+              </a>
+            ))}
+          </div>
+        ) : (
+          <section class="card card-plain stack tl-jobs">
+            <p class="m-0">
+              {site?.demo ? 'The Demo site is sample data, so it doesn’t run jobs.'
+                : site?.shared ? `${site.label} is shared with you to view, so its jobs are set up by ${site.shared.by}.`
+                : 'Jobs run for your own sites, and you haven’t added one yet.'}
+              {' '}Add your site and Kauzl starts collecting its visits, searches and releases.
+            </p>
+            <div class="row"><a class="btn primary" href="#/account?tab=sites&edit=new"><Icon name="plus" size={14} /> Add a site</a></div>
+          </section>
+        )}
     </Page>
   );
 }

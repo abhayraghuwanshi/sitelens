@@ -38,7 +38,7 @@ export const HOSTING = {
   netlify: { label: 'Netlify', feed: true },
   'cloudflare-pages': { label: 'Cloudflare Pages', feed: false },
   'github-pages': { label: 'GitHub Pages', feed: false },
-  fly: { label: 'Fly.io', feed: false },
+  fly: { label: 'Fly.io', feed: true },
   other: { label: 'Other / self-hosted', feed: false },
 };
 
@@ -59,6 +59,14 @@ function normalizeHosting(input) {
   if (provider === 'vercel' && input.vercel?.projectId) {
     if (!VERCEL_RE.test(input.vercel.projectId)) throw new ValidationError('That isn’t a Vercel project ID.');
     out.vercel = { projectId: input.vercel.projectId };
+  }
+  if (provider === 'netlify' && input.netlify?.siteId) {
+    if (!/^[\w-]{1,80}$/.test(input.netlify.siteId)) throw new ValidationError('That isn’t a Netlify site ID.');
+    out.netlify = { siteId: input.netlify.siteId };
+  }
+  if (provider === 'fly' && input.fly?.app) {
+    if (!/^[a-z0-9-]{1,63}$/.test(input.fly.app)) throw new ValidationError('That isn’t a Fly.io app name.');
+    out.fly = { app: input.fly.app };
   }
   if (input.note) out.note = String(input.note).trim().slice(0, 140);
   return out;
@@ -131,6 +139,7 @@ export function normalizeProduct(input = {}) {
   const hosting = normalizeHosting(input.hosting);
   if (hosting?.provider === 'firebase' && hosting.firebase && !siteId) throw new ValidationError('Pick the analytics site too: Firebase request logs are stored per site.');
   if (hosting?.provider === 'vercel' && hosting.vercel && !siteId) throw new ValidationError('Pick the analytics site too: Vercel deploys are matched per site.');
+  if ((hosting?.netlify || hosting?.fly) && !siteId) throw new ValidationError('Pick the analytics site too: deploys are matched per site.');
   const keywords = [...new Set((input.keywords || []).map((k) => String(k).trim().toLowerCase()).filter(Boolean))].slice(0, 20);
   const bad2 = keywords.find((k) => k.length < 4 || k.length > 60);
   if (bad2) throw new ValidationError(`Keyword “${bad2}” must be 4–60 characters.`);

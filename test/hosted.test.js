@@ -480,7 +480,7 @@ test('the tour is public: the design with sample data, frameable only by the hom
   assert.doesNotMatch(js.body, /onchange=/);
   assert.equal((await call('/tour?to=search')).headers.location, '/tour/?to=search');
   // The home page frames it.
-  assert.match((await call('/')).body, /<iframe src="\/tour\/\?embed=1"/);
+  assert.match((await call('/')).body, /<iframe src="\/tour\/\?embed=1&amp;only=timeline&amp;theme=dark"/);
 });
 
 test('the old live demo is gone: /demo goes to the tour, and its old cookie opens nothing', async () => {

@@ -5,6 +5,7 @@ const I = {
   pulse: '<path d="M3 12h4l3-7 4 14 3-7h4"/>',
   calendar: '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/>',
   layers: '<path d="M12 3l9 5-9 5-9-5z"/><path d="M3 13l9 5 9-5"/>',
+  database: '<ellipse cx="12" cy="6" rx="8" ry="3"/><path d="M4 6v12c0 1.7 3.6 3 8 3s8-1.3 8-3V6"/><path d="M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
   grid: '<rect x="3" y="3" width="7" height="7" rx="1.5"/><rect x="14" y="3" width="7" height="7" rx="1.5"/><rect x="3" y="14" width="7" height="7" rx="1.5"/><rect x="14" y="14" width="7" height="7" rx="1.5"/>',
   check: '<path d="M4 12l5 5L20 6"/>',
   bell: '<path d="M6 16V11a6 6 0 0 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
@@ -64,7 +65,8 @@ const REPORTS = [
   { g: 'Data', items: [['sql', 'SQL', 'Ask the warehouse directly']] },
 ];
 const ALL_REPORTS = REPORTS.flatMap((g) => g.items.map(([k, l, d]) => ({ k, l, d, g: g.g })));
-const VIEWS = [['timeline', 'Timeline', 'calendar'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['traffic', 'Traffic', 'arrows'], ['journeys', 'Journeys', 'route'], ['goals', 'Goals', 'target'], ['tools', 'Diagnose', 'terminal']];
+// Like the app's sidebar: Timeline, Jobs, Inbox. Reports (pages, search, traffic…) open from the Timeline.
+const VIEWS = [['timeline', 'Timeline', 'calendar'], ['jobs', 'Jobs', 'database'], ['inbox', 'Inbox', 'inbox']];
 const RANGES = [['today', 'Today'], ['7d', '7d'], ['28d', '28d'], ['90d', '90d']];
 const OLD_TABS = ['Pages', 'Campaigns', 'AI answers', 'Sessions', 'Funnels', 'Retention', 'Events', 'SQL', 'Overview'];
 
@@ -740,24 +742,34 @@ function marksPop(scope, days) {
 function bestWorst(scope, days, ctx, phone) {
   const m = ctx.metric, ml = CAL_METRICS.find(([k]) => k === m)[1];
   const data = days.filter((d) => d <= LAST).map((d) => day(scope, d)).map((d) => ({ d, c: d.v[m] / Math.max(1e-9, d.usual[m]) - 1 }));
+  // Daily totals: the biggest days by amount, like the app's "Highest daily totals".
+  if (ctx.lens === 'amount') {
+    const top = [...data].sort((a, b) => b.d.v[m] - a.d.v[m]).slice(0, 3);
+    return top.length ? `<div class="ib"><h5>Highest daily totals · ${ml}</h5>${top.map((x) => `<button type="button" class="brow" data-act="cal-d:${x.d.date}${phone ? '|pop:day' : ''}"><span>${fmtD(x.d.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span><span></span><b style="text-align:right">${fmtM(m, x.d.v[m])}</b></button>`).join('')}</div>` : '';
+  }
   const best = [...data].sort((a, b) => b.c - a.c).slice(0, 3).filter((x) => x.c > 0);
   const worst = [...data].sort((a, b) => a.c - b.c).slice(0, 3).filter((x) => x.c < 0);
   const row = (x) => `<button type="button" class="brow" data-act="cal-d:${x.d.date}${phone ? '|pop:day' : ''}"><span>${fmtD(x.d.date, { weekday: 'short', day: 'numeric', month: 'short' })}</span><b>${fmtM(m, x.d.v[m])}</b><span class="${x.c >= 0 ? 'up' : 'down'}">${pct(x.c)}</span></button>`;
   return `${best.length ? `<div class="ib"><h5>Best days · ${ml}</h5>${best.map(row).join('')}</div>` : ''}${worst.length ? `<div class="ib"><h5>Worst days</h5>${worst.map(row).join('')}</div>` : ''}`;
 }
 function shipped(scope, days, phone) {
-  const evs = EVENTS.filter((e) => (scope === 'all' || e[0] === scope) && e[1] >= days[0] && e[1] <= days[days.length - 1] && S.cal.layers.includes(e[2])).sort((a, b) => (a[1] < b[1] ? 1 : -1)).slice(0, 6);
+  const evs = EVENTS.filter((e) => (scope === 'all' || e[0] === scope) && e[2] !== 'alert' && e[1] >= days[0] && e[1] <= days[days.length - 1] && S.cal.layers.includes(e[2])).sort((a, b) => (a[1] < b[1] ? 1 : -1)).slice(0, 8);
   if (!evs.length) return '';
-  return `<div class="ib"><h5>What happened</h5>${evs.map((e) => {
+  return `<div class="ib"><h5>Activity</h5>${evs.map((e) => {
     const k = e[2];
     let eff = '';
     if (k !== 'alert' && k !== 'mention') { const ef = effectOf(scope, e[1], k === 'deploy' ? 'signups' : 'visits'); eff = ef.early ? '<span class="muted" title="The 3 days after it aren’t in yet">too early</span>' : `<span class="${ef.c >= 0 ? 'up' : 'down'}" title="${k === 'deploy' ? 'Signups' : 'Visits'}, 3 days after vs 3 before">${pct(ef.c)}</span>`; }
     return `<button type="button" class="erow" data-act="cal-d:${e[1]}${phone ? '|pop:day' : ''}"><span class="muted">${fmtD(e[1], { day: 'numeric', month: 'short' })}</span><span class="${k === 'alert' ? 'down' : ''}" style="display:grid">${ic(KINDS[k][0], 13)}</span><span class="et">${e[3]}</span><span>${eff}</span></button>`;
   }).join('')}</div>`;
 }
+// Alerts in the window, newest first: the "Key changes" at the top of the app's month panel.
+function keyChanges(scope, days, phone) {
+  const evs = EVENTS.filter((e) => (scope === 'all' || e[0] === scope) && e[2] === 'alert' && e[1] >= days[0] && e[1] <= days[days.length - 1]).sort((a, b) => (a[1] < b[1] ? 1 : -1)).slice(0, 5);
+  return `<div class="ib"><h5>Key changes</h5>${evs.length ? evs.map((e) => `<button type="button" class="erow" data-act="cal-d:${e[1]}${phone ? '|pop:day' : ''}"><span class="muted">${fmtD(e[1], { day: 'numeric', month: 'short' })}</span><span class="down" style="display:grid">${ic('bell', 13)}</span><span class="et"><b>${scope === 'all' ? `${site(e[0]).label}: ` : ''}${e[3]}</b></span><span></span></button>`).join('') : '<p class="muted small2">No key changes in this period.</p>'}</div>`;
+}
 function windowPanel(scope, days, ctx, zoom, phone) {
   const label = zoom === 'month' ? `${monthName(S.cal.month)}${S.cal.month === LAST.slice(0, 7) ? ', so far' : ''}` : zoom === 'year' ? 'The last 12 months' : `${fmtD(days[0], { day: 'numeric', month: 'short' })} – ${fmtD(days[days.length - 1], { day: 'numeric', month: 'short' })}`;
-  const body = (LEADS[ctx.lens] ? leadMatrix(scope, days, ctx, true) : bestWorst(scope, days, ctx, phone)) + shipped(scope, days, phone);
+  const body = keyChanges(scope, days, phone) + (LEADS[ctx.lens] ? leadMatrix(scope, days, ctx, true) : bestWorst(scope, days, ctx, phone)) + shipped(scope, days, phone);
   return `<div class="insp-in"><div class="insp-h"><b>${label}</b><span class="muted small2">${phone ? 'Tap a day for detail' : 'Pick a day for detail'}</span></div>${body}</div>`;
 }
 // Timeline as a line: the same window, metric, marks and side panel as the calendar,
@@ -840,16 +852,24 @@ function calendarBody(scope, phone, lim) {
   const offPrev = zoom === 'year' || (zoom === 'month' ? C.month <= YEAR_MONTHS[0] : days[0] <= FIRST);
   const offNext = zoom === 'year' || (zoom === 'month' ? C.month >= YEAR_MONTHS[11] : lastDay >= LAST);
   const period = `<div class="mo"><button type="button" class="icon-btn" data-act="${step(-1)}" aria-label="Earlier"${offPrev ? ' disabled' : ''}>${ic('back', 14)}</button><span class="mk-wrap"><button type="button" class="pbtn" data-act="pop:period" aria-expanded="${S.pop === 'period'}" aria-haspopup="menu">${periodLabel} ${ic('chev', 13)}</button>${S.pop === 'period' ? periodMenu : ''}</span><button type="button" class="icon-btn" data-act="${step(1)}" aria-label="Later"${offNext ? ' disabled' : ''}>${ic('fwd', 14)}</button></div>`;
-  const byLabel = LEADS[ctx.lens] ? `By ${LEADS[ctx.lens].one}` : ctx.lens === 'amount' ? 'Amount' : 'vs usual';
-  const byMenu = `<div class="pop menu">${item('cal-l:change', 'Change vs usual', ctx.lens === 'change')}${item('cal-l:amount', 'Amount', ctx.lens === 'amount')}<hr><span class="lab">Break down by</span>${Object.entries(LEADS).map(([k, L]) => item(`cal-l:${k}`, L.name, ctx.lens === k)).join('')}</div>`;
+  const byLabel = LEADS[ctx.lens] ? `By ${LEADS[ctx.lens].one}` : ctx.lens === 'amount' ? 'Daily totals' : 'vs usual';
+  const byMenu = `<div class="pop menu">${item('cal-l:change', 'Change vs usual', ctx.lens === 'change')}${item('cal-l:amount', 'Daily totals', ctx.lens === 'amount')}<hr><span class="lab">Break down by</span>${Object.entries(LEADS).map(([k, L]) => item(`cal-l:${k}`, L.name, ctx.lens === k)).join('')}</div>`;
   const by = `<span class="mk-wrap"><button type="button" class="chip${S.pop === 'by' ? ' on' : ''}" data-act="pop:by" aria-expanded="${S.pop === 'by'}" aria-haspopup="menu" title="What colors the days">${byLabel} ${ic('chev', 12)}</button>${S.pop === 'by' ? byMenu : ''}</span>`;
   const marks = `<span class="mk-wrap"><button type="button" class="chip${S.pop === 'marks' ? ' on' : ''}" data-act="pop:marks" aria-expanded="${S.pop === 'marks'}">Marks${C.layers.length < 6 ? ` ${C.layers.length}/6` : ''} ${ic('chev', 12)}</button>${S.pop === 'marks' ? marksPop(scope, days) : ''}</span>`;
   const viewSeg = zoom === 'day' ? '' : `<div class="mini-seg icons" role="group" aria-label="Draw as">${[['calendar', 'calendar', 'Calendar'], ['line', 'chart', 'Line']].map(([k, i, l]) => `<button type="button" class="${(asLine ? 'line' : 'calendar') === k ? 'on' : ''}" data-act="cal-v:${k}" title="${l}" aria-label="${l}">${ic(i, 15)}</button>`).join('')}</div>`;
-  // The period and filters sit in the page header, where every other page keeps its date range.
-  const ctl = `<div class="hdctl">${period}<span class="bargrp">${by}${marks}${viewSeg}</span></div>`;
+  // The metric menu (Visits, Search clicks…) replaced the row of tiles, like the app.
+  const ml = CAL_METRICS.find(([k]) => k === ctx.metric)?.[1] || 'Visits';
+  const metricMenu = `<div class="pop menu">${CAL_METRICS.map(([k, l]) => item(`cal-m:${k}`, l, ctx.metric === k)).join('')}</div>`;
+  const metric = LEADS[ctx.lens] ? '' : `<span class="mk-wrap"><button type="button" class="chip${S.pop === 'metric' ? ' on' : ''}" data-act="pop:metric" aria-expanded="${S.pop === 'metric'}" aria-haspopup="menu" title="Which number">${ml} ${ic('chev', 12)}</button>${S.pop === 'metric' ? metricMenu : ''}</span>`;
+  const add = `<button type="button" class="icon-btn" data-act="noop" aria-label="Add a post, note or job" title="Add a post, note or job">${ic('plus', 15)}</button>`;
+  // One bar in the page header, as in the app: period · what colors the days · marks · calendar or line · add.
+  const ctl = `<div class="hdctl">${period}<span class="bargrp">${by}${metric}${marks}${viewSeg}${add}</span></div>`;
   const grid = asLine ? tlLine(scope, days, ctx, phone) : zoom === 'year' ? yearGrid(scope, ctx) : zoom === 'month' ? monthGrid(scope, ctx, phone, false) : zoom === '28d' ? rollGrid(scope, days, ctx, phone, false) : zoom === '7d' ? weekView(scope, days, ctx, phone) : dayView(scope, days[0], ctx);
   const map = `<div class="map">${grid}<div class="mapkey">${asLine ? '<span class="scale">Hover to read a day · click to open it · drag across days to sum them up</span>' : scaleKey(ctx)}</div></div>`;
-  const html = head('Timeline', `Every day for ${scopeName(scope)}: how it went, what happened, what needs you`, { phone, right: '' }) + needsRow(scope) + askBox(scope) + ctl + calTiles(scope, days, ctx);
+  // Setup notes sit under the header, like the app's: here, the AI answer job that can't run yet.
+  const note = scope === 'all' ? '' : `<p class="setup-note">${ic('bell', 14)}<span><b>AI answer checks have never run.</b> 9 questions are set up but no Anthropic key is set, so Kauzl can’t say whether assistants name you.</span></p>`;
+  const sub = `Every day: how it went, where people landed, what shipped${scope === 'all' ? ' · all sites' : ''}`;
+  const html = phone ? head('Timeline', sub, { phone, right: '' }) + ctl + note : head('Timeline', sub, { phone, right: ctl }) + note;
   if (phone) return html + map + `<div class="insp">${zoom === 'day' ? dayPanel(scope, days[0], true) : windowPanel(scope, days, ctx, zoom, true)}</div>`;
   const panel = S.srange ? rangePanel(scope, S.srange[0], S.srange[1]) : null;
   const dd = zoom === 'day' ? days[0] : C.day;
@@ -2550,6 +2570,7 @@ function afterBody(phone) {
   if (v === 'inbox') return inboxBody(sc, phone);
   if (v === 'live') return liveBody(sc, phone, goAfter);
   if (v === 'timeline') return calendarBody(sc, phone, false);
+  if (v === 'jobs') return jobsBody(sc, phone);
   if (v === 'tools') return toolsBody(sc, phone);
   if (v === 'raw') return sc === 'all' ? pickSite('Raw data', 'Pick a site:', phone, 'journeys') : rawBody(sc, phone);
   if (v === 'journeys' && sc !== 'all') return journeysBody(sc, phone);
@@ -2558,6 +2579,21 @@ function afterBody(phone) {
   if (v === 'search' && sc !== 'all' && S.tab !== 'ai') return searchBody(sc, phone);
   if (v === 'pages' && sc !== 'all' && S.page && PAGE_Q[S.page]) return pageStory(sc, phone);
   return sectionBody(v, sc, phone);
+}
+// Jobs: what Kauzl collects for a site, and when. Each job puts one number a day on the Timeline.
+const JOBS = [
+  ['GA4 visits & sources', 'Google Analytics', 'Hourly', '12 min ago', 'in 48 min', 'ok'],
+  ['Search Console clicks', 'Google Search Console', 'Daily', '6 h ago', 'in 18 h', 'ok'],
+  ['Releases', 'GitHub', 'Hourly', '12 min ago', 'in 48 min', 'ok'],
+  ['Deploys', 'Vercel', 'Hourly', '12 min ago', 'in 48 min', 'ok'],
+  ['Sign-ups', 'SQL · Cloudflare D1', 'Daily', '6 h ago', 'in 18 h', 'ok'],
+  ['AI answer checks', 'Claude · 9 questions', 'Weekly', 'Never run', 'Needs a key', 'bad'],
+];
+function jobsBody(scope, phone) {
+  const name = scope === 'all' ? 'your sites' : site(scope).label;
+  const rows = JOBS.map(([t, src, every, last, next, st]) => `<tr><td><b>${t}</b><div class="muted small2">${src}</div></td><td>${every}</td><td><span class="dot${st === 'ok' ? ' on' : ''}"></span> ${last}</td><td class="${st === 'bad' ? 'down' : 'muted'}">${next}</td></tr>`).join('');
+  return head('Jobs', `What Kauzl collects for ${name}, and when.`, { phone, right: phone ? '' : `<button type="button" class="chip" data-act="noop">${ic('plus', 12)} New job</button>` }) +
+    `<div class="card"><div style="overflow-x:auto"><table class="ctable" style="width:100%"><thead><tr><th>Job</th><th>Schedule</th><th>Last run</th><th>Next run</th></tr></thead><tbody>${rows}</tbody></table></div></div>`;
 }
 function scopeBtn(phone) {
   const small = S.scope === 'all' ? `${SITES.length} sites` : site(S.scope).host;
@@ -2577,14 +2613,14 @@ function navAfter() {
   return shownViews().map(([k, l, i]) => {
     const on = S.view === k || (k === 'journeys' && S.view === 'raw');
     const count = k === 'inbox' && n ? `<span class="count">${n}</span>` : '';
-    return `${k === 'pages' ? '<span class="navlab">Reports</span>' : ''}<button type="button" class="item${on ? ' on' : ''}" data-act="view:${k}">${ic(i)}<span>${k === 'story' && S.scope === 'all' ? 'Sites' : l}</span>${count}</button>`;
+    return `<button type="button" class="item${on ? ' on' : ''}" data-act="view:${k}">${ic(i)}<span>${k === 'story' && S.scope === 'all' ? 'Sites' : l}</span>${count}</button>`;
   }).join('');
 }
 function userPop() {
   return `<div class="pop user"><button type="button" class="row" data-act="noop">${ic('plug')}Integrations</button><button type="button" class="row" data-act="noop">${ic('terminal')}MCP</button><button type="button" class="row" data-act="noop">${ic('moon')}Theme</button><hr><button type="button" class="row" data-act="noop">${ic('out')}Sign out</button></div>`;
 }
 // Phone "More": Live up top, then a tile per view with one live fact each, then the rest as rows.
-const MORE_VIEWS = [['traffic', 'arrows', 'Traffic', 'Google 44% · AI answers rising'], ['journeys', 'route', 'Journeys', '1 in 30 sign up'], ['goals', 'target', 'Goals', ''], ['tools', 'terminal', 'Diagnose', 'Check any page']];
+const MORE_VIEWS = [];
 function morePop() {
   const n = liveFor(S.scope), behind = S.scope === 'all' ? 0 : goalsFor(S.scope).filter((g) => g.st === 'behind').length;
   const views = MORE_VIEWS.filter(([k]) => k !== 'journeys' || hasWh(S.scope));
@@ -2592,7 +2628,7 @@ function morePop() {
   const row = (act, i, l, m = '') => `<button type="button" class="row" data-act="${act}">${ic(i)}${l}${m ? `<span class="meta">${m}</span>` : ''}</button>`;
   return `<div class="morep"><span class="mhead">${scopeName(S.scope)}</span>
     <button type="button" class="mlive${S.view === 'live' ? ' on' : ''}" data-act="view:live"><span class="dot${n ? ' on' : ''}"></span><span><b>${n} on now</b><small>${S.scope === 'demo' ? 'Chicago, Toronto, Miami' : 'Berlin, Austin, Bengaluru'}</small></span><span class="go">See who →</span></button>
-    <div class="mtiles">${views.map(tile).join('')}</div>
+    ${views.length ? `<div class="mtiles">${views.map(tile).join('')}</div>` : ''}
     <div class="mrows">${hasWh(S.scope) ? row('raw:events', 'layers', 'Raw data', 'Events, SQL') : ''}${row('view:account', 'gear', 'Account', 'Sites, sign-ins, keys')}</div></div>`;
 }
 function cmdBox() {
@@ -2624,7 +2660,6 @@ function afterDesktop() {
       ${scopeBtn(false)}
       ${S.pop === 'scopes' ? `<div class="pop scopes">${scopeRows()}</div>` : ''}
       ${liveLink()}
-      <button type="button" class="jump" data-act="pop:cmd">${ic('search', 14)}Jump to or ask…<kbd>⌘K</kbd></button>
       <nav class="nav" aria-label="Views">${navAfter()}</nav>
       <div class="sb-foot">
         ${S.pop === 'user' ? userPop() : ''}
@@ -2636,15 +2671,15 @@ function afterDesktop() {
     ${S.pop === 'cmd' ? cmdBox() : ''}
   </div>`;
 }
-const PHONE_TABS = [['timeline', 'Timeline', 'calendar'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['more', 'More', 'more']];
+const PHONE_TABS = [['timeline', 'Timeline', 'calendar'], ['jobs', 'Jobs', 'database'], ['inbox', 'Inbox', 'inbox'], ['more', 'More', 'more']];
 function afterPhone() {
   const n = inboxCount(S.scope);
-  const inMore = ['traffic', 'journeys', 'goals', 'live', 'raw', 'account', 'setup'].includes(S.view) || S.pop === 'more';
+  const inMore = !['timeline', 'jobs', 'inbox'].includes(S.view) || S.pop === 'more';
   const sheet = (inner) => `<div class="scrim" data-act="close"></div><div class="sheet pop" style="position:absolute"><span class="grab"></span>${inner}</div>`;
   return `<div class="app p">
     <header class="pt">
       ${scopeBtn(true)}
-      <select id="ph-range" aria-label="Period">${RANGES.map(([k, l]) => `<option value="${k}"${S.range === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+      ${['timeline', 'jobs', 'inbox'].includes(S.view) ? '' : `<select id="ph-range" aria-label="Period">${RANGES.map(([k, l]) => `<option value="${k}"${S.range === k ? ' selected' : ''}>${l}</option>`).join('')}</select>`}
       <button type="button" class="icon-btn" data-act="pop:cmd" aria-label="Jump to or ask">${ic('search', 15)}</button>
       <button type="button" class="avatar" style="border:0;cursor:pointer" data-act="view:account" aria-label="Account">A</button>
     </header>
@@ -2766,7 +2801,7 @@ function render() {
   document.querySelectorAll('[data-act^="device:"]').forEach((b) => b.setAttribute('aria-pressed', b.dataset.act === `device:${S.device}`));
   stage.className = `stage${S.device === 'phone' ? ' phone' : ''}`;
   stage.innerHTML = S.mode === 'after' ? (S.device === 'phone' ? afterPhone() : afterDesktop()) : (S.device === 'phone' ? beforePhone() : beforeDesktop());
-  hint.textContent = S.device === 'phone' ? 'Tap anything: the tabs, a day, the site chip.' : 'Click anything: the sidebar, a day on the Timeline, a search, a source. Sample data.';
+  hint.textContent = S.device === 'phone' ? 'Tap anything: the tabs, a day, the site chip.' : 'Click a day on the calendar, then Jobs and the Inbox in the sidebar. Sample data.';
   const gal = document.getElementById('gallery');
   if (gal) gal.innerHTML = galleryHTML();
   const q = document.getElementById('cmd-q');
@@ -2806,6 +2841,7 @@ function run(acts) {
       else if (it.k === 'day') { S.view = 'timeline'; S.tab = null; S.page = null; S.cal.month = it.v.slice(0, 7); S.cal.day = it.v; S.cal.zoom = 'month'; S.stack = []; }
       else if (it.k === 'todo') { S.view = 'inbox'; S.tab = null; S.page = null; S.stack = [it]; }
     }
+    else if (k === 'view' && S.solo && v !== 'timeline') { /* Timeline only: other views stay out of this frame */ }
     else if (k === 'view') { S.stack = []; S.view = v; S.tab = null; S.ask = null; S.inboxF = 'all'; S.srange = null; S.cal.day = null; S.jleak = null; S.jedit = false; S.page = null; S.src = null; S.q = null; S.madd = false; S.msrc = null; S.todo = null; S.yf = null; }
     else if (k === 'tab') S.tab = v;
     else if (k === 'raw') { S.view = 'raw'; S.raw = v; }
@@ -2942,12 +2978,15 @@ document.addEventListener('change', (e) => {
 });
 {
   const p = new URLSearchParams(location.search);
-  const TO = { story: 'view:timeline', timeline: 'view:timeline', inbox: 'view:inbox', todos: 'view:inbox', alerts: 'view:inbox',
+  const TO = { story: 'view:timeline', timeline: 'view:timeline', jobs: 'view:jobs', inbox: 'view:inbox', todos: 'view:inbox', alerts: 'view:inbox',
     pages: 'view:pages', cycles: 'view:pages', health: 'view:pages|tab:health', search: 'view:search', ai: 'view:search|tab:ai',
     traffic: 'view:traffic', campaigns: 'view:traffic', journeys: 'view:journeys', funnels: 'view:journeys', goals: 'view:goals', outcomes: 'view:goals', live: 'view:live' };
   if (p.get('device') === 'phone' || p.get('device') === 'desktop') S.device = p.get('device');
   else if (window.innerWidth < 760) S.device = 'phone';
   if (p.get('embed') === '1') document.body.classList.add('embed');
+  // ?only=timeline: just the Timeline page, no sidebar or tabs (the home page's "Look inside"). ?theme=dark|light pins the theme.
+  if (p.get('only') === 'timeline') { S.solo = true; S.view = 'timeline'; S.cal.lens = 'amount'; document.body.classList.add('solo'); }
+  if (p.get('theme') === 'dark' || p.get('theme') === 'light') document.documentElement.dataset.theme = p.get('theme');
   const to = TO[p.get('to')];
   if (to) run(to); else render();
 }

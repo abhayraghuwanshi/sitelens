@@ -6,7 +6,12 @@ import { Icon } from '../../components/icons.jsx';
 import { GoalsEditor } from './Goals.jsx';
 import { BrandIcon } from '../../components/BrandIcon.jsx';
 
-const HOST_BRAND = { firebase: 'firebase', vercel: 'vercel', 'github-pages': 'github' };
+const HOST_BRAND = { firebase: 'firebase', vercel: 'vercel', netlify: 'netlify', fly: 'fly', 'github-pages': 'github' };
+// Hosts whose deploys Kauzl reads through a connection, picked like a Vercel project.
+const DEPLOY_HOSTS = {
+  netlify: { name: 'Netlify', what: 'site', field: 'siteId', connect: '#/account?i=netlify' },
+  fly: { name: 'Fly.io', what: 'app', field: 'app', connect: '#/account?i=fly' },
+};
 
 // Settings → Sites & products: a product is set up stage by stage, the same order as its
 // journey: domains & hosting → analytics → code & releases → distribution → community → goals.
@@ -98,7 +103,7 @@ export function ProductStages({ form, set, setup, inSite = false, only = '', ski
       )}
 
       {show('hosting') && (
-      <Stage icon="rocket" brand={HOST_BRAND[form.hosting?.provider]} title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel send each deploy to the Timeline; other hosts are noted for context." done={hostingState(form.hosting)}>
+      <Stage icon="rocket" brand={HOST_BRAND[form.hosting?.provider]} title="Hosting & deploys" sub="Where the site runs. Firebase, Vercel, Netlify and Fly.io send each deploy to the Timeline; other hosts are noted for context." done={hostingState(form.hosting)}>
         <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} hint={hint} onChange={(hosting) => set({ hosting })} />
       </Stage>
       )}
@@ -266,7 +271,7 @@ function Hosting({ hosting, setup, siteId, hint = '', onChange }) {
       <div class="provider-grid" role="radiogroup" aria-label="Hosting provider">
         {setup.hosting.map((h) => (
           <button key={h.key} type="button" role="radio" aria-checked={provider === h.key} class={`provider${provider === h.key ? ' on' : ''}`}
-            onClick={() => onChange(provider === h.key ? {} : { provider: h.key, ...(h.key === 'firebase' ? { firebase: hosting.firebase } : {}), ...(h.key === 'vercel' ? { vercel: hosting.vercel } : {}) })}>
+            onClick={() => onChange(provider === h.key ? {} : { provider: h.key, ...(h.key === 'firebase' ? { firebase: hosting.firebase } : {}), ...(h.key === 'vercel' ? { vercel: hosting.vercel } : {}), ...(DEPLOY_HOSTS[h.key] ? { [h.key]: hosting[h.key] } : {}) })}>
             {HOST_BRAND[h.key] ? <BrandIcon name={HOST_BRAND[h.key]} small /> : <span class="provider-letter" aria-hidden="true">{h.label[0]}</span>}
             <span class="provider-b"><b>{h.label}</b><small>{h.feed ? 'Deploys on Timeline' : 'Noted only'}</small></span>
           </button>
@@ -308,12 +313,50 @@ function Hosting({ hosting, setup, siteId, hint = '', onChange }) {
         </div>
       )}
 
+      {DEPLOY_HOSTS[provider] && (
+        <DeployHost provider={provider} hosting={hosting} state={setup[provider] || { connected: false, items: [], matches: {} }} siteId={siteId} host={host} onChange={onChange} />
+      )}
+
       {chosen && !chosen.feed && (
         <div class="host-panel">
           <label class="field host-field"><span class="field-label">Plan or note <small>optional</small></span>
             <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : provider === 'fly' ? 'App name, e.g. my-app (one machine, sin)' : 'Anything worth remembering'} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
           </label>
           <small class="muted">{chosen.label} has no deploy feed Kauzl can read, so GitHub releases, Web Store versions and your own notes mark changes on the Timeline.</small>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Netlify site or Fly.io app: pick the one that serves this address, or connect the host first.
+function DeployHost({ provider, hosting, state, siteId, host, onChange }) {
+  const d = DEPLOY_HOSTS[provider];
+  const picked = hosting[provider]?.[d.field] ?? (state.matches?.[siteId] || '');
+  const suggest = !picked && host ? state.items.find((x) => x.domain?.replace(/^www\./, '') === host) : null;
+  const pick = (id) => onChange({ ...hosting, [provider]: id ? { [d.field]: id } : undefined });
+  return (
+    <div class="host-panel">
+      <p class="host-panel-h"><BrandIcon name={provider} small /><b>{state.connected ? `Pick the ${d.name} ${d.what}` : `Connect ${d.name} to read deploys`}</b></p>
+      {state.connected ? (
+        <>
+          {suggest && (
+            <button type="button" class="host-suggest" onClick={() => pick(suggest.id)}>
+              <Icon name="sparkles" size={13} /><span><b>{suggest.name}</b> serves {host}</span><span class="host-suggest-go">Use it</span>
+            </button>
+          )}
+          <label class="field host-field">{d.what === 'app' ? 'App' : 'Site'}
+            <select value={picked} onChange={(e) => pick(e.currentTarget.value)}>
+              <option value="">Choose {d.what === 'app' ? 'an app' : 'a site'}…</option>
+              {state.items.map((x) => <option key={x.id} value={x.id}>{x.name}{x.domain && x.domain !== x.name ? ` · ${x.domain}` : ''}</option>)}
+            </select>
+            {state.error && <small class="bad">{state.error}</small>}
+          </label>
+        </>
+      ) : (
+        <div class="host-connect">
+          <span class="muted small">Kauzl reads production {provider === 'fly' ? 'releases' : 'deploys'}, failed ones too, and marks each one on the Timeline.</span>
+          <a class="btn" href={d.connect}>Connect {d.name}</a>
         </div>
       )}
     </div>

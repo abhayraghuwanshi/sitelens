@@ -107,7 +107,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
   else if (view === 'jobs') body = <TimelineJobs site={site} sites={sites} />;
   else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} />;
-  else if (view === 'story') body = <Sites sites={sites} auth={auth} viewer={state.viewer} />;
+  else if (view === 'story') body = <Sites sites={sites} auth={auth} viewer={state.viewer} browser={state.browser} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
   else if (view === 'setup' && site) body = <Page title="Config file" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
@@ -143,6 +143,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const conn = state.demo
     ? (sites.some((s) => s.showcase) ? 'Live demo · view only' : 'Demo · sample data')
     : state.viewer ? 'Viewing shared sites'
+    : state.browser && !auth.connected ? 'This browser · no sign-in'
     : auth.connected ? (auth.expired ? 'Google sign-in expired' : auth.broken ? 'Google needs you' : 'Google connected') : 'Google not connected';
   const connOn = !state.demo && !state.viewer && auth.connected && !auth.expired && !auth.broken;
   const connBad = !state.demo && !state.viewer && auth.connected && (auth.expired || auth.broken);
@@ -236,6 +237,9 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           <span>{liveN == null ? 'Live' : <><b>{liveN}</b> on now</>}</span>
           <span class="nx-livelink-go">See who →</span>
         </a>
+        {state.browser && (
+          <a class="btn nx-signin" href="/login" title="Sign in to Kauzl to save your setup to the cloud"><Icon name="cloud" size={15} />Sign in to save</a>
+        )}
         <nav class="nx-nav" aria-label="Views">
           {/* Reports open from the Timeline; page checks open from each page's Checks. */}
           {views.filter((v) => !v.report).map((v) => (
@@ -257,6 +261,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
       {/* Phone */}
       <header class="nx-ptop">
         {scopeBtn(true)}
+        {state.browser && <a class="btn nx-signin nx-ptop-btn" href="/login"><Icon name="cloud" size={15} />Sign in</a>}
         <button type="button" class="nx-icon-btn nx-ptop-btn" onClick={() => toggle('jump')} aria-label="Jump to"><Icon name="search" size={16} /></button>
         <button type="button" class="nx-avatar nx-ptop-btn" onClick={() => toggle('user')} aria-label="Account and theme" aria-expanded={pop === 'user'}>{initial(auth, state)}</button>
       </header>

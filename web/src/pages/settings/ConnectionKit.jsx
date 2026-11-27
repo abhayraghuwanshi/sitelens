@@ -1,4 +1,6 @@
 import { useState } from 'preact/hooks';
+import { api } from '../../api.js';
+import { useAsync } from '../../hooks.js';
 import { BrandIcon } from '../../components/BrandIcon.jsx';
 import { Icon } from '../../components/icons.jsx';
 
@@ -96,6 +98,17 @@ export function Facts({ items }) {
 // A key or token. `source` says where the saved one comes from: 'settings'
 // (saved here), 'env' (.env, can't be removed here), 'oauth', or '' (none).
 // onSave(value) resolves to a message (or throws); onRemove() likewise.
+// Where a saved key lives, asked once: on this computer (local Kauzl), in the
+// account's encrypted folder (hosted), or sealed to this browser (no sign-in).
+let whereAsked = null;
+const keyHome = () => (whereAsked ||= api.get('/state').then((st) => (st.browser ? 'browser' : st.hosted ? 'hosted' : 'local'), () => 'local'));
+const SAVED = { local: 'Saved on this computer', hosted: 'Saved in your account, encrypted', browser: 'Saved in this browser, encrypted' };
+const STORED = {
+  local: <>Stored on this computer in <code>.data/studio.json</code>, readable only by your user account. Kauzl uses it only to read from this service, and never sends it anywhere else.</>,
+  hosted: <>Stored encrypted in your Kauzl account. Kauzl uses it only to read from this service.</>,
+  browser: <>Stored encrypted with a secret only this browser holds. Kauzl uses it only to read from this service; <b>Forget this browser</b> deletes it.</>,
+};
+
 export function SecretField({ label, placeholder, source, envName, onSave, onRemove, busyText = 'Checking…', extra = null, canSaveEmpty = false }) {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState('');
@@ -103,6 +116,7 @@ export function SecretField({ label, placeholder, source, envName, onSave, onRem
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState(null);
   const open = editing || !source;
+  const home = useAsync(keyHome, []).data || 'local';
 
   async function run(fn) {
     setBusy(true);
@@ -128,7 +142,7 @@ export function SecretField({ label, placeholder, source, envName, onSave, onRem
           <div class="cx-key-text">
             <b>{label}</b>
             <span class="small muted">
-              {source === 'env' ? <>From <code>{envName}</code> in .env</> : source === 'oauth' ? 'Signed in, no key needed' : 'Saved in Kauzl'} · <span class="mono">••••••••••••</span>
+              {source === 'env' ? <>From <code>{envName}</code> in .env</> : source === 'oauth' ? 'Signed in, no key needed' : SAVED[home]} · <span class="mono">••••••••••••</span>
             </span>
           </div>
           <div class="row gap-6">
@@ -155,7 +169,8 @@ export function SecretField({ label, placeholder, source, envName, onSave, onRem
         </form>
       )}
       {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
-      {envName && source !== 'env' && <p class="small muted m-0">Or set <code>{envName}</code> in <code>.env</code> and restart Kauzl.</p>}
+      {source !== 'env' && source !== 'oauth' && <p class="small muted m-0">{STORED[home]}</p>}
+      {envName && source !== 'env' && home === 'local' && <p class="small muted m-0">Or set <code>{envName}</code> in <code>.env</code> and restart Kauzl.</p>}
     </div>
   );
 }

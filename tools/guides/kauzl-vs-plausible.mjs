@@ -12,17 +12,18 @@ export default {
   blurb: 'One counts visits, one explains them. When to use which.',
   lead: 'We make Kauzl, so read this with that in mind. We’ve tried to be fair: Plausible is a good product, and for a lot of sites it’s the better choice.',
   published: '2026-11-16',
+  updated: '2026-11-28',
   tools: ['did-it-work', 'utm-builder', 'serp-preview'],
   inShort: [
     '<strong>Plausible counts visits.</strong> It replaces Google Analytics with a small, cookieless script and one clean dashboard.',
-    '<strong>Kauzl explains visits.</strong> It adds no script. It reads Google Analytics and Search Console and lines them up with your releases, posts and campaigns.',
+    '<strong>Kauzl explains visits.</strong> It adds no script. It reads Plausible, Google Analytics or Search Console and lines them up with your releases, posts and campaigns.',
     'Want privacy-first counting with no cookie banner? <strong>Use Plausible.</strong>',
-    'Already on GA4 and can’t tell <em>why</em> a number moved? <strong>Use Kauzl.</strong> Today Kauzl reads GA4, not Plausible.',
+    'Already on GA4 and can’t tell <em>why</em> a number moved? <strong>Use Kauzl.</strong> It reads Plausible too, so you can use both.',
   ],
   body: `
 <h2>They do different jobs</h2>
 <p><strong>Plausible</strong> is a tracker. You add its script to your site, and it records visits, sources, pages, goals and custom events, without cookies. It’s open source, hosted in the EU, and you can run it yourself.</p>
-<p><strong>Kauzl</strong> isn’t a tracker. It reads the analytics you already collect (Google Analytics 4 and Search Console), adds what you did (GitHub releases, Chrome Web Store versions, Reddit and Hacker News posts, tagged campaigns), and writes down what changed and why. For example: “Visits up 32%. Reddit sent 18 more, the day after your launch post.”</p>
+<p><strong>Kauzl</strong> isn’t a tracker. It reads the analytics you already collect (Plausible, Google Analytics 4, PostHog, Cloudflare Web Analytics and Search Console), adds what you did (GitHub releases, Chrome Web Store versions, Reddit and Hacker News posts, tagged campaigns), and writes down what changed and why. For example: “Visits up 32%. Reddit sent 18 more, the day after your launch post.”</p>
 <p>So the real question isn’t which is better. It’s which problem you have.</p>
 
 <h2>Side by side</h2>
@@ -61,15 +62,15 @@ export default {
 </ul>
 
 <h2>Can you use both?</h2>
-<p>Yes, and many people with GA4 should keep it alongside a privacy-first tool anyway. Today Kauzl reads Google Analytics, so if Plausible is your only tracker, Kauzl can’t read your visits yet. Reading Plausible and Umami directly is the next thing we want to add. If you’d use that, <a href="/waitlist">join the waitlist</a> and we’ll let you know when it’s ready.</p>
+<p>Yes, and many people with GA4 should keep it alongside a privacy-first tool anyway. Kauzl reads Plausible directly, so it works even if Plausible is your only tracker: add a Plausible API key and your visits sit on the same calendar as your releases and posts. Plausible counts the visits; Kauzl tells you why they moved.</p>
 
 <h2>Without either tool</h2>
 <p>If you only want to check whether one change worked, you don’t need a new tool. Paste your daily numbers from before and after into the <a href="/tools/did-it-work/">Did it work? checker</a>. Tag your links with the <a href="/tools/utm-builder/">UTM builder</a> so you can tell later which post sent the visits.</p>
 `,
   faq: [
-    ['Is Kauzl a Plausible alternative?', 'Not really. Plausible replaces Google Analytics as the thing that counts visits. Kauzl doesn’t count visits; it reads Google Analytics and Search Console and explains what changed.'],
-    ['Does Kauzl work with Plausible?', 'Not yet. Today Kauzl reads Google Analytics 4 and Search Console. Reading Plausible and Umami directly is planned.'],
-    ['Does Kauzl add a tracking script to my site?', 'No. It connects to your existing Google Analytics and Search Console with read-only access.'],
-    ['Which is better for privacy?', 'Plausible. It’s cookieless and collects no personal data. Kauzl inherits whatever your Google Analytics setup collects.'],
+    ['Is Kauzl a Plausible alternative?', 'Not really. Plausible replaces Google Analytics as the thing that counts visits. Kauzl doesn’t count visits; it reads Plausible, Google Analytics or Search Console and explains what changed.'],
+    ['Does Kauzl work with Plausible?', 'Yes. Add a Plausible API key, hosted or self-hosted, and Kauzl reads visitors, pageviews, bounce rate and goals for each site. Umami is planned.'],
+    ['Does Kauzl add a tracking script to my site?', 'No. It connects to the analytics you already have (Plausible, Google Analytics, PostHog, Cloudflare or Search Console) with read-only access.'],
+    ['Which is better for privacy?', 'Plausible. It’s cookieless and collects no personal data. Kauzl collects nothing itself; it only reads what your analytics tool already has.'],
   ],
 };

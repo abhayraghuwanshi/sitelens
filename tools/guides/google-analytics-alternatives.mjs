@@ -13,6 +13,7 @@ export default {
   blurb: 'Nine options, grouped by the reason you want out of GA4.',
   lead: 'We make Kauzl, which is on this list, so read with that in mind. It’s only the right answer for one of the five reasons below, and we say which.',
   published: '2026-11-16',
+  updated: '2026-11-28',
   tools: ['did-it-work', 'utm-builder', 'ai-robots-txt-generator'],
   inShort: [
     'Leaving for <strong>privacy or the cookie banner</strong>: Plausible, Fathom or Simple Analytics.',
@@ -76,6 +77,6 @@ export default {
     ['Is there a free Google Analytics alternative?', 'Umami and Matomo are free if you host them yourself, and PostHog has a free tier. Looker Studio is free but reads GA4 rather than replacing it.'],
     ['Do privacy-first analytics tools need a cookie banner?', 'Cookieless tools like Plausible, Fathom and Simple Analytics are usually used without one, but whether you need consent depends on your setup and your jurisdiction, so check with your own advisor.'],
     ['Can I move my old GA4 data to another tool?', 'Mostly no. Matomo has a Google Analytics importer; most others start fresh. Export the reports you care about, and run both tools side by side for a few weeks.'],
-    ['Is Kauzl a Google Analytics alternative?', 'Not in the usual sense. Kauzl reads Google Analytics 4, Search Console and Bing instead of replacing them, and explains what changed. It suits people who want to keep GA4 but get answers out of it.'],
+    ['Is Kauzl a Google Analytics alternative?', 'Not in the usual sense. Kauzl reads Google Analytics 4, Plausible, PostHog, Cloudflare Web Analytics, Search Console and Bing instead of replacing them, and explains what changed. It suits people who want to keep GA4 but get answers out of it.'],
   ],
 };

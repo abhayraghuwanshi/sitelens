@@ -32,13 +32,32 @@ export function guessHosting(dns) {
   return '';
 }
 
-export function createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes = null }) {
+export function createProductSetup({ products, store, firebase, vercel, netlify = null, fly = null, journey, mentions, outcomes = null }) {
+  // A deploy source's picker: connected or not, its list, and which item each site uses.
+  async function hostList(source, list, pick = (m) => m.app) {
+    if (!source) return { connected: false, items: [], matches: {} };
+    const status = await source.status().catch(() => ({ tokenSource: '' }));
+    if (!status.tokenSource) return { connected: false, items: [], matches: {} };
+    try {
+      const items = await list();
+      const matched = await source.matches(await store.sites());
+      return { connected: true, items, matches: Object.fromEntries(Object.entries(matched).map(([siteId, m]) => [siteId, pick(m) || ''])) };
+    } catch (err) {
+      return { connected: true, items: [], matches: {}, error: err.message };
+    }
+  }
+
   async function options() {
     const base = await products.options();
     const [fb, vc, mention] = await Promise.all([
       firebase.status().catch(() => ({ links: [] })),
       vercel.status().catch(() => ({ tokenSource: '' })),
       mentions.overview({ rangeKey: '7d' }).then((o) => o.sources).catch(() => ({})),
+    ]);
+    // Netlify sites and Fly.io apps, when connected, to pick from like Vercel projects.
+    const [netlifyState, flyState] = await Promise.all([
+      hostList(netlify, async () => (await netlify.sites()).map((x) => ({ id: x.id, name: x.name, domain: x.customDomain || x.url.replace(/^https?:\/\//, '') })), (m) => m.siteId),
+      hostList(fly, async () => (await fly.apps()).map((a) => ({ id: a.name, name: a.name, domain: a.domains[0] || a.hostname }))),
     ]);
     let vercelProjects = [];
     let vercelError = '';
@@ -62,6 +81,8 @@ export function createProductSetup({ products, store, firebase, vercel, journey,
         projects: vercelProjects,
         matches: Object.fromEntries(Object.entries(vercelMatches).map(([siteId, m]) => [siteId, m.projectId || ''])),
       },
+      netlify: netlifyState,
+      fly: flyState,
       community: {
         hn: { ready: true },
         reddit: { ready: Boolean(mention.reddit?.ready) },
@@ -103,6 +124,14 @@ export function createProductSetup({ products, store, firebase, vercel, journey,
     if (h?.provider === 'vercel' && h.vercel && product.siteId) {
       await vercel.setMatch(product.siteId, h.vercel.projectId);
       linked.push('vercel');
+    }
+    if (h?.provider === 'netlify' && h.netlify && product.siteId && netlify) {
+      await netlify.setMatch(product.siteId, h.netlify.siteId);
+      linked.push('netlify');
+    }
+    if (h?.provider === 'fly' && h.fly && product.siteId && fly) {
+      await fly.setMatch(product.siteId, h.fly.app);
+      linked.push('fly');
     }
     journey.clear?.(product.id);
     outcomes?.clear(product.id);

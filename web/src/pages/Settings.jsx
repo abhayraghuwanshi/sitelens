@@ -8,6 +8,8 @@ import { SiteIcon } from '../components/SiteIcon.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ProductForm, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings, KeyForm } from './settings/BingSettings.jsx';
+import { MoreAnalyticsSources, saveSourcePicks } from './settings/SiteSources.jsx';
+import { GitHubRepos } from './settings/GitHubRepos.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
@@ -37,8 +39,8 @@ const TABS = [
 ];
 
 const PANELS = {
-  google: { title: 'Google account', render: ({ state, onChange }) => <ConnectCard auth={state.auth} onChange={onChange} /> },
-  github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings state={state} sources={state.sources} onChange={onChange} /> },
+  google: { title: 'Google account', render: ({ state, onChange }) => <ConnectCard auth={state.auth} onChange={onChange} browser={Boolean(state.browser)} /> },
+  github: { title: 'GitHub', render: ({ state, onChange }) => <><GitHubSettings state={state} sources={state.sources} onChange={onChange} /><GitHubRepos connected={Boolean(state.sources?.github?.tokenSource)} /></> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
   plausible: { title: 'Plausible', render: () => <PlausibleSettings /> },
@@ -64,7 +66,9 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
   const panel = params.get('i') !== 'mcp' && PANELS[params.get('i')] ? params.get('i') : connected ? 'google' : '';
   // Sites and products share one tab: old ?tab=products links (with ?edit=<product id>) land there.
   const asked = params.get('tab') === 'products' ? 'sites' : params.get('tab');
-  const tab = params.get('i') === 'mcp' ? 'mcp' : panel ? 'integrations' : TABS.some((t) => t.key === asked) ? asked : 'sites';
+  // In this browser (no sign-in) there's no MCP: agents need an account, so its tab is left out.
+  const tabs = state.browser ? TABS.filter((t) => t.key !== 'mcp') : TABS;
+  const tab = params.get('i') === 'mcp' && !state.browser ? 'mcp' : panel ? 'integrations' : tabs.some((t) => t.key === asked) ? asked : 'sites';
 
   // Alert settings moved to the Alerts page; old ?tab=alerts links land there.
   useEffect(() => {
@@ -84,11 +88,11 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
     <>
       {phone ? (
         <div class="sp-phone-tabs">
-          <PullDown label="Account" value={tab} options={TABS} onChange={(k) => { location.hash = `#/account?tab=${k}`; }} />
+          <PullDown label="Account" value={tab} options={tabs} onChange={(k) => { location.hash = `#/account?tab=${k}`; }} />
         </div>
       ) : (
         <nav class="tabs" aria-label="Settings sections">
-          {TABS.map((t) => (
+          {tabs.map((t) => (
             <a key={t.key} href={`#/account?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
           ))}
         </nav>
@@ -505,7 +509,7 @@ function GitHubSettings({ state, sources, onChange }) {
   );
 }
 
-function ConnectCard({ auth, onChange }) {
+function ConnectCard({ auth, onChange, browser = false }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -550,6 +554,17 @@ function ConnectCard({ auth, onChange }) {
 
   const scopes = auth.scopes || [];
   const has = (s) => scopes.some((x) => x.endsWith(s));
+  const tokenForm = (
+    <form class="stack" onSubmit={paste}>
+      <input type="password" placeholder="ya29.…" value={token} onInput={(e) => setToken(e.currentTarget.value)} aria-label="Access token" autocomplete="off" />
+      <p class="note">
+        From the <a href="https://developers.google.com/oauthplayground/" target="_blank" rel="noreferrer">OAuth Playground</a> with scopes
+        <code> analytics.readonly webmasters.readonly bigquery logging.read</code>. Lasts about an hour — same as the extension.
+      </p>
+      <button class="btn self-start" type="submit" disabled={busy || !token.trim()}>{busy ? 'Verifying…' : 'Verify token'}</button>
+      {error && <p class="small text-bad m-0">{error.message}</p>}
+    </form>
+  );
   return (
     <Card title="Google account" sub={auth.connected ? (auth.mode === 'oauth' ? 'Signed in · refreshes automatically' : auth.mode === 'service' ? 'Service account key · never expires' : 'Pasted access token') : 'Not connected'}>
       <div class="stack">
@@ -566,6 +581,13 @@ function ConnectCard({ auth, onChange }) {
             <button class="btn ghost danger" type="button" onClick={async () => { await api.post('/auth/signout'); onChange(); }}>{auth.mode === 'service' ? 'Remove key' : 'Sign out'}</button>
           </div>
         )}
+        {browser ? (
+          <div class="stack">
+            <b>Try the calendar with your Google data</b>
+            <p class="note m-0">In this browser, Google connects with a short-lived access token: paste one to see your own Analytics and Search Console on the calendar. It lasts about an hour; paste a new one when it runs out.</p>
+            {tokenForm}
+          </div>
+        ) : <>
         {auth.mode === 'service' && (
           <p class="note m-0">
             Add <code>{auth.email}</code> in GA4 (Admin → Property access management, Viewer) and in Search Console (Settings → Users and permissions, Restricted).
@@ -599,17 +621,10 @@ function ConnectCard({ auth, onChange }) {
           </div>
           <details class="advanced">
           <summary>Advanced: paste an access token instead</summary>
-          <form class="stack" onSubmit={paste}>
-            <input type="password" placeholder="ya29.…" value={token} onInput={(e) => setToken(e.currentTarget.value)} aria-label="Access token" autocomplete="off" />
-            <p class="note">
-              From the <a href="https://developers.google.com/oauthplayground/" target="_blank" rel="noreferrer">OAuth Playground</a> with scopes
-              <code> analytics.readonly webmasters.readonly bigquery logging.read</code>. Lasts about an hour — same as the extension.
-            </p>
-            <button class="btn self-start" type="submit" disabled={busy || !token.trim()}>{busy ? 'Verifying…' : 'Verify token'}</button>
-            {error && <p class="small text-bad m-0">{error.message}</p>}
-          </form>
+          {tokenForm}
           </details>
         </div>
+        </>}
       </div>
     </Card>
   );
@@ -710,6 +725,8 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
     }));
   }, [bqExport.data]);
 
+  // Plausible, PostHog and Cloudflare picks, saved once the site has an id.
+  const [sourcePicks, setSourcePicks] = useState({});
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setBq = (patch) => setForm((f) => ({ ...f, bq: { ...f.bq, ...patch } }));
 
@@ -722,6 +739,7 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
       const site = await api.post('/sites', { ...rest, bq: useBq ? form.bq : null });
       // A retry after a product error updates this site rather than adding another.
       set({ id: site.id });
+      await saveSourcePicks(site.id, sourcePicks);
       if (product) {
         await api.post('/products/setup', {
           ...product,
@@ -841,6 +859,8 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
                 </label>
               </div>
             </section>
+
+            <MoreAnalyticsSources siteId={initial.id || ''} host={form.host} picks={sourcePicks} onPick={(key, value) => setSourcePicks((p) => ({ ...p, [key]: value }))} />
           </div>
         </>
         )}

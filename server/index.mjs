@@ -185,7 +185,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
   const siteHealth = createSiteHealth({ pageReview, hub: searchHub, vitals });
   const pageJourney = createPageJourney({ engines, outcomes, store, auth, cacheDb });
-  const setup = createProductSetup({ products, store, firebase, vercel, journey, mentions, outcomes });
+  const setup = createProductSetup({ products, store, firebase, vercel, netlify, fly, journey, mentions, outcomes });
   const history = createCalendarStore({ dbPath: join(store.dir, 'calendar.db'), store, auth });
   const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, history, cacheDb, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
@@ -468,7 +468,14 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const scope = await siteRepoScope(site);
       return { ...githubOverview(githubDb(), range, new Set(scope.repos)), scope };
     }],
-    ['GET', /^\/api\/github\/repo$/, async ({ query }) => githubRepo(githubDb(), query.get('name') || '', query.get('range') || '28d')],
+    // Each site and the repos that belong to it, for Settings → GitHub.
+    ['GET', /^\/api\/github\/sites$/, async () => ({
+      sites: await Promise.all((await store.sites()).filter((s) => !s.demo).map(async (site) => {
+        const scope = await siteRepoScope(site);
+        return { siteId: site.id, label: site.label || site.host, host: site.host || '', repos: scope.repos, note: scope.note };
+      })),
+    })],
+    ['GET', /^\/api\/github\/repo$/,async ({ query }) => githubRepo(githubDb(), query.get('name') || '', query.get('range') || '28d')],
 
     ['GET', /^\/api\/extensions$/, async ({ query }) => {
       const range = historyRange(query.get('range') || '28d');

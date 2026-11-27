@@ -303,7 +303,7 @@ ${cta({}, 'guides')}`;
   const courseUrl = `${SITE}${GUIDES}/#course`;
   const courseLd = {
     '@context': 'https://schema.org', '@type': 'Course', '@id': courseUrl, name: COURSE.name, description: COURSE.description, url: gurl(''),
-    provider: { '@type': 'Organization', name: 'Kauzl', url: `${APP}/` }, isAccessibleForFree: true, educationalLevel: 'Beginner', inLanguage: 'en',
+    provider: { '@type': 'Organization', name: 'Kauzl', url: `${SITE}/` }, isAccessibleForFree: true, educationalLevel: 'Beginner', inLanguage: 'en',
     offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD', category: 'Free' },
     hasCourseInstance: { '@type': 'CourseInstance', courseMode: 'Online', courseWorkload: `PT${total}M` },
     teaches: MODULES.map((m) => m.teaches),
@@ -411,7 +411,7 @@ ${entries.map(([loc, mod]) => `  <url><loc>${loc}</loc><lastmod>${mod}</lastmod>
 // numbered lessons; every lesson and tool is still listed.
 const llms = `# Kauzl
 
-> Kauzl is an analytics calendar for your website. It reads Google Analytics 4, Search Console and Bing, shows each day next to your releases, posts and campaigns, and says what changed, why, and whether it is real. These are its free guides and browser tools.
+> Kauzl is an analytics calendar for your website. It reads Google Analytics 4, Plausible, PostHog, Cloudflare Web Analytics, Search Console and Bing, shows each day next to your releases, posts and campaigns, and says what changed, why, and whether it is real. These are its free guides and browser tools.
 
 ## Free course: ${COURSE.name}
 

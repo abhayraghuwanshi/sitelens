@@ -13,6 +13,7 @@ export default {
   blurb: 'Twelve self-hostable analytics tools: stars, licence and what each is for.',
   lead: 'Open-source analytics lets you own your data and skip the cookie banner, but the tools differ more than their landing pages suggest. Here are twelve, with the numbers from GitHub. We make Kauzl, which reads analytics rather than collecting it, and isn’t in the list.',
   published: '2026-11-22',
+  updated: '2026-11-28',
   tools: ['did-it-work', 'utm-builder'],
   inShort: [
     'For <strong>simple, private website stats</strong>: Umami (MIT) or Plausible (AGPL). Both are cookie-free and easy to self-host.',
@@ -64,7 +65,7 @@ export default {
 <p>If you don’t want to run a server, most of these offer a hosted plan, and so do closed-source privacy tools such as Fathom and Simple Analytics (<a href="/guides/google-analytics-alternatives/">lesson 5</a>).</p>
 
 <h2>Keep your history when you switch</h2>
-<p>None of these imports your old Google Analytics data completely. Export the reports you care about first, and run both trackers side by side for a few weeks so you can see how the numbers differ. Different tools count visits differently, so a 20% gap is normal. Kauzl reads Google Analytics today; reading Umami and Plausible directly is on our list.</p>
+<p>None of these imports your old Google Analytics data completely. Export the reports you care about first, and run both trackers side by side for a few weeks so you can see how the numbers differ. Different tools count visits differently, so a 20% gap is normal. Kauzl reads Plausible, PostHog and Cloudflare Web Analytics as well as Google Analytics; Umami is on our list.</p>
 `,
   faq: [
     ['What is the best open-source Google Analytics alternative?', 'Matomo is the closest open-source match to Google Analytics in depth. For simpler, cookie-free stats, Umami and Plausible are the most popular choices, each with tens of thousands of GitHub stars.'],

@@ -1038,6 +1038,8 @@ pre.sql { margin: 0; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; color:
 .thbtn { border: 0; background: none; font: inherit; color: inherit; cursor: pointer; padding: 0; text-transform: inherit; letter-spacing: inherit; }
 .bargrp { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .hdctl { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.setup-note { display: flex; align-items: flex-start; gap: 8px; margin: 0; padding: 10px 14px; border-radius: 8px; font-size: 13px; color: var(--text); background: color-mix(in srgb, var(--warn-ink) 12%, var(--surface)); }
+.setup-note > svg { flex: none; margin-top: 2px; color: var(--warn-ink); }
 .hdctl .mo { display: flex; align-items: center; gap: 2px; }
 .hdctl .icon-btn[disabled] { opacity: .35; cursor: default; }
 .hdctl .chip { display: inline-flex; align-items: center; gap: 4px; }
@@ -1598,11 +1600,18 @@ td.was { color: var(--text-2); }
 .tour-logo { display: inline-flex; align-items: center; gap: 8px; color: var(--text); font-family: 'Space Grotesk', var(--font); font-weight: 700; font-size: 18px; text-decoration: none; }
 .tour-note { color: var(--text-3); font-size: 13px; }
 .tour-bar .tour-grow { flex: 1; }
-.tour-cta { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 10px; background: #F5A524; color: #121522; font-weight: 600; font-size: 14px; text-decoration: none; }
+.tour-cta { display: inline-flex; align-items: center; padding: 8px 14px; border-radius: 10px; background: #2FA596; color: #06201c; font-weight: 600; font-size: 14px; text-decoration: none; }
 .tour-main { max-width: 1320px; margin: 0 auto; padding: 0 16px 24px; display: grid; gap: 8px; }
 body.embed .tour-bar { display: none; }
 body.embed .tour-main { padding: 0; max-width: none; }
 body.embed .hint { display: none; }
+/* ?only=timeline: the Timeline page alone, filling the frame. */
+body.solo { background: var(--bg); padding: 0; }
+body.solo .stage { padding: 0; overflow: visible; }
+body.solo .app { border: 0; border-radius: 0; }
+body.solo .app.d { grid-template-columns: minmax(0, 1fr); height: 100vh; min-width: 0; }
+body.solo .app .sb, body.solo .app.p .pt, body.solo .app.p .tabbar { display: none; }
+body.solo .app.p { width: 100%; height: 100vh; border: 0; }
 </style>
 </head>
 <body>

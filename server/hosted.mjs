@@ -94,7 +94,6 @@ const SECURITY_HEADERS = {
 // repo, which live on their own static host and are shown at /tools/ so links
 // they earn count for this domain) use the brand's Google Fonts; still no
 // inline JS.
-const HOME_PLAY_JS = readFileSync(new URL('./home-play.js', import.meta.url), 'utf8');
 const TOUR_HTML = readFileSync(new URL('./tour/index.html', import.meta.url), 'utf8');
 const TOUR_JS = readFileSync(new URL('./tour/tour.js', import.meta.url), 'utf8');
 
@@ -646,10 +645,6 @@ export function createGateway({
     }
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
 
-    // The home page hero's script (server/home-play.js, also imported by home.mjs).
-    if (url.pathname === '/home-play.js') {
-      return res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(HOME_PLAY_JS);
-    }
     if (url.pathname === '/robots.txt') {
       return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(robotsTxt(origin, { tools: Boolean(toolsOrigin) }));
     }
