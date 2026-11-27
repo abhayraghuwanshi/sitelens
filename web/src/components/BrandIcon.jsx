@@ -94,6 +94,14 @@ const MARKS = {
       <rect x="9.6" y="18.6" width="4.8" height="3" rx="1" fill="var(--brand-fly)" />
     </>
   ),
+  // Netlify: a teal tile with the arrow of its mark. A stand-in, not the logo.
+  netlify: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="var(--brand-netlify)" />
+      <path d="M6.5 17.5 12 6l5.5 11.5z" fill="var(--brand-white)" />
+      <path d="M9.4 17.5 12 12.4l2.6 5.1z" fill="var(--brand-netlify)" />
+    </>
+  ),
   // Databases.
   postgres: (
     <>
@@ -187,7 +195,7 @@ const MARKS = {
 
 const NAMES = {
   analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', plausible: 'Plausible', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
-  fly: 'Fly.io', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
+  fly: 'Fly.io', netlify: 'Netlify', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
   claude: 'Claude', openrouter: 'OpenRouter', hn: 'Hacker News', reddit: 'Reddit', producthunt: 'Product Hunt', pagespeed: 'PageSpeed', slack: 'Slack',
 };
 

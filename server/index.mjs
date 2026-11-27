@@ -41,6 +41,7 @@ import { createAlerts, alertRoutes } from './alerts.mjs';
 import { createVercel, vercelRoutes } from './vercel.mjs';
 import { createPlausible, plausibleRoutes } from './plausible.mjs';
 import { createFly, flyRoutes } from './fly.mjs';
+import { createNetlify, netlifyRoutes } from './netlify.mjs';
 import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes, ENGINES, ENGINE_ON } from './ai-search.mjs';
@@ -132,6 +133,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const vercel = createVercel({ store, env, cacheDb, fetchImpl });
   const plausible = createPlausible({ store, env, cacheDb, fetchImpl });
   const fly = createFly({ store, env, cacheDb, fetchImpl });
+  const netlify = createNetlify({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
   // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
   const siteRepoCache = new Map(); // site id → { at, linked, value }
@@ -163,6 +165,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, plausible, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
   annotations.registerSource('fly', (q) => fly.annotations(q));
+  annotations.registerSource('netlify', (q) => netlify.annotations(q));
   annotations.registerSource('mentions', (q) => mentions.annotations(q));
   const firebase = createFirebase({ dbPath: join(store.dir, 'firebase.db'), store, getToken: () => auth.token(), bigquery, fetchImpl });
   annotations.registerSource('firebase', (q) => firebase.annotations(q));
@@ -189,7 +192,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   // Reddit posts planned by Claude, posted by you, measured in Reddit and GA4.
   const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl, hosted });
-  const automaticJobs = createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly });
+  const automaticJobs = createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly, netlify });
   const timelineJobs = createTimelineJobs({ store, github, metrics: customMetrics, automaticJobs, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays, goalDays: outcomes.goalDays, customMetrics, citationDays: aiSearch.citationDays, jobSeries: timelineJobs.series, bingDays: bing.timelineDays });
@@ -257,6 +260,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
     ...plausibleRoutes({ plausible, store, siteOr404, auth }),
     ...flyRoutes({ fly, store }),
+    ...netlifyRoutes({ netlify, store }),
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
     ...analystRoutes({ analyst, siteOr404 }),
@@ -366,6 +370,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
         plausible: { source: plausibleStatus.keySource, baseUrl: plausibleStatus.baseUrl, error: plausibleStatus.lastError },
         fly: await fly.status().then((f) => ({ source: f.tokenSource, login: f.login, orgs: f.orgs.length, error: f.lastError })).catch(() => ({ source: '' })),
+        netlify: await netlify.status().then((n) => ({ source: n.tokenSource, login: n.login, error: n.lastError })).catch(() => ({ source: '' })),
         // Each tracked extension, as its own row on Connections.
         extensions: {
           count: (await extensions.list()).length,
@@ -772,7 +777,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, fly, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, fly, netlify, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
 }
 
 // Calls handle() as if over HTTP and returns a fetch Response.

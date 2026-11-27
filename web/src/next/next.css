@@ -2253,6 +2253,7 @@ table.data.tl-sched .tl-sched-group th { padding: 10px 16px; background: var(--s
   --brand-fly: #7B3BE2;
   --brand-fly-light: #B892F5;
   --brand-plausible: #5850EC;
+  --brand-netlify: #00AD9F;
 }
 .tl-sched-id, .tl-jp-id { display: flex; align-items: flex-start; gap: 12px; min-width: 0; }
 .tl-sched-id > div, .tl-jp-id > div { display: grid; gap: 2px; min-width: 0; }

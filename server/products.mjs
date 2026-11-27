@@ -35,7 +35,7 @@ export const HOSTING = {
   firebase: { label: 'Firebase App Hosting', feed: true },
   vercel: { label: 'Vercel', feed: true },
   hostinger: { label: 'Hostinger', feed: false },
-  netlify: { label: 'Netlify', feed: false },
+  netlify: { label: 'Netlify', feed: true },
   'cloudflare-pages': { label: 'Cloudflare Pages', feed: false },
   'github-pages': { label: 'GitHub Pages', feed: false },
   fly: { label: 'Fly.io', feed: false },

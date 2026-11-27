@@ -59,6 +59,13 @@ const GROUPS = [
           : { on: false, text: 'Needs an access token' }),
       },
       {
+        key: 'netlify', brand: 'netlify', name: 'Netlify', icon: 'rocket', panel: 'netlify',
+        desc: 'Production deploys on each site’s Timeline, including the ones that failed.',
+        status: ({ netlify: n }) => (n?.source
+          ? { on: !n.error, text: n.error || (n.login ? `Signed in as ${n.login}` : via(n.source, 'token')), warn: Boolean(n.error) }
+          : { on: false, text: 'Needs a personal access token' }),
+      },
+      {
         key: 'vercel', brand: 'vercel', name: 'Vercel', icon: 'triangle', panel: 'vercel',
         desc: 'Deployments and Web Analytics for projects hosted on Vercel.',
         status: ({ vercel: v }) => (v.source
@@ -143,6 +150,7 @@ const HERO = {
   github: { tagline: 'Repo traffic, stars, clones and release downloads, synced hourly.', link: { label: 'GitHub tokens', href: 'https://github.com/settings/tokens' } },
   firebase: { tagline: 'Server-side page loads, AI crawlers, errors and deploys from your Cloud Run request log.', link: { label: 'Firebase console', href: 'https://console.firebase.google.com' } },
   fly: { tagline: 'Releases on each site’s Timeline, plus edge requests, errors, response time and machines per app.', link: { label: 'Fly dashboard', href: 'https://fly.io/dashboard' } },
+  netlify: { tagline: 'Production deploys on each site’s Timeline, including the ones that failed.', link: { label: 'Netlify tokens', href: 'https://app.netlify.com/user/applications#personal-access-tokens' } },
   vercel: { tagline: 'Deployments and Web Analytics for projects hosted on Vercel.', link: { label: 'Vercel dashboard', href: 'https://vercel.com/dashboard' } },
   plausible: { tagline: 'Visitors, pageviews, bounce rate and goals from Plausible, hosted or self-hosted.', link: { label: 'Plausible API keys', href: 'https://plausible.io/settings/api-keys' } },
   bing: { tagline: 'Bing search clicks, queries and crawl health. Bing also feeds DuckDuckGo, Copilot and ChatGPT search.', link: { label: 'Bing Webmaster Tools', href: 'https://www.bing.com/webmasters' } },
