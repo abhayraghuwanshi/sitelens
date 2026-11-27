@@ -15,6 +15,11 @@ test('warehouseRange ends yesterday by default, or at a fixed end date', () => {
   assert.equal(sql.warehouseRange('nonsense', { now }).days, 28);
 });
 
+test('warehouseRange accepts one exact calendar day', () => {
+  const day = sql.warehouseRange('2021-01-30', { now: new Date(2026, 9, 30) });
+  assert.deepEqual([day.days, day.start, day.end], [1, '20210130', '20210130']);
+});
+
 test('events table is the wildcard in the data project and prunes on _TABLE_SUFFIX', () => {
   assert.equal(sql.eventsTable(bq), '`bigquery-public-data.ga4_obfuscated_sample_ecommerce.events_*`');
   const { sql: text } = sql.eventsCatalogSql(bq, range);
@@ -147,6 +152,13 @@ test('sessions summary reads every matching session in one pass, with the outcom
   assert.equal(built.params.converted, 'event:sign_up');
   // An outcome that isn't a plain event name is dropped, never inlined.
   assert.doesNotMatch(sql.sessionsSummarySql(bq, range, { outcome: "x' OR 1" }).sql, /x' OR 1/);
+});
+
+test('daily summaries return completions and people for configured goal keys', () => {
+  const built = sql.sessionsSummarySql(bq, sql.warehouseRange('2021-01-30'), { goalKeys: ['event:sign_up', 'page:/pricing'] });
+  assert.match(built.sql, /e\.k IN UNNEST\(@goal_keys\)/);
+  assert.match(built.sql, /COUNT\(DISTINCT user_id\) AS people/);
+  assert.deepEqual(built.params.goal_keys, ['event:sign_up', 'page:/pricing']);
 });
 
 test('journeys group sessions by source and landing page, counting goal steps', () => {

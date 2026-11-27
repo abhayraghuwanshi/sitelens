@@ -5,7 +5,7 @@ import { mkdtemp, rm, readFile, readdir, writeFile, mkdir } from 'node:fs/promis
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { randomBytes } from 'node:crypto';
-import { createGateway, userKey, parseEmails, parseMasterKey } from '../server/hosted.mjs';
+import { createGateway, userKey, parseEmails, parseMasterKey, browserUserFrom } from '../server/hosted.mjs';
 import { createStore } from '../server/store.mjs';
 import { isPrivateAddress } from '../server/net-guard.mjs';
 import { selfFetch } from '../server/index.mjs';
@@ -124,10 +124,24 @@ test('an old host sends people to the same page on the main host, and still answ
   assert.equal((await call('/mcp', { method: 'POST', headers: { host: 'old.example.com' }, body: '{}' })).status, 401);
 });
 
+test('the privacy policy and terms are public, linked from the home page, and the policy has the Limited Use statement', async () => {
+  const privacy = await call('/privacy');
+  assert.equal(privacy.status, 200);
+  assert.match(privacy.body, /Limited Use requirements/);
+  for (const scope of ['analytics.readonly', 'webmasters.readonly', 'bigquery', 'logging.read']) assert.match(privacy.body, new RegExp(scope.replace('.', '\\.')));
+  assert.doesNotMatch(privacy.body, /<script/);
+  const terms = await call('/terms');
+  assert.equal(terms.status, 200);
+  assert.match(terms.body, /Terms of service/);
+  const home = (await call('/home')).body;
+  assert.match(home, /href="\/privacy"/);
+  assert.match(home, /href="\/terms"/);
+});
+
 test('without a session: / is the home page, other pages go to sign-in, the API says 401', async () => {
   const home = await call('/');
   assert.equal(home.status, 200);
-  assert.match(home.body, /href="\/login">Open Kauzl/);
+  assert.match(home.body, /href="\/start">Open Kauzl/);
   assert.equal((await call('/home')).status, 200);
   assert.equal((await call('/settings')).headers.location, '/login');
   const api = await call('/api/state');
@@ -442,6 +456,13 @@ test('home and sign-in pages may load the brand fonts; both link the free tools'
   assert.match(login.body, /href="\/home">← Back to home/);
 });
 
+test('the landing page advertises Reddit Cycles without Content Cycles', async () => {
+  const home = await call('/');
+  assert.equal(home.status, 200);
+  assert.match(home.body, /Reddit cycles/);
+  assert.doesNotMatch(home.body, /content cycles|which articles to grow|worth writing more of|[?&]to=cycles/i);
+});
+
 test('the tour is public: the design with sample data, frameable only by the home page, no inline script', async () => {
   const r = await call('/tour/');
   assert.equal(r.status, 200);
@@ -503,7 +524,8 @@ const waitlisted = () => gateway.db.prepare('SELECT email, source FROM waitlist 
 test('anyone can join the waitlist from the home page; bad emails, bots and other sites are turned away', async () => {
   const home = await call('/');
   assert.match(home.body, /<form class="join" method="post" action="\/waitlist">/);
-  assert.match(home.body, /href="\/waitlist">Get early access/);
+  assert.match(home.body, /href="\/start">Start, no sign-in/);
+  assert.match(home.body, /id="early-access"/);
 
   const ok = await postForm('/waitlist', { email: ' New.Person@Example.com ', from: 'home' }, { ip: '203.0.113.1' });
   assert.equal(ok.status, 303);
@@ -686,4 +708,70 @@ test('a flood from many addresses stops at the hourly cap; people already on the
   } finally {
     srv.close();
   }
+});
+
+// No sign-in: /start, from its own address so the sign-in limit stays out of the way.
+async function startBrowser() {
+  const res = await call('/start', { headers: { 'fly-client-ip': `198.51.100.${++signIns}` } });
+  assert.equal(res.headers.location, '/');
+  const set = String(res.headers['set-cookie'] || '');
+  assert.match(set, /^__Host-kauzl-browser=[A-Za-z0-9_-]{43}; Path=\/; HttpOnly; Secure; SameSite=Lax; Max-Age=\d+/);
+  return set.split(';')[0];
+}
+
+test('no sign-in: /start opens Kauzl in this browser, with its own sealed folder', async () => {
+  const one = await startBrowser();
+  const two = await startBrowser();
+  assert.notEqual(one, two);
+  assert.equal((await call('/', { cookie: one })).status, 200);
+  assert.doesNotMatch((await call('/', { cookie: one })).body, /Get early access/, 'the app, not the home page');
+  assert.equal((await write('/api/sites', { host: 'browser-one.com' }, one)).status, 200);
+  const state = JSON.parse((await call('/api/state', { cookie: one })).body);
+  assert.equal(state.browser, true);
+  assert.ok(state.sites.some((s) => s.host === 'browser-one.com'));
+  assert.ok(!JSON.parse((await call('/api/state', { cookie: two })).body).sites.some((s) => s.host === 'browser-one.com'));
+  assert.deepEqual(JSON.parse((await call('/api/me', { cookie: one })).body), { email: '', hosted: true, viewer: false, browser: true });
+  // A second /start with the cookie keeps the same browser.
+  const again = await call('/start', { cookie: one });
+  assert.equal(again.headers.location, '/');
+  assert.equal(again.headers['set-cookie'], undefined);
+  // A forged or malformed cookie opens nothing.
+  assert.equal((await call('/api/state', { cookie: '__Host-kauzl-browser=forged' })).status, 401);
+});
+
+test('a browser folder opens only with its cookie: the server and MASTER_KEY alone cannot read it', async () => {
+  const cookie = await startBrowser();
+  assert.equal((await write('/api/sites', { host: 'sealed-browser.com' }, cookie)).status, 200);
+  const secret = cookie.split('=')[1];
+  const user = browserUserFrom(masterKey, secret);
+  const raw = await readFile(join(dir, 'users', user.id, 'studio.json'), 'utf8');
+  assert.ok(!raw.includes('sealed-browser.com'));
+  // The master key's per-user key does not open it; the browser's does.
+  await assert.rejects(createStore(join(dir, 'users', user.id), { key: userKey(masterKey, user.id) }).get());
+  assert.ok((await createStore(join(dir, 'users', user.id), { key: user.key }).sites()).some((s) => s.host === 'sealed-browser.com'));
+  // Nor does the same secret with another master key.
+  assert.notDeepEqual(browserUserFrom(randomBytes(32), secret).key, user.key);
+  assert.equal(browserUserFrom(masterKey, 'short'), null);
+});
+
+test('a browser cannot share sites or make MCP tokens, and forgetting it deletes its folder', async () => {
+  const cookie = await startBrowser();
+  assert.equal((await call('/api/mcp/tokens', { cookie })).status, 403);
+  assert.equal((await write('/api/mcp/tokens', { label: 'x' }, cookie)).status, 403);
+  assert.equal((await call('/api/shares?site=demo', { cookie })).status, 403);
+  assert.equal((await call('/admin', { cookie })).status, 404);
+  assert.equal((await write('/api/sites', { host: 'forget-me.com' }, cookie)).status, 200);
+  const { id } = browserUserFrom(masterKey, cookie.split('=')[1]);
+  assert.ok((await readdir(join(dir, 'users'))).includes(id));
+  const out = await call('/logout', { method: 'POST', cookie, headers: { origin: ORIGIN } });
+  assert.equal(out.headers.location, '/home');
+  assert.match(String(out.headers['set-cookie']), /__Host-kauzl-browser=; .*Max-Age=0/);
+  assert.ok(!(await readdir(join(dir, 'users'))).includes(id));
+  // The old cookie now opens an empty folder, not the old data.
+  assert.ok(!JSON.parse((await call('/api/state', { cookie })).body).sites.some((s) => s.host === 'forget-me.com'));
+});
+
+test('the sign-in page offers starting in this browser before Google', async () => {
+  const page = (await call('/login')).body;
+  assert.ok(page.indexOf('href="/start"') > 0 && page.indexOf('href="/start"') < page.indexOf('href="/login/google"'));
 });

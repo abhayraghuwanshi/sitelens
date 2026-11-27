@@ -5,6 +5,7 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { AddTodo } from '../components/Todos.jsx';
 import { Campaigns } from './Campaigns.jsx';
+import { AdMoney, moneyFormat } from './AdMoney.jsx';
 import { family } from './Journeys.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
 import { Accounts, AddByUrl, LinkBuilder } from '../pages/Posts.jsx';
@@ -59,7 +60,8 @@ function bySource(rows, host) {
 }
 
 export function TrafficView({ site, range, params }) {
-  const data = useAsync(() => api.get(`/sites/${site.id}/campaigns${qs({ range })}`), [site.id, range]);
+  const [fresh, setFresh] = useState(0);
+  const data = useAsync(() => api.get(`/sites/${site.id}/campaigns${qs({ range, ...(fresh ? { fresh: 1 } : {}) })}`), [site.id, range, fresh]);
   const [openKind, setOpenKind] = useState(null);
   const [full, setFull] = useState(false);
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
@@ -75,7 +77,11 @@ export function TrafficView({ site, range, params }) {
     const sessions = list.reduce((n, s) => n + s.sessions, 0);
     return { k, label, color, list, sessions, keyEvents: list.reduce((n, s) => n + s.keyEvents, 0), previous: list.reduce((n, s) => n + s.previous, 0) };
   }).filter((k) => k.sessions > 0);
+  const money = moneyFormat(d.currency);
+  const spent = d.money?.spent || 0;
   const worth = (x) => {
+    // Paid: what each key event cost, from the spend below.
+    if ((x.k === 'paid' || x.kind === 'paid') && spent) return x.keyEvents ? [`${money(spent / x.keyEvents)} per key event`, ''] : ['Paid, no key events', 'bad'];
     if (!avg || x.sessions < 10) return ['', 'muted'];
     const r = x.keyEvents / x.sessions;
     return r >= avg * 1.3 ? ['Converts', 'good'] : r <= avg * 0.5 ? ['Mostly browsing', 'muted'] : ['Average', ''];
@@ -93,10 +99,12 @@ export function TrafficView({ site, range, params }) {
         <b>{fmt(total)}</b> visits. {top.label} brought {share(top.sessions / total)}.
         {growing && growing.sessions > growing.previous && <> {growing.label} grew most ({change(growing.sessions, growing.previous).text}).</>}
         {bestRate && bestRate.keyEvents > 0 && <> Visitors from <b>{bestRate.label.toLowerCase()}</b> reach a key event most often ({rate(bestRate.keyEvents / bestRate.sessions)}, against {rate(avg)} on average).</>}
+        {spent > 0 && <> You spent <b>{money(spent)}</b> on ads.</>}
+        {d.money?.earned > 0 && <> Ads on your site earned <b>{money(d.money.earned)}</b>.</>}
       </p>
 
       <section class="nx-block" aria-label="The mix">
-        <h2 class="nx-h2">The mix <span class="muted small">· where visits come from{avg ? ', and how often each kind reaches a key event' : ''}</span></h2>
+        <h2 class="nx-h2">The mix <span class="nx-h2-sub">where visits come from{avg ? ', and how often each kind reaches a key event' : ''}</span></h2>
         <div class="card card-plain">
           <div class="nx-mixbar" role="img" aria-label={kinds.map((k) => `${k.label} ${share(k.sessions / total)}`).join(', ')}>
             {kinds.map((k) => <span key={k.k} style={`flex:${k.sessions};background:${k.color}`} title={`${k.label}: ${fmt(k.sessions)} visits`} />)}
@@ -117,7 +125,7 @@ export function TrafficView({ site, range, params }) {
       </section>
 
       <section class="nx-block" aria-label="By source">
-        <h2 class="nx-h2">By source <span class="muted small">· open a kind for its sources, a source for its detail</span></h2>
+        <h2 class="nx-h2">By source <span class="nx-h2-sub">open a kind for its sources, a source for its detail</span></h2>
         <div class="card card-plain nx-tight">
           <div class="nx-trow nx-thead" aria-hidden="true"><span>Kind</span><span class="nx-num">Visits</span><span class="nx-num">Change</span><span>Worth it?</span></div>
           {kinds.map((k) => {
@@ -145,7 +153,9 @@ export function TrafficView({ site, range, params }) {
         </div>
       </section>
 
-      <PutOut site={site} host={host} range={range} campaigns={d.campaigns || []} ads={d.ads} open={params.get('post') || ''} />
+      <AdMoney site={site} d={d} onChanged={() => setFresh((n) => n + 1)} />
+
+      <PutOut site={site} host={host} range={range} campaigns={d.campaigns || []} ads={d.ads} spend={d.spend} money={money} open={params.get('post') || ''} />
       <TalkedAbout site={site} range={range} />
 
       <button type="button" class="todo-link" aria-expanded={full} onClick={() => setFull(!full)}>{full ? 'Hide the full report' : 'Every campaign and source / medium, and the tagged-link builder'}</button>
@@ -162,7 +172,7 @@ const hostOf = (u) => String(u || '').replace(/^https?:\/\//, '').replace(/^www\
 // What you put out: your posts (newest first), then tagged links and ad
 // campaigns, as one short list. Managing accounts, adding posts and building
 // tagged links happen in the drawer (AddPanel).
-function PutOut({ site, host, range, campaigns, ads, open }) {
+function PutOut({ site, host, range, campaigns, ads, spend, money, open }) {
   const data = useAsync(() => api.get(`/posts${qs({ range })}`), [range]);
   const [all, setAll] = useState(false);
   const d = data.data;
@@ -189,8 +199,12 @@ function PutOut({ site, host, range, campaigns, ads, open }) {
       v: c.keyEvents ? [`${fmt(c.keyEvents)} key event${c.keyEvents === 1 ? '' : 's'}`, 'good'] : ['No key events', 'muted'],
     })),
     ...(ads?.linked ? ads.campaigns || [] : []).map((a) => ({
-      key: `a:${a.campaign}`, when: 'Ad', icon: 'target', title: a.campaign, sub: `Google Ads · $${fmt(a.cost)} spent`, visits: fmt(a.sessions),
-      v: a.keyEvents ? [`$${fmt(a.cost / a.keyEvents)} per key event`, ''] : ['No key events', 'bad'],
+      key: `a:${a.campaign}`, when: 'Ad', icon: 'target', title: a.campaign, sub: `Google Ads · ${money(a.cost)} spent`, visits: fmt(a.sessions),
+      v: a.keyEvents ? [`${money(a.cost / a.keyEvents)} per key event`, ''] : ['No key events', 'bad'],
+    })),
+    ...(spend?.entries || []).filter((e) => e.inPeriod).map((e) => ({
+      key: `s:${e.id}`, when: day(Date.parse(`${e.start}T12:00:00Z`)), icon: 'target', title: e.name, sub: `Ad · ${money(e.spent)} spent`, visits: fmt(e.sessions),
+      v: e.keyEvents ? [`${money(e.spent / e.keyEvents)} per key event`, ''] : ['No key events', 'bad'],
     })),
   ];
   const shown = all ? rows : rows.slice(0, 4);
@@ -198,7 +212,7 @@ function PutOut({ site, host, range, campaigns, ads, open }) {
   const [adding, setAdding] = useState(false);
   return (
     <section class="nx-block" aria-label="What you put out">
-      <h2 class="nx-h2">What you put out <span class="muted small">· posts, tagged links and ads, with what they brought in the 3 days after</span></h2>
+      <h2 class="nx-h2">What you put out <span class="nx-h2-sub">posts, tagged links and ads, with what they brought in the 3 days after</span></h2>
       <div class="card card-plain nx-tight">
         {data.error ? <p class="muted small m-0">Couldn’t read your posts: {data.error.message}</p>
           : !d ? <Loading height={120} />
@@ -307,7 +321,7 @@ function TalkedAbout({ site, range }) {
   }
   return (
     <section class="nx-block" aria-label="Who talked about you">
-      <h2 class="nx-h2">Who talked about you <span class="muted small">· mentions elsewhere</span></h2>
+      <h2 class="nx-h2">Who talked about you <span class="nx-h2-sub">mentions elsewhere</span></h2>
       <div class="card card-plain nx-tight">
         {data.error ? <p class="muted small m-0">Couldn’t read mentions: {data.error.message}</p>
           : !data.data ? <Loading height={90} />

@@ -79,6 +79,19 @@ https://example.com/pricing?utm_source=newsletter&amp;utm_medium=email&amp;utm_c
 <h2>Build your links in seconds</h2>
 <p>The free <a href="/tools/utm-builder/">Kauzl UTM builder</a> lowercases and dashes your tags, warns when GA4 won’t recognise a medium, keeps the other parameters already on your URL, and builds one link per channel in bulk. It runs in your browser, with nothing to sign up for.</p>
 `,
+  goal: [
+    'Know what a UTM code is and what it tracks.',
+    'Tag links so GA4 attributes the source and medium.',
+  ],
+  steps: [
+    { text: 'Add utm_source and utm_medium to the links you share.' },
+    { text: 'Lowercase all tag values and use dashes, not spaces.' },
+    { text: 'Never tag links between your own pages.' },
+  ],
+  check: [
+    { q: 'Why do UTM parameters show up as Direct in GA4?', options: ['No source was recorded', 'The link was internal', 'The medium was missing', 'The campaign was renamed'], answer: 0, why: 'Without utm_source the visit lands in Direct.' },
+    { q: 'Why are GA4 mediums case-sensitive?', options: ['Yes', 'No', 'Only for paid channels', 'Only for email'], answer: 0, why: 'GA4 is case-sensitive, so Newsletter and newsletter are different mediums.' },
+  ],
   faq: [
     ['Do UTM codes affect SEO?', 'No. Google ignores UTM parameters for ranking. Use them only on links outside your site, and keep a canonical tag on your pages so tagged URLs aren’t indexed as duplicates.'],
     ['Are UTM parameters case-sensitive?', 'Yes. In GA4, <code>Email</code> and <code>email</code> are two different mediums. Lowercase everything.'],

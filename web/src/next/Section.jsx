@@ -1,32 +1,32 @@
 import { usePersistent } from '../hooks.js';
-import { Segmented } from '../components/ui.jsx';
+import { Segmented, PullDown } from '../components/ui.jsx';
+import { Icon } from '../components/icons.jsx';
 import { Articles } from '../pages/Articles.jsx';
-import { ContentCycles } from '../pages/ContentCycles.jsx';
+import { ArticleEditor } from '../pages/ArticleEditor.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
 import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
 import { Events } from '../pages/Events.jsx';
 import { Sessions } from '../pages/Sessions.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
-import { Page, SectionTabs } from './Page.jsx';
+import { Page, SectionTabs, SectionTitle, usePhoneWidth } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
-import { GoalsView } from './GoalsView.jsx';
-import { PagesList } from './PagesList.jsx';
+import { GoalsEdit } from './GoalsEdit.jsx';
+import { PagesList, PagesSort, PagesFilter } from './PagesList.jsx';
 import { PageView } from './PageView.jsx';
 import { HealthView } from './HealthView.jsx';
 import { SearchView, EngineSwitch, engineOf, engineSub } from './SearchView.jsx';
 import { JourneysPage } from './Journeys.jsx';
-import { OutcomesPage } from './Outcomes.jsx';
+import { DiagnoseView } from './DiagnoseView.jsx';
 import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
 
 // The reports: Pages, Search, Traffic, Journeys, Goals and Raw data. Each is one
 // question with a few tabs. `mode` says which ranges a tab reads (GA4's API
 // ranges, BigQuery's 7/28/90 days); `own` tabs draw their own header and period;
-// `period: false` tabs have none (a cycle is its own period, Health its own).
+// `period: false` tabs have none (for example, Health).
 const TABS = {
   pages: {
     pages: { mode: 'content', component: PagesTab },
-    cycles: { mode: 'content', component: ContentCycles, period: false },
     health: { component: HealthView, period: false },
   },
   search: {
@@ -42,8 +42,11 @@ const TABS = {
     retention: { mode: 'warehouse', component: Retention },
   },
   goals: {
-    numbers: { mode: 'api', component: GoalsView },
-    results: { own: OutcomesPage },
+    // Never shown: the Goals page opens the Timeline's Goals view (see below).
+    numbers: { mode: 'api', component: () => null },
+  },
+  diagnose: {
+    run: { own: DiagnoseView },
   },
   raw: {
     events: { mode: 'warehouse', component: Events },
@@ -58,6 +61,7 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
   const [saved, setSaved] = usePersistent('range', '28d');
   // Pages (and a page's view) keep their own period, defaulting to 90 days like their suggestions.
   const [pagesRange, setPagesRange] = usePersistent('pagesRange', '90d');
+  const phone = usePhoneWidth();
   const sec = SECTIONS[view];
   const tabs = sec.tabs.filter(([k]) => !WAREHOUSE_TABS.has(k) || hasWarehouse(site));
   // A few views live behind a link instead of in the tab row (Edit steps, Retention).
@@ -69,6 +73,30 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
   if (page && !params.get('edit')) {
     return <PageView key={`${site.id}:${page}`} site={site} path={page} back={{ href: `#/site/${site.id}/pages`, label: 'All pages' }} />;
   }
+  // Goals live on the Timeline (its Goals view). The old Goals page opens it; ?edit=1 is
+  // the one place goals are edited, and goes back to the Timeline when saved.
+  const goalsTimeline = `#/site/${site.id}/timeline?by=goal`;
+  if (view === 'goals' && (params.get('edit') !== '1' || site.demo || site.shared)) {
+    location.replace(goalsTimeline);
+    return null;
+  }
+  if (view === 'goals') {
+    const goalsPage = goalsTimeline;
+    return (
+      <Page title="Edit goals" sub={`What counts as a result on ${site.label}`} back={{ href: goalsPage, label: 'Timeline · Goals' }}>
+        <GoalsEdit key={site.id} site={site} done={() => { location.hash = goalsPage; }} />
+      </Page>
+    );
+  }
+  // Edit the page: only the editing (title, description, the article, Claude's ideas, publish), back to its view.
+  if (page) {
+    const view = `#/site/${site.id}/pages?article=${encodeURIComponent(page)}`;
+    return (
+      <Page title="Edit the page" sub={page} back={{ href: view, label: 'Back to the page' }}>
+        <ArticleEditor key={`${site.id}:${page}`} site={site} range={pagesRange} path={page} only="content" onClose={() => { location.hash = view; }} />
+      </Page>
+    );
+  }
 
   const nav = tabs.length > 1 ? (
     <nav class="tabs nx-tabs-row" aria-label={sec.label}>
@@ -77,12 +105,19 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
       ))}
     </nav>
   ) : null;
+  // Phone: the same tabs as a menu on the title.
+  const titleMenu = phone && tabs.length > 1 && !hidden ? (
+    <PullDown big label={sec.label} value={tab} options={tabs.map(([key, label]) => ({ key, label }))}
+      onChange={(k) => { location.hash = hrefFor(site.id, view, k === tabs[0][0] ? '' : k).replace(/^#/, ''); }} />
+  ) : null;
 
   if (spec.own) {
     const Own = spec.own;
     return (
       <SectionTabs.Provider value={nav}>
-        <Own key={`${site.id}:${tab}`} site={site} params={params} />
+        <SectionTitle.Provider value={titleMenu}>
+          <Own key={`${site.id}:${tab}`} site={site} params={params} />
+        </SectionTitle.Provider>
       </SectionTabs.Provider>
     );
   }
@@ -105,20 +140,31 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
     }} />
   );
 
+  // Goals: editing them sits in the header (its own screen; a .sitelens.yml site is pointed to its file there).
+  const goalsEdit = view === 'goals' && !site.demo && !site.shared ? `#/site/${site.id}/goals?edit=1` : '';
   // Search's searches: which engine sits in the header beside the period.
   const searchTab = view === 'search' && tab === 'queries';
+  // All pages (not a page opened from it): its sort sits in the header with the period.
+  const pagesList = view === 'pages' && tab === 'pages' && !params.get('article') && !params.get('path');
   return (
     <SectionTabs.Provider value={nav}>
+      <SectionTitle.Provider value={titleMenu}>
       <Page title={sec.label}
+        corner={goalsEdit && phone ? <a class="nx-corner" href={goalsEdit}><Icon name="target" size={13} /> Edit goals</a> : null}
+        actions={goalsEdit && !phone ? <a class="btn" href={goalsEdit}><Icon name="target" size={13} /> Edit goals</a> : null}
         sub={searchTab ? `${engineSub(engineOf(params))}, plus AI answers · ${site.label}` : `${sec.q} · ${site.label}`}
-        actions={searchTab ? <span class="nx-head-ctl"><EngineSwitch params={params} />{period}</span> : period || null}
+        time={period || null}
+        options={searchTab ? <EngineSwitch params={params} /> : pagesList ? <><PagesSort params={params} />{phone && <PagesFilter site={site} range={range} params={params} />}</> : null}
         back={hidden ? { href: hrefFor(site.id, view), label: sec.label } : view === 'raw' ? { href: hrefFor(site.id, 'journeys'), label: 'Journeys' } : null}>
         <SectionTabs.Provider value={null}>
-          <div class="nx-explore-body">
-            <View key={`${site.id}:${tab}`} site={site} range={range} params={params} auth={auth} />
-          </div>
+          <SectionTitle.Provider value={null}>
+            <div class="nx-explore-body">
+              <View key={`${site.id}:${tab}`} site={site} range={range} params={params} auth={auth} />
+            </div>
+          </SectionTitle.Provider>
         </SectionTabs.Provider>
       </Page>
+      </SectionTitle.Provider>
     </SectionTabs.Provider>
   );
 }
@@ -151,5 +197,5 @@ function PagesTab({ site, range, params }) {
     // Closing the editor goes back to the page's own view.
     return <Articles site={site} range={range} params={p} onClose={() => { location.hash = `/site/${site.id}/pages?article=${encodeURIComponent(open)}`; }} />;
   }
-  return <PagesList site={site} range={range} />;
+  return <PagesList site={site} range={range} params={params} />;
 }

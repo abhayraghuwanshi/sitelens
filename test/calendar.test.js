@@ -85,11 +85,11 @@ test('composeStory: headline by tone, drivers only when the day moved', () => {
     github: { stars: 12, top: 'me/app' },
   });
   assert.equal(big.tone, 'up2');
-  assert.match(big.headline, /^Big day: 650 sessions, 117% above a typical Saturday/);
+  assert.equal(big.headline, 'Big day: 650 visits, 2.2× a usual Saturday (~300).');
   const text = big.lines.map((l) => l.text);
-  assert.ok(text.some((t) => /extra traffic came from Reddit \(300 sessions, usually ~10\)/.test(t)));
-  assert.ok(text.some((t) => t.startsWith('/blog/post drew 280')));
-  assert.ok(text.includes('Search: 40 clicks, top query “foo”.'));
+  assert.ok(text.includes('300 visits came from Reddit (usually ~10).'));
+  assert.ok(text.includes('/blog/post got the most extra: 280 visits started there (usually ~5).'));
+  assert.ok(text.includes('Clicks from Google and Bing results: 40. Top search: “foo”.'));
   assert.ok(text.includes('That day: Your Reddit post: hello.'));
   assert.ok(text.includes('The day before: app v1.2.'));
   assert.ok(text.includes('GitHub: +12 stars (most on me/app).'));
@@ -101,12 +101,20 @@ test('composeStory: headline by tone, drivers only when the day moved', () => {
 
   const drop = composeStory({ date: '2026-10-14', sessions: 100, baseline: 300, sites: [{ id: 'a', label: 'A', sessions: 100, baseline: 300, sources, pages, search: { pending: true } }] });
   assert.match(drop.headline, /^Quiet day/);
-  assert.ok(drop.lines.some((l) => /drop was mostly Google/.test(l.text)));
+  assert.equal(drop.headline, 'Quiet day: 100 visits, 67% fewer than a usual Wednesday (~300).');
+  assert.ok(drop.lines.some((l) => l.text === 'Fewer came from Google search: 90 visits, usually ~100.'));
   assert.ok(drop.lines.some((l) => /lags 2–3 days/.test(l.text)));
 
   const today = composeStory({ date: '2026-11-02', today: '2026-11-02', sessions: 120, baseline: 400 });
   assert.equal(today.tone, 'none');
-  assert.match(today.headline, /^So far today: 120 sessions/);
+  assert.equal(today.headline, 'So far today: 120 visits (a full Monday is usually ~400).');
+
+  // "Direct" is said in plain words, with what it means; the home page by name.
+  const direct = composeStory({ date: '2026-11-19', sessions: 133, baseline: 36,
+    sites: [{ id: 'a', label: 'A', sessions: 133, baseline: 36, sources: [{ label: 'Direct', value: 67, expected: 15, gain: 52 }], pages: [{ label: '/', value: 26, expected: 12, gain: 14 }] }] });
+  assert.equal(direct.headline, 'Big day: 133 visits, 3.7× a usual Thursday (~36).');
+  assert.equal(direct.lines[0].text, '67 visits came straight to the site (usually ~15). That’s visits with no link we can see: someone typed the address, used a bookmark, or tapped a link in an app or chat.');
+  assert.equal(direct.lines[1].text, 'The home page got the most extra: 26 visits started there (usually ~12).');
   assert.equal(composeStory({ date: '2026-11-01' }).headline, 'No traffic data for this day.');
 });
 
@@ -116,9 +124,9 @@ test('composeStory lists each site when several are in view', () => {
     sites: [{ id: 'a', label: 'A', sessions: 500, baseline: 200, sources: [{ label: 'HN', value: 300, expected: 5, gain: 295 }], pages: [] }, { id: 'b', label: 'B', sessions: 100, baseline: 200, sources: [], pages: [] }],
   });
   const text = story.lines.map((l) => l.text);
-  assert.ok(text.includes('A: 500 sessions (+150% vs usual).'));
-  assert.ok(text.includes('A: Most of the extra traffic came from HN (300 sessions, usually ~5).'));
-  assert.ok(text.includes('B: 100 sessions (−50% vs usual).'));
+  assert.ok(text.includes('A: 500 visits (150% more than usual).'));
+  assert.ok(text.includes('A: 300 visits came from HN (usually ~5).'));
+  assert.ok(text.includes('B: 100 visits (50% fewer than usual).'));
   assert.equal(story.lines[0].href, '#/site/a/overview');
 });
 
@@ -254,4 +262,81 @@ test('calendarRoutes pass month, site and date through', async () => {
   await call('/api/calendar?month=2026-10&site=a&fresh=1');
   await call('/api/calendar/day?date=2026-10-14');
   assert.deepEqual(calls, [['month', { month: '2026-10', site: 'a', fresh: true }], ['day', { date: '2026-10-14', site: 'all' }]]);
+});
+
+test('goal breakdown: people per goal per day, every goal listed even on days with none', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com', propertyId: '123' };
+  const asked = [];
+  const goalDays = async (s, from, to) => {
+    asked.push([s.id, from, to]);
+    return {
+      goals: [{ key: 'Signed up' }, { key: 'Saw pricing' }],
+      rows: [{ date: '2026-10-14', key: 'Signed up', value: 4 }, { date: '2026-10-13', key: 'Signed up', value: 1 }],
+    };
+  };
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, goalDays, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'goal', daily: true });
+  assert.equal(out.metric, 'people');
+  assert.deepEqual(out.rows.map((r) => [r.key, r.value, r.days]), [['Signed up', 5, [1, 4, 0]], ['Saw pricing', 0, [0, 0, 0]]]);
+  assert.deepEqual(asked, [['a', '2026-10-10', '2026-10-15']]);
+});
+
+test('Timeline goals include product counts and preserve gaps in database averages', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com' };
+  const goalDays = async () => ({
+    goals: [{ key: 'Extension installs' }, { key: 'Desktop downloads', sparse: true }],
+    rows: [{ date: '2026-10-14', key: 'Extension installs', value: 4 }],
+  });
+  const customMetrics = {
+    forSite: async (id, _, { window }) => {
+      assert.equal(id, site.id);
+      return { metrics: [{
+        id: 'active', label: 'Active installs', summary: 'average', unit: 'installs',
+        values: window.dates.map((date) => ({ '2026-10-13': 3, '2026-10-15': 5 })[date] ?? null),
+      }] };
+    },
+  };
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, goalDays, customMetrics, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'goal', daily: true });
+  const rows = new Map(out.rows.map((row) => [row.key, row]));
+  assert.deepEqual(rows.get('Extension installs').days, [0, 4, 0]);
+  assert.deepEqual(rows.get('Desktop downloads').days, [null, null, null]);
+  assert.deepEqual(rows.get('metric:active').days, [3, null, 5]);
+  assert.equal(rows.get('metric:active').summary, 'average');
+  assert.equal(rows.get('metric:active').value, 4);
+  const connected = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'metric', daily: true });
+  assert.equal(connected.metric, 'value');
+  assert.deepEqual(connected.rows.map(({ key, days }) => [key, days]), [['metric:active', [3, null, 5]]]);
+});
+
+test('citation sources distinguish unchecked days from checked days with no citations', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com' };
+  const citationDays = async () => ({
+    dates: ['2026-10-13', '2026-10-15'],
+    rows: [
+      { date: '2026-10-13', key: 'answers', value: 1 },
+      { date: '2026-10-13', key: 'citing', value: 1 },
+      { date: '2026-10-13', key: 'domain:example.com', value: 1 },
+      { date: '2026-10-15', key: 'answers', value: 1 },
+    ],
+  });
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, citationDays, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'citation', daily: true });
+  assert.deepEqual(out.rows.map((r) => [r.key, r.days]), [
+    ['answers', [1, null, 1]],
+    ['citing', [1, null, 0]],
+    ['own', [0, null, 0]],
+    ['domain:example.com', [1, null, 0]],
+  ]);
+  assert.equal(out.rows.at(-1).label, 'example.com');
+});
+
+test('Bing Timeline keeps unreleased days blank and charts reported zero clicks', async () => {
+  const site = { id: 'a', label: 'Site A' };
+  const calendar = createCalendar({
+    store: memoryStore({ sites: [site] }), now: () => NOW,
+    bingDays: async () => [{ date: '2026-10-13', clicks: 0, impressions: 4 }, { date: '2026-10-14', clicks: 2, impressions: 11 }],
+  });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'bing', daily: true });
+  assert.deepEqual(Object.fromEntries(out.rows.map((row) => [row.key, row.days])), { clicks: [0, 2, null], impressions: [4, 11, null] });
 });

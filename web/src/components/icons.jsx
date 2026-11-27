@@ -2,6 +2,7 @@
 const PATHS = {
   grid: 'M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z',
   chart: 'M4 19V5M4 19h16M8 15l3-4 3 2 5-6',
+  sliders: 'M4 7h10M18 7h2M4 17h4M12 17h8M16 5v4M10 15v4',
   pages: 'M7 3h7l5 5v13H7zM14 3v5h5M10 13h6M10 17h6',
   search: 'M11 4a7 7 0 1 1 0 14 7 7 0 0 1 0-14zM20 20l-4-4',
   flow: 'M4 6h4c4 0 4 12 8 12h4M4 18h4c2 0 3-3 4-6M16 6h4',

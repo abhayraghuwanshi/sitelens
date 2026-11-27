@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 
 export const RULE_LABELS = {
-  traffic: 'GA4 sessions & users',
+  traffic: 'Sessions & users (GA4, Plausible or PostHog)',
   search: 'Search Console clicks',
   installs: 'Web Store listing installs',
   extUsers: 'Extension users drop',
@@ -252,6 +252,10 @@ export function createAlerts({
   listingProperty = null,
   mentions = null,
   siteConfig = null,
+  plausible = null,
+  posthog = null,
+  cloudflare = null,
+  cloudflareAnalytics = null,
   fetchImpl = fetch,
   now = () => Date.now(),
   notify = null,
@@ -329,12 +333,61 @@ export function createAlerts({
         search: { ...cfg.rules.search, ...own?.alerts?.search },
       };
       try {
+        // GA4 when the site has a property; otherwise Plausible, then PostHog, if connected.
+        let traffic = null;
         if (site.demo || site.propertyId) {
           const [p] = await engines.portfolio([site], '90d');
           if (p.error) throw new Error(p.error);
-          const sessions = denseSeries(p.trend || [], dates, 'sessions');
-          const users = denseSeries(p.trend || [], dates, 'activeUsers');
-          Object.assign(row, { sessions: sessions.at(-1), users: users.at(-1), sessionsChange: change(sessions) });
+          traffic = {
+            source: 'ga4',
+            sessions: denseSeries(p.trend || [], dates, 'sessions'),
+            users: denseSeries(p.trend || [], dates, 'activeUsers'),
+          };
+        } else if (plausible) {
+          const pa = await plausible.analyticsForSite(site, '90d').catch((err) => {
+            if (err.kind === 'needs-plausible' || err.kind === 'plausible-unmatched') return null;
+            throw err;
+          });
+          if (pa) {
+            traffic = {
+              source: 'plausible',
+              sessions: (pa.series.visits || []).slice(-dates.length),
+              users: (pa.series.visitors || []).slice(-dates.length),
+            };
+          }
+        }
+        // No GA4 and no Plausible match: fall back to PostHog, if connected.
+        if (!traffic && !site.demo && !site.propertyId && posthog) {
+          const ph = await posthog.analyticsForSite(site, '90d').catch((err) => {
+            if (err.kind === 'needs-posthog' || err.kind === 'posthog-unmatched') return null;
+            throw err;
+          });
+          if (ph) {
+            traffic = {
+              source: 'posthog',
+              sessions: (ph.series.sessions || ph.series.visits || []).slice(-dates.length),
+              users: (ph.series.visitors || []).slice(-dates.length),
+            };
+          }
+        }
+        // No GA4/Plausible/PostHog match: fall back to Cloudflare Web Analytics, if connected.
+        const cf = cloudflare || cloudflareAnalytics;
+        if (!traffic && !site.demo && !site.propertyId && cf) {
+          const ca = await cf.analyticsForSite(site, '90d').catch((err) => {
+            if (err?.kind === 'needs-cloudflare' || err?.kind === 'cloudflare-unmatched' || String(err?.kind || '').includes('cloudflare')) return null;
+            throw err;
+          });
+          if (ca) {
+            traffic = {
+              source: 'cloudflare',
+              sessions: (ca.series?.visits || ca.series?.pageviews || ca.series?.uniqueVisits || []).slice(-dates.length),
+              users: (ca.series?.visitors || ca.series?.uniqueVisits || []).slice(-dates.length),
+            };
+          }
+        }
+        if (traffic) {
+          const { sessions, users } = traffic;
+          Object.assign(row, { sessions: sessions.at(-1), users: users.at(-1), sessionsChange: change(sessions), source: traffic.source });
           if (rules.traffic.enabled) {
             for (const [metric, series] of [['sessions', sessions], ['users', users]]) {
               const hit = detectAnomaly(series.at(-1), series.slice(0, -1), rules.traffic);
@@ -659,13 +712,18 @@ export function createAlerts({
         labels: RULE_LABELS,
       };
     },
-    // Unread count overall and per site, for the sidebar.
+    // Unread count overall and per site, for the sidebar and the phone badge.
+    // Repeats of one rule on one subject count once, as the Inbox lists them.
     async unread() {
       const s = await store.get();
       const bySite = {};
+      const seen = new Set();
       let unread = 0;
       for (const a of tagSites(s.alerts || [], s.products || [])) {
         if (a.read) continue;
+        const key = `${a.rule}:${a.subject?.type}:${a.subject?.id}:${a.site}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
         unread++;
         if (a.site) bySite[a.site] = (bySite[a.site] || 0) + 1;
       }

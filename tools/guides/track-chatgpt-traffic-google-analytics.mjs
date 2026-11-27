@@ -52,7 +52,7 @@ GA4 matches regex against the whole value and is case-sensitive, which is why th
 <blockquote><p>Treat GA4’s AI number as the minimum. If it’s growing, the real figure is growing faster.</p></blockquote>
 
 <h2>Make sure AI assistants can read you</h2>
-<p>An assistant can only cite what it can fetch. Check that your robots.txt doesn’t block AI <em>search</em> crawlers like OAI-SearchBot, Claude-SearchBot and PerplexityBot, even if you block training crawlers. The <a href="/tools/ai-robots-txt-generator/">AI robots.txt generator</a> sets that up, and the guide to <a href="/guides/ai-crawlers-robots-txt/">which AI crawlers to block</a> explains the difference.</p>
+<p>An assistant can only cite what it can fetch. Check that your robots.txt doesn’t block AI <em>search</em> crawlers like OAI-SearchBot, Claude-SearchBot and PerplexityBot, even if you block training crawlers. The <a href="/tools/ai-robots-txt-generator/">AI robots.txt generator</a> sets that up, and the guide to <a href="/guides/ai-crawlers-robots-txt/">which AI crawlers to block</a> explains the difference. To get mentioned in those answers in the first place, read <a href="/guides/generative-engine-optimization/">how to get recommended by ChatGPT, Claude and Perplexity</a>.</p>
 
 <h2>Ask the assistants directly</h2>
 <p>Referral numbers tell you about the visits you got, not the answers where you weren’t mentioned. Kauzl asks ChatGPT, Claude, Gemini and Perplexity the questions your customers ask, every week, and shows whether they name you, cite you or send you visitors, next to your GA4 traffic. You can <a href="/demo?to=ai">see it in the demo</a>.</p>

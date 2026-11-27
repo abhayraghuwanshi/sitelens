@@ -1,17 +1,26 @@
 import { useEffect, useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync, navigate } from '../hooks.js';
-import { Card, ErrorState, Loading, humanBytes } from '../components/ui.jsx';
+import { Card, ErrorState, Loading, humanBytes, PullDown } from '../components/ui.jsx';
+import { usePhoneWidth } from '../next/Page.jsx';
+import { BrandIcon } from '../components/BrandIcon.jsx';
+import { SiteIcon } from '../components/SiteIcon.jsx';
 import { Icon } from '../components/icons.jsx';
-import { ProductsCard, ProductForm, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
+import { ProductForm, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings, KeyForm } from './settings/BingSettings.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
+import { PlausibleSettings } from './settings/PlausibleSettings.jsx';
+import { CloudflareAnalyticsSettings } from './settings/CloudflareAnalyticsSettings.jsx';
+import { PostHogSettings } from './settings/PostHogSettings.jsx';
+import { FlySettings } from './settings/FlySettings.jsx';
+import { NetlifySettings } from './settings/NetlifySettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
-import { IntegrationGrid } from './settings/Integrations.jsx';
+import { IntegrationGrid, connectionHero } from './settings/Integrations.jsx';
+import { ConnectionHero, CHANGED as CONNECTION_CHANGED } from './settings/ConnectionKit.jsx';
 import { McpSettings } from './settings/McpSettings.jsx';
 import { CustomMetricsSettings } from './settings/CustomMetrics.jsx';
 
@@ -32,7 +41,13 @@ const PANELS = {
   github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings state={state} sources={state.sources} onChange={onChange} /> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
-  metrics: { title: 'Custom metrics', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
+  plausible: { title: 'Plausible', render: () => <PlausibleSettings /> },
+  cloudflare: { title: 'Cloudflare Web Analytics', render: () => <CloudflareAnalyticsSettings /> },
+  'cloudflare-analytics': { title: 'Cloudflare Web Analytics', render: () => <CloudflareAnalyticsSettings /> },
+  posthog: { title: 'PostHog', render: () => <PostHogSettings /> },
+  fly: { title: 'Fly.io', render: () => <FlySettings /> },
+  netlify: { title: 'Netlify', render: () => <NetlifySettings /> },
+  metrics: { title: 'Databases', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
   mentions: { title: 'Mentions', render: () => <MentionsSettings /> },
   pagespeed: { title: 'PageSpeed & CrUX', render: () => <SiteHealthCard /> },
   bing: { title: 'Bing Webmaster Tools', render: () => <BingSettings /> },
@@ -64,13 +79,20 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
     history.replaceState(null, '', hash || '#/');
   }, [connected]);
 
+  const phone = usePhoneWidth();
   return (
     <>
-      <nav class="tabs" aria-label="Settings sections">
-        {TABS.map((t) => (
-          <a key={t.key} href={`#/account?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
-        ))}
-      </nav>
+      {phone ? (
+        <div class="sp-phone-tabs">
+          <PullDown label="Account" value={tab} options={TABS} onChange={(k) => { location.hash = `#/account?tab=${k}`; }} />
+        </div>
+      ) : (
+        <nav class="tabs" aria-label="Settings sections">
+          {TABS.map((t) => (
+            <a key={t.key} href={`#/account?tab=${t.key}`} class={t.key === tab ? 'active' : ''} aria-current={t.key === tab ? 'page' : undefined}>{t.label}</a>
+          ))}
+        </nav>
+      )}
       {state.auth?.broken && panel !== 'google' && (
         <a class="nx-note-line bad" href="#/account?i=google">
           <Icon name="triangle" size={15} /><span><b>Google needs you.</b> {state.auth.broken}</span><span class="nx-go">Sign in again →</span>
@@ -78,14 +100,31 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
       )}
       {flashError && <ErrorState error={{ message: flashError }} />}
       {tab === 'integrations' && (panel ? (
-        <>
-          <a class="back-link" href="#/account?tab=integrations">← All connections</a>
-          {PANELS[panel].render({ state, params, onChange })}
-        </>
+        <ConnectionDetail panel={panel}>{PANELS[panel].render({ state, params, onChange })}</ConnectionDetail>
       ) : <IntegrationGrid onOpen={(key) => navigate(`/settings?i=${key}`)} />)}
       {tab === 'mcp' && <McpSettings hosted={state.hosted} />}
       {tab === 'sites' && <SitesSettings state={state} params={params} onChange={onChange} siteExtras={siteExtras} siteMeasures={siteMeasures} />}
     </>
+  );
+}
+
+// One connection's own page: back link, its header (logo, name, live status,
+// what it gives, a link to the service), then its settings. Databases has its
+// own views (list, source form, metric editor), and Netlify renders its header
+// from its own live status, so both skip the shared header.
+function ConnectionDetail({ panel, children }) {
+  const data = useAsync(() => api.get('/integrations').catch(() => null), [panel]);
+  useEffect(() => {
+    window.addEventListener(CONNECTION_CHANGED, data.reload);
+    return () => window.removeEventListener(CONNECTION_CHANGED, data.reload);
+  }, [data.reload]);
+  const hero = panel === 'metrics' || panel === 'netlify' ? null : connectionHero(panel, data.data);
+  return (
+    <div class="cx-page">
+      <a class="back-link" href="#/account?tab=integrations">← All connections</a>
+      {hero && <ConnectionHero {...hero} />}
+      <div class="cx-body">{children}</div>
+    </div>
   );
 }
 
@@ -101,6 +140,7 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
 // so a site is set up in one place.
 function SitesSettings({ state, params, onChange, siteExtras, siteMeasures }) {
   const { auth, sites } = state;
+  const phone = usePhoneWidth();
   const setup = useAsync(() => api.get('/products/setup'), []);
   const base = location.hash.startsWith('#/account') ? '/account' : '/settings';
   const go = (extra = {}) => navigate(`${base}${qs({ tab: 'sites', ...extra })}`);
@@ -120,15 +160,38 @@ function SitesSettings({ state, params, onChange, siteExtras, siteMeasures }) {
   if (siteEdit) {
     const site = siteEdit === 'new' ? {} : sites.find((s) => s.id === siteEdit && !s.demo);
     if (!site) return <>{back}<ErrorState error={{ message: 'That site was removed or can’t be edited.' }} /></>;
+    // An existing site: a list of its parts, each edited and saved on its own (?part=…). Older
+    // ?focus= links open that part. A new site keeps the one form, to go through once.
+    const part = site.id ? params.get('part') || FOCUS_PART[params.get('focus')] || '' : '';
+    if (site.id && part === 'goals') { navigate(`/site/${site.id}/goals?edit=1`); return null; }
+    const toList = () => go({ edit: site.id });
+    if (site.id && !part) {
+      return <>{back}<SiteParts site={site} setup={setup.data} onPart={(k) => go({ edit: site.id, part: k })} phone={phone} onRemove={async () => {
+        if (!confirm(`Remove ${site.label} from Kauzl? Its data stays in GA4 and Search Console.`)) return;
+        await api.del(`/sites/${site.id}`); onChange(); go();
+      }} /></>;
+    }
+    const timeline = site.id && params.get('timeline') === '1' ? `#/site/${encodeURIComponent(site.id)}/timeline` : '';
+    const partBack = timeline ? <a class="back-link" href={timeline}>← Timeline</a> : <a class="back-link" href={`#${base}?tab=sites&edit=${encodeURIComponent(site.id)}`}>← {site.label}</a>;
+    // The config file (the old "What Kauzl measures" part opens it too).
+    if (part === 'config' || part === 'measures') return <>{partBack}{siteMeasures?.(site)}</>;
+    if (part === 'sharing' || part === 'leaveout') return <>{partBack}{siteExtras?.(site, part)}</>;
     return (
-      <>
-        {back}
-        <SiteForm key={site.id || 'new'} initial={site} auth={auth} focus={params.get('focus') || ''}
-          measures={site.id ? siteMeasures?.(site) : null}
-          onCancel={() => go()}
-          onSaved={(saved) => { onChange(); navigate(`/site/${saved.id}`); }} />
-        {site.id && siteExtras?.(site)}
-      </>
+      <div class={site.id ? 'sp-wrap' : 'sp-new'}>
+        {/* An existing site's parts read in a column; adding a new site uses the full width for its long form. */}
+        {part ? partBack : back}
+        {!site.id && <p class="note site-or-product">No website? <a href={`#${base}?tab=sites&product=new`}>Add an extension, app or CLI on its own →</a></p>}
+        <SiteForm key={`${site.id || 'new'}:${part}`} initial={site} auth={auth} focus={params.get('focus') || ''} part={part}
+          measures={site.id && !part ? siteMeasures?.(site) : null}
+          onCancel={() => (timeline ? (location.hash = timeline) : part ? toList() : go())}
+          onSaved={(saved) => {
+            onChange();
+            if (timeline) location.hash = timeline;
+            else if (part) toList();
+            else navigate(`/site/${saved.id}`);
+          }} />
+        {site.id && !part && siteExtras?.(site)}
+      </div>
     );
   }
 
@@ -144,59 +207,214 @@ function SitesSettings({ state, params, onChange, siteExtras, siteMeasures }) {
         {back}
         <ProductForm key={product.id || 'new'} initial={product} setup={setup.data} focus={params.get('focus') || ''}
           onCancel={() => go()}
-          onSaved={(saved) => navigate(`/product/${saved.id}`)} />
+          onSaved={(saved) => navigate(`/product/${saved.id}`)}
+          onRemove={product.id ? async () => {
+            if (!confirm(`Remove ${product.label} from Kauzl?`)) return;
+            await api.del(`/products/${product.id}`); setup.reload(); go();
+          } : null} />
       </>
     );
   }
 
   const productOf = (id) => setup.data?.products.find((p) => p.siteId === id);
+  // Sites and products are one list: a product without a website is a row like a site's,
+  // with a letter for an icon and "No website" where the address goes. One Add button.
+  const loneProducts = (setup.data?.products || []).filter((p) => !p.siteId);
+  const siteHref = (s) => (s.demo ? `#/site/${s.id}/setup` : `#${base}?tab=sites&edit=${encodeURIComponent(s.id)}`);
+  const productHref = (p) => `#${base}?tab=sites&product=${encodeURIComponent(p.id)}`;
+  const productSub = (p) => ['No website', ...(p.domains || []).map((d) => d.name)].join(' · ');
+  const total = sites.length + loneProducts.length;
+  const suggestions = setup.data?.suggestions || [];
+  async function addSuggested(product) {
+    const saved = await api.post('/products/setup', product);
+    navigate(`/product/${saved.id}`);
+  }
+
+  // Phone: the same list, iOS-settings style; a row opens it, where it can also be removed.
+  if (phone) {
+    return (
+      <>
+        <h2 class="nx-h2 sp-h">Sites &amp; products <span class="nx-h2-sub">Each with its analytics, hosting, repos, store listings and goals</span></h2>
+        <div class="nx-mlist">
+          {sites.map((s) => (
+            <a key={s.id} class="nx-mrow site-mrow" href={siteHref(s)}>
+              <SiteIcon site={s} />
+              <span class="nx-mrow-main">
+                <b>{s.label}</b>
+                <span class="nx-mrow-sub"><span class="nx-mrow-path sp-host">{s.demo ? 'Built-in sample' : s.host}</span></span>
+                {s.demo ? <span class="nx-mrow-sub"><span>Sample data</span></span> : <SiteSources site={s} product={productOf(s.id)} setup={setup.data} />}
+              </span>
+              <Icon name="chevron" size={13} class="nx-mrow-go" />
+            </a>
+          ))}
+          {loneProducts.map((p) => (
+            <a key={p.id} class="nx-mrow site-mrow" href={productHref(p)}>
+              <SiteIcon site={{ id: p.id, label: p.label }} />
+              <span class="nx-mrow-main">
+                <b>{p.label}</b>
+                <span class="nx-mrow-sub"><span>{productSub(p)}</span></span>
+                <SiteSources site={{}} product={p} setup={setup.data} />
+              </span>
+              <Icon name="chevron" size={13} class="nx-mrow-go" />
+            </a>
+          ))}
+          <button type="button" class="nx-mrow-more" onClick={() => go({ edit: 'new' })}>Add a site or product</button>
+        </div>
+      </>
+    );
+  }
   return (
     <>
       <div class="sp-head">
-        <p class="muted small">A site is set up with everything it runs on: analytics, domains, hosting, repos, store listings and goals. A product without a website, like an extension or a CLI, is set up on its own.</p>
+        <p class="muted small">Everything you track, each with what it runs on: analytics, hosting, repos, store listings and goals. Something without a website, like an extension or a CLI, sits here too.</p>
         <div class="row">
-          <button class="btn primary" type="button" onClick={() => go({ edit: 'new' })}><Icon name="plus" size={13} /> Add a site</button>
-          <button class="btn" type="button" onClick={() => go({ product: 'new' })}><Icon name="plus" size={13} /> Add a product without a website</button>
+          <button class="btn primary" type="button" onClick={() => go({ edit: 'new' })}><Icon name="plus" size={13} /> Add a site or product</button>
         </div>
       </div>
 
-      <Card title={`Sites (${sites.length})`} flush>
-        <table class="data">
-          <thead><tr><th>Site</th><th>GA4</th><th>Search Console</th><th>BigQuery</th><th>Runs on</th><th /></tr></thead>
+      <Card title={`Sites & products (${total})`} flush>
+        <table class="data site-table">
+          <thead><tr><th>Name</th><th>Connected</th><th><span class="sr-only">Open</span></th></tr></thead>
           <tbody>
             {sites.map((s) => (
-              <tr key={s.id}>
-                <td><b>{s.label}</b><div class="muted small">{s.demo ? 'Built-in sample data' : s.host}</div></td>
-                <td class="small">{s.demo ? 'demo' : s.propertyId || <span class="muted">—</span>}</td>
-                <td class="small">{s.demo ? 'demo' : s.searchSite || <span class="muted">—</span>}</td>
-                <td class="small mono">{s.demo ? 'demo events' : s.bq ? `${s.bq.dataProject}.${s.bq.dataset}` : <span class="muted">—</span>}
-                  {s.bq?.sessionsTable && <div class="chip accent" style={{ marginTop: '3px' }}>rollup</div>}</td>
-                <td class="small">{s.demo ? 'demo' : productSummary(productOf(s.id), setup.data) || <span class="muted">—</span>}</td>
-                <td class="num nowrap">
-                  {(s.demo || !siteExtras) && <a class="btn ghost" href={`#/site/${s.id}/setup`}>Setup</a>}
-                  {!s.demo && <button class="btn ghost" type="button" onClick={() => go({ edit: s.id })}>Edit</button>}
-                  <button class="btn ghost danger" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); setup.reload(); }}>
-                    {s.demo ? 'Hide' : 'Remove'}
-                  </button>
+              <tr key={s.id} class="clickable" onClick={(e) => { if (!e.target.closest('a, button')) location.hash = siteHref(s); }}>
+                <td>
+                  <div class="site-id">
+                    <SiteIcon site={s} />
+                    <div>
+                      <a class="site-name" href={siteHref(s)}>{s.label}</a>
+                      <small>{s.demo ? 'Built-in sample data' : s.host}</small>
+                    </div>
+                  </div>
                 </td>
+                <td>{s.demo ? <span class="muted small">Sample data</span> : <SiteSources site={s} product={productOf(s.id)} setup={setup.data} />}</td>
+                <td class="num nowrap">
+                  {s.demo
+                    ? <button class="btn ghost" type="button" onClick={async () => { await api.del(`/sites/${s.id}`); onChange(); setup.reload(); }}>Hide</button>
+                    : <Icon name="chevron" size={14} class="site-go" />}
+                </td>
+              </tr>
+            ))}
+            {loneProducts.map((p) => (
+              <tr key={p.id} class="clickable" onClick={(e) => { if (!e.target.closest('a, button')) location.hash = productHref(p); }}>
+                <td>
+                  <div class="site-id">
+                    <SiteIcon site={{ id: p.id, label: p.label }} />
+                    <div>
+                      <a class="site-name" href={productHref(p)}>{p.label}</a>
+                      <small>{productSub(p)}</small>
+                    </div>
+                  </div>
+                </td>
+                <td><SiteSources site={{}} product={p} setup={setup.data} /></td>
+                <td class="num nowrap"><Icon name="chevron" size={14} class="site-go" /></td>
               </tr>
             ))}
           </tbody>
         </table>
-        {!sites.length && <p class="muted inset">No sites yet. Add one above.</p>}
+        {!total && <p class="muted inset">Nothing yet. Add a site, or a product without one, above.</p>}
+        {suggestions.length > 0 && (
+          <div class="site-suggest">
+            <span class="muted small">Found in your connections:</span>
+            {suggestions.map((sg) => <button key={sg.id} class="btn ghost" type="button" onClick={() => addSuggested(sg)}><Icon name="sparkles" size={13} /> Add {sg.label}</button>)}
+          </div>
+        )}
       </Card>
-
-      {setup.data ? <ProductsCard setup={setup.data} onReload={setup.reload} onEdit={(id) => go({ product: id })} /> : <Loading height={120} />}
     </>
   );
 }
 
+// A site's parts, each edited on its own from the site's settings list.
+const PARTS = [
+  { key: 'analytics', title: 'Analytics', icon: 'chart' },
+  { key: 'bigquery', title: 'BigQuery export', icon: 'database' },
+  { key: 'domains', title: 'Domains', icon: 'globe' },
+  { key: 'hosting', title: 'Hosting & deploys', icon: 'rocket' },
+  { key: 'code', title: 'Code & releases', icon: 'github' },
+  { key: 'distribution', title: 'Distribution', icon: 'puzzle' },
+  { key: 'goals', title: 'Goals', icon: 'target' },
+  { key: 'config', title: 'Config file', icon: 'code' },
+  { key: 'sharing', title: 'Share with your team', icon: 'users' },
+  { key: 'leaveout', title: 'Left-out visits', icon: 'eye' },
+];
+const FOCUS_PART = { goals: 'goals', domains: 'domains', hosting: 'hosting', repos: 'code', code: 'code', distribution: 'distribution' };
+
+// The site's settings as a list: each part with what it's set to now; a row opens that part alone.
+function SiteParts({ site, setup, onPart, onRemove }) {
+  const p = setup?.products.find((x) => x.siteId === site.id);
+  const n = (count, word) => (count ? `${count} ${word}${count > 1 ? 's' : ''}` : '');
+  const hosting = setup?.hosting.find((h) => h.key === p?.hosting?.provider)?.label;
+  const now = {
+    analytics: [site.host, site.propertyId && 'GA4', site.searchSite && 'Search Console'].filter(Boolean).join(' · '),
+    bigquery: site.bq ? `${site.bq.dataProject}.${site.bq.dataset}` : '',
+    domains: (p?.domains || []).map((d) => d.name).join(', '),
+    hosting: hosting || '',
+    code: n(p?.repos?.length, 'repo'),
+    distribution: n(p?.extensionIds?.length, 'extension'),
+    goals: n(p?.goals?.length, 'goal'),
+    config: '.sitelens.yml: goals, funnels, search topics and alerts in one file',
+    sharing: 'People who can view this site, by email',
+    leaveout: 'Bot-like visits, by country, kept out of the numbers',
+  };
+  // Parts that come from one service show its logo; the rest keep a plain icon.
+  const host = p?.hosting?.provider;
+  const brand = {
+    analytics: 'analytics', bigquery: 'bigquery', code: 'github', distribution: 'extensions',
+    hosting: host === 'github-pages' ? 'github' : ['firebase', 'vercel'].includes(host) ? host : '',
+  };
+  return (
+    <div class="sp-wrap">
+      <header class="sp-site-head">
+        <SiteIcon site={site} large />
+        <div class="sp-site-id">
+          <h2>{site.label}</h2>
+          <small>{site.host} · each part below saves on its own</small>
+        </div>
+        <a class="btn" href={`#/site/${encodeURIComponent(site.id)}/timeline`}>Open Timeline</a>
+      </header>
+      <div class="nx-mlist">
+        {PARTS.map((x) => {
+          const set = Boolean(now[x.key]);
+          return (
+            <button key={x.key} type="button" class={`nx-mrow sp-part${set ? '' : ' unset'}`} onClick={() => onPart(x.key)}>
+              {brand[x.key] ? <BrandIcon name={brand[x.key]} /> : <span class="nx-hk"><Icon name={x.icon} size={15} /></span>}
+              <span class="nx-mrow-main"><b>{x.title}</b><span class="nx-mrow-sub"><span>{now[x.key] || 'Not set yet'}</span></span></span>
+              {set ? <Icon name="chevron" size={13} class="nx-mrow-go" /> : <span class="sp-setup">Set up</span>}
+            </button>
+          );
+        })}
+      </div>
+      <div class="sp-danger">
+        <button type="button" class="btn ghost danger" onClick={onRemove}>Remove {site.label}</button>
+        <span class="muted small">Takes it out of Kauzl. Its data stays in GA4 and Search Console.</span>
+      </div>
+    </div>
+  );
+}
+
 // What a site's product runs on, in one line: hosting, repos, extensions, goals.
-function productSummary(p, setup) {
-  if (!p) return '';
-  const hosting = setup?.hosting.find((h) => h.key === p.hosting?.provider)?.label;
-  const n = (count, word) => count && `${count} ${word}${count > 1 ? 's' : ''}`;
-  return [hosting, n(p.repos.length, 'repo'), n(p.extensionIds.length, 'extension'), n(p.goals?.length, 'goal')].filter(Boolean).join(' · ');
+// What a site is connected to, as a row of small logos; the details (IDs, names) are in each one's tooltip.
+function SiteSources({ site, product, setup }) {
+  const items = [];
+  if (site.propertyId) items.push({ brand: 'analytics', title: `GA4 property ${site.propertyId}` });
+  if (site.searchSite) items.push({ brand: 'search', title: `Search Console: ${site.searchSite}` });
+  if (site.bq) items.push({ brand: 'bigquery', title: `BigQuery: ${site.bq.dataProject}.${site.bq.dataset}${site.bq.sessionsTable ? ' (rollup)' : ''}` });
+  const host = product?.hosting?.provider;
+  const hostLabel = setup?.hosting.find((h) => h.key === host)?.label || host;
+  if (host) items.push({ brand: host === 'github-pages' ? 'github' : host, title: `Runs on ${hostLabel}`, text: ['firebase', 'vercel', 'github-pages'].includes(host) ? '' : hostLabel });
+  if (product?.repos.length) items.push({ brand: 'github', title: product.repos.join(', '), count: product.repos.length });
+  if (product?.extensionIds.length) items.push({ brand: 'extensions', title: `${product.extensionIds.length} Chrome extension${product.extensionIds.length > 1 ? 's' : ''}`, count: product.extensionIds.length });
+  if (!items.length) return <span class="muted small">Nothing connected yet</span>;
+  return (
+    <span class="site-sources">
+      {items.map((it) => (
+        <span key={it.title} class="site-src" title={it.title}>
+          {it.text ? <span class="site-src-text">{it.text}</span> : <BrandIcon name={it.brand} small title={it.title} />}
+          {it.count > 1 && <span class="site-src-n">{it.count}</span>}
+        </span>
+      ))}
+    </span>
+  );
 }
 
 function GitHubSettings({ state, sources, onChange }) {
@@ -291,6 +509,29 @@ function ConnectCard({ auth, onChange }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
+  const [key, setKey] = useState('');
+  const [keyBusy, setKeyBusy] = useState(false);
+  const [keyError, setKeyError] = useState(null);
+
+  async function useKey(e) {
+    e.preventDefault();
+    setKeyBusy(true);
+    setKeyError(null);
+    try {
+      await api.post('/auth/service-account', { key });
+      setKey('');
+      onChange();
+    } catch (err) {
+      setKeyError(err);
+    } finally {
+      setKeyBusy(false);
+    }
+  }
+
+  async function readKeyFile(e) {
+    const file = e.currentTarget.files?.[0];
+    if (file) setKey(await file.text());
+  }
 
   async function paste(e) {
     e.preventDefault();
@@ -310,7 +551,7 @@ function ConnectCard({ auth, onChange }) {
   const scopes = auth.scopes || [];
   const has = (s) => scopes.some((x) => x.endsWith(s));
   return (
-    <Card title="Google account" sub={auth.connected ? (auth.mode === 'oauth' ? 'Signed in · refreshes automatically' : 'Pasted access token') : 'Not connected'}>
+    <Card title="Google account" sub={auth.connected ? (auth.mode === 'oauth' ? 'Signed in · refreshes automatically' : auth.mode === 'service' ? 'Service account key · never expires' : 'Pasted access token') : 'Not connected'}>
       <div class="stack">
         {auth.connected && (
           <div class="row">
@@ -322,9 +563,26 @@ function ConnectCard({ auth, onChange }) {
             <span class="chip">{has('logging.read') || has('cloud-platform') ? '✓' : '✗'} Cloud logs</span>
             {auth.expiresAt && <span class="muted small">{auth.expired ? 'expired' : `expires ${new Date(auth.expiresAt).toLocaleTimeString()}`}</span>}
             <span class="grow" style={{ flex: 1 }} />
-            <button class="btn ghost danger" type="button" onClick={async () => { await api.post('/auth/signout'); onChange(); }}>Sign out</button>
+            <button class="btn ghost danger" type="button" onClick={async () => { await api.post('/auth/signout'); onChange(); }}>{auth.mode === 'service' ? 'Remove key' : 'Sign out'}</button>
           </div>
         )}
+        {auth.mode === 'service' && (
+          <p class="note m-0">
+            Add <code>{auth.email}</code> in GA4 (Admin → Property access management, Viewer) and in Search Console (Settings → Users and permissions, Restricted).
+            For BigQuery, give it BigQuery Data Viewer and Job User in the project.
+          </p>
+        )}
+        <form class="stack" onSubmit={useKey}>
+          <b>Use a service account key, no sign-in</b>
+          <textarea rows="4" placeholder='{ "type": "service_account", … }' value={key} onInput={(e) => setKey(e.currentTarget.value)} aria-label="Service account key (JSON)" autocomplete="off" spellcheck={false} />
+          <input type="file" accept="application/json,.json" onChange={readKeyFile} aria-label="Or choose the key file" />
+          <p class="note m-0">
+            In Google Cloud: IAM → Service accounts → create one → Keys → Add key → JSON. Then add its email as a viewer in GA4 and a user in Search Console.
+            It never expires, and Kauzl only reads.
+          </p>
+          <button class="btn self-start" type="submit" disabled={keyBusy || !key.trim()}>{keyBusy ? 'Checking…' : 'Use this key'}</button>
+          {keyError && <p class="small text-bad m-0">{keyError.message}</p>}
+        </form>
         <div class="stack">
           <div class="stack">
             {auth.oauthAvailable ? (
@@ -392,7 +650,15 @@ function BqExportStatus({ propertyId, live, result }) {
   );
 }
 
-function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) {
+// The domain someone registered for a host: shop.example.com → example.com, blog.site.co.uk → site.co.uk.
+function registeredDomain(host) {
+  const parts = String(host || '').toLowerCase().replace(/^www\./, '').split('.').filter(Boolean);
+  if (parts.length < 2) return '';
+  const two = parts.slice(-2).join('.');
+  return parts.length > 2 && /^(co|com|org|net|gov|ac|edu)\.[a-z]{2}$/.test(two) ? parts.slice(-3).join('.') : two;
+}
+
+function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, onSaved }) {
   const [form, setForm] = useState(() => ({
     id: initial.id || '',
     label: initial.label || '',
@@ -411,6 +677,15 @@ function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) 
   const properties = useAsync(() => (live ? api.get('/google/properties') : Promise.resolve([])), [live]);
   const streams = useAsync(() => (live && form.propertyId ? api.get(`/google/streams?property=${form.propertyId}`) : Promise.resolve([])), [live, form.propertyId]);
   const searchSites = useAsync(() => (live ? api.get('/google/search-sites').catch(() => []) : Promise.resolve([])), [live]);
+  // A new site: once its address is typed, pick the Search Console property for it (domain or URL-prefix).
+  useEffect(() => {
+    if (initial.id || form.searchSite || !form.host || !searchSites.data?.length) return;
+    const host = form.host.replace(/^www\./, '').toLowerCase();
+    const urls = searchSites.data.map((x) => x.siteUrl || x);
+    const match = urls.find((u) => u === `sc-domain:${host}`)
+      || urls.find((u) => u.replace(/^https?:\/\/(www\.)?/, '').replace(/\/$/, '') === host);
+    if (match) set({ searchSite: match });
+  }, [form.host, searchSites.data]);
   const setup = useAsync(() => api.get('/products/setup'), []);
   const existing = initial.id ? setup.data?.products.find((p) => p.siteId === initial.id) : null;
   const [product, setProduct] = useState(null);
@@ -454,7 +729,8 @@ function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) 
           label: existing?.label || site.label,
           id: existing?.id,
           previousId: existing?.id,
-          domains: product.domains.length ? product.domains : [{ name: site.host.replace(/^www\./, '') }],
+          // The address is the domain: watch the one that was registered (shop.example.com → example.com).
+          domains: product.domains.length ? product.domains : [{ name: registeredDomain(site.host) || site.host.replace(/^www\./, '') }],
         });
       }
       onSaved(site);
@@ -466,62 +742,126 @@ function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) 
 
   return (
     <form class="stack" onSubmit={save}>
-      {/* Save stays in reach: pinned at the top while the form scrolls. */}
-      <div class="form-bar">
-        <b class="form-bar-title">{initial.id ? `Edit ${initial.label}` : 'Add a site'}</b>
-        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save site'}</button>
+      {/* A whole new site: Save stays in reach, pinned at the top while the long form scrolls.
+          One part: its card is the heading, and Save sits under its fields. */}
+      {!part && <div class="form-bar">
+        <b class="form-bar-title">{part ? PARTS.find((x) => x.key === part)?.title || 'Edit' : initial.id ? `Edit ${initial.label}` : 'Add a site'}</b>
+        <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : part ? 'Save' : 'Save site'}</button>
         <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
-      </div>
+      </div>}
       {error && <ErrorState error={error} />}
-      <Card title="Analytics" sub="The site’s analytics first, then everything it runs on. Skip what doesn’t apply."
+      {(!part || part === 'analytics' || part === 'bigquery') && (
+      <Card title={part === 'bigquery' ? 'BigQuery export' : part ? 'Analytics' : 'Your site'} sub={part === 'bigquery' ? 'GA4’s raw events, for Journeys and Raw data.' : part ? 'The site’s address and where its numbers come from.' : 'Its address, then where its numbers come from. Skip what you don’t use.'}
         actions={!initial.id && (
           <button class="btn ghost" type="button" onClick={() => setForm((f) => ({ ...f, label: PUBLIC_SAMPLE.label, host: PUBLIC_SAMPLE.host, useBq: true, bq: { ...f.bq, ...PUBLIC_SAMPLE.bq } }))}>
             <Icon name="database" size={13} /> Use Google’s public GA4 sample
           </button>
         )}>
         <div class="stack">
-        <div class="settings-grid">
-          <label class="field">Hostname<input required value={form.host} placeholder="example.com" onInput={(e) => set({ host: e.currentTarget.value })} /></label>
-          <label class="field">Label<input value={form.label} placeholder="Marketing site" onInput={(e) => set({ label: e.currentTarget.value })} /></label>
-          <label class="field">GA4 property
-            {properties.data?.length ? (
-              <select value={form.propertyId} onChange={(e) => set({ propertyId: e.currentTarget.value, streamName: '' })}>
-                <option value="">— none —</option>
-                {properties.data.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.account} ({p.id})</option>)}
-              </select>
-            ) : (
-              <input value={form.propertyId} placeholder="123456789" onInput={(e) => set({ propertyId: e.currentTarget.value })} />
-            )}
-            <small>Powers Overview and Pages through the GA4 Data API.</small>
-          </label>
-          <label class="field">Web data stream
-            <select value={form.streamName} onChange={(e) => {
-              const stream = (streams.data || []).find((s) => s.name === e.currentTarget.value);
-              set({ streamName: e.currentTarget.value });
-              if (stream && form.useBq && !form.bq.streamId) setBq({ streamId: stream.id });
-            }}>
-              <option value="">Whole property</option>
-              {(streams.data || []).map((s) => <option key={s.id} value={s.name}>{s.name} · {s.defaultUri}</option>)}
-            </select>
-            <small>Scopes live users to this site.</small>
-          </label>
-          <label class="field">Search Console property
-            {searchSites.data?.length ? (
-              <select value={form.searchSite} onChange={(e) => set({ searchSite: e.currentTarget.value })}>
-                <option value="">— none —</option>
-                {searchSites.data.map((s) => <option key={s.siteUrl || s} value={s.siteUrl || s}>{s.siteUrl || s}</option>)}
-              </select>
-            ) : (
-              <input value={form.searchSite} placeholder="sc-domain:example.com" onInput={(e) => set({ searchSite: e.currentTarget.value })} />
-            )}
-          </label>
-          <label class="check" style={{ alignSelf: 'end', paddingBottom: '8px' }}>
-            <input type="checkbox" checked={form.includeSubdomains} onChange={(e) => set({ includeSubdomains: e.currentTarget.checked })} /> Include subdomains
-          </label>
-        </div>
+        {part !== 'bigquery' && (
+        <>
+          {/* The site itself: its address, big, then what to call it. */}
+          <div class="an-site">
+            <label class="field an-host">Website address
+              <span class="an-url">
+                <span class="an-url-pre" aria-hidden="true">https://</span>
+                <input required value={form.host} placeholder="example.com" autocomplete="off" spellcheck={false}
+                  onInput={(e) => set({ host: e.currentTarget.value })}
+                  onBlur={(e) => {
+                    // A pasted URL keeps just its host.
+                    const host = e.currentTarget.value.trim().replace(/^https?:\/\//i, '').replace(/[/?#].*$/, '').toLowerCase();
+                    if (host !== form.host) set({ host });
+                  }} />
+              </span>
+            </label>
+            <label class="field an-name">Name
+              <input value={form.label} placeholder={form.host ? form.host.replace(/^www\./, '').split('.')[0] : 'Marketing site'} onInput={(e) => set({ label: e.currentTarget.value })} />
+              <small>How it shows in Kauzl. Leave blank to use the address.</small>
+            </label>
+          </div>
 
-        <div class="divider" />
-        <label class="check"><input type="checkbox" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} /> <b>Connect the GA4 BigQuery export</b> — unlocks Paths, Funnels, Retention, Events, Sessions and SQL · <a href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">How to set it up</a></label>
+          <div class="an-sources">
+            <section class="an-src">
+              <div class="an-src-id">
+                <BrandIcon name="analytics" />
+                <div>
+                  <b>Google Analytics 4</b>
+                  <small>Visits, pages and where people came from.</small>
+                  <span class={`an-pill${form.propertyId ? ' on' : ''}`}>{form.propertyId ? 'Connected' : 'Recommended'}</span>
+                </div>
+              </div>
+              <div class="an-src-fields">
+                <label class="field">Property
+                  {properties.data?.length ? (
+                    <select value={form.propertyId} onChange={(e) => set({ propertyId: e.currentTarget.value, streamName: '' })}>
+                      <option value="">Choose a property…</option>
+                      {properties.data.map((p) => <option key={p.id} value={p.id}>{p.name} · {p.account} ({p.id})</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.propertyId} placeholder="123456789" inputMode="numeric" onInput={(e) => set({ propertyId: e.currentTarget.value })} />
+                  )}
+                </label>
+                <label class="field">Web stream
+                  <select value={form.streamName} disabled={!form.propertyId} onChange={(e) => {
+                    const stream = (streams.data || []).find((s) => s.name === e.currentTarget.value);
+                    set({ streamName: e.currentTarget.value });
+                    if (stream && form.useBq && !form.bq.streamId) setBq({ streamId: stream.id });
+                  }}>
+                    <option value="">Whole property</option>
+                    {(streams.data || []).map((s) => <option key={s.id} value={s.name}>{s.name} · {s.defaultUri}</option>)}
+                  </select>
+                  <small>Pick one when a property has several sites.</small>
+                </label>
+              </div>
+            </section>
+
+            <section class="an-src">
+              <div class="an-src-id">
+                <BrandIcon name="search" />
+                <div>
+                  <b>Search Console</b>
+                  <small>Google searches that show and click your site.</small>
+                  <span class={`an-pill${form.searchSite ? ' on' : ''}`}>{form.searchSite ? 'Connected' : 'Recommended'}</span>
+                </div>
+              </div>
+              <div class="an-src-fields">
+                <label class="field">Property
+                  {searchSites.data?.length ? (
+                    <select value={form.searchSite} onChange={(e) => set({ searchSite: e.currentTarget.value })}>
+                      <option value="">Choose a property…</option>
+                      {searchSites.data.map((s) => <option key={s.siteUrl || s} value={s.siteUrl || s}>{s.siteUrl || s}</option>)}
+                    </select>
+                  ) : (
+                    <input value={form.searchSite} placeholder="sc-domain:example.com" onInput={(e) => set({ searchSite: e.currentTarget.value })} />
+                  )}
+                </label>
+                <label class="an-switch">
+                  <input type="checkbox" role="switch" checked={form.includeSubdomains} onChange={(e) => set({ includeSubdomains: e.currentTarget.checked })} />
+                  <span><b>Include subdomains</b><small>Count blog.{form.host || 'example.com'} and the like as this site.</small></span>
+                </label>
+              </div>
+            </section>
+          </div>
+        </>
+        )}
+
+        {part !== 'analytics' && <>
+        <section class={`an-src an-bq${form.useBq ? ' on' : ''}`}>
+          <div class="an-src-id">
+            <BrandIcon name="bigquery" />
+            <div>
+              <b>BigQuery export</b>
+              <small>GA4’s raw events: unlocks Journeys, Funnels, Retention, Sessions and SQL. <a href="https://kauzl.com/guides/ga4-bigquery-export/" target="_blank" rel="noopener noreferrer">How to set it up</a></small>
+              <span class={`an-pill${form.useBq ? ' on' : ''}`}>{form.useBq ? 'On' : 'Optional'}</span>
+            </div>
+          </div>
+          <div class="an-src-fields">
+            <label class="an-switch">
+              <input type="checkbox" role="switch" checked={form.useBq} onChange={(e) => set({ useBq: e.currentTarget.checked })} />
+              <span><b>{form.useBq ? 'Connected to the export' : 'Connect the export'}</b><small>Kauzl finds the dataset for you once GA4 is picked.</small></span>
+            </label>
+          </div>
+        </section>
         {form.useBq && (
           <>
             <BqExportStatus propertyId={form.propertyId} live={live} result={bqExport} />
@@ -554,15 +894,23 @@ function SiteForm({ initial, auth, focus, measures = null, onCancel, onSaved }) 
             {initial.id && initial.bq && <Rollup site={initial} />}
           </>
         )}
+        </>}
 
         </div>
       </Card>
+      )}
 
-      {product
-        ? <ProductStages form={{ ...product, siteId: initial.id || '' }} set={setProductPatch} setup={setup.data} inSite />
+      {part === 'analytics' || part === 'bigquery' ? null : product
+        ? <ProductStages form={{ ...product, siteId: initial.id || '' }} set={setProductPatch} setup={setup.data} inSite only={part} skip={part ? [] : ['domains']} hint={form.host} />
         : setup.error ? <ErrorState error={setup.error} onRetry={setup.reload} /> : <Loading height={120} />}
 
       {measures}
+      {part && (
+        <div class="row form-foot">
+          <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save'}</button>
+          <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+        </div>
+      )}
     </form>
   );
 }

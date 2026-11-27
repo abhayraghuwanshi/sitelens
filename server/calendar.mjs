@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { ValidationError } from './store.mjs';
 import { localDay } from './alerts.mjs';
 import { sourceFamily } from './journey.mjs';
+import { metricTotal } from './custom-metrics.mjs';
 
 const DAY = 86_400_000;
 const WEEKS = 4;
@@ -95,20 +96,40 @@ const pct = (v) => `${Math.round(Math.abs(v) * 100)}%`;
 const signed = (v) => `${v >= 0 ? '+' : '−'}${num(Math.abs(v))}`;
 
 // The day as a few plain sentences. Every input is optional.
+// Plain words for the day's story: visits, not sessions; a big jump as a multiple
+// ("3.7× a usual Thursday"); where visits came from as a person would say it.
+function vsUsual(value, base, weekday) {
+  const usual = `a usual ${weekday} (~${num(base)})`;
+  const r = value / base;
+  if (r >= 1.95) return `${r >= 10 ? Math.round(r) : Math.round(r * 10) / 10}× ${usual}`;
+  if (r >= 1) return `${Math.round((r - 1) * 100)}% more than ${usual}`;
+  return `${Math.round((1 - r) * 100)}% fewer than ${usual}`;
+}
+const SEARCH_ENGINES = /^(google|bing|duckduckgo|yahoo|ecosia|brave|baidu|yandex)$/i;
+const isDirect = (label) => /^\(?direct\)?$/i.test(String(label || ''));
+function cameFrom(label) {
+  if (isDirect(label)) return 'came straight to the site';
+  if (SEARCH_ENGINES.test(label)) return `came from ${label} search`;
+  return `came from ${label}`;
+}
+const DIRECT_MEANS = 'That’s visits with no link we can see: someone typed the address, used a bookmark, or tapped a link in an app or chat.';
+const pageName = (path) => (path === '/' ? 'The home page' : path);
+
 export function composeStory({ date, today = '', sessions = null, baseline = null, sites = [], events = [], eventsBefore = [], alerts = [], github = null, extensions = [] }) {
   const lines = [];
   const weekday = weekdayName(date);
   const partial = date === today;
   const { change, tone } = dayTone(sessions, baseline);
   let headline;
+  const visits = (n) => `${num(n)} visit${n === 1 ? '' : 's'}`;
   if (sessions === null) headline = 'No traffic data for this day.';
-  else if (partial) headline = `So far today: ${num(sessions)} sessions${baseline ? ` (a full ${weekday} is usually ~${num(baseline)}).` : '.'}`;
-  else if (baseline === null || change === null) headline = `${num(sessions)} sessions.`;
-  else if (tone === 'up2') headline = `Big day: ${num(sessions)} sessions, ${pct(change)} above a typical ${weekday}.`;
-  else if (tone === 'up') headline = `Busier than usual: ${num(sessions)} sessions, ${pct(change)} above a typical ${weekday}.`;
-  else if (tone === 'down2') headline = `Quiet day: ${num(sessions)} sessions, ${pct(change)} below a typical ${weekday}.`;
-  else if (tone === 'down') headline = `Slower than usual: ${num(sessions)} sessions, ${pct(change)} below a typical ${weekday}.`;
-  else headline = `A typical ${weekday}: ${num(sessions)} sessions (usually ~${num(baseline)}).`;
+  else if (partial) headline = `So far today: ${visits(sessions)}${baseline ? ` (a full ${weekday} is usually ~${num(baseline)}).` : '.'}`;
+  else if (baseline === null || change === null || !baseline) headline = `${visits(sessions)}.`;
+  else if (tone === 'up2') headline = `Big day: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'up') headline = `Busier than usual: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'down2') headline = `Quiet day: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else if (tone === 'down') headline = `Slower than usual: ${visits(sessions)}, ${vsUsual(sessions, baseline, weekday)}.`;
+  else headline = `A typical ${weekday}: ${visits(sessions)} (usually ~${num(baseline)}).`;
 
   const moved = !partial && (tone === 'up' || tone === 'up2' || tone === 'down' || tone === 'down2');
   const up = tone === 'up' || tone === 'up2';
@@ -117,7 +138,7 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
     const where = multi ? `${s.label}: ` : '';
     const st = dayTone(s.sessions, s.baseline);
     if (multi && s.sessions !== null && s.sessions !== undefined) {
-      lines.push({ kind: 'site', tone: st.tone, href: `#/site/${s.id}/overview`, text: `${s.label}: ${num(s.sessions)} sessions${st.change !== null && Number.isFinite(st.change) && !partial ? ` (${st.change >= 0 ? '+' : '−'}${pct(st.change)} vs usual)` : ''}.` });
+      lines.push({ kind: 'site', tone: st.tone, href: `#/site/${s.id}/overview`, text: `${s.label}: ${visits(s.sessions)}${st.change !== null && Number.isFinite(st.change) && !partial ? ` (${st.change >= 0 ? `${pct(st.change)} more` : `${pct(st.change)} fewer`} than usual)` : ''}.` });
     }
     if (s.error) lines.push({ kind: 'error', text: `${where}${s.error}` });
     const siteMoved = multi ? !partial && ['up', 'up2', 'down', 'down2'].includes(st.tone) : moved;
@@ -125,21 +146,22 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
     if (siteMoved && s.sources?.length) {
       const pick = siteUp ? s.sources[0] : s.sources.at(-1);
       if (pick && Math.abs(pick.gain) >= 3) {
+        const why = isDirect(pick.label) ? ` ${DIRECT_MEANS}` : '';
         lines.push({ kind: 'source', text: siteUp
-          ? `${where}Most of the extra traffic came from ${pick.label} (${num(pick.value)} sessions, usually ~${num(pick.expected)}).`
-          : `${where}The drop was mostly ${pick.label} (${num(pick.value)} sessions, usually ~${num(pick.expected)}).` });
+          ? `${where}${visits(pick.value)} ${cameFrom(pick.label)} (usually ~${num(pick.expected)}).${why}`
+          : `${where}Fewer ${cameFrom(pick.label).replace(/^came/, 'came')}: ${visits(pick.value)}, usually ~${num(pick.expected)}.${why}` });
       }
     }
     if (siteMoved && siteUp && s.pages?.length) {
       const page = s.pages[0];
-      if (page.gain >= 3) lines.push({ kind: 'page', text: `${where}${page.label} drew ${num(page.value)} landing sessions (usually ~${num(page.expected)}).` });
+      if (page.gain >= 3) lines.push({ kind: 'page', text: `${where}${pageName(page.label)} got the most extra: ${visits(page.value)} started there (usually ~${num(page.expected)}).` });
     }
     if (s.search?.pending) lines.push({ kind: 'search', text: `${where}Search Console hasn’t reported this day yet; it lags 2–3 days.` });
     else if (s.search && s.search.clicks !== null) {
       const sc = dayTone(s.search.clicks, s.search.baseline);
-      const vs = sc.change !== null && Number.isFinite(sc.change) && sc.tone !== 'flat' ? ` (${sc.change >= 0 ? '+' : '−'}${pct(sc.change)} vs usual)` : '';
+      const vs = sc.change !== null && Number.isFinite(sc.change) && sc.tone !== 'flat' && s.search.baseline ? ` (usually ~${num(s.search.baseline)})` : '';
       const top = s.search.queries?.[0];
-      lines.push({ kind: 'search', text: `${where}Search: ${num(s.search.clicks)} click${s.search.clicks === 1 ? '' : 's'}${vs}${top ? `, top query “${top.query}”` : ''}.` });
+      lines.push({ kind: 'search', text: `${where}Clicks from Google and Bing results: ${num(s.search.clicks)}${vs}.${top ? ` Top search: “${top.query}”.` : ''}` });
     }
   }
   // Claude's comments are analysis of the day, not things that happened on it.
@@ -147,7 +169,7 @@ export function composeStory({ date, today = '', sessions = null, baseline = nul
   const happenedBefore = eventsBefore.filter((e) => e.kind !== 'claude');
   if (happened.length) lines.push({ kind: 'event', text: `That day: ${happened.map((e) => e.label).join('; ')}.` });
   if (happenedBefore.length && moved) lines.push({ kind: 'event', text: `The day before: ${happenedBefore.map((e) => e.label).join('; ')}.` });
-  if (github?.stars) lines.push({ kind: 'github', text: `GitHub: ${signed(github.stars)} stars${github.top ? ` (most on ${github.top})` : ''}.` });
+  if (github?.stars) lines.push({ kind: 'github', text: `GitHub: ${signed(github.stars)} star${Math.abs(github.stars) === 1 ? '' : 's'}${github.top ? ` (most on ${github.top})` : ''}.` });
   for (const e of extensions) {
     if (e.users === null || e.users === undefined) continue;
     lines.push({ kind: 'extension', text: `${e.label}: ${num(e.users)} users${e.delta ? ` (${signed(e.delta)} vs the day before)` : ''}.` });
@@ -241,9 +263,13 @@ export function demoDay(siteId, date) {
   };
 }
 
+function timelineAlert({ id, title, detail, rule, direction, link, value, baseline }) {
+  return { id, title, detail, rule, direction, link, value, baseline };
+}
+
 /* ---------- The service ---------- */
 
-export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, now = () => Date.now() }) {
+export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, goalDays = null, customMetrics = null, citationDays = null, jobSeries = null, bingDays = null, now = () => Date.now() }) {
   // Which sites, repos and extensions a view covers. 'all' = every real site
   // (the sample only when there's nothing else); a site adds its product's repos and extensions.
   async function scope(siteParam = 'all') {
@@ -303,7 +329,21 @@ export function createCalendar({ store, history, annotations, extensions = null,
 
   async function eventsFor(sc, from, to) {
     const listed = await annotations.list({ from, to, scopes: sc.scopes });
-    return [...listed, ...demoAnnotations(sc.sites, from, to)].sort((a, b) => a.date.localeCompare(b.date));
+    return [...listed, ...demoAnnotations(sc.sites, from, to), ...(await adMarks(sc, from, to))].sort((a, b) => a.date.localeCompare(b.date));
+  }
+
+  // Entered ad campaigns, marked on the day each started.
+  const AD_PLATFORM = { google: 'Google Ads', reddit: 'Reddit Ads', x: 'X Ads', meta: 'Meta Ads', linkedin: 'LinkedIn Ads', other: 'Ad' };
+  async function adMarks(sc, from, to) {
+    const all = (await store.get()).adSpend || {};
+    return sc.sites.flatMap((site) => (all[site.id] || [])
+      .filter((e) => e.start >= from && e.start <= to)
+      .map((e) => {
+        const days = Math.round((Date.parse(`${e.end}T00:00:00Z`) - Date.parse(`${e.start}T00:00:00Z`)) / 86_400_000) + 1;
+        const amount = e.amount.toLocaleString('en-US', { maximumFractionDigits: 2 });
+        return { id: `ad-${e.id}`, date: e.start, kind: 'ad', source: 'ad-spend', scope: `site:${site.id}`,
+          label: `${AD_PLATFORM[e.platform] || 'Ad'}: ${e.name} · ${amount} over ${days} day${days === 1 ? '' : 's'}${sc.key === 'all' ? ` (${site.label})` : ''}` };
+      }));
   }
 
   async function alertsFor(sc, from, to) {
@@ -526,7 +566,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
       sites: sites.map((s) => ({ ...s, baseline: s.baseline === null ? null : Math.round(s.baseline), sources: s.sources.slice(0, 6), losers: s.sources.filter((r) => r.gain < 0).slice(-3).reverse(), pages: s.pages.slice(0, 6), trend: undefined })),
       events,
       eventsBefore,
-      alerts: alerts.map(({ id, title, detail, direction, link }) => ({ id, title, detail, direction, link })),
+      alerts: alerts.map((a) => timelineAlert(a)),
       github: gh,
       extensions: exts,
     };
@@ -550,7 +590,10 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const r = span(from, to);
     const sc = await scope(site);
     const lookback = addDays(r.from, -7 * WEEKS);
-    const sums = { sessions: new Map(), users: new Map(), views: new Map(), clicks: new Map() };
+    const sums = { sessions: new Map(), users: new Map(), views: new Map(), clicks: new Map(), spent: new Map(), earned: new Map() };
+    let hasSpent = false;
+    let hasEarned = false;
+    const currencies = new Set();
     const add = (map, d, v) => map.set(d, (map.get(d) || 0) + (v || 0));
     const errors = [];
     let hasTraffic = false;
@@ -576,6 +619,15 @@ export function createCalendar({ store, history, annotations, extensions = null,
       } catch (err) {
         errors.push({ site: s.label, message: err.message });
       }
+      // Ad money: spend (Google Ads + entered) and ad earnings, when the site has any.
+      if (adDays) {
+        try {
+          const money = await adDays(s, lookback, r.to);
+          if (money.currency && (money.spent || money.earned)) currencies.add(money.currency);
+          if (money.spent) { hasSpent = true; for (const [d, v] of money.spent) add(sums.spent, d, v); }
+          if (money.earned) { hasEarned = true; for (const [d, v] of money.earned) add(sums.earned, d, v); }
+        } catch { /* ad money is extra: the day's other numbers stand without it */ }
+      }
     }
     const days = [];
     for (let d = r.from; d <= r.to; d = addDays(d, 1)) {
@@ -591,12 +643,16 @@ export function createCalendar({ store, history, annotations, extensions = null,
         baseline: baseline === null ? null : Math.round(baseline),
         change: t.change === null || !Number.isFinite(t.change) ? null : Math.round(t.change * 1000) / 1000,
         clicks: hasSearch && searchLast && d <= searchLast ? sums.clicks.get(d) || 0 : null,
+        spent: hasSpent ? Math.round((sums.spent.get(d) || 0) * 100) / 100 : null,
+        earned: hasEarned ? Math.round((sums.earned.get(d) || 0) * 100) / 100 : null,
       });
     }
     return {
       from: r.from, to: r.to, site: sc.key,
       sites: sc.sites.map((s) => ({ id: s.id, label: s.label })),
       searchLast: searchLast || null,
+      // One currency, or none when sites differ (amounts are then shown plain).
+      currency: currencies.size === 1 ? [...currencies][0] : '',
       totals: {
         sessions: hasTraffic ? days.reduce((a, x) => a + x.sessions, 0) : null,
         views: hasTraffic ? days.reduce((a, x) => a + x.views, 0) : null,
@@ -614,7 +670,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
   // `key`: only that row (one page's days, for its own view).
   async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false, key: only = '' } = {}) {
-    if (!['source', 'page', 'query', 'country'].includes(by)) throw new ValidationError('by must be source, page, query or country.');
+    if (!['source', 'page', 'query', 'country', 'goal', 'citation', 'metric', 'job', 'bing'].includes(by)) throw new ValidationError('by must be source, page, query, country, goal, citation, metric, job or bing.');
     const r = span(from, to);
     const sc = await scope(site);
     const shift = Math.max(r.days, Math.min(366, Number(back) || 0));
@@ -624,13 +680,90 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const cur = new Map();
     const prev = new Map();
     const perDay = new Map(); // key → Map(date → value), only with `daily`
+    const goalMeta = new Map();
+    const metricTotals = new Map();
     const errors = [];
+    const citationDates = new Set();
     for (const s of sc.sites) {
-      if (!s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
+      if (!['goal', 'citation', 'metric', 'job', 'bing'].includes(by) && !s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
       try {
-        for (const row of await dailyBreakdown(s, by, prevFrom, r.to)) {
+        let found;
+        if (by === 'bing') {
+          const traffic = bingDays ? await bingDays(s, prevFrom, r.to) : [];
+          found = [];
+          if (traffic.length) {
+            for (const [key, label] of [['clicks', 'Bing clicks'], ['impressions', 'Bing impressions']]) {
+              const scopedKey = multi ? `${s.label} ${key}` : key;
+              cur.set(scopedKey, 0);
+              goalMeta.set(scopedKey, { label: multi ? `${s.label} ${label}` : label, sparse: true, unit: key });
+              for (const row of traffic) found.push({ date: row.date, key, value: row[key] });
+            }
+          }
+        } else if (by === 'job') {
+          const feeds = jobSeries ? await jobSeries(s.id) : [];
+          found = [];
+          for (const feed of feeds) {
+            const key = multi ? `${s.label} ${feed.id}` : feed.id;
+            cur.set(key, 0);
+            goalMeta.set(key, { label: multi ? `${s.label} ${feed.label}` : feed.label, sparse: true, summary: 'latest' });
+            const points = Object.entries(feed.points || {}).sort(([a], [b]) => a.localeCompare(b));
+            metricTotals.set(key, {
+              value: points.findLast(([date]) => date >= r.from && date <= r.to)?.[1] ?? null,
+              previous: points.findLast(([date]) => date >= prevFrom && date <= prevTo)?.[1] ?? null,
+            });
+            for (const [date, value] of points) {
+              if (date >= prevFrom && date <= r.to) found.push({ date, key: feed.id, value });
+            }
+          }
+        } else if (by === 'citation') {
+          const result = citationDays ? await citationDays(s, prevFrom, r.to) : { dates: [], rows: [] };
+          for (const date of result.dates) citationDates.add(date);
+          if (result.dates.length) {
+            for (const [key, label] of [['answers', 'Answers checked'], ['citing', 'Answers with citations'], ['own', 'Answers citing the tracked site']]) {
+              if (!cur.has(key)) cur.set(key, 0);
+              goalMeta.set(key, { label, summaryMetric: true });
+            }
+          }
+          found = result.rows;
+        } else if (by === 'goal' || by === 'metric') {
+          const g = by === 'goal' && goalDays ? await goalDays(s, prevFrom, r.to).catch((err) => ({ goals: [], rows: [], errors: [err.message] })) : { goals: [], rows: [] };
+          for (const message of g.errors || []) errors.push({ site: s.label, message });
+          found = g.rows.slice();
+          for (const goal of g.goals) {
+            const key = multi ? `${s.label} ${goal.key}` : goal.key;
+            cur.set(key, cur.get(key) || 0);
+            if (goal.sparse) goalMeta.set(key, { sparse: true });
+          }
+          if (daily && customMetrics && !s.demo) {
+            const days = (Date.parse(r.to) - Date.parse(prevFrom)) / DAY_MS + 1;
+            const dates = Array.from({ length: days }, (_, i) => addDays(prevFrom, i));
+            const window = { key: 'timeline', days, dates, start: prevFrom, end: r.to, prevStart: prevFrom };
+            const { metrics } = await customMetrics.forSite(s.id, '', { window });
+            for (const m of metrics) {
+              if (m.error) {
+                errors.push({ site: s.label, message: `${m.label}: ${m.error.message}` });
+                continue;
+              }
+              const base = `metric:${m.id}`;
+              const key = multi ? `${s.label} ${base}` : base;
+              cur.set(key, 0);
+              goalMeta.set(key, { label: multi ? `${s.label} ${m.label}` : m.label, summary: m.summary, unit: m.unit });
+              metricTotals.set(key, {
+                value: metricTotal(m.values.slice(-r.days), m.summary),
+                previous: metricTotal(m.values.slice(0, r.days), m.summary),
+              });
+              dates.forEach((date, i) => {
+                if (Number.isFinite(m.values[i])) found.push({ date, key: base, value: m.values[i] });
+              });
+            }
+          }
+        } else {
+          found = await dailyBreakdown(s, by, prevFrom, r.to);
+        }
+        for (const row of found) {
           const base = by === 'source' ? sourceFamily(row.key) : row.key;
-          const key = multi && by === 'page' ? `${s.label} ${base}` : base;
+          if (by === 'citation' && base.startsWith('domain:')) goalMeta.set(base, { label: base.slice(7) });
+          const key = multi && ['page', 'goal', 'metric', 'job', 'bing'].includes(by) ? `${s.label} ${base}` : base;
           const map = row.date >= r.from ? cur : row.date <= prevTo ? prev : null;
           if (!map) continue;
           map.set(key, (map.get(key) || 0) + row.value);
@@ -647,23 +780,22 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const total = [...cur.values()].reduce((a, b) => a + b, 0);
     const rows = [...new Set([...cur.keys(), ...prev.keys()])]
       .map((key) => {
-        const value = cur.get(key) || 0;
-        const before = prev.get(key) || 0;
-        return { key, value, previous: before, change: before ? Math.round(((value - before) / before) * 1000) / 1000 : null, share: total ? Math.round((value / total) * 1000) / 1000 : 0 };
+        const { value, previous: before } = metricTotals.get(key) || { value: cur.get(key) || 0, previous: prev.get(key) || 0 };
+        return { key, value, previous: before, change: before && value != null ? Math.round(((value - before) / before) * 1000) / 1000 : null, share: total ? Math.round((value / total) * 1000) / 1000 : 0, ...goalMeta.get(key) };
       })
       .filter((row) => !only || row.key === only)
-      .sort((a, b) => b.value - a.value || b.previous - a.previous)
+      .sort((a, b) => Number(Boolean(b.summaryMetric)) - Number(Boolean(a.summaryMetric)) || b.value - a.value || b.previous - a.previous)
       .slice(0, Math.min(200, Math.max(1, Number(limit) || 25)));
     const dates = [];
     if (daily) {
       for (let d = r.from; d <= r.to; d = addDays(d, 1)) dates.push(d);
-      for (const row of rows) row.days = dates.map((d) => perDay.get(row.key)?.get(d) || 0);
+      for (const row of rows) row.days = dates.map((d) => perDay.get(row.key)?.get(d) ?? ((by === 'citation' && !citationDates.has(d)) || row.sparse || (row.summary && row.summary !== 'sum') ? null : 0));
     }
     return {
       from: r.from, to: r.to, previous: { from: prevFrom, to: addDays(r.from, -1) }, site: sc.key, by,
       ...(daily ? { dates } : {}),
-      metric: by === 'query' ? 'clicks' : 'sessions',
-      note: 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
+      metric: by === 'bing' ? 'clicks' : by === 'job' || by === 'metric' ? 'value' : by === 'citation' ? 'answers' : by === 'query' ? 'clicks' : by === 'goal' ? 'people' : 'sessions',
+      note: by === 'bing' ? 'Daily search traffic reported by Bing Webmaster Tools.' : by === 'job' ? 'Saved values from Timeline Jobs.' : by === 'metric' ? 'Daily values from connected metrics.' : by === 'citation' ? 'Answers citing each domain. Days without checks are blank.' : by === 'goal' ? 'Daily counts by goal or metric.' : 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
       rows,
       errors,
     };
@@ -672,11 +804,12 @@ export function createCalendar({ store, history, annotations, extensions = null,
   async function rangeEvents({ from = '', to = '', site = 'all' } = {}) {
     const r = span(from, to);
     const sc = await scope(site);
-    const [events, alerts] = await Promise.all([eventsFor(sc, r.from, r.to), alertsFor(sc, r.from, r.to)]);
+    const [events, alerts, customTypes] = await Promise.all([eventsFor(sc, r.from, r.to), alertsFor(sc, r.from, r.to), annotations.customTypes?.(sc.scopes) || []]);
     return {
       from: r.from, to: r.to, site: sc.key,
-      events: events.map(({ id, date, label, kind, source, url, scope: sc2 }) => ({ id, date, label, kind, source, url, scope: sc2 })),
-      alerts: alerts.map(({ id, day, title, detail, rule, direction, link }) => ({ id, date: day, title, detail, rule, direction, link })),
+      events: events.map(({ id, date, label, kind, source, url, scope: sc2, page, author, body, eventType, value }) => ({ id, date, label, kind, source, url, scope: sc2, ...(kind === 'custom' ? { eventType, value, ...(body ? { body: String(body).slice(0, 400) } : {}) } : {}), ...(page ? { page } : {}), ...(author ? { author, body: body ? String(body).slice(0, 400) : undefined } : {}) })),
+      customTypes,
+      alerts: alerts.map((a) => ({ ...timelineAlert(a), date: a.day })),
     };
   }
 

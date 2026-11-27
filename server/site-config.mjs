@@ -13,7 +13,7 @@
 // A file that doesn't parse or validate is reported and not applied at all, so
 // half a config never mixes with Studio's guesses. The spec is docs/sitelens-yml.md.
 
-import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import YAML from 'yaml';
@@ -44,7 +44,7 @@ export const KINDS = {
 };
 
 // Studio's alert rules a site may tune; the rest aren't per site.
-const SITE_RULES = { traffic: 'GA4 sessions & users', search: 'Search Console clicks' };
+const SITE_RULES = { traffic: 'Sessions & users (GA4, Plausible or PostHog)', search: 'Search Console clicks' };
 export const GOAL_ALERT_DEFAULTS = Object.freeze({ when: 'drop', pct: 0.5, min: 5 });
 
 const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search', 'metrics'];
@@ -569,6 +569,76 @@ export function replaceSection(text, key, sectionYaml, { host = '' } = {}) {
   return lines.join('\n');
 }
 
+// The goals: section written from the Goals form's rows ({ label, source, match,
+// role, value, alert: { when, pct (fraction), min } | null }), one flow line per goal.
+// `oldText` is the section as the file has it now: the comments above the key stay,
+// and each goal keeps the comment lines above it when it's still there (matched by
+// its event, page or source, else by its label). New goals have none.
+const flowScalar = (v) => {
+  const s = YAML.stringify(v, { lineWidth: 0 }).trimEnd();
+  // Plain is fine unless it would read as something else inside { }.
+  return typeof v === 'string' && /[,{}[\]]/.test(v) && !/^["']/.test(s) ? JSON.stringify(v) : s;
+};
+const flowMap = (obj) => `{ ${Object.entries(obj).map(([k, v]) => `${k}: ${isMap(v) ? flowMap(v) : flowScalar(v)}`).join(', ')} }`;
+
+function goalFlow(g) {
+  const out = {};
+  if (g.source === 'event') out.event = String(g.match || '').trim();
+  else if (g.source === 'page') out.page = String(g.match || '').trim();
+  else out.source = g.source;
+  const label = String(g.label || '').trim();
+  if (label && label !== out.event && label !== out.page && label !== GOAL_SOURCES[g.source]?.label) out.label = label;
+  if (g.role === 'step') out.role = 'step';
+  if (Number(g.value) > 0) out.value = Number(g.value);
+  if (g.alert) {
+    const a = { when: g.alert.when || GOAL_ALERT_DEFAULTS.when, pct: Number(g.alert.pct ?? GOAL_ALERT_DEFAULTS.pct), min: Number(g.alert.min ?? GOAL_ALERT_DEFAULTS.min) };
+    const same = a.when === GOAL_ALERT_DEFAULTS.when && a.pct === GOAL_ALERT_DEFAULTS.pct && a.min === GOAL_ALERT_DEFAULTS.min;
+    out.alert = same ? true : { when: a.when, pct: Math.round(a.pct * 100), min: a.min };
+  }
+  return out;
+}
+
+const goalKey = (raw) => {
+  if (!isMap(raw)) return '';
+  if (raw.event !== undefined) return `event:${String(raw.event).trim()}`;
+  if (raw.page !== undefined) return `page:${String(raw.page).trim()}`;
+  if (raw.source !== undefined) return `source:${String(raw.source).trim()}`;
+  return '';
+};
+const commentLines = (c, indent) => (c ? c.split('\n').map((l) => (l.trim() ? `${indent}#${l}` : '')) : []);
+
+export function goalsSection(oldText, goals) {
+  if (!Array.isArray(goals)) throw new ValidationError('goals must be a list.');
+  if (!goals.length) return '';
+  const lines = String(oldText || '').split('\n');
+  const keyAt = lines.findIndex((l) => /^goals\s*:/.test(l));
+  const head = keyAt > 0 ? lines.slice(0, keyAt) : [];
+  // Each old goal's comment: the yaml library puts the first item's on the list itself.
+  const byKey = new Map();
+  const byLabel = new Map();
+  if (keyAt >= 0) {
+    const seq = YAML.parseDocument(lines.slice(keyAt).join('\n')).get('goals', true);
+    if (YAML.isSeq(seq)) {
+      seq.items.forEach((item, i) => {
+        const comment = i === 0 ? [seq.commentBefore, item.commentBefore].filter(Boolean).join('\n') : item.commentBefore;
+        if (!comment) return;
+        const raw = item.toJSON?.() ?? item;
+        const key = goalKey(raw);
+        if (key && !byKey.has(key)) byKey.set(key, comment);
+        if (raw?.label && !byLabel.has(raw.label)) byLabel.set(String(raw.label), comment);
+      });
+    }
+  }
+  const body = goals.flatMap((g) => {
+    const flow = goalFlow(g);
+    const key = goalKey(flow);
+    const comment = byKey.get(key) ?? (flow.label ? byLabel.get(flow.label) : undefined);
+    if (byKey.has(key)) byKey.delete(key);
+    return [...commentLines(comment, '  '), `  - ${flowMap(flow)}`];
+  });
+  return [...head, 'goals:', ...body].join('\n');
+}
+
 /* ---------- loading ---------- */
 
 // A link to a .sitelens.yml on GitHub, on any branch, as copied from the
@@ -835,6 +905,14 @@ export function createSiteConfig({ dir, repos = async () => [], getToken = async
       cache.clear(`${site.id}:`);
       return get(site);
     },
+    // Stop using Kauzl's copy, so the repo's file (or Kauzl's guesses) applies again.
+    async removeLocal(site) {
+      const host = cleanHost(site.host);
+      await Promise.all(['yml', 'yaml'].map((ext) => rm(join(dir, `${host}.${ext}`), { force: true })));
+      cache.clear(`${site.id}:`);
+      lastGood.delete(site.id);
+      return get(site, { fresh: true });
+    },
     forget(siteId) {
       cache.clear(`${siteId}:`);
       lastGood.delete(siteId);
@@ -920,6 +998,24 @@ export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInpu
       if (result.saved === 'local') onChange(site);
       return result;
     }],
+    // The Goals form: rows in, the goals: section written from them (comments kept), then saved like any section.
+    ['POST', /^\/api\/sites\/([\w-]+)\/config\/goals$/, async ({ match, body }) => {
+      const site = await siteOr404(match[1]);
+      const current = await siteConfig.get(site, { fresh: true });
+      const yaml = goalsSection(current.found ? sectionText(current.text, 'goals') : '', body.goals);
+      // to: 'kauzl' keeps the whole file, with the new goals, as Kauzl's own copy: it applies now and
+      // wins over the repo's file from then on. Otherwise the change goes where the file is.
+      if (body.to === 'kauzl' && current.source?.type !== 'local') {
+        if (site.demo) throw new ValidationError('The demo site’s config can’t be changed.');
+        const text = replaceSection(current.found ? current.text : '', 'goals', yaml, { host: cleanHost(site.host) });
+        await siteConfig.saveLocal(site, text);
+        onChange(site);
+        return { saved: 'local' };
+      }
+      const result = await siteConfig.saveSection(site, 'goals', yaml);
+      if (result.saved === 'local') onChange(site);
+      return result;
+    }],
     // Read the file from a pasted GitHub link (any branch); an empty link goes back to the repos.
     ['POST', /^\/api\/sites\/([\w-]+)\/config\/link$/, async ({ match, body }) => {
       const site = await siteOr404(match[1]);
@@ -932,6 +1028,15 @@ export function siteConfigRoutes({ siteConfig, siteOr404, firedEvents, draftInpu
       onChange(site);
       return result;
     }],
+    // Back to the repo's file: Kauzl's copy is deleted (the repo isn't touched).
+    ['POST', /^\/api\/sites\/([\w-]+)\/config\/local\/remove$/, async ({ match }) => {
+      const site = await siteOr404(match[1]);
+      if (site.demo) throw new ValidationError('The demo site’s config can’t be changed.');
+      const result = await siteConfig.removeLocal(site);
+      onChange(site);
+      return result;
+    }],
+    // Kauzl's own copy of the whole file (the app's "Keep in Kauzl", and Claude's save_site_config).
     ['POST', /^\/api\/sites\/([\w-]+)\/config\/local$/, async ({ match, body }) => {
       const site = await siteOr404(match[1]);
       if (site.demo) throw new ValidationError('The demo site’s config can’t be changed.');

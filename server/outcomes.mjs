@@ -8,8 +8,8 @@
 import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { baseDomain } from '../shared/sitelens/site.js';
-import { listingAnalytics } from './cws-ga.mjs';
-import { historyRange, SourceError } from './github.mjs';
+import { listingAnalytics, listingInstallDays } from './cws-ga.mjs';
+import { githubRepoSeries, historyRange, SourceError } from './github.mjs';
 import { sourceFamily, pctChange, formatPct } from './journey.mjs';
 import { createCache } from './cache.mjs';
 
@@ -381,7 +381,7 @@ export function rollup(measured) {
 
 // ---------- the service ----------
 
-export function createOutcomes({ store, products, auth, listingProperty, siteConfig = null, cacheDb = null, now = Date.now }) {
+export function createOutcomes({ store, products, auth, listingProperty, githubDbPath = () => null, siteConfig = null, cacheDb = null, now = Date.now }) {
   // Whole results, saved to disk so a restart doesn't send every report again.
   const cache = createCache({ db: cacheDb, name: 'outcomes', staleFor: cacheDb ? STALE_FOR : 0, now });
   // Each part that loaded, so a retry after a partial failure only asks for what failed.
@@ -647,8 +647,90 @@ export function createOutcomes({ store, products, auth, listingProperty, siteCon
     }
   }
 
+  // The goals a site is measured by, as the Goals page picks them: its .sitelens.yml,
+  // else its product's goals, else a guess from the events it sends.
+  async function siteGoals(site, product) {
+    const fileGoals = (await siteConfig?.applied(site))?.goals || null;
+    if (fileGoals?.length) return fileGoals;
+    if (product?.goals?.length) return product.goals;
+    const base = site.propertyId ? await pieces.wrap(`${site.id}:28d:${historyRange('28d', now()).end}:site`, TTL, false, () => siteEvents(site, historyRange('28d', now()))).catch(() => null) : null;
+    return autoGoals(classifyEvents(base?.events || []), { hasStore: Boolean(product?.extensionIds?.length), hasRepos: Boolean(product?.repos?.length) });
+  }
+
+  // People reaching each event or page goal, per day: { goals: [{ key, label }], rows: [{ date, key, value }] }.
+  async function goalDays(site, from, to) {
+    if (!site || site.demo) return { goals: [], rows: [] };
+    const product = (await products.list()).find((p) => p.siteId === site.id);
+    const configured = await siteGoals(site, product);
+    const goals = configured.filter((g) => site.propertyId && (g.source === 'event' || g.source === 'page') && g.match);
+    const installs = product?.extensionIds || [];
+    const installGoals = configured.filter((g) => g.source === 'installs');
+    if (installs.length && !installGoals.length) installGoals.push({ source: 'installs', label: 'Extension installs' });
+    const label = (g) => g.label || g.match;
+    const repos = product?.repos || [];
+    const repoGoals = configured.filter((g) => g.source === 'downloads' || g.source === 'stars');
+    const sig = JSON.stringify([goals, installGoals, installs, repoGoals, repos]);
+    const key = `${site.id}:goal-days:${from}:${to}:${sig}`;
+    const result = await pieces.wrap(key, TTL, false, async () => {
+      const dateRanges = [{ startDate: from, endDate: to }];
+      const events = goals.filter((g) => g.source === 'event');
+      const pages = goals.filter((g) => g.source === 'page');
+      const dates = Array.from({ length: Math.round((Date.parse(to) - Date.parse(from)) / DAY) + 1 }, (_, i) => addDays(from, i));
+      const errors = [];
+      const read = async (name, fn) => {
+        try {
+          return await fn();
+        } catch (err) {
+          errors.push(`${name}: ${err.message}`);
+          return null;
+        }
+      };
+      const [installDays, eventRows, ...pageRows] = await Promise.all([
+        Promise.all(installs.map((id) => read('Extension installs', async () =>
+          listingInstallDays({ token: await auth.token(), propertyId: await listingProperty(id), range: { start: from, end: to, dates } })))),
+        events.length ? read('Event goals', () => report(site, { dateRanges, dimensions: [{ name: 'date' }, { name: 'eventName' }], metrics: [{ name: 'totalUsers' }], dimensionFilter: eventIn(events.map((g) => g.match)), limit: 10_000 })) : [],
+        ...pages.map((g) => read(label(g), () => report(site, { dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'totalUsers' }], dimensionFilter: pageIs(g.match), limit: 1000 }))),
+      ]);
+      const rows = [];
+      for (const r of eventRows || []) {
+        for (const g of events.filter((e) => e.match === r.eventName)) rows.push({ date: isoFromGa(r.date), key: label(g), value: n(r.totalUsers) });
+      }
+      pages.forEach((g, i) => { for (const r of pageRows[i] || []) rows.push({ date: isoFromGa(r.date), key: label(g), value: n(r.totalUsers) }); });
+      const measured = [...(eventRows ? events : []), ...pages.filter((_, i) => pageRows[i])];
+      const knownInstalls = installDays.filter(Boolean);
+      if (knownInstalls.length) {
+        measured.push(...installGoals);
+        for (const goal of installGoals) {
+          dates.forEach((date, i) => rows.push({ date, key: label(goal), value: sum(knownInstalls.map((days) => days[i])) }));
+        }
+      }
+      const path = repos.length && repoGoals.length ? githubDbPath() : null;
+      if (path) {
+        const repoDates = [addDays(from, -1), ...dates];
+        const data = await read('GitHub goals', () => githubRepoSeries(path, repos, { start: repoDates[0], end: to, dates: repoDates }, { includeHistory: true }));
+        for (const goal of repoGoals) {
+          if (!data?.length) continue;
+          measured.push({ ...goal, sparse: true });
+          dates.forEach((date, i) => {
+            const values = data.map((repo) => {
+              if (goal.source === 'downloads') return repo.downloadHistory[i + 1];
+              const before = repo.series.stars[i];
+              const current = repo.series.stars[i + 1];
+              return repo.firstStarSnapshot && repo.firstStarSnapshot < date ? Math.max(0, current - before) : null;
+            }).filter(Number.isFinite);
+            if (values.length) rows.push({ date, key: label(goal), value: sum(values) });
+          });
+        }
+      }
+      return { goals: measured.map((g) => ({ key: label(g), source: g.source, match: g.match, ...(g.sparse ? { sparse: true } : {}) })), rows, errors };
+    });
+    if (result.errors.length) pieces.clear(key);
+    return result;
+  }
+
   return {
     suggest,
+    goalDays,
     // Every event name the site sent in the range (GA4 API), or null without GA4.
     async eventNames(site, rangeKey = '28d') {
       if (!site || site.demo || !site.propertyId) return null;

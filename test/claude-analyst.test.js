@@ -62,7 +62,7 @@ test('analyze: reads with the MCP tools, then saves one Claude comment on the fi
     assert.match(first.messages[0].content, /Cool Desk[\s\S]*2026-10-01 to 2026-10-31[\s\S]*Why the spike\?/);
     const names = first.tools.map((t) => t.name);
     assert.ok(names.includes('save_comment') && names.includes('list_comments'));
-    assert.ok(!names.includes('add_comment') && !names.includes('delete_comment'), 'no MCP write tools in-app');
+    assert.ok(!names.includes('add_comment') && !names.includes('delete_comment') && !names.includes('save_site_config'), 'no MCP write tools in-app');
     const result = second.messages[2].content[0];
     assert.equal(result.type, 'tool_result');
     assert.equal(result.tool_use_id, 't1');

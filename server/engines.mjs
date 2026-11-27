@@ -49,9 +49,38 @@ export function personOf(r) {
     pages, did, engaged: Boolean(r.engaged),
   };
 }
+// One warehouse session → a Live-shaped person (no city: the export's sessions don't keep it).
+export function dayPerson(r) {
+  const ms = (ts) => Math.round(Number(ts) / 1000);
+  const pages = [];
+  const did = [];
+  for (const step of r.steps || []) {
+    if (step.k.startsWith('page:')) {
+      const path = step.k.slice(5) || '/';
+      if (pages.at(-1)?.path !== path) pages.push({ path, title: '', ms: ms(step.ts) });
+    } else if (step.k.startsWith('event:')) {
+      const name = step.k.slice(6);
+      if (ROUTINE.test(name) || did.some((d) => d.name === name)) continue;
+      const c = classifyEvents([{ name, users: 1 }]);
+      did.push({ name, kind: c.completions.length ? 'goal' : c.intents.length ? 'intent' : 'other', ms: ms(step.ts) });
+    }
+  }
+  return {
+    id: `${String(r.user_id).slice(-6)}-${r.session_id}`,
+    first: ms(r.started_at), last: ms(r.ended_at),
+    device: r.device || '', browser: r.browser && r.browser !== '(not set)' ? r.browser : '', os: /^(Mac|Windows|Linux|Chromebooks)$/.test(r.system || '') ? r.system : '',
+    city: '', country: r.country && r.country !== '(not set)' ? r.country : '',
+    source: r.visit_source || '(direct)', new: !r.returning,
+    pages, did,
+  };
+}
+
 const WAREHOUSE_TTL = 60 * 60_000;
 // Past its TTL, a result still shows (up to this age) while a fresh one loads.
 const STALE_FOR = 24 * 60 * 60_000;
+const EVENT_GOAL = /^event:[A-Za-z][\w]{0,39}$/;
+const PAGE_GOAL = /^page:\/[^\s]{0,200}$/;
+const validIsoDay = (date) => /^\d{4}-\d{2}-\d{2}$/.test(date) && new Date(`${date}T00:00:00Z`).toISOString().slice(0, 10) === date;
 
 export function createEngines({ auth, bigquery, cacheDb = null }) {
   const cache = createCache({ db: cacheDb, name: 'engines', staleFor: cacheDb ? STALE_FOR : 0 });
@@ -195,6 +224,9 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
   async function rangeFor(site, rangeKey) {
     if (site.demo) return sql.warehouseRange(rangeKey);
     const bq = requireBq(site);
+    if (validIsoDay(rangeKey) && bq.endDate && rangeKey > bq.endDate) {
+      throw new EngineError(`This site’s BigQuery export ends on ${bq.endDate}.`, { kind: 'no-data' });
+    }
     const range = sql.warehouseRange(rangeKey, { endDate: bq.endDate || '' });
     // Session views on a rollup table filter by session_date, not by export tables.
     if (bq.sessionsTable) return range;
@@ -374,6 +406,46 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     };
   }
 
+  async function daySummary(site, date, goalKeys = [], flags) {
+    if (!validIsoDay(date)) throw new EngineError('Pick a date (YYYY-MM-DD).');
+    const keys = [...new Set(goalKeys)];
+    if (keys.some((key) => typeof key !== 'string' || (!EVENT_GOAL.test(key) && !PAGE_GOAL.test(key)))) {
+      throw new EngineError('Goal keys must be event names or page paths.');
+    }
+    const range = await rangeFor(site, date);
+    if (site.demo) return { ...meta(site, range), summary: demo.demoSessionsSummary(range, keys) };
+    const result = await run(site, sql.sessionsSummarySql(requireBq(site), range, { goalKeys: keys }), flags);
+    const row = result.rows[0] || {};
+    return {
+      ...meta(site, range, [result]),
+      summary: {
+        sessions: Number(row.sessions) || 0,
+        people: Number(row.people) || 0,
+        returning: Number(row.returning) || 0,
+        goals: (row.goals || []).map((goal) => ({
+          key: String(goal.key),
+          completions: Number(goal.completions) || 0,
+          people: Number(goal.people) || 0,
+        })),
+      },
+    };
+  }
+
+  // One day's visitors, shaped like Live's people (personOf) so the Timeline can
+  // draw them the same way: pages and own events in order, goals marked.
+  async function daySessions(site, date, flags) {
+    if (!validIsoDay(date)) throw new EngineError('Pick a date (YYYY-MM-DD).');
+    const range = await rangeFor(site, date);
+    let rows;
+    let result = null;
+    if (site.demo) rows = demo.demoDaySessions(range);
+    else {
+      result = await run(site, sql.daySessionsSql(requireBq(site), range), flags);
+      rows = result.rows;
+    }
+    return { ...meta(site, range, [result]), people: rows.map(dayPerson) };
+  }
+
   async function events(site, rangeKey, flags) {
     const range = await eventsRange(site, rangeKey);
     if (site.demo) return { ...meta(site, range), events: demo.demoEventsCatalog(range).map(eventRow) };
@@ -549,6 +621,8 @@ export function createEngines({ auth, bigquery, cacheDb = null }) {
     segments,
     sessions,
     sessionsSummary,
+    daySummary,
+    daySessions,
     events,
     eventDetail,
     breakdown,

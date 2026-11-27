@@ -21,7 +21,7 @@ const LAND = [
 ];
 
 // Middle of each country (longitude, latitude), by ISO code, as GA4's countryId gives it.
-const CENTRE = {
+export const CENTRE = {
   US: [-98, 39], CA: [-106, 56], MX: [-102, 23], BR: [-52, -10], AR: [-64, -34], CL: [-71, -33], CO: [-74, 4], PE: [-76, -10], VE: [-66, 7], EC: [-78, -1.5], UY: [-56, -33], PY: [-58, -23], BO: [-64, -17],
   CR: [-84, 10], PA: [-80, 9], GT: [-90, 15], DO: [-70, 19], PR: [-66, 18], CU: [-79, 22], JM: [-77, 18],
   GB: [-2, 54], IE: [-8, 53], FR: [2.5, 46.5], DE: [10.5, 51], NL: [5.3, 52.2], BE: [4.5, 50.6], LU: [6.1, 49.8], CH: [8.2, 46.8], AT: [14.5, 47.5], ES: [-3.7, 40.3], PT: [-8, 39.6], IT: [12.5, 42.8],
@@ -35,10 +35,10 @@ const CENTRE = {
   AU: [134, -25.3], NZ: [172, -41.3],
 };
 
-const W = 360;
-const H = 150;
-const lonX = (lon) => ((lon + 170) / 360) * W;
-const latY = (lat) => ((78 - lat) / 136) * H;
+export const W = 360;
+export const H = 150;
+export const lonX = (lon) => ((lon + 170) / 360) * W;
+export const latY = (lat) => ((78 - lat) / 136) * H;
 
 const inPoly = (x, y, poly) => {
   let o = false;
@@ -51,7 +51,7 @@ const inPoly = (x, y, poly) => {
 };
 
 let DOTS = null;
-function landDots() {
+export function landDots() {
   if (DOTS) return DOTS;
   DOTS = [];
   for (let lat = 76; lat >= -56; lat -= 3.4) {
@@ -62,8 +62,27 @@ function landDots() {
   return DOTS;
 }
 
+// Zoom to where the pins are when they sit in one region (two or more
+// countries; a single pin stays on the whole world). Pins: { x, y }.
+export function fitView(pins, phone = false) {
+  let vb = [0, 0, W, H];
+  if (pins.length > 1) {
+    const xs = pins.map((p) => p.x);
+    const ys = pins.map((p) => p.y);
+    const spanX = Math.max(...xs) - Math.min(...xs);
+    if (phone || spanX < W * 0.45) {
+      const w = Math.min(W, Math.max(spanX + 90, phone ? 160 : 220));
+      const h = (w * H) / W;
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
+      const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      vb = [Math.max(0, Math.min(W - w, cx - w / 2)), Math.max(0, Math.min(H - h, cy - h / 2)), w, h];
+    }
+  }
+  return vb;
+}
+
 // feed: the live visitor groups ({ ago, code, country, city, users }).
-export function LiveMap({ feed, phone = false }) {
+export function LiveMap({ feed, phone = false, picked = '', onPick }) {
   const { pins, vb, labels } = useMemo(() => {
     const byCountry = new Map();
     for (const r of feed) {
@@ -80,21 +99,7 @@ export function LiveMap({ feed, phone = false }) {
       // One city names the pin; several fall back to the country.
       return { ...c, x: lonX(lon), y: latY(lat), name: c.cities.size === 1 ? top : c.country };
     });
-    // Zoom to where the visitors are when they sit in one region (two or more
-    // countries; a single pin stays on the whole world).
-    let vb = [0, 0, W, H];
-    if (pins.length > 1) {
-      const xs = pins.map((p) => p.x);
-      const ys = pins.map((p) => p.y);
-      const spanX = Math.max(...xs) - Math.min(...xs);
-      if (phone || spanX < W * 0.45) {
-        const w = Math.min(W, Math.max(spanX + 90, phone ? 160 : 220));
-        const h = (w * H) / W;
-        const cx = (Math.min(...xs) + Math.max(...xs)) / 2;
-        const cy = (Math.min(...ys) + Math.max(...ys)) / 2;
-        vb = [Math.max(0, Math.min(W - w, cx - w / 2)), Math.max(0, Math.min(H - h, cy - h / 2)), w, h];
-      }
-    }
+    const vb = fitView(pins, phone);
     // Name the places with someone on now, skipping a name that would sit on another.
     const placed = [];
     const labels = [];
@@ -115,7 +120,11 @@ export function LiveMap({ feed, phone = false }) {
         aria-label={pins.length ? `Map: people in ${pins.map((p) => p.country).join(', ')}` : 'Map: nobody in the last 30 minutes'}>
         <g class="lv-land">{landDots().map(([x, y], i) => <circle key={i} cx={x.toFixed(1)} cy={y.toFixed(1)} r={(0.85 * Math.max(0.6, k)).toFixed(2)} />)}</g>
         {pins.map((p) => (
-          <g key={p.code} class={`lv-pin${p.fresh ? ' fresh' : ''}`} transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${k.toFixed(3)})`}>
+          <g key={p.code} class={`lv-pin${p.fresh ? ' fresh' : ''}${onPick ? ' pick' : ''}${picked === p.code ? ' on' : ''}${picked && picked !== p.code ? ' dim' : ''}`}
+            transform={`translate(${p.x.toFixed(1)} ${p.y.toFixed(1)}) scale(${k.toFixed(3)})`}
+            onClick={onPick ? () => onPick(picked === p.code ? '' : p.code) : undefined}>
+            {onPick && <circle class="lv-pin-hit" r="22" />}
+            {picked === p.code && <circle class="lv-pin-sel" r="6" />}
             <title>{`${p.country}: ${p.users} in the last 30 minutes${p.cities.size ? ` (${[...p.cities.keys()].slice(0, 4).join(', ')})` : ''}`}</title>
             {p.fresh && <circle class="ring" r="3" />}
             <circle class="core" r={Math.min(6, 1.6 + p.users * 0.5).toFixed(1)} />

@@ -113,10 +113,10 @@ function downloadDeltas(snapshots, range) {
     if (prev !== null && s.downloads >= prev) perDay.set(day(s.date), (perDay.get(day(s.date)) || 0) + (s.downloads - prev));
     prev = s.downloads;
   }
-  return range.dates.map((d) => perDay.get(d) || 0);
+  return range.dates.map((d) => perDay.get(d) ?? null);
 }
 
-function loadAll(db, range, repoFilter = null) {
+function loadAll(db, range, repoFilter = null, includeHistory = false) {
   const repos = db
     .prepare('SELECT id, name, description, archived, fork FROM repos WHERE hidden = 0 ORDER BY name')
     .all()
@@ -149,7 +149,8 @@ function loadAll(db, range, repoFilter = null) {
     const daily = (field) => range.dates.map((d) => inRange.find((r) => day(r.date) === d)?.[field] || 0);
     const stars = carry(rows, 'stars', range);
     const forks = carry(rows, 'forks', range);
-    const downloads = downloadDeltas(releases.get(repo.id) || [], range);
+    const downloadHistory = downloadDeltas(releases.get(repo.id) || [], range);
+    const downloads = downloadHistory.map((value) => value ?? 0);
     const series = {
       views: daily('views_count'),
       uniques: daily('views_uniques'),
@@ -171,6 +172,7 @@ function loadAll(db, range, repoFilter = null) {
       uniques: sum(series.uniques),
       clones: sum(series.clones),
       downloads: sum(downloads),
+      ...(includeHistory ? { downloadHistory, firstStarSnapshot: rows.find((row) => row.stars != null)?.date.slice(0, 10) || null } : {}),
       downloadsTotal: totalDownloads.get(repo.id) || 0,
       lastSeen: rows.length ? day(rows.at(-1).date) : '',
       series,
@@ -263,7 +265,6 @@ export function githubStatus(path) {
 
 // Daily series for a set of repos over any { start, end, dates } range, e.g. a
 // doubled range for previous-period deltas. Used by the product page.
-export function githubRepoSeries(path, names, range) {
-  const wanted = new Set(names);
-  return withDb(path, (db) => loadAll(db, range).filter((r) => wanted.has(r.name)));
+export function githubRepoSeries(path, names, range, { includeHistory = false } = {}) {
+  return withDb(path, (db) => loadAll(db, range, new Set(names), includeHistory));
 }

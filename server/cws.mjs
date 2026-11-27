@@ -1,20 +1,53 @@
-// Chrome Web Store stats. The store has no analytics API, so Studio builds its
-// own history from two sources:
-//  - the public listing page (users, rating, version), snapshotted once a day;
-//  - CSV exports from the developer dashboard (installs, uninstalls, weekly
-//    users…) that the user uploads. Any "date + numeric columns" CSV works.
+// Extension store stats: Chrome Web Store, Microsoft Edge Add-ons and Firefox
+// Add-ons. None has an analytics API for listings, so Studio builds its own
+// history: each listing's users, rating and version, snapshotted once a day.
+// Chrome also takes CSV exports from its developer dashboard (installs,
+// uninstalls, weekly users…). Any "date + numeric columns" CSV works.
+//
+// Where each store's numbers come from:
+//  - chrome: the public listing page (HTML, parsed).
+//  - edge: the store's own JSON for a listing, by its 32-letter ID.
+//  - firefox: addons.mozilla.org's public API (v5), by slug or numeric ID.
+//
+// IDs: Chrome and Edge use the 32-letter extension ID; a Firefox add-on is
+// `firefox-<numeric id>`, which stays put when its slug changes.
 
 import { SourceError } from './github.mjs';
 
 const ID_RE = /^[a-p]{32}$/;
+// Every ID an extension can have here, for routes and product links.
+export const EXTENSION_ID_RE = /^(?:[a-p]{32}|firefox-\d{1,12})$/;
 const LISTING = (id) => `https://chromewebstore.google.com/detail/${id}?hl=en`;
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36';
+
+export const STORES = {
+  chrome: { label: 'Chrome Web Store', url: (id) => `https://chromewebstore.google.com/detail/${id}` },
+  edge: { label: 'Edge Add-ons', url: (id) => `https://microsoftedge.microsoft.com/addons/detail/${id}` },
+  firefox: { label: 'Firefox Add-ons', url: (id) => `https://addons.mozilla.org/firefox/addon/${id.replace(/^firefox-/, '')}/` },
+};
 
 // Accepts a bare ID or any Web Store URL containing one.
 export function parseExtensionId(input) {
   const match = String(input || '').trim().match(/[a-p]{32}/);
   if (!match || !ID_RE.test(match[0])) throw new SourceError('Paste a Chrome Web Store link or the 32-letter extension ID.', { kind: 'validation' });
   return match[0];
+}
+
+// A store link (or a bare ID with the store picked) → { store, ref }. `ref` is
+// the 32-letter ID for Chrome and Edge, a slug or numeric ID for Firefox.
+export function parseExtensionInput(input, storeHint = '') {
+  const text = String(input || '').trim();
+  const amo = text.match(/addons\.mozilla\.org\/(?:[\w-]+\/)?(?:firefox|android)\/addon\/([^/?#\s]+)/i);
+  if (amo) return { store: 'firefox', ref: decodeURIComponent(amo[1]) };
+  if (/microsoftedge\.microsoft\.com/i.test(text)) return { store: 'edge', ref: parseExtensionId(text) };
+  if (/chromewebstore\.google\.com|chrome\.google\.com/i.test(text)) return { store: 'chrome', ref: parseExtensionId(text) };
+  if (/^firefox-\d+$/.test(text)) return { store: 'firefox', ref: text.slice(8) };
+  if (storeHint === 'firefox') {
+    if (!/^[\w.@{}-]{2,120}$/.test(text)) throw new SourceError('Paste a Firefox Add-ons link, like addons.mozilla.org/firefox/addon/your-addon/.', { kind: 'validation' });
+    return { store: 'firefox', ref: text };
+  }
+  if (ID_RE.test(text)) return { store: storeHint === 'edge' ? 'edge' : 'chrome', ref: text };
+  throw new SourceError('Paste a Chrome Web Store, Edge Add-ons or Firefox Add-ons link.', { kind: 'validation' });
 }
 
 function decode(text) {
@@ -53,6 +86,70 @@ export function parseListing(html) {
     throw new SourceError('Could not read the Web Store listing — Google may have changed the page.', { kind: 'parse' });
   }
   return listing;
+}
+
+const dayText = (ms) => (Number.isFinite(ms) ? new Date(ms).toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'UTC' }) : '');
+
+async function getJson(url, fetchImpl, what) {
+  let res;
+  try {
+    res = await fetchImpl(url, { headers: { Accept: 'application/json', 'User-Agent': UA }, signal: AbortSignal.timeout(20_000) });
+  } catch (err) {
+    throw new SourceError(`Couldn’t reach ${what}: ${err.message}`, { kind: 'source' });
+  }
+  if (res.status === 404) return null;
+  if (!res.ok) throw new SourceError(`${what} returned HTTP ${res.status}.`, { kind: 'source' });
+  return res.json();
+}
+
+// Edge's listing JSON: an unknown ID answers 200 with no name.
+export function parseEdgeListing(j) {
+  if (!j?.name) return null;
+  const logo = j.logoUrl || '';
+  return {
+    title: String(j.name),
+    users: Number.isFinite(j.activeInstallCount) ? j.activeInstallCount : null,
+    usersPlus: false,
+    rating: Number.isFinite(j.averageRating) ? Math.round(j.averageRating * 10) / 10 : null,
+    ratings: Number.isFinite(j.ratingCount) ? j.ratingCount : null,
+    version: String(j.version || ''),
+    updated: dayText(j.lastUpdateDate * 1000),
+    icon: logo.startsWith('//') ? `https:${logo}` : logo,
+  };
+}
+
+export function parseFirefoxListing(j) {
+  if (!j?.id) return null;
+  const name = typeof j.name === 'string' ? j.name : j.name?.['en-US'] || Object.values(j.name || {})[0] || '';
+  return {
+    amoId: j.id,
+    slug: j.slug || '',
+    title: String(name),
+    users: Number.isFinite(j.average_daily_users) ? j.average_daily_users : null,
+    usersPlus: false,
+    rating: Number.isFinite(j.ratings?.average) ? Math.round(j.ratings.average * 10) / 10 : null,
+    ratings: Number.isFinite(j.ratings?.count) ? j.ratings.count : null,
+    version: String(j.current_version?.version || ''),
+    updated: dayText(Date.parse(j.last_updated)),
+    icon: j.icon_url || '',
+  };
+}
+
+// One listing from any store. For Firefox, `ref` may be a slug or numeric ID.
+export async function fetchStoreListing(store, ref, fetchImpl = fetch) {
+  if (store === 'edge') {
+    const j = await getJson(`https://microsoftedge.microsoft.com/addons/getproductdetailsbycrxid/${ref}?hl=en-US&gl=US`, fetchImpl, 'Edge Add-ons');
+    const listing = parseEdgeListing(j);
+    if (!listing) throw new SourceError(`No Edge Add-ons listing for ${ref}.`, { kind: 'notfound' });
+    return listing;
+  }
+  if (store === 'firefox') {
+    const j = await getJson(`https://addons.mozilla.org/api/v5/addons/addon/${encodeURIComponent(String(ref).replace(/^firefox-/, ''))}/`, fetchImpl, 'Firefox Add-ons');
+    const listing = parseFirefoxListing(j);
+    if (!listing) throw new SourceError(`No Firefox add-on called “${ref}”.`, { kind: 'notfound' });
+    return listing;
+  }
+  return fetchListing(ref, fetchImpl);
 }
 
 export async function fetchListing(id, fetchImpl = fetch) {
@@ -134,7 +231,8 @@ export function createExtensionTracker({ store, fetchImpl = fetch, log = console
   }
 
   async function snapshot(id) {
-    const listing = await fetchListing(id, fetchImpl);
+    const known = (await list()).find((e) => e.id === id);
+    const listing = await fetchStoreListing(known?.store || 'chrome', id, fetchImpl);
     await store.update((s) => {
       const ext = (s.extensions ||= []).find((e) => e.id === id);
       if (!ext) return;
@@ -150,15 +248,18 @@ export function createExtensionTracker({ store, fetchImpl = fetch, log = console
 
   return {
     list,
-    async add(input, label = '') {
-      const id = parseExtensionId(input);
-      const listing = await fetchListing(id, fetchImpl);
+    async add(input, label = '', storeHint = '') {
+      const { store: where, ref } = parseExtensionInput(input, storeHint);
+      const listing = await fetchStoreListing(where, ref, fetchImpl);
+      const id = where === 'firefox' ? `firefox-${listing.amoId}` : ref;
       await store.update((s) => {
         s.extensions ||= [];
-        if (!s.extensions.some((e) => e.id === id)) s.extensions.push({ id, label: String(label).slice(0, 80), history: [], imports: {} });
+        if (!s.extensions.some((e) => e.id === id)) {
+          s.extensions.push({ id, ...(where === 'chrome' ? {} : { store: where }), label: String(label).slice(0, 80), history: [], imports: {} });
+        }
       });
       await snapshot(id);
-      return { id, ...listing };
+      return { id, store: where, ...listing };
     },
     async remove(id) {
       await store.update((s) => {
@@ -190,7 +291,7 @@ export function createExtensionTracker({ store, fetchImpl = fetch, log = console
           try {
             await snapshot(ext.id);
           } catch (err) {
-            log.warn?.(`  Web Store snapshot failed for ${ext.id}: ${err.message}`);
+            log.warn?.(`  Store snapshot failed for ${ext.id}: ${err.message}`);
           }
         }
       };
@@ -209,15 +310,18 @@ export function extensionView(ext, range) {
   const before = [...(ext.history || [])].reverse().find((p) => p.date < range.start);
   const latest = ext.history?.at(-1) || null;
   const baseline = before || history[0] || null;
+  const where = STORES[ext.store] ? ext.store : 'chrome';
   return {
     id: ext.id,
+    store: where,
+    storeLabel: STORES[where].label,
     label: ext.label || ext.title || ext.id,
     title: ext.title || '',
     icon: ext.icon || '',
     version: ext.version || '',
     updated: ext.updated || '',
     checkedAt: ext.checkedAt || 0,
-    url: LISTING(ext.id).replace('?hl=en', ''),
+    url: STORES[where].url(ext.id),
     latest,
     usersChange: latest && baseline && latest.users !== null && baseline.users !== null && baseline !== latest ? latest.users - baseline.users : null,
     trackedSince: ext.history?.[0]?.date || '',

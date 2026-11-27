@@ -62,6 +62,19 @@ export default {
 <h2>The question neither answers</h2>
 <p>Both tools tell you what happened. Neither tells you whether it was because of something you did, like the title you rewrote or the article you published. Preview a new title with the <a href="/tools/serp-preview/">SERP preview tool</a>, then check the clicks before and after with the <a href="/tools/did-it-work/">Did it work? checker</a>. Kauzl puts Search Console, GA4 and your releases on one timeline, so that answer comes without exporting anything (<a href="/demo?to=story">see the demo</a>).</p>
 `,
+  goal: [
+    'Know what Search Console counts and what GA4 counts.',
+    'Compare clicks and sessions without confusing them.',
+  ],
+  steps: [
+    { text: 'Compare clicks and sessions over the same date range.' },
+    { text: 'In GA4, read only the google / organic row from Traffic acquisition.' },
+    { text: 'Use GA4’s Admin → Search Console link to connect the two.' },
+  ],
+  check: [
+    { q: 'Why do Search Console clicks and GA4 organic sessions differ?', options: ['Clicks are not sessions', 'Different time zones only', 'Different tools entirely', 'Privacy filtering only'], answer: 0, why: 'A click is not a session; most of the gap is that fact.' },
+    { q: 'Which tool answers “how do people find us in Google”?', options: ['Search Console', 'GA4', 'The Did it work checker', 'The SERP preview'], answer: 0, why: 'Search Console counts impressions and clicks on Google; GA4 counts sessions on your site.' },
+  ],
   faq: [
     ['Why is GA4 organic traffic lower than Search Console clicks?', 'Mostly because GA4 depends on a script that ad blockers, declined cookie banners and quick exits stop, while Google counts every click on its own results.'],
     ['Which is more accurate, Search Console or Google Analytics?', 'Each is accurate for what it measures. Search Console is the better count of clicks from Google; GA4 is the only one that shows what visitors do on your site.'],

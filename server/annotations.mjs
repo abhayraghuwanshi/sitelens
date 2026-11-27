@@ -11,12 +11,13 @@
 //   kind: 'release' | 'extension' | 'deploy' | 'note' | 'claude' | 'alert'
 //   scope: 'site:<id>' | 'repo:<owner/name>' | 'ext:<id>'; no scope = global.
 
+import { STORES } from './cws.mjs';
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { ValidationError } from './store.mjs';
 
-export const ANNOTATION_KINDS = ['release', 'extension', 'deploy', 'note', 'claude', 'alert', 'mention', 'post'];
+export const ANNOTATION_KINDS = ['release', 'extension', 'deploy', 'note', 'claude', 'alert', 'mention', 'post', 'custom'];
 export const NOTE_AUTHORS = ['you', 'claude'];
 const BODY_MAX = 4000;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -29,14 +30,14 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     sources.set(name, fn);
   }
 
-  registerSource('notes', async () => ((await store.get()).annotations || []).map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : 'note', source: 'notes' })));
+  registerSource('notes', async () => ((await store.get()).annotations || []).map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : n.kind === 'custom' ? 'custom' : 'note', source: 'notes' })));
   registerSource('github', async ({ from, to }) => githubReleases(githubDbPath(), { from, to }));
   registerSource('cws', async () => extensionVersions(extensions ? await extensions.list() : (await store.get()).extensions || []));
 
   async function list({ from = '', to = '', scopes = null, author = '' } = {}) {
     if (author) {
       const notes = ((await store.get()).annotations || []).filter((n) => (n.author || 'you') === author)
-        .map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : 'note', source: 'notes' }));
+        .map((n) => ({ ...n, kind: n.author === 'claude' ? 'claude' : n.kind === 'custom' ? 'custom' : 'note', source: 'notes' }));
       return filterAnnotations(notes, { from, to, scopes });
     }
     const results = await Promise.all([...sources].map(async ([name, fn]) => {
@@ -58,6 +59,14 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     const author = String(input.author || 'you');
     const body = String(input.body || '').trim();
     const url = String(input.url || '').trim();
+    const custom = input.kind === 'custom';
+    const eventType = custom ? String(input.eventType || '').trim().replace(/\s+/g, ' ') : '';
+    const value = custom && input.value != null && input.value !== '' ? Number(input.value) : 1;
+    if (custom && (!eventType || eventType.length > 60 || author !== 'you')) throw new ValidationError('Enter an event type of up to 60 characters.');
+    if (custom && (!Number.isFinite(value) || value < 0 || value > 1e12)) throw new ValidationError('Enter a value between 0 and 1 trillion.');
+    // The page a note is about (a path on the site), so it shows on that page's timeline.
+    const page = String(input.page || '').trim();
+    if (page && !/^\/[^\s?#]{0,300}$/.test(page)) throw new ValidationError('A page is a path on the site, like /pricing.');
     if (url && (!/^https?:\/\/\S+$/.test(url) || url.length > 500)) throw new ValidationError('Links must start with http:// or https://.');
     if (!NOTE_AUTHORS.includes(author)) throw new ValidationError(`Author must be one of: ${NOTE_AUTHORS.join(', ')}.`);
     if (body.length > BODY_MAX) throw new ValidationError(`Keep the write-up under ${BODY_MAX} characters.`);
@@ -65,9 +74,11 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     if (!label) throw new ValidationError('Write a short note.');
     if (scope && !SCOPE.test(scope)) throw new ValidationError('Scope must look like site:<id>, repo:<owner/name> or ext:<id>.');
     const note = {
-      id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: author === 'claude' ? 'claude' : 'note', source: 'notes',
+      id: `note-${randomUUID().slice(0, 8)}`, date, label, kind: custom ? 'custom' : author === 'claude' ? 'claude' : 'note', source: 'notes',
+      ...(custom ? { eventType, value } : {}),
       ...(scope ? { scope } : {}),
       ...(url ? { url } : {}),
+      ...(page ? { page } : {}),
       ...(author === 'claude' ? { author, body, via: input.via === 'app' ? 'app' : 'mcp', createdAt: new Date().toISOString(), ...(input.model ? { model: String(input.model).slice(0, 60) } : {}) } : body ? { body } : {}),
     };
     await store.update((s) => {
@@ -87,7 +98,17 @@ export function createAnnotations({ store, githubDbPath = () => null, extensions
     if (!found) throw new ValidationError('Only notes can be deleted, and that one no longer exists.');
   }
 
-  return { list, registerSource, addNote, removeNote };
+  async function customTypes(scopes) {
+    const custom = ((await store.get()).annotations || []).filter((item) => item.kind === 'custom' && item.eventType);
+    const types = new Map();
+    for (const item of filterAnnotations(custom, { scopes })) {
+      const key = item.eventType.toLowerCase();
+      if (!types.has(key)) types.set(key, item.eventType);
+    }
+    return [...types].sort((a, b) => a[1].localeCompare(b[1])).map(([key, label]) => ({ key, label }));
+  }
+
+  return { list, registerSource, addNote, removeNote, customTypes };
 }
 
 // Keeps annotations inside [from, to] whose scope is one of `scopes` (globals
@@ -142,7 +163,7 @@ export function extensionVersions(list) {
           label: `${ext.label || ext.title || 'Extension'} v${point.version}`,
           kind: 'extension',
           source: 'cws',
-          url: `https://chromewebstore.google.com/detail/${ext.id}`,
+          url: (STORES[ext.store] || STORES.chrome).url(ext.id),
           scope: `ext:${ext.id}`,
         });
       }

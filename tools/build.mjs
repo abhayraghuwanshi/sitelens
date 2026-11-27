@@ -14,7 +14,8 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { checkPage, checkGuide, checkSite, describe } from './seo-rules.mjs';
-import { owl } from './assets/lib/owl.js';
+import { owl, eye, owlSays } from './assets/lib/owl.js';
+import { COURSE, MODULES, COURSE_ORDER, PATHS, lessonNo, moduleOf, inCourseOrder } from './course.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 // Asset URLs carry a hash of the assets folder, so a deploy never pairs new
@@ -44,6 +45,9 @@ const ORDER = [
   'ai-robots-txt-generator', 'ai-crawler-log-analyzer', 'llms-txt-generator',
   'serp-preview', 'open-graph-preview', 'schema-generator',
 ];
+
+// The owl's line on the course page before anyone has answered anything.
+const COURSE_WELCOME = 'New here? Three quick questions, and I’ll pick your lessons.';
 
 // 24px line icons, drawn with currentColor (no emoji).
 const ICON_PATHS = {
@@ -79,7 +83,10 @@ async function loadGuides() {
   for (const g of guides) g.minutes = Math.max(3, Math.round(strip([g.body, ...(g.inShort || []), ...(g.faq || []).flat()].join(' ')).split(' ').length / 200));
   const bad = guides.map((g) => describe(`guides/${g.slug}`, checkGuide(g))).filter(Boolean);
   if (bad.length) throw new Error(`Guides break the GEO rules (tools/seo-rules.mjs, docs/seo-rules.md):\n${bad.join('\n')}`);
-  return guides.sort((a, b) => (a.order ?? 99) - (b.order ?? 99));
+  const badPath = Object.values(PATHS).flat().filter((s) => !guides.some((g) => g.slug === s));
+  if (badPath.length) throw new Error(`The course paths (tools/course.mjs) name lessons that are not in the course: ${[...new Set(badPath)].join(', ')}`);
+  ALL_GUIDES = guides;
+  return inCourseOrder(guides);
 }
 
 async function loadPages() {
@@ -97,7 +104,7 @@ let footer = '';
 const BUILT = [];
 // The link preview image for every page (Reddit, X, LinkedIn, Slack).
 const OG_IMAGE = `${SITE}${BASE}/assets/og.png`;
-const OG_ALT = 'Kauzl: you shipped it. Did it work? An owl over a before-and-after chart.';
+const OG_ALT = 'Kauzl, the analytics calendar: an owl over a month of website traffic, one day picked and explained.';
 
 function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website', skip = 'Skip to the tool', title, description, band, body, ld = [], scripts = [] }) {
   const html = `<!doctype html>
@@ -120,7 +127,7 @@ ${ld.map(jsonLd).join('\n')}
 <a class="skip" href="#main">${skip}</a>
 <header class="top"><div class="wrap">
   <div class="brand"><a class="home-link" href="${APP}/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a><a class="tag" href="${href('')}">free tools</a></div>
-  <nav aria-label="Main"><a href="${href('')}">Tools</a><a href="${ghref('')}">Guides</a><a href="${APP}/tour/">Look inside</a><a class="btn amber small" href="#early-access">Get early access</a></nav>
+  <nav aria-label="Main"><a href="${href('')}">Tools</a><a href="${ghref('')}">Course</a><a href="${APP}/tour/">Look inside</a><a class="btn amber small" href="#early-access">Get early access</a></nav>
 </div></header>
 ${band}
 <main class="wrap" id="main">${body}</main>
@@ -140,8 +147,8 @@ ${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}?v=${ASSET_V
 function cta(c = {}, from = 'tools') {
   return `<aside class="cta" id="early-access" aria-label="Get early access to Kauzl">
 <div class="cta-copy">${owl(56, { variant: 'paper' })}
-<h2>${c.title || 'You shipped it. Did it work?'}</h2>
-<p>${c.text || 'Kauzl lines up every change you ship with what happened next: traffic, search, mentions and AI answers. A straight answer, not another dashboard.'}</p>
+<h2>${c.title || 'See what happened on your site, day by day.'}</h2>
+<p>${c.text || 'Kauzl is an analytics calendar: each day’s traffic, search and AI answers next to what you shipped, posted and launched, and what moved and why.'}</p>
 <form class="join" method="post" action="${APP}/waitlist">
 <input type="hidden" name="from" value="${from}">
 <label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
@@ -171,7 +178,7 @@ ${cta(p.cta)}
 <article class="content">${p.content || ''}
 ${p.faq?.length ? `<h2>Questions</h2><div class="faq">${p.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : ''}
 </article>
-${reading.length ? `<h2 class="section-title">Read the guide</h2><div class="grid">${reading.map(guideTile).join('')}</div>` : ''}
+${reading.length ? `<h2 class="section-title">Learn it in the course</h2><div class="col more-guides"><ul>${reading.map(guideRow).join('')}</ul></div>` : ''}
 <h2 class="section-title">More free tools</h2>
 <div class="grid">${more.map(tile).join('')}</div>`;
   const ld = [{
@@ -189,57 +196,125 @@ ${reading.length ? `<h2 class="section-title">Read the guide</h2><div class="gri
   return layout({ slug: p.slug, page: `tool:${p.slug}`, title: p.title, description: p.description, band, body, ld, scripts: p.script ? [p.script] : [] });
 }
 
-const guideTile = (g) => `<a class="tile guide" href="${ghref(g.slug)}"><span class="kick">Guide · ${g.minutes} min read</span><h3>${esc(g.h1 || g.title)}</h3><p>${esc(g.blurb || g.description)}</p><span class="go" aria-hidden="true">Read →</span></a>`;
+// The guides are one free course, "Learn web analytics for your app": five
+// modules of numbered lessons, read in order or dipped into. The course itself
+// (name, modules, lesson order) lives in tools/course.mjs, the one source of
+// truth; a guide must be listed there to get a lesson number, one that isn't is
+// appended at the end.
 
-// One article: hero with title and date, an "In short" box, the body, FAQ,
-// the tools it uses, and the other guides.
+// The two lessons at the top of the index, each with a small picture of its point.
+const GUIDE_FEATURED = {
+  'web-analytics-tools': {
+    line: 'Seven kinds of analytics tool, the one question each answers, and which your app needs first.',
+    visual: `<ul class="fv-map"><li><span>Who came, and from where?</span><b>GA4 · Plausible · Umami</b></li><li><span>What do users do?</span><b>PostHog · Mixpanel</b></li><li><span>Why did they leave?</span><b>Clarity · Hotjar</b></li><li><span>Did my change work?</span><b class="a">Kauzl</b></li></ul>`,
+  },
+  'generative-engine-optimization': {
+    line: 'Why AI assistants skip small products, and what gets you named. With numbers from our own sites.',
+    visual: `<div class="fv-ba"><span>Used as a source</span><span class="t"><i style="width:23%"></i></span><b>5 of 22</b><span>Recommended</span><span class="t a"><i style="width:14%"></i></span><b>3 of 22</b></div><p class="fv-foot">Claude’s answers about three small products · Nov 2026</p>`,
+  },
+};
+let ALL_GUIDES = [];
+const guideRow = (g) => `<li><a class="row" href="${ghref(g.slug)}"><span class="course-eyebrow">${eye('todo', 16)}<span class="ic num" aria-label="Lesson ${lessonNo(g, ALL_GUIDES)}">${lessonNo(g, ALL_GUIDES)}</span></span><span><b>${esc(g.short || g.h1 || g.title)}</b><small>${esc(g.blurb || g.description)}</small><small class="mins">${g.minutes} min read</small></span></a></li>`;
+const guideFeature = (g) => `<a class="feature" href="${ghref(g.slug)}"><div><p class="kick">Lesson ${lessonNo(g, ALL_GUIDES)} · ${g.minutes} min read</p><h3>${esc(g.short || g.h1)}</h3><p>${GUIDE_FEATURED[g.slug].line}</p><span class="go">Start the lesson →</span></div><div class="fv" aria-hidden="true">${GUIDE_FEATURED[g.slug].visual}</div></a>`;
+const lessonLink = (g, dir) => g ? `<a class="lesson-link ${dir}" href="${ghref(g.slug)}"><span>${dir === 'prev' ? '← Previous' : 'Next →'} · Lesson ${lessonNo(g, ALL_GUIDES)}</span><b>${esc(g.short || g.h1)}</b></a>` : '<span></span>';
+
+// One lesson: hero with its place in the course, an "In short" box, the body,
+// FAQ, previous and next lessons, the tools it uses, and the rest of its module.
 function guidePage(g, guides, pages) {
   const tools = pages.filter((p) => (g.tools || []).includes(p.slug));
-  const others = guides.filter((o) => o.slug !== g.slug).slice(0, 3);
+  const ordered = inCourseOrder(guides);
+  const i = ordered.indexOf(g);
+  const n = lessonNo(g, guides);
+  const m = moduleOf(g.slug);
+  const modName = m >= 0 ? `Module ${m + 1}: ${MODULES[m].name}` : 'More lessons';
+  // The owl can only ever say the welcome and the module-finished lines; the
+  // checkpoint's own answers live in the goal/steps/check the build renders.
+  const checkpoint = (g) => {
+    if (!g.steps?.length && !g.check?.length) return '';
+    let html = `<h2>Checkpoint</h2>`;
+    if (g.steps?.length) html += `<h3>Do it now</h3><ul class="do-now">${g.steps.map((s, i) => `<li><label><input type="checkbox" data-step="${i}" /> <span>${s.text}${s.href ? ` <a href="${esc(s.href)}">${esc(s.href)}</a>` : ''}</span></label></li>`).join('')}</ul>`;
+    if (g.check?.length) html += `<h3>Check yourself</h3>${g.check.map((q, qi) => `<fieldset class="check"><legend>${q.q}</legend>${q.options.map((o, oi) => `<label><input type="radio" name="check-${qi}" value="${oi}"${q.answer === oi ? ' checked' : ''}> ${o}</label>`).join('')}${q.why ? `<details class="check-why"><summary>Why</summary><p>${q.why}</p></details>` : ''}</fieldset>`).join('')}`;
+    return html;
+  };
+  // Module crumb and breadcrumb: the module is a section of the course, so it
+  // links there rather than to a lesson.
+  const modCrumb = m >= 0 ? `<a href="${SITE}${GUIDES}/#module-${MODULES[m].id}">${esc(MODULES[m].name)}</a>` : esc(modName);
+  const sameModule = ordered.filter((o) => o !== g && moduleOf(o.slug) === m && m >= 0);
   const band = `<section class="band article-band"><div class="wrap band-in">
-<div class="band-copy"><p class="crumbs"><a href="${ghref('')}">Guides</a><span aria-hidden="true"> / </span>${esc(g.kicker || 'Analytics')}</p>
+<div class="band-copy"><p class="crumbs"><a href="${ghref('')}">${esc(COURSE.name)}</a><span aria-hidden="true"> / </span>${modCrumb}</p>
 <h1>${esc(g.h1 || g.title)}</h1><p class="lead">${g.lead || g.description}</p>
-<p class="article-meta">By the Kauzl team · Updated <time datetime="${g.updated || g.published}">${fmtDate(g.updated || g.published)}</time> · ${g.minutes} min read</p></div>
+<p class="article-meta"><span class="lesson-badge">Lesson ${n} of ${guides.length}</span><span class="lesson-head-eyes" aria-hidden="true">${m >= 0 ? MODULES[m].lessons.map((l) => eye('todo', 16)).join('') : ''}</span> By the Kauzl team · Updated <time datetime="${g.updated || g.published}">${fmtDate(g.updated || g.published)}</time> · ${g.minutes} min read</p></div>
 <div class="perch" aria-hidden="true">${owl(132, { variant: 'paper', className: 'hero-owl' })}<span class="branch"></span></div>
 </div></section>`;
   const body = `
 <article class="content article">
 ${g.inShort?.length ? `<aside class="in-short"><p class="lbl">In short</p><ul>${g.inShort.map((x) => `<li>${x}</li>`).join('')}</ul></aside>` : ''}
+${g.goal?.length ? `<h2>By the end of this lesson</h2><ul>${g.goal.map((t) => `<li>${t}</li>`).join('')}</ul>` : ''}
 ${g.body}
+${checkpoint(g)}
 ${g.faq?.length ? `<h2>Questions</h2><div class="faq">${g.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : ''}
 </article>
+<div class="mark-done"><button type="button" class="btn" id="mark-done"><span class="eye" data-state="todo">${eye('todo', 16)}</span> Mark as done</button></div>
+<nav class="lesson-nav" aria-label="Course lessons">${lessonLink(ordered[i - 1], 'prev')}${lessonLink(ordered[i + 1], 'next')}</nav>
 ${cta(g.cta, 'guides')}
 ${tools.length ? `<h2 class="section-title">Free tools for this</h2><div class="grid">${tools.map(tile).join('')}</div>` : ''}
-<h2 class="section-title">More guides</h2>
-<div class="grid">${others.map(guideTile).join('')}</div>`;
+${sameModule.length ? `<h2 class="section-title">Also in ${esc(modName)}</h2>
+<div class="col more-guides"><ul>${sameModule.map(guideRow).join('')}</ul></div>` : ''}`;
   const ld = [{
-    '@context': 'https://schema.org', '@type': 'Article', headline: g.h1 || g.title, description: g.description,
+    '@context': 'https://schema.org', '@type': ['Article', 'LearningResource'], '@id': `${gurl(g.slug)}#lesson`,
+    headline: g.h1 || g.title, description: g.description,
     datePublished: g.published, dateModified: g.updated || g.published, mainEntityOfPage: gurl(g.slug),
     author: { '@type': 'Organization', name: 'Kauzl', url: APP }, publisher: { '@type': 'Organization', name: 'Kauzl', url: APP },
+    isPartOf: { '@type': 'Course', '@id': `${SITE}${GUIDES}/#course`, name: COURSE.name, url: gurl('') },
+    position: n, learningResourceType: 'Lesson', educationalLevel: 'Beginner', timeRequired: `PT${g.minutes}M`,
+    teaches: g.goal || [],
   }, {
     '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [
-      { '@type': 'ListItem', position: 1, name: 'Guides', item: gurl('') },
-      { '@type': 'ListItem', position: 2, name: g.h1 || g.title, item: gurl(g.slug) },
+      { '@type': 'ListItem', position: 1, name: COURSE.name, item: gurl('') },
+      ...(m >= 0 ? [{ '@type': 'ListItem', position: 2, name: MODULES[m].name, item: `${SITE}${GUIDES}/#module-${MODULES[m].id}` }] : []),
+      { '@type': 'ListItem', position: m >= 0 ? 3 : 2, name: g.h1 || g.title, item: gurl(g.slug) },
     ],
   }];
   if (g.faq?.length) ld.push({ '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: g.faq.map(([q, a]) => ({ '@type': 'Question', name: strip(q), acceptedAnswer: { '@type': 'Answer', text: strip(a) } })) });
-  return layout({ canonical: gurl(g.slug), page: `guide:${g.slug}`, ogType: 'article', skip: 'Skip to the article', title: g.title, description: g.description, band, body, ld });
+  return layout({ canonical: gurl(g.slug), page: `guide:${g.slug}`, ogType: 'article', skip: 'Skip to the lesson', title: g.title, description: g.description, band, body, ld });
 }
 
+// The course page: two lessons to start with, then the syllabus by module.
 function guidesIndex(guides) {
+  const ordered = inCourseOrder(guides);
+  const total = ordered.reduce((s, g) => s + g.minutes, 0);
   const band = `<section class="band home"><div class="wrap band-in">
-<div class="band-copy"><p class="eyebrow">Guides from kauzl</p>
-<h1>Analytics, explained plainly.</h1>
-<p class="lead">How to set up Google Analytics, tag campaigns, track traffic from ChatGPT, read an A/B test, and tell whether a change you shipped actually worked. No jargon, and every guide comes with a free tool.</p></div>
+<div class="band-copy"><p class="eyebrow">A free course from kauzl</p>
+<h1>Learn web analytics for your app.</h1>
+<p class="lead">${guides.length} short lessons, from your first tracking script to being recommended by ChatGPT. Compare the tools, read your numbers, and know when a change worked. Each lesson stands alone and comes with a free tool.</p>
+<p class="course-meta"><a class="btn amber" href="${ghref(ordered[0].slug)}">Start with lesson 1 →</a><span>${MODULES.length} modules · about ${total >= 60 ? `${Math.round(total / 30) / 2} hours` : `${total} minutes`} in all</span></p></div>
 <div class="perch" aria-hidden="true">${owl(190, { variant: 'paper', className: 'hero-owl' })}<span class="branch"></span></div>
 </div></section>`;
-  const body = `<section class="group"><h2 class="section-title">All guides</h2><p class="section-sub">${guides.length} guides, newest ideas first.</p>
-<div class="grid">${guides.map(guideTile).join('')}</div></section>
+  const bySlug = Object.fromEntries(guides.map((g) => [g.slug, g]));
+  const rest = ordered.filter((g) => !COURSE_ORDER.includes(g.slug));
+  const mod = (m, i) => `<section id="module-${m.id}" class="col module"><p class="mod-no">Module ${i + 1}</p><h3>${m.name}</h3><p class="col-sub">${m.sub}</p><ul>${m.lessons.filter((l) => bySlug[l.slug]).map((l) => guideRow(bySlug[l.slug])).join('')}</ul><div class="module-eyes" data-module="${m.id}">${m.lessons.filter((l) => bySlug[l.slug]).map((l) => eye('todo', 16)).join('')}</div></section>`;
+  const body = `<div id="course-welcome" class="course-welcome">${owlSays(COURSE_WELCOME, 44)}<div class="course-welcome-actions"><a class="btn amber" href="${ghref(ordered[0].slug)}">Start at lesson 1</a><button type="button" class="btn" id="pick-path">Pick my path</button></div></div>
+<section class="group"><h2 class="section-title">Start here</h2><p class="section-sub">The map of the market, and the question everyone is asking about AI search.</p>
+<div class="features">${Object.keys(GUIDE_FEATURED).filter((s) => bySlug[s]).map((s) => guideFeature(bySlug[s])).join('')}</div></section>
+<section class="group"><h2 class="section-title">The lessons</h2><p class="section-sub">In order, or jump to the module you need.</p>
+<div class="cols syllabus">${MODULES.map(mod).join('')}
+${rest.length ? `<div class="col module"><p class="mod-no">More</p><h3>More lessons</h3><ul>${rest.map(guideRow).join('')}</ul></div>` : ''}</div></section>
 ${cta({}, 'guides')}`;
+  const courseUrl = `${SITE}${GUIDES}/#course`;
+  const courseLd = {
+    '@context': 'https://schema.org', '@type': 'Course', '@id': courseUrl, name: COURSE.name, description: COURSE.description, url: gurl(''),
+    provider: { '@type': 'Organization', name: 'Kauzl', url: `${APP}/` }, isAccessibleForFree: true, educationalLevel: 'Beginner', inLanguage: 'en',
+    offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD', category: 'Free' },
+    hasCourseInstance: { '@type': 'CourseInstance', courseMode: 'Online', courseWorkload: `PT${total}M` },
+    teaches: MODULES.map((m) => m.teaches),
+    syllabusSections: MODULES.map((m) => ({ '@type': 'Syllabus', name: m.name, description: m.sub, timeRequired: `PT${m.lessons.reduce((s, l) => s + (bySlug[l.slug]?.minutes || 0), 0)}M` })),
+    hasPart: ordered.map((g) => ({ '@type': 'Article', '@id': `${gurl(g.slug)}#lesson`, headline: g.h1 || g.title, url: gurl(g.slug), position: lessonNo(g, guides) })),
+  };
+  const ld = [courseLd, { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [{ '@type': 'ListItem', position: 1, name: COURSE.name, item: gurl('') }] }];
   return layout({
-    canonical: gurl(''), page: 'index:guides', skip: 'Skip to the guides', title: 'Analytics Guides: GA4, UTMs, AI Traffic, A/B Tests | Kauzl',
-    description: 'Plain-English guides to Google Analytics 4, UTM parameters, ChatGPT and AI traffic, AI crawlers, Search Console and A/B testing, each with a free tool.',
-    band, body, ld: [{ '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Kauzl guides', url: gurl(''), hasPart: guides.map((g) => ({ '@type': 'Article', headline: g.h1 || g.title, url: gurl(g.slug) })) }],
+    canonical: gurl(''), page: 'index:guides', skip: 'Skip to the lessons', title: 'Learn Web Analytics: A Free Course for Your App | Kauzl',
+    description: 'A free course in short lessons: GA4 and UTMs, analytics tools compared, A/B tests, AI search, and connecting your data to Claude and ChatGPT.',
+    band, body, ld,
   });
 }
 
@@ -276,7 +351,7 @@ function indexPage(pages) {
   const rest = pages.filter((p) => !listed.has(p.slug));
   const band = `<section class="band home"><div class="wrap band-in">
 <div class="band-copy"><p class="eyebrow">Free tools from kauzl</p>
-<h1>Small tools for people who ship.</h1>
+<h1>Small tools for your website.</h1>
 <p class="lead">Tag a campaign, check whether a launch moved anything, size an A/B test, and get ready for AI search. Everything runs in your browser. Nothing to sign up for, and nothing you type leaves the page.</p>${perks}</div>
 <div class="perch" aria-hidden="true">${owl(210, { variant: 'paper', className: 'hero-owl' })}<span class="branch"></span></div>
 </div></section>`;
@@ -297,9 +372,9 @@ ${cta()}`;
 const pages = await loadPages();
 const guides = await loadGuides();
 footer = `<footer class="foot"><div class="wrap">
-<div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p></div></div>
+<div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches your site, day by day.</p></div></div>
 <div class="foot-lists"><p class="foot-h">Free tools</p><ul>${pages.map((p) => `<li><a href="${href(p.slug)}">${esc(p.name)}</a></li>`).join('')}</ul>
-<p class="foot-h">Guides</p><ul>${guides.map((g) => `<li><a href="${ghref(g.slug)}">${esc(g.short || g.h1 || g.title)}</a></li>`).join('')}</ul></div>
+<p class="foot-h">Course</p><ul>${guides.map((g) => `<li><a href="${ghref(g.slug)}">${esc(g.short || g.h1 || g.title)}</a></li>`).join('')}</ul></div>
 <p class="small">© ${new Date().getFullYear()} Kauzl · Free tools that run in your browser · <a href="${APP}">kauzl.com</a></p>
 </div></footer>`;
 
@@ -332,14 +407,26 @@ ${entries.map(([loc, mod]) => `  <url><loc>${loc}</loc><lastmod>${mod}</lastmod>
 </urlset>
 `);
 // llms.txt (llmstxt.org): a Markdown map of the site for AI assistants, served
-// at kauzl.com/llms.txt. Every guide and tool, with its one-line description.
+// at kauzl.com/llms.txt. The free course is one course, with its modules and
+// numbered lessons; every lesson and tool is still listed.
 const llms = `# Kauzl
 
-> Kauzl is analytics for people who ship. It reads Google Analytics 4, Search Console and Bing, puts your releases, posts and campaigns on the same timeline, and says what changed, why, and whether it is real. These are its free guides and browser tools.
+> Kauzl is an analytics calendar for your website. It reads Google Analytics 4, Search Console and Bing, shows each day next to your releases, posts and campaigns, and says what changed, why, and whether it is real. These are its free guides and browser tools.
 
-## Guides
+## Free course: ${COURSE.name}
 
-${guides.map((g) => `- [${g.short || g.h1}](${gurl(g.slug)}): ${g.description}`).join('\n')}
+${COURSE_ORDER.length} lessons in ${MODULES.length} modules. Course page: ${gurl('')}
+
+${MODULES.map((m, i) => `### Module ${i + 1}: ${m.name}
+
+${m.lessons.filter((l) => guides.some((g) => g.slug === l.slug)).map((l) => {
+  const g = guides.find((x) => x.slug === l.slug);
+  return `${COURSE_ORDER.indexOf(l.slug) + 1}. [${g.short || g.h1}](${gurl(l.slug)}): ${g.description}`;
+}).join('\n')}
+`).join('\n')}
+### More lessons
+
+${guides.filter((g) => !COURSE_ORDER.includes(g.slug)).map((g) => `- [${g.short || g.h1}](${gurl(g.slug)}): ${g.description}`).join('\n')}
 
 ## Free tools
 

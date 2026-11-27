@@ -65,6 +65,20 @@ export default {
 </ul>
 <p>The question GA4 doesn’t answer on its own is <em>why</em> a number moved. When you ship a redesign, publish a post or launch a campaign, compare the days before and after with the <a href="/tools/did-it-work/">Did it work? checker</a>, or let Kauzl line up every change you ship against GA4 automatically.</p>
 `,
+  goal: [
+    'Set up a GA4 property and install the tracking tag.',
+    'Turn on 14 months of data retention and mark key events.',
+  ],
+  steps: [
+    { text: 'Create the GA4 property and data stream.', href: 'https://analytics.google.com' },
+    { text: 'Install the Google tag: snippet, Google Tag Manager, or your platform.' },
+    { text: 'Check Realtime for visits, then set retention and key events.' },
+  ],
+  check: [
+    { q: 'How long does GA4 keep event-level data by default?', options: ['Two months', '14 months', 'Two years', 'Five months'], answer: 0, why: 'GA4 keeps detailed event data for only two months by default; standard reports still work.' },
+    { q: 'Should you install more than one way to run the GA4 tag?', options: ['One way', 'The snippet and Tag Manager', 'Tag Manager and your platform', 'All three'], answer: 0, why: 'Installing two ways counts every visit twice.' },
+    { q: 'Where do you set data retention in GA4?', options: ['Admin → Data collection and modification', 'Reports → Realtime', 'Events → Key events', 'Traffic acquisition'], answer: 0, why: 'Retention is set in Admin, and the maximum for a free property is 14 months.' },
+  ],
   faq: [
     ['Is Google Analytics 4 free?', 'Yes. The standard version is free. Google Analytics 360 is the paid version for very large sites.'],
     ['How long until data shows in GA4?', 'Realtime shows visits within a minute. Standard reports usually fill in within 24 to 48 hours.'],

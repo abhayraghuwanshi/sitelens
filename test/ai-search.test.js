@@ -120,6 +120,11 @@ test('a run asks every question and keeps history', async () => {
     assert.equal(c.results[0].latest.mentioned, true);
     assert.equal(c.results[0].latest.rank, 2);
     assert.equal(c.results[0].mentionRate, 1);
+    const { dates, rows } = ai.citationDays(site, '2000-01-01', '2100-01-01');
+    assert.equal(dates.length, 1);
+    assert.equal(rows.find(({ key }) => key === 'citing')?.value, 1);
+    assert.equal(rows.find(({ key }) => key === 'own')?.value, 1);
+    assert.equal(rows.filter(({ key }) => key === 'domain:cool-desk.com').length, 1);
     ai.stop();
   } finally {
     await rm(dir, { recursive: true, force: true });

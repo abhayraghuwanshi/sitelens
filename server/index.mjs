@@ -6,6 +6,7 @@ import { existsSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { join, resolve, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { createSiteIcons } from './site-icon.mjs';
 import { createStore, publicSite, ValidationError, normalizeLeaveOut } from './store.mjs';
 import { createAuth, AuthError } from './auth.mjs';
 import { createBigQuery, BigQueryError } from './bigquery.mjs';
@@ -13,27 +14,36 @@ import { createEngines, EngineError } from './engines.mjs';
 import { listAccountSummaries, listDataStreams, GaApiError } from '../shared/sitelens/ga4.js';
 import { listSearchSites } from '../shared/sitelens/gsc.js';
 import { githubOverview, githubRepo, githubStatus, HISTORY_RANGES, historyRange, SourceError } from './github.mjs';
-import { createExtensionTracker, extensionView } from './cws.mjs';
+import { createExtensionTracker, extensionView, STORES } from './cws.mjs';
 import { listingAnalytics, findListingProperty, listProperties } from './cws-ga.mjs';
 import { createCache, openCacheDb, requestContext } from './cache.mjs';
 import { createGitHubSync } from './github-sync.mjs';
+import { createTimelineJobs, timelineJobRoutes } from './timeline-jobs.mjs';
+import { createTimelineSources } from './timeline-sources.mjs';
 import { fetchDemand, demoDemand, defaultGroups, normalizeGroups } from './search-demand.mjs';
 import { fetchTopics, demoTopics } from './search-topics.mjs';
+import { fetchDayTrends, fetchQueryTrend, fetchPageSearches } from './day-trends.mjs';
 import { createAnnotations, annotationRoutes } from './annotations.mjs';
 import { detectMcpClients } from './mcp-clients.mjs';
+import { TOOLS as MCP_TOOLS, PROMPTS as MCP_PROMPTS } from './mcp.mjs';
 import { createFunnelSuggest, funnelSuggestRoutes, linkedRepos, siteRepos } from './funnel-suggest.mjs';
 import { createArticles, articleRoutes } from './articles.mjs';
 import { createArticleEditor, articleEditorRoutes } from './article-editor.mjs';
 import { productRoutes, createProducts } from './products.mjs';
 import { createJourney, journeyRoutes } from './journey.mjs';
 import { createOutcomes, outcomeRoutes } from './outcomes.mjs';
-import { createCampaigns, campaignRoutes } from './campaigns.mjs';
+import { createCampaigns, createAdSpend, createAdDays, campaignRoutes } from './campaigns.mjs';
 import { createProductSetup, productSetupRoutes } from './product-setup.mjs';
 import { createPosts, postRoutes } from './posts.mjs';
 import { createBing, bingRoutes } from './bing.mjs';
 import { createVitals, vitalsRoutes } from './vitals.mjs';
 import { createAlerts, alertRoutes } from './alerts.mjs';
 import { createVercel, vercelRoutes } from './vercel.mjs';
+import { createCloudflareAnalytics, cloudflareRoutes } from './cloudflare-analytics.mjs';
+import { createPlausible, plausibleRoutes } from './plausible.mjs';
+import { createPostHog, posthogRoutes } from './posthog.mjs';
+import { createFly, flyRoutes } from './fly.mjs';
+import { createNetlify, netlifyRoutes } from './netlify.mjs';
 import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
 import { createAiSearch, aiSearchRoutes, ENGINES, ENGINE_ON } from './ai-search.mjs';
@@ -45,7 +55,8 @@ import { nextStepRoutes } from './next-steps.mjs';
 import { createSearchHub, searchHubRoutes } from './search-hub.mjs';
 import { createSiteHealth, siteHealthRoutes } from './site-health.mjs';
 import { createPageReview, pageReviewRoutes } from './page-review.mjs';
-import { createContentCycles, contentCycleRoutes } from './content-cycles.mjs';
+import { createPageEvents, pageEventRoutes, todoIsFor } from './page-events.mjs';
+import { createDiagnose, diagnoseRoutes } from './diagnose.mjs';
 import { createRedditCycles, redditCycleRoutes } from './reddit-cycles.mjs';
 import { createPageJourney, pageJourneyRoutes } from './page-journey.mjs';
 import { createCalendarStore } from './calendar-store.mjs';
@@ -81,6 +92,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const hosted = env.STUDIO_HOSTED === '1';
   const hosts = ['127.0.0.1', 'localhost', '[::1]', ...(env.STUDIO_HOST ? [env.STUDIO_HOST] : [])];
   const extensions = createExtensionTracker({ store, fetchImpl });
+  const siteIcons = createSiteIcons({ fetchImpl });
   const sourceCache = createCache({ db: cacheDb, name: 'sources', staleFor: STALE_FOR });
 
   // The GA4 property Chrome Web Store created for this extension: a saved link,
@@ -121,6 +133,11 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   }
   const githubSource = (sources) => (sources?.githubToken ? 'settings' : sources?.githubOAuth ? 'oauth' : env.GITHUB_TOKEN ? 'env' : '');
   const vercel = createVercel({ store, env, cacheDb, fetchImpl });
+  const plausible = createPlausible({ store, env, cacheDb, fetchImpl });
+  const posthog = createPostHog({ store, env, cacheDb, fetchImpl });
+  const cloudflareAnalytics = createCloudflareAnalytics({ store, env, cacheDb, fetchImpl });
+  const fly = createFly({ store, env, cacheDb, fetchImpl });
+  const netlify = createNetlify({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
   // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
   const siteRepoCache = new Map(); // site id → { at, linked, value }
@@ -149,8 +166,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), cacheDb, repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, siteConfig, fetchImpl });
-  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, fetchImpl });
+  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, plausible, posthog, cloudflare: cloudflareAnalytics, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
+  annotations.registerSource('fly', (q) => fly.annotations(q));
+  annotations.registerSource('netlify', (q) => netlify.annotations(q));
   annotations.registerSource('mentions', (q) => mentions.annotations(q));
   const firebase = createFirebase({ dbPath: join(store.dir, 'firebase.db'), store, getToken: () => auth.token(), bigquery, fetchImpl });
   annotations.registerSource('firebase', (q) => firebase.annotations(q));
@@ -158,8 +177,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const bing = createBing({ dbPath: join(store.dir, 'bing.db'), store, env, fetchImpl });
   const searchHub = createSearchHub({ engines, bing, auth, fetchImpl });
   const journey = createJourney({ store, products, vitals, firebase, mentions, annotations, auth, bing, fetchImpl });
-  const outcomes = createOutcomes({ store, products, auth, listingProperty, siteConfig, cacheDb });
-  const campaigns = createCampaigns({ auth, siteConfig });
+  const outcomes = createOutcomes({ store, products, auth, listingProperty, githubDbPath: () => (github.hasDb() ? github.dbPath : null), siteConfig, cacheDb });
+  const campaigns = createCampaigns({ auth, siteConfig, store });
+  const adDays = createAdDays({ auth, store });
+  const adSpend = createAdSpend({ store, onChange: (site) => { campaigns.forget(site); adDays.forget(site); } });
   // Setting a page's next goal moves its to-do on (todos is created below).
   const pageReview = createPageReview({ articles, bing, store, outcomes, cacheDb, onGoalSet: (e) => todos.carryGoal(e) });
   const siteHealth = createSiteHealth({ pageReview, hub: searchHub, vitals });
@@ -169,18 +190,34 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const posts = createPosts({ dbPath: join(store.dir, 'posts.db'), store, mentions, auth, history, cacheDb, fetchImpl });
   annotations.registerSource('posts', (q) => posts.annotations(q));
   const aiSearch = createAiSearch({ dbPath: join(store.dir, 'ai-search.db'), store, auth, firebase, siteConfig, env });
-  const contentCycles = createContentCycles({ dbPath: join(store.dir, 'content-cycles.db'), store, auth, articles, bing, aiSearch, siteConfig, annotations, pageReview });
   // Hosted, the analyst's calls to this app stay in-process: over the network
   // they would reach the gateway, which knows no session for them.
   const analyst = createAnalyst({ store, annotations, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   // Reddit posts planned by Claude, posted by you, measured in Reddit and GA4.
   const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
-  const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl });
+  const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl, hosted });
+  const automaticJobs = createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly, plausible, netlify });
+  const timelineJobs = createTimelineJobs({ store, github, metrics: customMetrics, automaticJobs, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
-  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null) });
+  const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays, goalDays: outcomes.goalDays, customMetrics, citationDays: aiSearch.citationDays, jobSeries: timelineJobs.series, bingDays: bing.timelineDays });
   // Calendar days are local, so the story's "today" is too.
   const story = createStory({ calendar, today: () => new Date().toLocaleDateString('en-CA') });
   const todos = createTodos({ store, annotations, context: createTodoContext({ calendar, engines, outcomes, store, today: () => new Date().toLocaleDateString('en-CA') }) });
+  // Diagnose: run a check on one page; each run lands on that page's timeline.
+  const diagnose = createDiagnose({ store, editor, vitals, hub: searchHub, fetchImpl });
+  // A page's timeline (server/page-events.mjs): its visits, commits, notes and to-dos as one list of events.
+  const pageEvents = createPageEvents({ sources: {
+    series: async (site, path, from, to) => {
+      const b = await calendar.breakdown({ site: site.id, from, to, by: 'page', daily: true, key: path, limit: 200 });
+      const row = b.rows?.[0];
+      return { series: (b.dates || []).map((date, i) => ({ date, visits: row?.days?.[i] || 0 })) };
+    },
+    commits: (site, path, since) => editor.commits(site, path, { since }),
+    checks: async (site, path, since) => ({ checks: await diagnose.runs(site, { path, since }) }),
+    index: (site, path) => searchHub.indexStatus(site, { path }),
+    marks: async (site, from, to) => ({ marks: (await calendar.events({ site: site.id, from, to })).events || [] }),
+    todos: async (site, path) => ({ todos: ((await todos.list({ site: site.id })).todos || []).filter((t) => todoIsFor(t, path)) }),
+  } });
   function githubDb() {
     if (!github.hasDb()) {
       throw new SourceError('No GitHub data yet.', {
@@ -212,6 +249,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
 
   const routes = [
     ...annotationRoutes({ annotations }),
+    ...timelineJobRoutes({ jobs: timelineJobs, siteOr404 }),
     ...vitalsRoutes({ vitals, store, siteOr404, fetchImpl }),
     ...alertRoutes(alerts),
     ...mentionRoutes({ mentions }),
@@ -220,14 +258,20 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...searchHubRoutes({ hub: searchHub, bing, siteOr404 }),
     ...siteHealthRoutes({ health: siteHealth, siteOr404 }),
     ...pageReviewRoutes({ review: pageReview, siteOr404 }),
+    ...pageEventRoutes({ pageEvents, siteOr404 }),
+    ...diagnoseRoutes({ diagnose, siteOr404 }),
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
+    ...plausibleRoutes({ plausible, store, siteOr404, auth }),
+    ...posthogRoutes({ posthog, store, siteOr404, auth }),
+    ...cloudflareRoutes({ cloudflareAnalytics, store, siteOr404, auth }),
+    ...flyRoutes({ fly, store }),
+    ...netlifyRoutes({ netlify, store }),
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
     ...analystRoutes({ analyst, siteOr404 }),
     ...funnelSuggestRoutes({ funnelSuggest, siteOr404 }),
     ...articleRoutes({ articles, siteOr404 }),
-    ...contentCycleRoutes({ cycles: contentCycles, siteOr404 }),
     ...redditCycleRoutes({ cycles: redditCycles, siteOr404 }),
     ...articleEditorRoutes({ editor, siteOr404 }),
     ...calendarRoutes({ calendar, history }),
@@ -321,8 +365,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const saved = await store.get();
       const src = saved.sources || {};
       const from = (settingsValue, envValue) => (settingsValue ? 'settings' : envValue ? 'env' : '');
-      const [firebaseStatus, vercelStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
-        firebase.status(), vercel.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
+      const [firebaseStatus, vercelStatus, plausibleStatus, posthogStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
+        firebase.status(), vercel.status(), plausible.status(), posthog.status().catch(() => ({ keySource: '' })), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
       ]);
       return {
         hosted,
@@ -330,7 +374,18 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         github: { source: githubSource(src), ...github.status(), repos: github.hasDb() ? githubStatus(github.dbPath).repos || 0 : 0 },
         firebase: { links: firebaseStatus.links.length, errors: firebaseStatus.links.filter((l) => l.error).map((l) => l.error) },
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
-        extensions: { count: (await extensions.list()).length },
+        plausible: { source: plausibleStatus.keySource, baseUrl: plausibleStatus.baseUrl, error: plausibleStatus.lastError },
+        posthog: { source: posthogStatus.keySource, projectId: posthogStatus.projectId || '', baseUrl: posthogStatus.baseUrl, error: posthogStatus.lastError || '' },
+        fly: await fly.status().then((f) => ({ source: f.tokenSource, login: f.login, orgs: f.orgs.length, error: f.lastError })).catch(() => ({ source: '' })),
+        netlify: await netlify.status().then((n) => ({ source: n.tokenSource, login: n.login, error: n.lastError })).catch(() => ({ source: '' })),
+        // Each tracked extension, as its own row on Connections.
+        extensions: {
+          count: (await extensions.list()).length,
+          list: (await extensions.list()).map((e) => ({
+            id: e.id, name: e.label || e.title || e.id, store: (STORES[e.store] || STORES.chrome).label, storeKey: STORES[e.store] ? e.store : 'chrome',
+            users: e.history?.at(-1)?.users ?? null, version: e.version || '',
+          })),
+        },
         reddit: { source: from(src.redditClientId, env.REDDIT_CLIENT_ID) },
         productHunt: { source: from(src.productHuntToken, env.PRODUCTHUNT_TOKEN) },
         pagespeedKey: { source: vitalsStatus.key?.source || '' },
@@ -340,10 +395,33 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
           source: from(src.openrouterKey, env.OPENROUTER_API_KEY),
           on: ENGINES.filter((e) => e.via === 'openrouter' && { ...ENGINE_ON, ...(saved.aiSearch?.engines || {}) }[e.key]).map((e) => e.label),
         },
-        customMetrics: { count: metricStatus.metrics.length, sources: metricStatus.connectors.filter((c) => c.secret.source).map((c) => c.label) },
+        customMetrics: {
+          count: metricStatus.metrics.length,
+          // Each saved database, as its own row on Connections.
+          dataSources: metricStatus.dataSources.map((ds) => ({
+            id: ds.id, name: ds.name, where: ds.where, secret: ds.secret, platformKey: ds.platform,
+            platform: metricStatus.platforms.find((p) => p.key === ds.platform)?.label || ds.kind,
+            metrics: metricStatus.metrics.filter((m) => m.source.dataSource === ds.id
+              || (ds.kind === 'd1' && m.source.type === 'd1' && m.source.databaseId === ds.config.databaseId)).length,
+          })),
+          // D1 databases a .sitelens.yml names that have no saved data source yet.
+          fromFiles: Object.values(metricStatus.metrics.filter((m) => m.source.type === 'd1'
+            && !metricStatus.dataSources.some((ds) => ds.kind === 'd1' && ds.config.databaseId === m.source.databaseId))
+            .reduce((acc, m) => {
+              const k = m.source.databaseId;
+              acc[k] = acc[k] || { accountId: m.source.accountId, databaseId: k, metrics: 0 };
+              acc[k].metrics += 1;
+              return acc;
+            }, {})),
+        },
         notifications: { webhook: Boolean(alertSettings.webhookUrl), desktop: Boolean(alertSettings.desktop), enabled: Boolean(alertSettings.enabled) },
       };
     }],
+    // What Claude can do over MCP: each tool's name, what it says it does, and whether it changes anything.
+    ['GET', /^\/api\/mcp\/tools$/, async () => ({
+      tools: MCP_TOOLS.map((t) => ({ name: t.name, description: t.description, writes: Boolean(t.write) })),
+      prompts: MCP_PROMPTS.map((p) => ({ name: p.name, description: p.description })),
+    })],
     // What an MCP client needs to launch server/mcp.mjs with this install's
     // Node and data folder (in the desktop app, both live inside the bundle).
     ['GET', /^\/api\/mcp\/setup$/, async () => {
@@ -395,21 +473,22 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const range = historyRange(query.get('range') || '28d');
       return { range, extensions: (await extensions.list()).map((e) => extensionView(e, range)) };
     }],
-    ['POST', /^\/api\/extensions$/, async ({ body }) => extensions.add(body.id, body.label)],
-    ['DELETE', /^\/api\/extensions\/([a-p]{32})$/, async ({ match }) => {
+    ['POST', /^\/api\/extensions$/, async ({ body }) => extensions.add(body.id, body.label, body.store)],
+    ['DELETE', /^\/api\/extensions\/([a-p]{32}|firefox-\d{1,12})$/, async ({ match }) => {
       await extensions.remove(match[1]);
       return { ok: true };
     }],
-    ['GET', /^\/api\/extensions\/([a-p]{32})\/analytics$/, async ({ match, query }) => {
+    ['GET', /^\/api\/extensions\/([a-p]{32}|firefox-\d{1,12})\/analytics$/, async ({ match, query }) => {
       const range = historyRange(query.get('range') || '28d');
       const propertyId = await listingProperty(match[1]);
       return sourceCache.wrap(`listing:${propertyId}:${range.key}:${range.end}`, 10 * 60_000, query.has('fresh'), async () =>
         ({ range, ...(await listingAnalytics({ token: await auth.token(), propertyId, range })) }));
     }],
-    ['POST', /^\/api\/extensions\/([a-p]{32})\/refresh$/, async ({ match }) => extensions.snapshot(match[1])],
-    ['POST', /^\/api\/extensions\/([a-p]{32})\/import$/, async ({ match, body }) => extensions.importCsv(match[1], body.filename, body.csv)],
+    ['POST', /^\/api\/extensions\/([a-p]{32}|firefox-\d{1,12})\/refresh$/, async ({ match }) => extensions.snapshot(match[1])],
+    ['POST', /^\/api\/extensions\/([a-p]{32}|firefox-\d{1,12})\/import$/, async ({ match, body }) => extensions.importCsv(match[1], body.filename, body.csv)],
 
     ['POST', /^\/api\/auth\/token$/, async ({ body }) => auth.usePastedToken(body.token)],
+    ['POST', /^\/api\/auth\/service-account$/, async ({ body }) => auth.useServiceAccount(body.key)],
     ['POST', /^\/api\/auth\/signout$/, async () => {
       await auth.signOut();
       return { ok: true };
@@ -451,7 +530,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...productRoutes({ products }),
     ...journeyRoutes({ journey }),
     ...outcomeRoutes({ outcomes }),
-    ...campaignRoutes({ campaigns, siteOr404 }),
+    ...campaignRoutes({ campaigns, adSpend, siteOr404 }),
     ['GET', /^\/api\/portfolio$/, async ({ query }) => engines.portfolio(await store.sites(), query.get('range') || '28d')],
 
     ['GET', /^\/api\/sites\/([\w-]+)\/dashboard$/, async ({ match, query }) =>
@@ -499,6 +578,30 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         fetchDemand({ token: await auth.token(), site, rangeKey, groups }));
       return { ...data, ...meta };
     }],
+    // A day's search trends: up or down because people searched more or less, you ranked differently, or fewer clicked.
+    ['GET', /^\/api\/sites\/([\w-]+)\/day-trends$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const date = query.get('date') || '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) throw new ValidationError('date must be YYYY-MM-DD.');
+      if (site.demo) return { date, verdict: 'The sample site has no Search Console data.', queries: [] };
+      if (!site.searchSite) throw new EngineError('Pick a Search Console property for this site in Settings.', { kind: 'needs-search' });
+      return sourceCache.wrap(`day-trends:${site.id}:${date}`, 60 * 60_000, query.has('fresh'), async () => fetchDayTrends({ token: await auth.token(), site, date }));
+    }],
+    // The searches one page is found for on Google, each with 13 weeks of history.
+    ['GET', /^\/api\/sites\/([\w-]+)\/page-searches$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const path = query.get('path') || '/';
+      if (site.demo || !site.searchSite) return { path, searches: [] };
+      return sourceCache.wrap(`page-searches:${site.id}:${path}`, 60 * 60_000, query.has('fresh'), async () => fetchPageSearches({ token: await auth.token(), site, path }));
+    }],
+    // One search over 90 days: clicks, impressions and position per day (Google).
+    ['GET', /^\/api\/sites\/([\w-]+)\/query-trend$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const q = String(query.get('q') || '').trim().slice(0, 200);
+      if (!q) throw new ValidationError('Give a search: ?q=…');
+      if (site.demo || !site.searchSite) return { query: q, days: [] };
+      return sourceCache.wrap(`query-trend:${site.id}:${q}`, 60 * 60_000, query.has('fresh'), async () => fetchQueryTrend({ token: await auth.token(), site, query: q }));
+    }],
     // How each search topic in the site's .sitelens.yml does in Google.
     ['GET', /^\/api\/sites\/([\w-]+)\/search-topics$/, async ({ match, query }) => {
       const site = await siteOr404(match[1]);
@@ -542,6 +645,10 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         converted: query.get('converted') || '',
         outcome: query.get('outcome') || '',
       }, flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/day-summary$/, async ({ match, query }) =>
+      engines.daySummary(await siteOr404(match[1]), query.get('date') || '', (query.get('goals') || '').split(',').filter(Boolean), flags(query))],
+    ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/day-sessions$/, async ({ match, query }) =>
+      engines.daySessions(await siteOr404(match[1]), query.get('date') || '', flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/events$/, async ({ match, query }) =>
       engines.events(await siteOr404(match[1]), query.get('range'), flags(query))],
     ['GET', /^\/api\/sites\/([\w-]+)\/warehouse\/journeys$/, async ({ match, query }) =>
@@ -644,6 +751,19 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       return;
     }
 
+    // A site's own icon (server/site-icon.mjs), as an image, for lists of sites.
+    const iconMatch = req.method === 'GET' && url.pathname.match(/^\/api\/sites\/([\w-]+)\/icon$/);
+    if (iconMatch) {
+      const site = await store.site(iconMatch[1]);
+      const icon = site && !site.demo && site.host ? await siteIcons.icon(site.host) : null;
+      if (!icon) return res.writeHead(404, { 'Cache-Control': 'private, max-age=3600' }).end();
+      // An SVG from someone's site must never run as a page on our origin.
+      return res.writeHead(200, {
+        'Content-Type': icon.type, 'Cache-Control': 'private, max-age=86400', 'X-Content-Type-Options': 'nosniff',
+        'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      }).end(icon.body);
+    }
+
     if (url.pathname.startsWith('/api/')) {
       // CSRF guard: state-changing calls need a header a cross-site form cannot send.
       if (req.method !== 'GET' && req.headers['x-studio'] !== '1') return send(res, 403, { error: 'Missing X-Studio header.' });
@@ -664,7 +784,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, mentions, firebase, posts, bing, aiSearch, contentCycles, redditCycles, calendar, history, customMetrics };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, posthog, cloudflareAnalytics, fly, netlify, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
 }
 
 // Calls handle() as if over HTTP and returns a fetch Response.
@@ -789,9 +909,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
   app.posts.start();
   app.bing.start();
   app.aiSearch.start();
-  app.contentCycles.start();
   app.redditCycles.start();
   app.history.start();
+  app.timelineJobs.start();
   createServer((req, res) => app.handle(req, res)).listen(port, '127.0.0.1', () => {
     console.log(`\n  Kauzl  →  http://127.0.0.1:${port}\n`);
     if (!app.auth.oauthAvailable) console.log('  Google sign-in disabled (no GOOGLE_CLIENT_ID); paste-a-token works.\n');

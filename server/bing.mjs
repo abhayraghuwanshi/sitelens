@@ -49,6 +49,20 @@ export const bingDay = (value) => {
   return t === null ? null : isoDay(t + 12 * HOUR);
 };
 
+// Bing's GetUrlInfo answer → what it knows. For a URL it has never seen, Bing still answers,
+// with placeholder dates (0001-01-01) and size 0: that's "not known", not "crawled".
+export function parseUrlInfo(r) {
+  if (!r) return { known: false };
+  const day = (v) => {
+    const d = v ? bingDay(v) : null;
+    return d && d >= '2000-01-01' ? d : null;
+  };
+  const discovered = day(r.DiscoveryDate), lastCrawled = day(r.LastCrawledDate);
+  const httpStatus = r.HttpStatus || null;
+  const known = Boolean(discovered || lastCrawled || httpStatus || r.DocumentSize);
+  return { known, httpStatus, discovered, lastCrawled, size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null };
+}
+
 // The Bing site for a Studio host: same host ignoring scheme and www; verified first, then https.
 export function matchSiteUrl(host, bingSites) {
   const want = bare(host);
@@ -76,6 +90,25 @@ export function aggregateQueries(rows, from, to, limit = 50) {
     .map(({ weighted, ...a }) => ({ ...a, ctr: a.impressions ? a.clicks / a.impressions : 0, position: a.impressions ? weighted / a.impressions : null }))
     .sort((a, b) => b.clicks - a.clicks || b.impressions - a.impressions)
     .slice(0, limit);
+}
+
+// Adds 13 weekly impressions to each aggregated query (Bing's rows are dated), the last week ending
+// on `to`, plus the change of the last 4 weeks against the 4 before (null when it's new).
+export function withWeeks(queries, rows, to, weeks = 13) {
+  const end = Date.parse(`${to || new Date().toISOString().slice(0, 10)}T00:00:00Z`);
+  const by = new Map(queries.map((q) => [q.query, Array(weeks).fill(0)]));
+  for (const r of rows) {
+    const w = by.get(r.Query);
+    const day = bingDay(r.Date);
+    if (!w || !day) continue;
+    const i = weeks - 1 - Math.floor((end - Date.parse(`${day}T00:00:00Z`)) / (7 * DAY));
+    if (i >= 0 && i < weeks) w[i] += Number(r.Impressions) || 0;
+  }
+  return queries.map((q) => {
+    const w = by.get(q.query);
+    const now = w.slice(-4).reduce((a, b) => a + b, 0), before = w.slice(-8, -4).reduce((a, b) => a + b, 0);
+    return { ...q, weeks: w.map((impressions) => ({ impressions })), change: before ? (now - before) / before : now ? null : 0 };
+  });
 }
 
 export function bingError(json, status) {
@@ -190,6 +223,34 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     };
   }
 
+  async function timelineStatus(site) {
+    const cfg = await config();
+    if (!cfg.key && !cfg.siteMap[site.id]) return null;
+    if (!cfg.key) return { status: 'Needs Bing connection' };
+    try {
+      const siteUrl = await siteUrlFor(site);
+      if (!siteUrl) return { status: 'Link a Bing site' };
+      const lastReported = open().prepare('SELECT MAX(date) AS day FROM traffic WHERE site_url = ?').get(siteUrl)?.day;
+      return { status: lastReported ? 'History available' : 'Waiting for first sync', lastReported, siteUrl };
+    } catch {
+      return { status: 'Connection needs attention' };
+    }
+  }
+
+  async function timelineDays(site, from, to) {
+    if (site.demo || !(await config()).key) return [];
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) return [];
+    try {
+      await refresh(siteUrl);
+    } catch (err) {
+      const saved = storedRange(siteUrl, from, to).traffic;
+      if (!saved.length) throw err;
+      return saved;
+    }
+    return storedRange(siteUrl, from, to).traffic;
+  }
+
   async function overview(site, rangeKey = '28d', { fresh = false } = {}) {
     if (site.demo) throw new EngineError('Bing isn’t available for the sample site.', { status: 409, kind: 'needs-bing' });
     const siteUrl = await siteUrlFor(site);
@@ -281,6 +342,31 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     return aggregateQueries(rows || [], from, to, 5000).map(({ query, ...p }) => ({ page: query, ...p }));
   }
 
+  // The searches Bing showed one page for (GetPageQueryStats), over a period: Bing's own per-page
+  // report, so a page's Bing searches don't depend on matching Google's wording.
+  async function pageQueries(site, url, { from = '', to = '' } = {}) {
+    if (site.demo) return { url, queries: [] };
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    const rows = (await cache.wrap(`page-queries:${url}`, 3 * HOUR, false, () => call('GetPageQueryStats', { siteUrl, page: url }))) || [];
+    return { url, queries: withWeeks(aggregateQueries(rows, from, to, 200), rows, to) };
+  }
+
+  // The sitemaps Bing has for the site (submitted in Webmaster Tools, or found in robots.txt):
+  // each with Bing's status, when it last read it and how many URLs it found there.
+  async function feeds(site) {
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
+    const list = (await cache.wrap(`feeds:${siteUrl}`, HOUR, false, () => call('GetFeeds', { siteUrl }))) || [];
+    return {
+      siteUrl,
+      feeds: list.map((f) => ({
+        url: f.Url, status: f.Status || '', type: f.Type || '', urls: f.UrlCount ?? null, submitted: f.Submitted ? bingDay(f.Submitted) : null,
+        lastCrawled: f.LastCrawled ? bingDay(f.LastCrawled) : null, fileSize: f.FileSize ?? null,
+      })),
+    };
+  }
+
   async function submit(site, urls) {
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
@@ -332,13 +418,8 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     const siteUrl = await siteUrlFor(site);
     if (!siteUrl) throw new EngineError(`${site.host} isn’t in your Bing Webmaster Tools account.`, { status: 409, kind: 'bing-site' });
     try {
-      const r = await cache.wrap(`url:${url}`, HOUR, false, () => call('GetUrlInfo', { siteUrl, url }));
-      if (!r) return { known: false };
-      return {
-        known: true, httpStatus: r.HttpStatus ?? null,
-        discovered: r.DiscoveryDate ? bingDay(r.DiscoveryDate) : null, lastCrawled: r.LastCrawledDate ? bingDay(r.LastCrawledDate) : null,
-        size: r.DocumentSize ?? null, anchors: r.AnchorCount ?? null,
-      };
+      const r = await cache.wrap(`urlinfo:${url}`, HOUR, false, async () => ({ answer: await call('GetUrlInfo', { siteUrl, url }), at: Date.now() }));
+      return { ...parseUrlInfo(r.answer), at: r.at }; // at: when Kauzl asked Bing (kept an hour)
     } catch (err) {
       if (err.kind === 'needs-bing') throw err;
       return { known: false, note: err.message };
@@ -401,7 +482,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, submit, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, timelineStatus, timelineDays, summary, pageStats, pageQueries, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));
@@ -423,6 +504,15 @@ export function bingRoutes({ bing, siteOr404 }) {
     ['GET', /^\/api\/bing\/status$/, async () => bing.status()],
     ['POST', /^\/api\/bing\/key$/, async ({ body }) => bing.saveKey(body.key)],
     ['POST', /^\/api\/bing\/match$/, async ({ body }) => bing.setMatch(String(body.siteId || ''), body.siteUrl || '')],
+    ['GET', /^\/api\/bing\/sites\/([\w-]+)\/page-queries$/, async ({ match, query }) => {
+      const site = await siteOr404(match[1]);
+      const path = query.get('path') || '/';
+      const host = String(site.host || '').replace(/^https?:\/\//, '').replace(/\/.*$/, '');
+      const days = Math.min(180, Math.max(7, Number(query.get('days')) || 90));
+      const to = new Date().toISOString().slice(0, 10), from = new Date(Date.now() - days * 86_400_000).toISOString().slice(0, 10);
+      return bing.pageQueries(site, `https://${host}${path}`, { from, to });
+    }],
+    ['GET', /^\/api\/bing\/sites\/([\w-]+)\/sitemaps$/, async ({ match }) => bing.feeds(await siteOr404(match[1]))],
     ['GET', /^\/api\/bing\/sites\/([\w-]+)$/, async ({ match, query }) => bing.overview(await siteOr404(match[1]), query.get('range') || '28d', { fresh: query.has('fresh') })],
     ['POST', /^\/api\/bing\/sites\/([\w-]+)\/submit$/, async ({ match, body }) => bing.submit(await siteOr404(match[1]), body.urls)],
   ];

@@ -74,6 +74,11 @@ test('bing service: verifies the key, keeps daily history, submits URLs on the s
     const o = await bing.overview(site, '28d');
     assert.equal(o.siteUrl, 'https://cool-desk.com/');
     assert.equal(o.range.end, days[0]);
+    assert.deepEqual(await bing.timelineStatus(site), { status: 'History available', lastReported: days[0], siteUrl: o.siteUrl });
+    const timelineDays = await bing.timelineDays(site, days[0], days[0]);
+    assert.equal(timelineDays.length, 1);
+    assert.equal(timelineDays[0].date, days[0]);
+    assert.ok(timelineDays[0].impressions > 0);
     assert.equal(o.current.clicks, 84);
     assert.equal(o.previous.clicks, 28);
     assert.equal(o.queries[0].query, 'cooldesk');

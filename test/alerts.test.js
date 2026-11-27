@@ -277,6 +277,46 @@ test('goals marked alert in .sitelens.yml alert on a drop, and the file tunes si
   assert.deepEqual(reports[0].dimensionFilter.andGroup.expressions[1].filter.inListFilter.values, ['sign_up', 'purchase']);
 });
 
+test('a site without a GA4 property takes traffic from Plausible', async () => {
+  const site = { id: 'p1', label: 'Plausible Shop', host: 'shop.test' };
+  const dates = lastDays(NOW, 29);
+  const visits = dates.map((_, i) => (i === dates.length - 1 ? 400 : 100 + (i % 3)));
+  const visitors = dates.map(() => 80);
+  const calls = [];
+  const plausible = {
+    async analyticsForSite(s, range) {
+      calls.push([s.id, range]);
+      return { series: { visits, visitors } };
+    },
+  };
+  const store = memoryStore({ sites: [site], alertSettings: { desktop: false } });
+  const engines = {
+    async portfolio() { throw new Error('GA4 must not be used without a property'); },
+    async search() { return { trend: [] }; },
+  };
+  const alerts = createAlerts({ store, engines, plausible, extensions: { list: async () => [] }, github: null, now: () => NOW, notify: fakeNotify() });
+  const run = await alerts.run({ daily: true, digest: true });
+  assert.deepEqual(run.errors, []);
+  assert.deepEqual(calls, [['p1', '90d']]);
+  assert.equal(run.digest.sites[0].source, 'plausible');
+  assert.equal(run.digest.sites[0].sessions, 400);
+  assert.equal(run.fired[0].key, `traffic:p1:sessions:${localDay(NOW - DAY)}`);
+  assert.match(run.fired[0].title, /Plausible Shop: sessions spiked/);
+});
+
+test('a site with neither GA4 nor a Plausible match is skipped without an error', async () => {
+  const site = { id: 'p2', label: 'No Traffic', host: 'none.test' };
+  const skip = (kind) => Object.assign(new Error(kind), { kind });
+  const plausible = { analyticsForSite: async () => { throw skip('plausible-unmatched'); } };
+  const store = memoryStore({ sites: [site], alertSettings: { desktop: false } });
+  const engines = { async portfolio() { throw new Error('GA4 must not be used'); } };
+  const alerts = createAlerts({ store, engines, plausible, extensions: { list: async () => [] }, github: null, now: () => NOW, notify: fakeNotify() });
+  const run = await alerts.run({ daily: true, digest: true });
+  assert.deepEqual(run.errors, []);
+  assert.deepEqual(run.digest.sites, []);
+  assert.equal(run.fired.length, 0);
+});
+
 test('desktop notices: title, subtitle and detail, several items one per line', () => {
   const one = alertNotice([{ title: 'New Tab by Cooldesk: users down 3 (-6%)', detail: '50 users on the listing.', subject: { label: 'New Tab by Cooldesk' } }]);
   assert.deepEqual(one, { title: 'New Tab by Cooldesk', subtitle: 'users down 3 (-6%)', body: '50 users on the listing.' });
@@ -297,4 +337,22 @@ test('tagSites files alerts under a site directly or through its product', () =>
     { id: '5', subject: { type: 'mention', id: 'cooldesk' } },
   ], products);
   assert.deepEqual(tagged.map((a) => a.site), ['infraplan', 'cooldesk', 'cooldesk', '', '']);
+});
+
+test('unread counts repeats of one rule on one subject once, as the Inbox groups them', async () => {
+  const alert = (id, day, extra = {}) => ({ id, key: `ext:${id}`, rule: 'extension-users', at: NOW, day, title: 'users down', subject: { type: 'extension', id: 'e1' }, ...extra });
+  const store = memoryStore({
+    sites: [trafficSite()],
+    alerts: [
+      alert('a1', '2026-10-29', { subject: { type: 'site', id: 's1' } }),
+      alert('a2', '2026-10-28', { subject: { type: 'site', id: 's1' } }),
+      alert('a3', '2026-10-27', { subject: { type: 'site', id: 's1' } }),
+      alert('b1', '2026-10-29', { rule: 'traffic', subject: { type: 'site', id: 's1' } }),
+      alert('c1', '2026-10-20', { rule: 'traffic', subject: { type: 'site', id: 's1' }, read: true }),
+    ],
+  });
+  const alerts = createAlerts({ store, engines: fakeEngines(), extensions: { list: async () => [] }, github: null, now: () => NOW, notify: fakeNotify() });
+  const out = await alerts.unread();
+  assert.equal(out.unread, 2);
+  assert.equal(out.bySite.s1, 2);
 });

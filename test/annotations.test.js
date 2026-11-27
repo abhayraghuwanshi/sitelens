@@ -5,6 +5,7 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createStore } from '../server/store.mjs';
+import { createCalendar } from '../server/calendar.mjs';
 import { createAnnotations, filterAnnotations, githubReleases, extensionVersions, annotationRoutes } from '../server/annotations.mjs';
 import { placeAnnotations } from '../web/src/charts/annotations.js';
 
@@ -145,6 +146,34 @@ test('addNote: keeps an http(s) link with the note, refuses anything else', asyn
     assert.equal(note.url, 'https://buttondown.com/kauzl/archive/1');
     assert.equal((await notes.list({ scopes: ['site:abc'] }))[0].url, note.url);
     await assert.rejects(notes.addNote({ date: '2026-11-14', label: 'x', url: 'javascript:alert(1)' }), /http/);
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test('custom events persist their values and expose site-scoped, case-insensitive event types', async () => {
+  const dir = await tempDir();
+  try {
+    const store = createStore(dir);
+    const annotations = createAnnotations({ store });
+    const site = await store.saveSite({ id: 'a', label: 'Site A', host: 'a.example' });
+    const date = '2026-10-12';
+    const add = (eventType, scope, value) => annotations.addNote({ kind: 'custom', label: 'Launch', date, eventType, scope, value });
+    const scope = `site:${site.id}`;
+    await add('Newsletter', scope);
+    await add('newsletter', scope, 0);
+    await add('Paid ad', 'site:b', 2.5);
+    await assert.rejects(add('Newsletter', 'site:a', -1), /Enter a value/);
+    const reopened = createAnnotations({ store: createStore(dir) });
+    const events = await reopened.list({ from: date, to: date, scopes: [scope] });
+    assert.deepEqual(events.map(({ kind, value }) => [kind, value]), [['custom', 1], ['custom', 0]]);
+    const calendar = createCalendar({ store, annotations: reopened, now: () => Date.parse(date + 'T18:00:00Z') });
+    const timeline = await calendar.events({ site: site.id, from: date, to: date });
+    assert.deepEqual(timeline.customTypes, [{ key: 'newsletter', label: 'Newsletter' }]);
+    assert.deepEqual(timeline.events.map(({ eventType, value }) => [eventType, value]), [['Newsletter', 1], ['newsletter', 0]]);
+    const later = await calendar.events({ site: site.id, from: '2026-10-11', to: '2026-10-11' });
+    assert.deepEqual(later.customTypes, timeline.customTypes);
+    assert.deepEqual(later.events, []);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }

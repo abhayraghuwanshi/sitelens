@@ -20,6 +20,12 @@
 //  - /mcp speaks MCP over HTTP to Claude Code and Claude Desktop. A personal
 //    access token (slk_…, made in Account → Claude; only its hash is kept)
 //    picks the user, and the tools run against that user's app and folder.
+//  - No sign-in needed: /start gives this browser a random 256-bit secret in an
+//    HttpOnly cookie. Its folder, /data/users/b-<hash>/, is sealed with a key
+//    derived from that secret, so the keys and tokens it holds open only while
+//    that browser is here: no background syncs, sharing or MCP for it, and
+//    "Forget this browser" deletes the folder. Google sign-in stays for
+//    invited accounts.
 //  - Early access: anyone can leave an email (/waitlist, from the home and
 //    sign-in pages; also anyone not invited who tries to sign in). Admins see
 //    the list, who's live, and invite people from /admin.
@@ -29,7 +35,7 @@
 
 import { createServer } from 'node:http';
 import { BlockList, isIP } from 'node:net';
-import { mkdirSync, readFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DatabaseSync } from 'node:sqlite';
@@ -41,6 +47,7 @@ import { SCOPES } from './auth.mjs';
 import { Agent } from 'undici';
 import { guardOutgoingFetch } from './net-guard.mjs';
 import { homePage } from './home.mjs';
+import { privacyPage, termsPage } from './legal.mjs';
 import { loginPage, waitlistPage, adminPage, waitlistCsv, signedInPage } from './pages.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
 
@@ -49,6 +56,10 @@ const COOKIE = '__Host-sitelens';
 // built by scripts/build-tour.mjs. No app, no data, nothing to sign in to.
 // The old live demo (/demo) redirects there and clears its old cookie.
 const DEMO_COOKIE = '__Host-kauzl-demo';
+// A browser using Kauzl without signing in: the secret that opens its folder.
+const BROWSER_COOKIE = '__Host-kauzl-browser';
+const BROWSER_DAYS = 400; // the longest a browser keeps a cookie
+const BROWSER_IDLE_MS = 30 * 60_000; // an idle browser's app is let go, and its key forgotten
 const SESSION_DAYS = 30;
 // How long a new MCP token lasts; 0 is never (until revoked). The default limits
 // what a token copied out of someone's Claude config is good for.
@@ -58,7 +69,7 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 // What a user's app may see of the server's environment.
-const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET', 'GITHUB_APP_SLUG', 'TZ'];
+const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET', 'GITHUB_APP_SLUG', 'POSTHOG_API_KEY', 'POSTHOG_PROJECT_ID', 'POSTHOG_BASE_URL', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'TZ'];
 
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
@@ -116,6 +127,15 @@ export function userKey(masterKey, userId) {
   return Buffer.from(hkdfSync('sha256', masterKey, 'sitelens-studio', `user:${userId}`, 32));
 }
 
+// A browser's folder id and sealing key both come from its cookie secret; the
+// server keeps neither. MASTER_KEY is mixed in, so the secret alone is no key either.
+export function browserUserFrom(masterKey, secret) {
+  if (!/^[A-Za-z0-9_-]{43}$/.test(String(secret || ''))) return null;
+  const id = `b-${createHash('sha256').update(`browser:${secret}`).digest('hex').slice(0, 32)}`;
+  const key = Buffer.from(hkdfSync('sha256', Buffer.from(secret, 'base64url'), masterKey, `browser:${id}`, 32));
+  return { id, email: '', browser: true, key };
+}
+
 export function parseEmails(value) {
   return new Set(String(value || '').split(/[\s,]+/).map((e) => e.trim().toLowerCase()).filter(Boolean));
 }
@@ -147,7 +167,7 @@ export function createGateway({
   waitlistPerHour = 300,
   // A user's own app over their own sealed folder; tests swap it.
   createUserApp = (user) => createApp({
-    store: createStore(join(dataDir, 'users', user.id), { key: userKey(masterKey, user.id) }),
+    store: createStore(join(dataDir, 'users', user.id), { key: user.key || userKey(masterKey, user.id) }),
     port,
     env: {
       ...Object.fromEntries(APP_ENV.filter((k) => env[k]).map((k) => [k, env[k]])),
@@ -184,11 +204,22 @@ export function createGateway({
   const attempts = new Map(); // client ip → { count, resetAt }
   const mcps = new Map(); // user id → MCP server over that user's app
 
+  const browserSeen = new Map(); // browser user id → last request
   function appFor(user) {
+    if (user.browser) {
+      browserSeen.set(user.id, now());
+      for (const [id, at] of browserSeen) {
+        if (now() - at > BROWSER_IDLE_MS) {
+          browserSeen.delete(id);
+          apps.delete(id);
+        }
+      }
+    }
     let app = apps.get(user.id);
     if (!app) {
       app = createUserApp(user);
-      if (startJobs) for (const job of ['extensions', 'github', 'vitals', 'alerts', 'mentions', 'firebase', 'posts', 'bing', 'aiSearch', 'contentCycles', 'redditCycles', 'history']) app[job]?.start?.();
+      // A browser's folder opens only while it's here, so nothing runs in the background for it.
+      if (startJobs && !user.browser) for (const job of ['extensions', 'github', 'vitals', 'alerts', 'mentions', 'firebase', 'posts', 'bing', 'aiSearch', 'redditCycles', 'history', 'timelineJobs']) app[job]?.start?.();
       apps.set(user.id, app);
     }
     return app;
@@ -315,6 +346,15 @@ export function createGateway({
     const id = cookies(req)[COOKIE];
     if (id) db.prepare('DELETE FROM sessions WHERE hash = ?').run(sha256(id));
     res.setHeader('Set-Cookie', `${COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`);
+  }
+
+  const browserUser = (req) => browserUserFrom(masterKey, cookies(req)[BROWSER_COOKIE]);
+  const BROWSER_CLEAR = `${BROWSER_COOKIE}=; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0`;
+  // "Forget this browser": its folder goes, since nothing else could ever open it.
+  function forgetBrowser(user) {
+    apps.delete(user.id);
+    browserSeen.delete(user.id);
+    rmSync(join(dataDir, 'users', user.id), { recursive: true, force: true });
   }
 
   /* ---------- MCP over HTTP ---------- */
@@ -625,6 +665,15 @@ export function createGateway({
     }
 
     if (url.pathname === '/waitlist') return waitlistRoutes(req, res, url);
+    // Use Kauzl in this browser, no sign-in.
+    if (url.pathname === '/start') {
+      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      if (sessionUser(req) || browserUser(req)) return res.writeHead(302, { Location: '/' }).end();
+      if (limited(req)) return redirectLogin(res, 'Too many tries. Wait a few minutes.');
+      const secret = randomBytes(32).toString('base64url');
+      res.setHeader('Set-Cookie', `${BROWSER_COOKIE}=${secret}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=${BROWSER_DAYS * 86_400}`);
+      return res.writeHead(302, { Location: '/' }).end();
+    }
     if (url.pathname === '/login') {
       if (sessionUser(req)) return res.writeHead(302, { Location: '/' }).end();
       return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Content-Security-Policy': PUBLIC_CSP }).end(loginPage(url.searchParams.get('error'), { tools: Boolean(toolsOrigin), ga: tagId, joined: url.searchParams.get('joined') === 'sign-in', v: await assetVersion() }));
@@ -695,12 +744,22 @@ export function createGateway({
       }).end(js ? TOUR_JS : TOUR_HTML);
     }
     if (url.pathname === '/logout' && req.method === 'POST') {
+      const browser = browserUser(req);
+      if (browser) forgetBrowser(browser);
       endSession(req, res);
-      res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie'), DEMO_CLEAR].flat().filter(Boolean));
-      return res.writeHead(303, { Location: '/login' }).end();
+      res.setHeader('Set-Cookie', [res.getHeader('Set-Cookie'), DEMO_CLEAR, browser ? BROWSER_CLEAR : null].flat().filter(Boolean));
+      return res.writeHead(303, { Location: browser ? '/home' : '/login' }).end();
     }
 
-    const user = sessionUser(req);
+    // Public legal pages (Google's OAuth review reads /privacy without signing in).
+    if (url.pathname === '/privacy' || url.pathname === '/terms') {
+      if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
+      return res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'public, max-age=300', 'Content-Security-Policy': PUBLIC_CSP })
+        .end(url.pathname === '/privacy' ? privacyPage() : termsPage());
+    }
+
+    // A signed-in account wins over this browser's no-sign-in folder.
+    const user = sessionUser(req) || browserUser(req);
     // The public home page: at /home for everyone, at / for visitors without a session.
     if (url.pathname === '/home' || (!user && url.pathname === '/')) {
       if (!['GET', 'HEAD'].includes(req.method)) return res.writeHead(405, { Allow: 'GET, HEAD' }).end();
@@ -719,6 +778,18 @@ export function createGateway({
     if (url.pathname === '/admin' || url.pathname.startsWith('/admin/')) {
       if (!admins.has(user.email)) return res.writeHead(404, { 'Content-Type': 'text/plain' }).end('Not found');
       return adminRoutes(req, res, url);
+    }
+    // In this browser, no sign-in: their own app, everything it does, nothing tied to an account.
+    if (user.browser) {
+      if (url.pathname === '/api/me') return jsonOut(res, 200, { email: '', hosted: true, viewer: false, browser: true });
+      if (url.pathname === '/api/shares' || url.pathname === '/api/mcp/tokens' || url.pathname.startsWith('/api/mcp/tokens/')) {
+        return jsonOut(res, 403, { error: 'Sign in with an invited account to share sites or connect Claude.', kind: 'browser-only' });
+      }
+      if (url.pathname === '/api/state' && req.method === 'GET') {
+        const own = await (await selfFetch(appFor(user).handle, `${origin}/api/state`)).json();
+        return jsonOut(res, 200, { ...own, browser: true });
+      }
+      return appFor(user).handle(req, res);
     }
     const invited = allowedEmails.has(user.email);
     if (url.pathname === '/api/me') {
@@ -740,7 +811,7 @@ export function createGateway({
     // Here only to view: their own app answers reads, and can't connect or change anything.
     if (!invited) {
       const read = req.method === 'GET' || req.method === 'HEAD';
-      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
+      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|plausible|posthog|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
       if (!read || reaching) return jsonOut(res, 403, VIEW_ONLY);
     }
     return appFor(user).handle(req, res);

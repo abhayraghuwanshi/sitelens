@@ -2,7 +2,7 @@ import { useState } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState, Segmented } from '../components/ui.jsx';
-import { Page } from './Page.jsx';
+import { Page, usePhoneWidth } from './Page.jsx';
 import { Marked } from '../components/Marks.jsx';
 import { Editor, labeller } from '../pages/Funnels.jsx';
 
@@ -129,11 +129,11 @@ export function JourneysPage({ site, params }) {
 
   return (
     <Page title="Journeys" sub="How people get to your goal, and where they stop"
+      time={<Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />}
       actions={
         <span class="nx-head-ctl">
           {outcome && <span class="chip" title="The site’s outcome goal">{outcome.label}</span>}
           <button class="btn" type="button" onClick={() => setEditing(true)}>Edit steps</button>
-          <Segmented label="Period" value={range} options={RANGES} onChange={(key) => { location.hash = `/site/${site.id}/journeys?range=${key}`; }} />
         </span>
       }>
       {editingMode ? (
@@ -172,6 +172,8 @@ function Answer({ steps, goals, outcome }) {
 // Steps down the goal, with the drop between each one.
 export function Stairs({ steps, goals, site, range, outcome, bare, onEdit }) {
   const first = steps[0]?.sessions || 0;
+  // A phone shows each step's name, its count and share, and who left: no event names or second ratio.
+  const phone = usePhoneWidth();
   const content = (
     <>
       <div class="nx-stairs">
@@ -180,18 +182,20 @@ export function Stairs({ steps, goals, site, range, outcome, bare, onEdit }) {
           const lost = next ? s.sessions - next.sessions : 0;
           return [
             <div class="nx-stair" key={`s${i}`}>
-              <span class="nx-stair-name"><b>{stepLabel(s, goals)}</b><span class="nx-stair-kind">{stepKind(s)}</span></span>
+              <span class="nx-stair-name"><b>{stepLabel(s, goals)}</b>{!phone && <span class="nx-stair-kind">{stepKind(s)}</span>}</span>
               <span class="nx-stair-bar"><span style={{ width: `${Math.max(0.6, (s.sessions / Math.max(1, first)) * 100)}%` }} /></span>
               <span class="nx-stair-num">
                 <b>{fmt(s.sessions)}</b>
-                <small>{i ? `${pct(s.sessions, first)} of all · ${share(s.stepRate)} of the step before` : 'everyone'}</small>
+                {phone ? i > 0 && <small>{pct(s.sessions, first)}</small>
+                  : <small>{i ? `${pct(s.sessions, first)} of all · ${share(s.stepRate)} of the step before` : 'everyone'}</small>}
               </span>
             </div>,
             next && (
               <div class="nx-leakrow" key={`l${i}`}>
                 <span />
                 <a class="nx-leak" href={stopHref(site, range, s)}>
-                  <b>{fmt(lost)} stopped here</b> ({pct(lost, s.sessions)}) <span>see where they went →</span>
+                  {phone ? <><b>↓ {fmt(lost)} left</b> ({pct(lost, s.sessions)}) <span>where to ›</span></>
+                    : <><b>{fmt(lost)} stopped here</b> ({pct(lost, s.sessions)}) <span>see where they went →</span></>}
                 </a>
               </div>
             ),
@@ -227,7 +231,7 @@ function WhoGetsThere({ site, who, setWho, data, steps, goals, outcome, average 
   return (
     <section class="card card-plain" aria-label="Who gets there">
       <div class="nx-jsum-bar">
-        <h2 class="nx-h2">Who gets there <span class="muted small">· {share(average)} on average</span></h2>
+        <h2 class="nx-h2">Who gets there <span class="nx-h2-sub">{share(average)} on average</span></h2>
         <Segmented label="Compare by" value={who} options={WHO} onChange={setWho} />
       </div>
       {data.error ? <ErrorState error={data.error} onRetry={data.reload} />
@@ -291,7 +295,7 @@ function RoutesCard({ site, data, outcome, average }) {
   return (
     <section class="card card-plain" aria-label="Routes">
       <div class="nx-jsum-bar">
-        <h2 class="nx-h2">Routes <span class="muted small">· where they came from › where they landed › where they went</span></h2>
+        <h2 class="nx-h2">Routes <span class="nx-h2-sub">where they came from › where they landed › where they went</span></h2>
         <Segmented label="Routes" value={sort} options={[{ key: 'best', label: 'Bring the most' }, { key: 'leaky', label: 'Lose the most' }]} onChange={setSort} />
       </div>
       {data.error ? <ErrorState error={data.error} onRetry={data.reload} />

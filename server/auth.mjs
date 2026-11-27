@@ -1,9 +1,13 @@
-// Google credentials. Two ways in:
+// Google credentials. Three ways in:
 //  - OAuth (GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET set): a real consent flow
 //    with a refresh token, so sessions never expire mid-analysis.
+//  - Service account key: the JSON key file of a Google service account, no
+//    sign-in. Kauzl signs a JWT with it for a 1-hour token whenever it needs
+//    one, so it never expires. The account's email must be added as a viewer
+//    in GA4 and as a user in Search Console (and given BigQuery roles).
 //  - Pasted access token: the extension's model, ~1 hour lifetime.
 
-import { randomBytes } from 'node:crypto';
+import { randomBytes, createSign, createPrivateKey } from 'node:crypto';
 import { cleanToken } from '../shared/sitelens/ga4.js';
 
 export const SCOPES = [
@@ -20,6 +24,34 @@ export const SCOPES = [
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const INFO_URL = 'https://oauth2.googleapis.com/tokeninfo';
+// What a service account asks for: the data scopes (openid/email are for people).
+export const SERVICE_SCOPES = SCOPES.filter((s) => s.startsWith('https://'));
+
+// The key file Google Cloud downloads (IAM → Service accounts → Keys → JSON).
+// Its token_uri is ignored: tokens only ever come from Google's own endpoint.
+export function parseServiceAccount(raw) {
+  let key;
+  try {
+    key = typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    throw new AuthError('Paste the whole JSON key file, from { to }.');
+  }
+  if (!key || key.type !== 'service_account' || typeof key.client_email !== 'string' || typeof key.private_key !== 'string') {
+    throw new AuthError('That isn’t a service account key. In Google Cloud: IAM → Service accounts → your account → Keys → Add key → JSON.');
+  }
+  try {
+    createPrivateKey(key.private_key);
+  } catch {
+    throw new AuthError('The key’s private_key can’t be read. Paste the file exactly as downloaded.');
+  }
+  return { clientEmail: key.client_email.trim(), privateKey: key.private_key, projectId: String(key.project_id || '') };
+}
+
+const b64url = (v) => Buffer.from(typeof v === 'string' ? v : JSON.stringify(v)).toString('base64url');
+export function serviceAssertion(sa, nowSec = Math.floor(Date.now() / 1000)) {
+  const unsigned = `${b64url({ alg: 'RS256', typ: 'JWT' })}.${b64url({ iss: sa.clientEmail, scope: SERVICE_SCOPES.join(' '), aud: TOKEN_URL, iat: nowSec, exp: nowSec + 3600 })}`;
+  return `${unsigned}.${createSign('RSA-SHA256').update(unsigned).sign(sa.privateKey).toString('base64url')}`;
+}
 
 export class AuthError extends Error {
   constructor(message) {
@@ -79,6 +111,27 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
     return payload.access_token;
   }
 
+  async function mintService(sa) {
+    const res = await fetchImpl(TOKEN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: serviceAssertion(sa) }),
+    });
+    const payload = await res.json().catch(() => ({}));
+    if (!res.ok || !payload.access_token) {
+      throw new AuthError(`Google refused the service account key (${payload.error_description || payload.error || res.status}). It may have been deleted or disabled.`);
+    }
+    return { accessToken: payload.access_token, expiresAt: Date.now() + (Number(payload.expires_in) || 3600) * 1000 };
+  }
+
+  async function refreshService(auth) {
+    const fresh = await mintService(auth.serviceAccount);
+    await store.update((s) => {
+      if (s.auth?.mode === 'service') s.auth = { ...s.auth, ...fresh };
+    });
+    return fresh.accessToken;
+  }
+
   return {
     oauthAvailable: Boolean(clientId && clientSecret),
 
@@ -90,8 +143,8 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
         mode: auth.mode,
         email: auth.email || '',
         scopes: auth.scopes || [],
-        expiresAt: auth.mode === 'oauth' ? null : auth.expiresAt,
-        expired: auth.mode !== 'oauth' && auth.expiresAt < Date.now(),
+        expiresAt: auth.mode === 'token' ? auth.expiresAt : null,
+        expired: auth.mode === 'token' && auth.expiresAt < Date.now(),
         // Google refused the saved sign-in: it needs signing in again.
         ...(auth.broken ? { broken: auth.broken.message } : {}),
         oauthAvailable: this.oauthAvailable,
@@ -105,6 +158,13 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
       if (auth.mode === 'oauth') {
         if (auth.expiresAt - 60_000 > Date.now()) return auth.accessToken;
         refreshing ||= refresh(auth).finally(() => {
+          refreshing = null;
+        });
+        return refreshing;
+      }
+      if (auth.mode === 'service') {
+        if (auth.accessToken && auth.expiresAt - 60_000 > Date.now()) return auth.accessToken;
+        refreshing ||= refreshService(auth).finally(() => {
           refreshing = null;
         });
         return refreshing;
@@ -123,6 +183,16 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
         s.auth = { mode: 'token', accessToken, ...info };
       });
       return info;
+    },
+
+    // A service account key instead of signing in: checked with Google once, then kept.
+    async useServiceAccount(raw) {
+      const sa = parseServiceAccount(raw);
+      const fresh = await mintService(sa);
+      await store.update((s) => {
+        s.auth = { mode: 'service', email: sa.clientEmail, scopes: SERVICE_SCOPES, serviceAccount: sa, ...fresh };
+      });
+      return { email: sa.clientEmail, scopes: SERVICE_SCOPES };
     },
 
     startUrl() {

@@ -123,6 +123,7 @@ export function createSearchHub({ engines, bing, auth, fetchImpl = fetch }) {
         robots: r.robotsTxtState || '', fetch: r.pageFetchState || '', indexing: r.indexingState || '',
         googleCanonical: r.googleCanonical || '', userCanonical: r.userCanonical || '',
         link: json.inspectionResult?.inspectionResultLink || '',
+        at: Date.now(), // when Kauzl asked Google (the answer is kept 6 hours)
       };
     });
   }

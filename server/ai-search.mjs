@@ -647,6 +647,40 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
     }
   }
 
+  // Count an answer once per cited domain, even when it cites several URLs there.
+  function citationDays(site, from, to) {
+    if (site.demo) return { dates: [], rows: [] };
+    const start = Date.parse(from);
+    const end = Date.parse(to) + DAY;
+    const checks = open().prepare('SELECT ts, sources FROM checks WHERE site_id = ? AND ts >= ? AND ts < ? AND error IS NULL').all(site.id, start, end);
+    const dates = new Set();
+    const rows = [];
+    const own = bare(site.host);
+    for (const check of checks) {
+      const date = new Date(check.ts).toISOString().slice(0, 10);
+      dates.add(date);
+      const sources = JSON.parse(check.sources || '{}');
+      const domains = new Set((sources.domains || []).map(({ domain }) => domain).filter(Boolean));
+      if (!sources.domains) {
+        for (const { url } of sources.cited || []) {
+          try {
+            const domain = bare(new URL(url).hostname);
+            if (domain) domains.add(domain);
+          } catch {
+            // Ignore malformed citation URLs in older checks.
+          }
+        }
+      }
+      rows.push({ date, key: 'answers', value: 1 });
+      if (domains.size) rows.push({ date, key: 'citing', value: 1 });
+      if ([...domains].some((domain) => domain === own || domain.endsWith(`.${own}`))) {
+        rows.push({ date, key: 'own', value: 1 });
+      }
+      for (const domain of domains) rows.push({ date, key: `domain:${domain}`, value: 1 });
+    }
+    return { dates: [...dates], rows };
+  }
+
   // Which of the site's pages the assistants cited between two times, from the
   // answer checks: path → { cited, prompts, engines }, plus how many answers there were.
   function citations(site, fromMs, toMs) {
@@ -675,7 +709,7 @@ export function createAiSearch({ dbPath, store, auth, firebase, siteConfig = nul
   }
 
   return {
-    overview, referrals, checks, run, savePrompts, saveSettings, status, promptsFor, citations,
+    overview, referrals, checks, run, savePrompts, saveSettings, status, promptsFor, citations, citationDays,
     start() {
       if (timers.length) return;
       const safe = () => weeklyRun().catch((err) => log.error('[ai-search]', err.message));

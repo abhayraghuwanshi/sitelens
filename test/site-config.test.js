@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, writeFile, mkdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { parseConfigLink, parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection } from '../server/site-config.mjs';
+import { parseConfigLink, parseSiteConfig, draftYaml, unseenEvents, createSiteConfig, siteConfigRoutes, GOAL_ALERT_DEFAULTS, searchGroups, aiQuestions, sliceYaml, replaceSection, sectionText, describeSection, goalsSection } from '../server/site-config.mjs';
 import { readFile } from 'node:fs/promises';
 import { openCacheDb } from '../server/cache.mjs';
 
@@ -582,4 +582,58 @@ test('editing a site in Settings keeps its .sitelens.yml link', async () => {
   await store.update((s) => { s.sites[0].configLink = 'https://github.com/me/web/blob/dev/.sitelens.yml'; });
   await store.saveSite({ ...saved, label: 'Shop 2' });
   assert.equal((await store.site(saved.id)).configLink, 'https://github.com/me/web/blob/dev/.sitelens.yml');
+});
+
+test('goalsSection writes the form rows back and keeps each goal’s comment', () => {
+  const old = `# What counts
+goals:
+  # OverlayLayout.jsx goLive(): first "Go Live"
+  - { event: go_live, label: Went live, alert: { when: drop, pct: 60, min: 2 } }
+  # Same button on a room that already exists
+  - { event: obs_link_copied, label: Came back to stream }
+  # LandingPage.jsx footer mailto
+  - { event: custom_email_click, label: Asked for a custom overlay }
+  - { page: /templates/, label: Browsed templates, role: step }`;
+  const { config } = parseSiteConfig(`version: 1\nsite: x.test\n${old}\n`, { host: 'x.test' });
+  // Unchanged rows give the same text back.
+  assert.equal(goalsSection(old, config.goals), old);
+  // Reordered, one removed, one renamed, one added: comments follow their goal.
+  const [live, back, , templates] = config.goals;
+  const next = goalsSection(old, [templates, { ...live, label: 'Went live: first time', alert: null }, back,
+    { label: 'Read a guide', source: 'page', match: '/guides/', role: 'step' }]);
+  assert.equal(next, `# What counts
+goals:
+  - { page: /templates/, label: Browsed templates, role: step }
+  # OverlayLayout.jsx goLive(): first "Go Live"
+  - { event: go_live, label: "Went live: first time" }
+  # Same button on a room that already exists
+  - { event: obs_link_copied, label: Came back to stream }
+  - { page: /guides/, label: Read a guide, role: step }`);
+  assert.equal(parseSiteConfig(`version: 1\nsite: x.test\n${next}\n`, { host: 'x.test' }).config.goals.length, 4);
+  assert.equal(goalsSection(old, []), '');
+  assert.match(goalsSection('', [{ label: 'A, b', source: 'event', match: 'a', role: 'outcome', alert: { when: 'drop', pct: 0.5, min: 5 } }]), /^goals:\n {2}- \{ event: a, label: "A, b", alert: true \}$/);
+});
+
+test('goals saved to Kauzl keep the repo file’s other parts, apply now, and can be dropped for the repo again', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'sitelens-config-'));
+  const gh = branchedGitHub({ 'me/web@main:.sitelens.yml': 'version: 1\nsite: shop.test\ngoals:\n  # from Checkout.jsx\n  - { event: purchase }\nalerts:\n  traffic: { pct: 40 }\n' });
+  const siteConfig = createSiteConfig({ dir, repos: async () => ['me/web'], getToken: async () => 't', fetchImpl: gh.fetchImpl });
+  const routes = siteConfigRoutes({ siteConfig, siteOr404: async () => site, firedEvents: async () => null, draftInputs: async () => ({}) });
+  const handler = (path) => routes.find(([m, re]) => m === 'POST' && re.test(`/api/sites/${site.id}/config/${path}`))[2];
+  const goals = [{ label: 'purchase', source: 'event', match: 'purchase', role: 'outcome' }, { label: 'Pricing', source: 'page', match: '/pricing', role: 'step' }];
+  assert.deepEqual(await handler('goals')({ match: [null, site.id], body: { goals, to: 'kauzl' } }), { saved: 'local' });
+  // No pull request; Kauzl's copy wins, with the comment and the alerts part kept.
+  assert.ok(!gh.calls.some((c) => c.path.endsWith('/pulls')));
+  const kept = await siteConfig.get(site);
+  assert.equal(kept.source.type, 'local');
+  assert.deepEqual(kept.config.goals.map((g) => g.match), ['purchase', '/pricing']);
+  assert.match(kept.text, /# from Checkout\.jsx\n {2}- \{ event: purchase \}/);
+  assert.equal(kept.config.alerts.traffic.pct, 0.4);
+  // Later edits stay in Kauzl's copy, whatever `to` says.
+  await handler('goals')({ match: [null, site.id], body: { goals: goals.slice(1) } });
+  assert.deepEqual((await siteConfig.get(site)).config.goals.map((g) => g.match), ['/pricing']);
+  // Back to the repo's file.
+  const back = await handler('local/remove')({ match: [null, site.id] });
+  assert.equal(back.source.type, 'repo');
+  assert.deepEqual(back.config.goals.map((g) => g.match), ['purchase']);
 });

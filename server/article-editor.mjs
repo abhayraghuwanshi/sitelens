@@ -346,6 +346,39 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
 
   // Everything the article page shows. The slow parts (the article list, the
   // live page, the GitHub file, Search Console) run side by side, not in turn.
+  // The commits that touched this page's source file since a day, newest first, each with the
+  // file's patch (GitHub's unified diff for that file only). Feeds "page changed" events.
+  const commitCache = new Map(); // repo@sha → commit (a commit never changes)
+  const commitLists = new Map(); // repo:file:since → { at, list }
+  async function commits(site, path, { since = '', limit = 8 } = {}) {
+    if (site.demo) return { commits: [], note: 'demo' };
+    const row = await articles.find(site, path, '90d');
+    if (!row?.file) return { commits: [], note: 'No source file in your GitHub repos matches this URL.' };
+    const token = await getToken();
+    if (!token) return { commits: [], note: 'Add a GitHub token in Settings → GitHub to see the page’s changes.' };
+    const { repo, file } = row.file;
+    const q = new URLSearchParams({ path: file, per_page: String(Math.min(20, limit)) });
+    if (since) q.set('since', `${since}T00:00:00Z`);
+    const listKey = `${repo}:${file}:${since}`;
+    let list = commitLists.get(listKey);
+    if (!list || now() - list.at > 10 * 60_000) {
+      list = { at: now(), list: await gh('GET', `/repos/${repo}/commits?${q}`, token) };
+      commitLists.set(listKey, list);
+    }
+    const out = await Promise.all((Array.isArray(list.list) ? list.list : []).slice(0, limit).map(async (c) => {
+      const ck = `${repo}@${c.sha}`;
+      if (!commitCache.has(ck)) commitCache.set(ck, gh('GET', `/repos/${repo}/commits/${c.sha}`, token).catch((err) => { commitCache.delete(ck); return null; }));
+      const full = await commitCache.get(ck);
+      const f = (full?.files || []).find((x) => x.filename === file) || null;
+      return {
+        sha: c.sha, date: String(c.commit?.author?.date || c.commit?.committer?.date || '').slice(0, 10),
+        message: String(c.commit?.message || '').split('\n')[0].slice(0, 200), author: c.author?.login || c.commit?.author?.name || '',
+        url: c.html_url || '', repo, file, status: f?.status || '', additions: f?.additions ?? null, deletions: f?.deletions ?? null, patch: f?.patch || '',
+      };
+    }));
+    return { commits: out, note: null };
+  }
+
   async function detail(site, path, rangeKey = '28d') {
     if (site.demo) throw new EngineError('The sample site has no articles to edit. Open one of your own sites.', { kind: 'demo' });
     // Search Console needs only the path, so it starts before the article is found.
@@ -529,7 +562,7 @@ export function createArticleEditor({ auth, store, articles, annotations, getTok
     return { url: pr.html_url, number: pr.number, branch, files: [...changes.keys()], skipped, note };
   }
 
-  return { detail, suggest, publish, startTrial, decideTrial, trials };
+  return { detail, commits, suggest, publish, startTrial, decideTrial, trials };
 }
 
 export function articleEditorRoutes({ editor, siteOr404 }) {
