@@ -1,83 +1,84 @@
 import { useState } from 'preact/hooks';
 import { api } from '../../api.js';
 import { useAsync } from '../../hooks.js';
-import { Card } from '../../components/ui.jsx';
-import { KeyForm } from './BingSettings.jsx';
+import { Section, Steps, Gets, Facts, SecretField } from './ConnectionKit.jsx';
 
 export function VercelSettings() {
   const status = useAsync(() => api.get('/vercel/status'), []);
   const connect = useAsync(() => api.get('/connect').catch(() => ({})), []);
   const canConnect = Boolean(connect.data?.vercel);
-  const [token, setToken] = useState('');
   const [teamId, setTeamId] = useState(null);
-  const [msg, setMsg] = useState(null);
-  const [busy, setBusy] = useState(false);
   const s = status.data || {};
   const team = teamId ?? s.teamId ?? '';
 
-  async function save(event) {
-    event.preventDefault();
-    setBusy(true);
-    setMsg(null);
-    try {
-      const r = await api.post('/vercel/token', { token, teamId: team });
-      setMsg({ ok: true, text: r.login ? `Saved — signed in as ${r.login}.` : 'Saved.' });
-      setToken('');
-      status.reload();
-    } catch (err) {
-      setMsg({ ok: false, text: err.message });
-    } finally {
-      setBusy(false);
-    }
+  async function saveToken(token) {
+    const r = await api.post('/vercel/token', { token, teamId: team });
+    status.reload();
+    return r.login ? `Saved. Signed in as ${r.login}.` : 'Saved.';
+  }
+  async function remove() {
+    await api.post('/vercel/token', { token: '', teamId: '' });
+    setTeamId(null);
+    status.reload();
+    return 'Removed the saved token.';
   }
 
-  async function remove() {
-    setBusy(true);
-    try {
-      await api.post('/vercel/token', { token: '', teamId: '' });
-      setTeamId(null);
-      setMsg({ ok: true, text: 'Removed the saved token.' });
-      status.reload();
-    } finally {
-      setBusy(false);
-    }
-  }
+  const teamField = (
+    <label class="field m-0">Team ID <span class="muted small">(optional)</span>
+      <input class="mono" placeholder="team_…" value={team} onInput={(e) => setTeamId(e.currentTarget.value)} />
+      <small>Leave empty to use your default team.</small>
+    </label>
+  );
 
   return (
-    <Card title="Vercel" sub="Deployments and Web Analytics for projects hosted on Vercel">
-      <div class="stack">
-        <div class="row small">
-          <span class={`dot${s.tokenSource ? ' on' : ''}`} />
-          {s.tokenSource
-            ? <>{s.tokenSource === 'oauth' ? 'Connected to Vercel' : <>Token from {s.tokenSource === 'env' ? <code>VERCEL_TOKEN</code> : 'Settings'}</>}{s.login && <> · <b>{s.login}</b></>}
-                {s.teamId && <> · <span class="mono">{s.teamId}</span></>}
-                {s.lastError && <span class="text-bad"> · {s.lastError}</span>}</>
-            : 'No token yet'}
-        </div>
+    <>
+      <Section title="What you get">
+        <Gets items={[
+          'Production deploys as moments on each site’s Timeline',
+          'Web Analytics for projects hosted on Vercel',
+          'A deploy lined up with the traffic change that followed it',
+        ]} />
+      </Section>
+
+      {!s.tokenSource && (
+        <Section title="Set up">
+          <Steps items={canConnect ? [
+            { title: 'Connect Vercel below', body: 'Pick the account or team that owns your projects. Kauzl only reads them.' },
+          ] : [
+            { title: 'Create an access token', body: 'Scope it to the team that owns your projects.', href: 'https://vercel.com/account/settings/tokens', cta: 'Vercel tokens' },
+            { title: 'Paste it below', body: 'Add the team ID if your projects aren’t in your default team.' },
+          ]} />
+        </Section>
+      )}
+
+      <Section title={canConnect ? 'Account' : 'Access token'}>
         {canConnect && (
-          <div class="row">
-            <a class="btn primary" href="/auth/vercel">{s.tokenSource === 'oauth' ? 'Connect again' : 'Connect Vercel'}</a>
-            {s.tokenSource === 'oauth' && <button class="btn ghost danger" type="button" disabled={busy} onClick={remove}>Disconnect</button>}
+          <div class="cx-key-saved">
+            <div class="cx-key-text">
+              <b>{s.tokenSource === 'oauth' ? `Connected${s.login ? ` as ${s.login}` : ''}` : 'Sign in with Vercel'}</b>
+              <span class="small muted">{s.tokenSource === 'oauth' ? 'Refreshes on its own.' : 'The quickest way: no token to copy.'}</span>
+            </div>
+            <div class="row gap-6">
+              <a class={`btn${s.tokenSource === 'oauth' ? ' ghost' : ' primary'}`} href="/auth/vercel">{s.tokenSource === 'oauth' ? 'Connect again' : 'Connect Vercel'}</a>
+              {s.tokenSource === 'oauth' && <button class="btn ghost danger" type="button" onClick={remove}>Disconnect</button>}
+            </div>
           </div>
         )}
-        <KeyForm open={!canConnect}>
-        <form class="row" onSubmit={save}>
-          <input type="password" autocomplete="off" style={{ flex: '1', minWidth: '240px' }} placeholder="Vercel access token" value={token}
-            onInput={(e) => setToken(e.currentTarget.value)} aria-label="Vercel token" />
-          <input style={{ width: '250px' }} placeholder="team_… (optional)" value={team}
-            onInput={(e) => setTeamId(e.currentTarget.value)} aria-label="Vercel team ID" />
-          <button class="btn primary" type="submit" disabled={busy || (!token.trim() && !s.tokenSource)}>{busy ? 'Checking…' : 'Save'}</button>
-          {s.tokenSource === 'settings' && <button class="btn ghost danger" type="button" disabled={busy} onClick={remove}>Remove</button>}
-        </form>
-        </KeyForm>
-        <p class="note">
-          {canConnect && <>Connect picks the account or team that owns your projects; Kauzl only reads them. </>}
-          {!canConnect && <>Create a token at <a href="https://vercel.com/account/settings/tokens" target="_blank" rel="noreferrer">vercel.com/account/settings/tokens</a> scoped
-          to the team that owns your projects. It's stored in <code>.data/studio.json</code> (owner-only), or set <code>VERCEL_TOKEN</code> (and
-          optionally <code>VERCEL_TEAM_ID</code>) in <code>.env</code>. Leave the team empty to use your default team.</>}
-        </p>
-        {msg && <p class={`small m-0 ${msg.ok ? 'text-good' : 'text-bad'}`}>{msg.text}</p>}
-      </div>
-    </Card>
+        {(!canConnect || s.tokenSource === 'settings' || s.tokenSource === 'env') && (
+          <SecretField label="Vercel access token" placeholder="Paste the token" source={s.tokenSource === 'oauth' ? '' : s.tokenSource || ''} envName="VERCEL_TOKEN"
+            extra={teamField} onSave={saveToken} onRemove={remove} />
+        )}
+        {s.lastError && <p class="small text-bad m-0">{s.lastError}</p>}
+      </Section>
+
+      {s.tokenSource && (
+        <Section title="Signed in">
+          <Facts items={[
+            { label: 'Signed in as', value: s.login },
+            { label: 'Team', value: s.teamId && <span class="mono">{s.teamId}</span> },
+          ]} />
+        </Section>
+      )}
+    </>
   );
 }

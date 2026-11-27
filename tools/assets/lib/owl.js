@@ -22,3 +22,19 @@ export function owl(size = 64, { variant = 'ink', label = '', className = '' } =
 export function owlSays(text, size = 44) {
   return `<div class="owl-says">${owl(size)}<p class="bubble">${text}</p></div>`;
 }
+
+// One owl eye, as a ring (todo, before) or a filled amber dot (done, after).
+// The eye mark carries the progress: ring before, filled after. `size` is in
+// owl units (the svg viewBox is 64); the accessible label names the state.
+export function eye(state = 'todo', size = 16, { sclera = '#FFFFFF' } = {}) {
+  const done = state === 'done';
+  const r = done ? 5 : 4.2;
+  const fill = done ? '#F5A524' : 'none';
+  const stroke = done ? 'none' : '#F5A524';
+  const sw = done ? 0 : 2.6;
+  const label = done ? 'done' : 'not done';
+  return `<svg class="eye" viewBox="0 0 64 64" width="${size}" height="${size}" role="img" aria-label="${label}">
+  <circle cx="32" cy="34" r="9.5" fill="${sclera}"/>
+  <circle cx="32" cy="34" r="${r}" fill="${fill}" stroke="${stroke}" stroke-width="${sw}"/>
+</svg>`;
+}

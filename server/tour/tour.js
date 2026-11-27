@@ -58,7 +58,7 @@ const INBOX = [
   { site: 'demo', k: 'alert', t: 'Bing clicks up 3× on product pages', s: 'Search alert · yesterday' },
 ];
 const REPORTS = [
-  { g: 'Content', items: [['pages', 'Pages', 'Every page and the searches that find it'], ['cycles', 'Content cycles', 'Grow, improve or cut each article'], ['ai', 'AI answers', 'Where AI tools cite you']] },
+  { g: 'Content', items: [['pages', 'Pages', 'Every page and the searches that find it'], ['ai', 'AI answers', 'Where AI tools cite you']] },
   { g: 'Traffic', items: [['campaigns', 'Campaigns', 'Tagged links, sources, Google Ads'], ['overview', 'Overview', 'The GA4 summary']] },
   { g: 'Behaviour', items: [['sessions', 'Sessions', 'Visits and the paths they take'], ['funnels', 'Funnels', 'Where people drop out'], ['retention', 'Retention', 'Who comes back'], ['events', 'Events', 'Every tracked event']] },
   { g: 'Data', items: [['sql', 'SQL', 'Ask the warehouse directly']] },
@@ -66,7 +66,7 @@ const REPORTS = [
 const ALL_REPORTS = REPORTS.flatMap((g) => g.items.map(([k, l, d]) => ({ k, l, d, g: g.g })));
 const VIEWS = [['timeline', 'Timeline', 'calendar'], ['inbox', 'Inbox', 'inbox'], ['pages', 'Pages', 'doc'], ['search', 'Search', 'search'], ['traffic', 'Traffic', 'arrows'], ['journeys', 'Journeys', 'route'], ['goals', 'Goals', 'target'], ['tools', 'Diagnose', 'terminal']];
 const RANGES = [['today', 'Today'], ['7d', '7d'], ['28d', '28d'], ['90d', '90d']];
-const OLD_TABS = ['Pages', 'Campaigns', 'Content cycles', 'AI answers', 'Sessions', 'Funnels', 'Retention', 'Events', 'SQL', 'Overview'];
+const OLD_TABS = ['Pages', 'Campaigns', 'AI answers', 'Sessions', 'Funnels', 'Retention', 'Events', 'SQL', 'Overview'];
 
 const S = {
   mode: 'after', device: 'desktop',
@@ -350,7 +350,7 @@ const LEADS = {
   searches: { key: 'queries', name: 'Searches', one: 'search', of: 'clicks', top: 'Each day’s top Google + Bing search', items: (sc) => QUERYSET[sc] },
   countries: { key: 'countries', name: 'Countries', one: 'country', of: 'visits', top: 'Each day’s top country', items: () => COUNTRIES },
 };
-const KINDS = { deploy: ['rocket', 'Deploys'], content: ['doc', 'Page changes'], search: ['search', 'Search moves'], found: ['target', 'Kauzl found'], todo: ['check', 'To-dos'], visits: ['pulse', 'Visitors'], goal: ['sparkles', 'Goals'], link: ['link', 'Links and mentions'], ai: ['chat', 'AI answers'], cycle: ['layers', 'Content cycles'], post: ['mega', 'Posts'], release: ['tag', 'Releases'], mention: ['chat', 'Mentions'], alert: ['bell', 'Alerts'] };
+const KINDS = { deploy: ['rocket', 'Deploys'], content: ['doc', 'Page changes'], search: ['search', 'Search moves'], found: ['target', 'Kauzl found'], todo: ['check', 'To-dos'], visits: ['pulse', 'Visitors'], goal: ['sparkles', 'Goals'], link: ['link', 'Links and mentions'], ai: ['chat', 'AI answers'], post: ['mega', 'Posts'], release: ['tag', 'Releases'], mention: ['chat', 'Mentions'], alert: ['bell', 'Alerts'] };
 const PAGESET = {
   kauzl: [['/', 0], ['/pricing', 1], ['/guides/ga4-bigquery-export', 2], ['/kauzl-vs-plausible', 3, '2026-11-15'], ['/guides/google-analytics-mcp-server', 4, '2026-11-04'], ['/guides/what-is-a-utm-code', 5, '2026-10-14'], ['/guides/track-chatgpt-traffic', 6], ['/docs', 7]],
   docs: [['/quickstart', 0], ['/mcp/setup', 1], ['/api', 2], ['/', 3]],
@@ -1128,27 +1128,21 @@ function journeyEditor(phone) {
 // [date, kind, what, detail, effect, tone]. Commits are matched to the page by its file (content/** in .sitelens.yml).
 const PAGE_HIST = {
   '/guides/ga4-bigquery-export': {
-    cycle: ['4 Nov', '2 Dec', 'Improve', 14, 28],
     curve: (n, d) => 6 + n * 0.04 + (d >= '2026-10-28' ? 4 : 0) + (d >= '2026-11-12' ? 2 : 0),
     changes: [
       ['2026-11-12', 'commit', 'Added a “GA4 raw data” section', 'content/guides/ga4-bigquery-export.md · +340 words, 1 new heading', 'Early sign: “ga4 raw data” #14 → #11 in 5 days. Judge it on 3 Dec.', 'early'],
-      ['2026-11-04', 'cycle', 'Content cycle: Improve', 'Strong on its main search, missing nearby ones. To-do made: “Work ga4 raw data into the page”.', 'To-do done 12 Nov.', 'muted'],
       ['2026-10-28', 'title', 'New title', '“GA4 to BigQuery: export guide” → “How to export GA4 to BigQuery (free, step by step)”', 'Click rate 2.1% → 3.4% at the same position. Clicks +41% in the 3 weeks after.', 'up'],
       ['2026-10-02', 'commit', 'Fixed broken screenshot links', 'content/guides/ga4-bigquery-export.md · images only', 'No change in search, as expected.', 'muted'],
-      ['2026-09-07', 'cycle', 'Content cycle: Grow', 'Rising on its main search. Kept as is.', '', 'muted'],
     ],
   },
   '/guides/what-is-a-utm-code': {
-    cycle: ['4 Nov', '2 Dec', 'Improve', 14, 28],
     curve: (n, d) => 7 + (d >= '2026-09-30' ? -2.6 : 0) - Math.max(0, n - 40) * 0.02,
     changes: [
-      ['2026-11-04', 'cycle', 'Content cycle: Improve', 'Falling on “what is a utm code” since the intro was cut.', 'Nothing done yet.', 'down'],
       ['2026-09-30', 'commit', 'Shortened the intro', 'content/guides/what-is-a-utm-code.md · −420 words, removed the example table', '“what is a utm code” #4 → #10 over 4 weeks. Clicks −38%.', 'down'],
       ['2026-08-28', 'commit', 'Added a UTM builder link', 'content/guides/what-is-a-utm-code.md · +1 link', 'No clear change.', 'muted'],
     ],
   },
   '/pricing': {
-    cycle: ['4 Nov', '2 Dec', 'Grow', 14, 28],
     curve: (n, d) => 0.8 + (d >= '2026-11-04' ? 1.4 : 0) + n * 0.004,
     changes: [
       ['2026-11-10', 'commit', 'Moved the sign-up button', 'app/pricing/page.tsx · button below the plan table', 'Sign-ups from this page −23% in the 3 days after, mostly on phones.', 'down'],
@@ -1177,41 +1171,6 @@ function pageChanges(path, noChart) {
   const tone = { up: 'up', down: 'down', early: '', muted: 'muted' };
   const list = h.changes.map((c) => `<li><span class="t">${fmtD(c[0], { day: 'numeric', month: 'short' })}</span><span class="hk">${ic(HIST_ICON[c[1]], 14)}</span><span class="b"><b>${c[2]}</b><span class="muted">${c[3]}</span>${c[4] ? `<span class="${tone[c[5]]} hfx">${c[4]}</span>` : ''}</span></li>`).join('');
   return `<div class="card"><div class="chhead"><h4>Changes <span class="muted">· and what happened after each</span></h4><span class="muted small2">${noChart ? '' : 'Search clicks, last 90 days'}</span></div>${noChart ? '' : pageChart(path)}<ol class="dev hist">${list}</ol></div>`;
-}
-
-/* ---------- Content cycles: one decision per page per cycle (Grow, Improve, Cut, or too new to judge) ---------- */
-// Each page keeps its own cycle card; the Content cycles tab is the board of every page's decision.
-const CYCLE_NOW = { from: '4 Nov', to: '2 Dec', day: 14, of: 28 };
-const CYCLES = {
-  '/guides/ga4-bigquery-export': { v: 'Improve', why: 'Top 3 for its main search, but missing the searches next to it.', checks: [['Google', '#2 for its main search', 'up'], ['Bing', '#2', 'up'], ['AI answers', 'Cited by ChatGPT and Perplexity', 'up']], act: ['Work “ga4 raw data” into the page', 'Done 12 Nov · judged again 2 Dec', 'done'], hist: [['Aug', 'Grow'], ['Sep', 'Grow'], ['Oct', 'Grow'], ['Nov', 'Improve']] },
-  '/guides/what-is-a-utm-code': { v: 'Improve', why: 'Slipped from #4 to #10 since the intro was cut on 30 Sep.', checks: [['Google', '#10, was #4', 'down'], ['Bing', '#6', ''], ['AI answers', 'Not cited', 'muted']], act: ['Put the example table back and update the date', 'Not started', 'open'], hist: [['Aug', 'Grow'], ['Sep', 'Grow'], ['Oct', 'Improve'], ['Nov', 'Improve']] },
-  '/guides/track-chatgpt-traffic': { v: 'Grow', why: 'Rising on Google and Bing, and Perplexity cites it.', checks: [['Google', '#5, up from #9', 'up'], ['Bing', '#3', 'up'], ['AI answers', 'Cited by Perplexity', 'up']], act: ['Add a ChatGPT referral example', 'Optional', 'open'], hist: [['Sep', 'Improve'], ['Oct', 'Grow'], ['Nov', 'Grow']] },
-  '/pricing': { v: 'Grow', why: 'Search visits up 2.9× since the new page on 4 Nov.', checks: [['Google', '#1 for “kauzl pricing”', 'up'], ['Bing', '#9 for “analytics for small sites”', ''], ['AI answers', 'Not asked about', 'muted']], act: ['Fix the sign-up button on phones', 'To-do open', 'open'], hist: [['Oct', 'Improve'], ['Nov', 'Grow']] },
-  '/guides/google-analytics-mcp-server': { v: 'Too new', why: 'Live for 14 days. First judged on 2 Dec.', checks: [['Google', '#5 to #9, rising', ''], ['Bing', '#5', ''], ['AI answers', 'Not cited yet', 'muted']], act: ['Nothing to do yet', 'Wait for 2 Dec', 'wait'], hist: [['Nov', 'Too new']] },
-  '/kauzl-vs-plausible': { v: 'Too new', why: 'Live for 3 days, already 28% of landings on its first day.', checks: [['Google', '#4 for “plausible vs kauzl”', ''], ['Bing', '#3', ''], ['AI answers', 'Not cited yet', 'muted']], act: ['Nothing to do yet', 'Wait for 2 Dec', 'wait'], hist: [['Nov', 'Too new']] },
-  '/blog/launch-notes': { v: 'Cut', why: '30 visits in 90 days. No search brings it up and nothing links to it.', checks: [['Google', '#6 for “kauzl launch” (30 a month)', 'muted'], ['Bing', 'Not showing up', 'muted'], ['AI answers', 'Not cited', 'muted']], act: ['Merge into the changelog and redirect', 'Suggested', 'open'], hist: [['Sep', 'Improve'], ['Oct', 'Improve'], ['Nov', 'Cut']] },
-};
-const VCLS = { Grow: 'up', Improve: 'warn', Cut: 'down', 'Too new': 'muted' };
-const ACT_WORD = { done: 'up', open: '', wait: 'muted' };
-const histDots = (h) => `<span class="cdots" aria-label="Past cycles">${h.map(([m, v]) => `<span class="cdot ${VCLS[v]}" title="${m}: ${v}"><i></i>${m}</span>`).join('')}</span>`;
-function cycleCard(path) {
-  const c = CYCLES[path];
-  if (!c) return '';
-  return `<div class="card ccycle"><div class="cchead"><span class="cvb"><small>Content cycle · ${CYCLE_NOW.from} – ${CYCLE_NOW.to}</small><b class="${VCLS[c.v]}">${c.v}</b></span><span class="cprog"><span class="prog"><i style="width:${Math.round((CYCLE_NOW.day / CYCLE_NOW.of) * 100)}%"></i></span><small>day ${CYCLE_NOW.day} of ${CYCLE_NOW.of}</small></span></div>
-    <p>${c.why}</p>
-    <div class="cchecks">${c.checks.map(([k, t, cls]) => `<span><small>${k}</small><span class="${cls}">${t}</span></span>`).join('')}</div>
-    <div class="cact"><span><b>This cycle:</b> ${c.act[0]}</span><span class="${ACT_WORD[c.act[2]]}">${c.act[1]}</span>${c.act[2] === 'open' ? '<button type="button" class="chip" data-act="noop">+ To-do</button>' : ''}</div>
-    <div class="cfoot">${histDots(c.hist)}<button type="button" class="linkish" data-act="pg:none|tab:cycles">Every page this cycle →</button></div></div>`;
-}
-function cyclesBoard() {
-  const cols = ['Grow', 'Improve', 'Cut', 'Too new'];
-  const pages = Object.keys(CYCLES);
-  const head = `<div class="cbhead"><span><b>Cycle ${CYCLE_NOW.from} – ${CYCLE_NOW.to}</b> · day ${CYCLE_NOW.day} of ${CYCLE_NOW.of} · ${pages.length} pages judged on Google, Bing and AI answers</span><span class="cprog"><span class="prog"><i style="width:${Math.round((CYCLE_NOW.day / CYCLE_NOW.of) * 100)}%"></i></span></span></div>`;
-  const col = (v) => {
-    const ps = pages.filter((p) => CYCLES[p].v === v);
-    return `<div class="ccol"><h5><span class="${VCLS[v]}">${v}</span> · ${ps.length}</h5>${ps.map((p) => { const c = CYCLES[p]; return `<button type="button" class="ccard" data-act="pg:${p}"><b>${nameOf(p)}</b><span class="cwhy">${c.why}</span><span class="cnext"><span>${c.act[0]}</span><small class="${ACT_WORD[c.act[2]]}">${c.act[1]}</small></span>${histDots(c.hist)}</button>`; }).join('') || '<p class="empty small2">None this cycle.</p>'}</div>`;
-  };
-  return `${head}<div class="cboard">${cols.map(col).join('')}</div><p class="muted small2">Each page is judged once a cycle: Grow (it’s working, add to it), Improve (fix one thing), Cut (merge or redirect it), or Too new. The same card sits on each page, with its history.</p>`;
 }
 
 /* ---------- Traffic: where visits come from, and whether they're worth it ---------- */
@@ -1562,11 +1521,11 @@ function pageSummary(path) {
 const VERDICT_CLS = { Working: 'up', Close: '', New: 'up', Fading: 'down', Quiet: 'muted' };
 function pagesList(phone) {
   // One line per page: its name, one status word, search visits, and what top 3 would add. Everything else is on the page.
-  const all = Object.keys(PAGE_Q).map((p) => { const x = pageSummary(p); return { p, ...x, status: CYCLES[p] ? CYCLES[p].v : x.verdict }; });
+  const all = Object.keys(PAGE_Q).map((p) => { const x = pageSummary(p); return { p, ...x, status: x.verdict }; });
   const words = ['Grow', 'Improve', 'Cut', 'Too new', 'Working'].filter((w) => all.some((x) => x.status === w));
   const f = words.includes(S.pfilter) ? S.pfilter : 'all';
   const list = all.filter((x) => f === 'all' || x.status === f).sort((a, b) => (S.psort === 'chance' ? (b.chance?.s.gain || 0) - (a.chance?.s.gain || 0) : b.clicks - a.clicks));
-  const cls = (w) => VCLS[w] || VERDICT_CLS[w] || '';
+  const cls = (w) => VERDICT_CLS[w] || '';
   const chips = `<div class="chhead"><span class="chips">${[['all', `All ${all.length}`], ...words.map((w) => [w, `${w} ${all.filter((x) => x.status === w).length}`])].map(([k, l]) => `<button type="button" class="chip${f === k ? ' on' : ''}" data-act="pf:${k}">${l}</button>`).join('')}</span><div class="mini-seg" role="group" aria-label="Sort">${[['visits', 'Most visits'], ['chance', 'Biggest chance']].map(([k, l]) => `<button type="button" class="${S.psort === k ? 'on' : ''}" data-act="ps:${k}">${l}</button>`).join('')}</div></div>`;
   const rows = list.map((x) => `<button type="button" class="prow1" data-act="pg:${x.p}" title="${x.p}"><b>${nameOf(x.p)}</b><span class="${cls(x.status)}">${x.status}</span><span class="num">${fmt(x.clicks)}</span><span class="num ${x.chance && x.chance.s.gain >= 20 ? 'up' : 'muted'}">${x.chance && x.chance.s.gain >= 20 ? `+${fmt(x.chance.s.gain)}` : '—'}</span></button>`).join('');
   return `${chips}<div class="card plist"><div class="prow1 phead"><span>Page</span><span>This month</span><span class="num">Search visits</span><span class="num">In the top 3</span></div>${rows}</div><p class="muted small2">Open a page for its searches, changes and what to do. “In the top 3” is the extra visits a month if its best chance got there.</p>`;
@@ -1689,13 +1648,12 @@ function todoMoments(path) {
 // Pages without a written timeline get one from their changes, cycle and checks.
 function tlBase(path, x) {
   if (TL[path]) return TL[path];
-  const h = PAGE_HIST[path], cyc = CYCLES[path], r = READS[path], ix = ixFor(path);
+  const h = PAGE_HIST[path];
   const m = [
     ...(h ? h.changes.filter((c) => c[1] !== 'cycle').map((c) => [c[0], 'you', c[2], c[4] ? c[4].replace(/ Judge it on [^.]+\./, '') : '', 'changes', c[5] === 'muted' ? 'muted' : c[5] === 'down' ? 'down' : c[5] === 'up' ? 'up' : '']) : []),
   ];
-  if (!m.length) m.push([LAST, 'kauzl', cyc ? `Content cycle: ${cyc.v}` : `Mostly found for “${x.best.r[0]}”`, cyc ? cyc.why : `${fmt(x.clicks)} search visits a month.`, cyc ? 'cycle' : 'searches', cyc && cyc.v === 'Grow' ? 'up' : '']);
-  const now = cyc && cyc.act[2] === 'open' ? [cyc.act[0], 'This cycle’s one thing to do.', null, '']
-    : x.chance && x.chance.s.gain >= 20 ? [`Work “${x.chance.r[0]}” into the page`, `${fmt(x.chance.r[1])} people search it a month.`, null, `+${fmt(x.chance.s.gain)}`]
+  if (!m.length) m.push([LAST, 'kauzl', `Mostly found for “${x.best.r[0]}”`, `${fmt(x.clicks)} search visits a month.`, 'searches', '']);
+  const now = x.chance && x.chance.s.gain >= 20 ? [`Work “${x.chance.r[0]}” into the page`, `${fmt(x.chance.r[1])} people search it a month.`, null, `+${fmt(x.chance.s.gain)}`]
     : ['Nothing to do right now', 'It’s doing its job. Kauzl keeps watching.', null, ''];
   return { m, now, more: [] };
 }
@@ -1742,7 +1700,6 @@ function evBody(path, phone, x, k) {
   if (k === 'reads') return readsCard(path, phone);
   if (k === 'speed') return `<div class="card"><h4>Speed</h4>${sp ? `<p class="m0">${sp[2].toFixed(1)} s on phones, ${sp[3].toFixed(1)} s on computers. Fast is under 2.5 s.${sp[4] ? ` ${sp[4]}.` : ''}</p>` : '<p class="muted m0">Not measured for this page yet.</p>'}</div>`;
   if (k === 'ai') return `<div class="card"><h4>AI answers</h4><p class="m0">${d.ai || 'No AI answer cites it for the questions Kauzl asks.'}</p></div>`;
-  if (k === 'cycle') return cycleCard(path);
   return '';
 }
 /* ---------- Tools: run a check on any page. A page never shows tools; it shows the runs, as moments. ---------- */
@@ -1990,8 +1947,6 @@ const EVX = {
     [['Click rate', '1.4%', 'was 3.1% at #4', 'down'], ['Position', '#9', '“what is a utm code”', ''], ['Usual at #9', '3%', '', '']], [['mid', 'Google shows the history paragraph as the snippet', 'it quotes the opening'], ['', 'The title still promises a definition', '']]],
   'utm-link': ['/guides/what-is-a-utm-code', '2026-11-15', 'kauzl', 'Linked from r/analytics', '“Stop guessing your traffic sources” linked to the guide. 24 visits came from it that day.', 'visitors', 'link', 'up', ['The post', 'r/analytics · 24 visits'], 'visits',
     [['Visits from the post', '24', 'that day', 'up'], ['Upvotes', '212', '', ''], ['Comments', '38', '', '']], [['ok', '“Stop guessing your traffic sources”', 'r/analytics · 15 Nov'], ['', '3 of them went on to Pricing', 'what they did next']]],
-  'utm-cycle': ['/guides/what-is-a-utm-code', '2026-11-04', 'kauzl', 'Content cycle: Grow → Improve', 'Three weeks of fewer visits moved it out of Grow. It needs a rewrite, not new links.', 'content', 'cycle', 'warn', ['The cycle', 'Improve · 4 Nov – 2 Dec'], 'clicks',
-    [['This cycle', 'Improve', 'last cycle: Grow', 'warn'], ['Google', '#10', 'was #4', 'down'], ['AI answers', 'Not cited', '', 'muted']], [['mid', 'Put the example table back and update the date', 'this cycle’s one thing to do']]],
   // Pricing
   'pr-milestone': ['/pricing', '2026-11-08', 'kauzl', '100th sign-up that started on Pricing', 'The page has brought in 100 sign-ups since the new design on 4 Nov.', 'goals', 'goal', 'up', ['Sign-ups from Pricing', '100 since 4 Nov'], 'visits',
     [['Sign-ups', '100', 'since 4 Nov', 'up'], ['Rate', '4.4%', 'of visits', ''], ['Days', '4', '', '']], [['ok', 'The 100th came from Google, “kauzl pricing”', 'on a phone']]],
@@ -2111,8 +2066,8 @@ function attachmentView(e, title, dd, path, ev) {
   return `<div class="att-v"><div class="att-vh">${ic('doc', 13)}<b>${title}</b><span class="muted">${dd === LAST ? 'today' : fmtD(dd, { day: 'numeric', month: 'short' })}</span></div>${diffFor(path, ev, dd) ? diffView(diffFor(path, ev, dd)) : ''}${hasChart(path, ev) ? proofChart(path, ev, dd) : ''}${rd}${fd}</div>`;
 }
 function pageStory(scope, phone, pathArg, inPanel) {
-  const path = pathArg || S.page, x = pageSummary(path), cyc = CYCLES[path];
-  const status = cyc ? cyc.v : x.verdict;
+  const path = pathArg || S.page, x = pageSummary(path);
+  const status = x.verdict;
   const t = tlFor(path, x), day = (dd) => (dd === LAST ? 'Today' : fmtD(dd, { day: 'numeric', month: 'short' }));
   const want = S.pev && S.pev.startsWith('ev-') ? t.m.findIndex((mm) => mm[4] === S.pev.slice(3) || mm[4] === `tool:${S.pev.slice(3)}`) : -1;
   const shown = t.m.map((mm, i) => [mm, i]).filter(([[, w, , , ev]]) => !S.ptrack || trackOf(ev, w) === S.ptrack);
@@ -2160,7 +2115,7 @@ function pageStory(scope, phone, pathArg, inPanel) {
     ${draft}${because ? `<div class="nbec"><small>Because</small>${because}</div>` : ''}${cells}${stages}
     ${act || more ? `<div class="ent-a">${act}${more}</div>` : ''}${moreList}</div></li>`;
   return `${inPanel ? '' : '<button type="button" class="linkish" data-act="pg:none">← All pages</button>'}
-    <div class="head"><div><h3>${nameOf(path)} <span class="pstat ${VCLS[status] || VERDICT_CLS[status] || ''}">${status}</span></h3><div class="sub2">${path} · ${fmt(x.clicks)} search visits a month</div></div>${inPanel ? '' : `<div class="head-r"><button type="button" class="chip" data-act="view:tools|tpage:${path}">${ic('terminal', 12)} Diagnose this page</button></div>`}</div>
+    <div class="head"><div><h3>${nameOf(path)} <span class="pstat ${VERDICT_CLS[status] || ''}">${status}</span></h3><div class="sub2">${path} · ${fmt(x.clicks)} search visits a month</div></div>${inPanel ? '' : `<div class="head-r"><button type="button" class="chip" data-act="view:tools|tpage:${path}">${ic('terminal', 12)} Diagnose this page</button></div>`}</div>
     ${trackerHead(path)}${S.ptrack ? `<p class="muted small2 m0">Only ${TRACKS.find((q) => q[0] === S.ptrack)[1].toLowerCase()} · <button type="button" class="linkish" data-act="ptrack:${S.ptrack}">Show everything</button></p>` : ''}
     <ol class="tl">${items}${S.ptrack ? '' : now}</ol>`;
 }
@@ -2253,7 +2208,7 @@ function queryPanel(q) {
 
 /* ---------- Proposed: sections named by question ---------- */
 const SECTIONS = {
-  pages: { l: 'Pages', q: 'Which content works', tabs: [['pages', 'All pages'], ['cycles', 'Content cycles'], ['health', 'Health']] },
+  pages: { l: 'Pages', q: 'Which content works', tabs: [['pages', 'All pages'], ['health', 'Health']] },
   search: { l: 'Search', q: 'How Google, Bing and AI tools show you', tabs: [['queries', 'Searches'], ['demand', 'No page yet'], ['ai', 'AI answers'], ['indexing', 'Indexing']] },
   traffic: { l: 'Traffic', q: 'Where people come from', tabs: [['sources', 'Sources'], ['campaigns', 'Campaigns'], ['posts', 'Posts & mentions'], ['ads', 'Google Ads']] },
   journeys: { l: 'Journeys', q: 'What people do once they’re here', tabs: [['paths', 'Paths'], ['funnels', 'Funnels'], ['retention', 'Retention']] },
@@ -2530,7 +2485,6 @@ function speedBody(phone) {
     <section class="tsec"><div class="tsh"><h3>Dead ends</h3><p>Missing pages people actually reached</p></div><div class="card">${dead}</div></section>`;
 }
 function tabBody(view, tab) {
-  if (view === 'pages' && tab === 'cycles') return cyclesBoard();
   if (view === 'pages' && tab === 'pages') return pagesList();
   if (view === 'search' && (tab === 'queries' || !tab)) return searchList();
   if (view === 'search' && tab === 'demand') return demandList();
@@ -2552,7 +2506,6 @@ function tabBody(view, tab) {
 }
 function tabBody0(view, tab) {
   if (view === 'pages') {
-    if (tab === 'cycles') return `<div class="card"><h4>This cycle · 4 Nov – 2 Dec</h4><div class="rows">${row(['GA4 BigQuery export', 'Grow', ['↑', 'up']])}${row(['What is a UTM code', 'Improve', ['→', 'muted']])}${row(['Old changelog page', 'Cut', ['↓', 'down']])}</div></div>`;
     if (tab === 'ai') return `<div class="card"><h4>Questions people ask AI tools</h4><div class="rows">${row(['Best GA4 alternative for small sites', 'ChatGPT', ['Cited', 'up']])}${row(['How to export GA4 to BigQuery', 'Perplexity', ['Cited', 'up']])}${row(['Plausible vs Kauzl', 'Gemini', ['Not yet', 'muted']])}</div></div>`;
     return `<div class="card"><div class="rows">${row([['Page', 'muted'], ['Visits', 'muted'], ['Google', 'muted'], ['AI', 'muted']], 'r4')}${[['/pricing', '612', '#4', 1], ['/guides/ga4-bigquery-export', '488', '#2', 1], ['/guides/google-analytics-mcp-server', '301', '#7', 0], ['/kauzl-vs-plausible', '144', '#11', 1]].map(([p, v, g, a]) => row([p, v, g, a ? ['Cited', 'up'] : ['—', 'muted']], 'r4')).join('')}</div><span class="muted" style="font-size:12px">Each page opens its own view: searches, AI answers and what to change.</span></div>`;
   }
@@ -2990,7 +2943,7 @@ document.addEventListener('change', (e) => {
 {
   const p = new URLSearchParams(location.search);
   const TO = { story: 'view:timeline', timeline: 'view:timeline', inbox: 'view:inbox', todos: 'view:inbox', alerts: 'view:inbox',
-    pages: 'view:pages', cycles: 'view:pages|tab:cycles', health: 'view:pages|tab:health', search: 'view:search', ai: 'view:search|tab:ai',
+    pages: 'view:pages', cycles: 'view:pages', health: 'view:pages|tab:health', search: 'view:search', ai: 'view:search|tab:ai',
     traffic: 'view:traffic', campaigns: 'view:traffic', journeys: 'view:journeys', funnels: 'view:journeys', goals: 'view:goals', outcomes: 'view:goals', live: 'view:live' };
   if (p.get('device') === 'phone' || p.get('device') === 'desktop') S.device = p.get('device');
   else if (window.innerWidth < 760) S.device = 'phone';

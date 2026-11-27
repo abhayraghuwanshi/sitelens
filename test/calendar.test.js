@@ -280,3 +280,63 @@ test('goal breakdown: people per goal per day, every goal listed even on days wi
   assert.deepEqual(out.rows.map((r) => [r.key, r.value, r.days]), [['Signed up', 5, [1, 4, 0]], ['Saw pricing', 0, [0, 0, 0]]]);
   assert.deepEqual(asked, [['a', '2026-10-10', '2026-10-15']]);
 });
+
+test('Timeline goals include product counts and preserve gaps in database averages', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com' };
+  const goalDays = async () => ({
+    goals: [{ key: 'Extension installs' }, { key: 'Desktop downloads', sparse: true }],
+    rows: [{ date: '2026-10-14', key: 'Extension installs', value: 4 }],
+  });
+  const customMetrics = {
+    forSite: async (id, _, { window }) => {
+      assert.equal(id, site.id);
+      return { metrics: [{
+        id: 'active', label: 'Active installs', summary: 'average', unit: 'installs',
+        values: window.dates.map((date) => ({ '2026-10-13': 3, '2026-10-15': 5 })[date] ?? null),
+      }] };
+    },
+  };
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, goalDays, customMetrics, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'goal', daily: true });
+  const rows = new Map(out.rows.map((row) => [row.key, row]));
+  assert.deepEqual(rows.get('Extension installs').days, [0, 4, 0]);
+  assert.deepEqual(rows.get('Desktop downloads').days, [null, null, null]);
+  assert.deepEqual(rows.get('metric:active').days, [3, null, 5]);
+  assert.equal(rows.get('metric:active').summary, 'average');
+  assert.equal(rows.get('metric:active').value, 4);
+  const connected = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'metric', daily: true });
+  assert.equal(connected.metric, 'value');
+  assert.deepEqual(connected.rows.map(({ key, days }) => [key, days]), [['metric:active', [3, null, 5]]]);
+});
+
+test('citation sources distinguish unchecked days from checked days with no citations', async () => {
+  const site = { id: 'a', label: 'Site A', host: 'a.com' };
+  const citationDays = async () => ({
+    dates: ['2026-10-13', '2026-10-15'],
+    rows: [
+      { date: '2026-10-13', key: 'answers', value: 1 },
+      { date: '2026-10-13', key: 'citing', value: 1 },
+      { date: '2026-10-13', key: 'domain:example.com', value: 1 },
+      { date: '2026-10-15', key: 'answers', value: 1 },
+    ],
+  });
+  const calendar = createCalendar({ store: memoryStore({ sites: [site] }), history: null, annotations: { list: async () => [] }, citationDays, now: () => NOW });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'citation', daily: true });
+  assert.deepEqual(out.rows.map((r) => [r.key, r.days]), [
+    ['answers', [1, null, 1]],
+    ['citing', [1, null, 0]],
+    ['own', [0, null, 0]],
+    ['domain:example.com', [1, null, 0]],
+  ]);
+  assert.equal(out.rows.at(-1).label, 'example.com');
+});
+
+test('Bing Timeline keeps unreleased days blank and charts reported zero clicks', async () => {
+  const site = { id: 'a', label: 'Site A' };
+  const calendar = createCalendar({
+    store: memoryStore({ sites: [site] }), now: () => NOW,
+    bingDays: async () => [{ date: '2026-10-13', clicks: 0, impressions: 4 }, { date: '2026-10-14', clicks: 2, impressions: 11 }],
+  });
+  const out = await calendar.breakdown({ from: '2026-10-13', to: '2026-10-15', site: 'a', by: 'bing', daily: true });
+  assert.deepEqual(Object.fromEntries(out.rows.map((row) => [row.key, row.days])), { clicks: [0, 2, null], impressions: [4, 11, null] });
+});

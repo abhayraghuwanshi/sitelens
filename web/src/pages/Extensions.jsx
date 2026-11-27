@@ -27,7 +27,7 @@ export function Extensions({ range, params, onChange }) {
   if (scoped && !extensions.length) {
     return (
       <div class="state">
-        <h3>No Chrome extension for this site</h3>
+        <h3>No browser extension for this site</h3>
         <p>Link the site’s extension to its product, and its users, rating and installs show here and on Pay off.</p>
         <a class="btn" href={`#/settings?tab=sites&edit=${scoped}`}>Link one</a> <a class="btn ghost" href="#/extensions">All extensions</a>
       </div>
@@ -37,8 +37,8 @@ export function Extensions({ range, params, onChange }) {
   return (
     <>
       {extensions.length === 0 && (
-        <Empty title="Track a Chrome extension">
-          Kauzl reads the public Web Store listing once a day (users, rating, version) and keeps the history — the store itself shows no history.
+        <Empty title="Track a browser extension">
+          Kauzl reads the public store listing once a day (users, rating, version) on Chrome Web Store, Edge Add-ons or Firefox Add-ons, and keeps the history. The stores themselves show no history.
           For installs and uninstalls, import the CSV from the developer dashboard.
         </Empty>
       )}
@@ -97,7 +97,7 @@ function ExtensionCard({ ext, range, onChange }) {
           <span>{ext.label}</span>
         </span>
       }
-      sub={[ext.version && `v${ext.version}`, ext.updated && `updated ${ext.updated}`].filter(Boolean).join(' · ')}
+      sub={[ext.storeLabel, ext.version && `v${ext.version}`, ext.updated && `updated ${ext.updated}`].filter(Boolean).join(' · ')}
       actions={
         <div class="row">
           <a class="btn ghost" href={ext.url} target="_blank" rel="noreferrer">Store listing ↗</a>
@@ -123,7 +123,7 @@ function ExtensionCard({ ext, range, onChange }) {
                   {ext.usersChange > 0 ? '+' : ''}{formatNumber(ext.usersChange)}
                 </span>
               ) : null}
-              <span>{ext.usersChange !== null ? 'this period' : 'weekly active, per the store'}</span>
+              <span>{ext.usersChange !== null ? 'this period' : USERS_MEANING[ext.store] || 'per the store'}</span>
             </div>
           </div>
           <div class="kpi">
@@ -138,7 +138,8 @@ function ExtensionCard({ ext, range, onChange }) {
           </div>
         </div>
 
-        <ListingAnalytics ext={ext} range={range} marks={marks} />
+        {/* Only Chrome Web Store sends listing traffic to a GA4 property. */}
+        {ext.store === 'chrome' && <ListingAnalytics ext={ext} range={range} marks={marks} />}
 
         {usersSeries.filter(Number.isFinite).length >= 2 ? (
           <div>
@@ -146,7 +147,7 @@ function ExtensionCard({ ext, range, onChange }) {
             <LineChart labels={labels} series={[{ label: 'Users', values: usersSeries }]} format={(v, axis) => formatNumber(v, { compact: axis })} height={180} area={false} {...marks} />
           </div>
         ) : (
-          <p class="note">The user history fills in as Kauzl takes one snapshot a day while it’s running. The Web Store only ever shows today’s number.</p>
+          <p class="note">The user history fills in as Kauzl takes one snapshot a day while it’s running. The store only ever shows today’s number.</p>
         )}
 
         {importNames.length > 0 && (
@@ -172,7 +173,17 @@ function ExtensionCard({ ext, range, onChange }) {
   );
 }
 
+// What "users" means on each store's listing.
+const USERS_MEANING = { chrome: 'weekly active, per the store', edge: 'active installs, per the store', firefox: 'average daily users, per the store' };
+
+const ADD_STORES = [
+  { key: 'chrome', label: 'Chrome Web Store', placeholder: 'https://chromewebstore.google.com/detail/…/ioggffobciopdddacpclplkeodllhjko' },
+  { key: 'edge', label: 'Edge Add-ons', placeholder: 'https://microsoftedge.microsoft.com/addons/detail/…/odfafepnkmbhccpbejgmiehpchacaeak' },
+  { key: 'firefox', label: 'Firefox Add-ons', placeholder: 'https://addons.mozilla.org/firefox/addon/your-addon/' },
+];
+
 function AddExtension({ onAdded }) {
+  const [where, setWhere] = useState('chrome');
   const [input, setInput] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -182,7 +193,7 @@ function AddExtension({ onAdded }) {
     setBusy(true);
     setError(null);
     try {
-      await api.post('/extensions', { id: input });
+      await api.post('/extensions', { id: input, store: where });
       setInput('');
       onAdded();
     } catch (err) {
@@ -195,13 +206,14 @@ function AddExtension({ onAdded }) {
   return (
     <Card title="Add an extension">
       <form class="stack" onSubmit={add}>
+        <Segmented label="Store" value={where} options={ADD_STORES.map(({ key, label }) => ({ key, label }))} onChange={setWhere} />
         <div class="row">
-          <input type="text" style={{ flex: '1', minWidth: '260px' }} placeholder="https://chromewebstore.google.com/detail/…/ioggffobciopdddacpclplkeodllhjko"
-            value={input} onInput={(e) => setInput(e.currentTarget.value)} aria-label="Web Store link or extension ID" />
+          <input type="text" style={{ flex: '1', minWidth: '260px' }} placeholder={ADD_STORES.find((x) => x.key === where).placeholder}
+            value={input} onInput={(e) => setInput(e.currentTarget.value)} aria-label="Store link or extension ID" />
           <button class="btn primary" type="submit" disabled={busy || !input.trim()}>{busy ? 'Checking listing…' : 'Track'}</button>
         </div>
         <p class="note">
-          Paste a Web Store link or the 32-letter ID. For exact installs and uninstalls: Developer Dashboard → your item → <b>Stats</b> → download CSV, then <b>Import dashboard CSV</b> here.
+          Paste the store link{where === 'firefox' ? '' : ' or the 32-letter ID'}; a link from any of the three stores is recognised whichever is picked. For exact installs and uninstalls on Chrome: Developer Dashboard → your item → <b>Stats</b> → download CSV, then <b>Import dashboard CSV</b> here.
           Re-importing an overlapping export updates those days instead of duplicating them.
         </p>
         {error && <ErrorState error={error} />}

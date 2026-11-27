@@ -39,6 +39,7 @@ export default {
 <tr><td><code>Bytespider</code></td><td>ByteDance</td><td>Training data for ByteDance models</td></tr>
 </tbody>
 </table>
+<p>For the details of each company’s bots, including how to check a request is genuine, see <a href="/guides/openai-crawlers/">OpenAI’s crawlers</a> and <a href="/guides/claude-crawlers/">Anthropic’s crawlers</a>.</p>
 
 <h2>Option 1: block training, keep AI search (recommended for most)</h2>
 <pre><code># AI training crawlers kept out

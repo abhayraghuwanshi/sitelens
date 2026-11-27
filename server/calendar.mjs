@@ -17,6 +17,7 @@ import { existsSync } from 'node:fs';
 import { ValidationError } from './store.mjs';
 import { localDay } from './alerts.mjs';
 import { sourceFamily } from './journey.mjs';
+import { metricTotal } from './custom-metrics.mjs';
 
 const DAY = 86_400_000;
 const WEEKS = 4;
@@ -262,9 +263,13 @@ export function demoDay(siteId, date) {
   };
 }
 
+function timelineAlert({ id, title, detail, rule, direction, link, value, baseline }) {
+  return { id, title, detail, rule, direction, link, value, baseline };
+}
+
 /* ---------- The service ---------- */
 
-export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, goalDays = null, now = () => Date.now() }) {
+export function createCalendar({ store, history, annotations, extensions = null, githubDbPath = () => null, adDays = null, goalDays = null, customMetrics = null, citationDays = null, jobSeries = null, bingDays = null, now = () => Date.now() }) {
   // Which sites, repos and extensions a view covers. 'all' = every real site
   // (the sample only when there's nothing else); a site adds its product's repos and extensions.
   async function scope(siteParam = 'all') {
@@ -561,7 +566,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
       sites: sites.map((s) => ({ ...s, baseline: s.baseline === null ? null : Math.round(s.baseline), sources: s.sources.slice(0, 6), losers: s.sources.filter((r) => r.gain < 0).slice(-3).reverse(), pages: s.pages.slice(0, 6), trend: undefined })),
       events,
       eventsBefore,
-      alerts: alerts.map(({ id, title, detail, direction, link }) => ({ id, title, detail, direction, link })),
+      alerts: alerts.map((a) => timelineAlert(a)),
       github: gh,
       extensions: exts,
     };
@@ -665,7 +670,7 @@ export function createCalendar({ store, history, annotations, extensions = null,
   // `daily`: each row also gets `days`, its value on every date of [from, to] (the Timeline's lenses).
   // `key`: only that row (one page's days, for its own view).
   async function rangeBreakdown({ from = '', to = '', site = 'all', by = 'source', limit = 25, back = 0, daily = false, key: only = '' } = {}) {
-    if (!['source', 'page', 'query', 'country', 'goal'].includes(by)) throw new ValidationError('by must be source, page, query, country or goal.');
+    if (!['source', 'page', 'query', 'country', 'goal', 'citation', 'metric', 'job', 'bing'].includes(by)) throw new ValidationError('by must be source, page, query, country, goal, citation, metric, job or bing.');
     const r = span(from, to);
     const sc = await scope(site);
     const shift = Math.max(r.days, Math.min(366, Number(back) || 0));
@@ -675,25 +680,90 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const cur = new Map();
     const prev = new Map();
     const perDay = new Map(); // key → Map(date → value), only with `daily`
+    const goalMeta = new Map();
+    const metricTotals = new Map();
     const errors = [];
+    const citationDates = new Set();
     for (const s of sc.sites) {
-      if (!s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
+      if (!['goal', 'citation', 'metric', 'job', 'bing'].includes(by) && !s.demo && (by === 'query' ? !s.searchSite : !s.propertyId)) continue;
       try {
         let found;
-        if (by === 'goal') {
-          // Goals: people reaching each of the site's event or page goals (GA4), listed even on a day with none.
-          const g = goalDays ? await goalDays(s, prevFrom, r.to) : { goals: [], rows: [] };
+        if (by === 'bing') {
+          const traffic = bingDays ? await bingDays(s, prevFrom, r.to) : [];
+          found = [];
+          if (traffic.length) {
+            for (const [key, label] of [['clicks', 'Bing clicks'], ['impressions', 'Bing impressions']]) {
+              const scopedKey = multi ? `${s.label} ${key}` : key;
+              cur.set(scopedKey, 0);
+              goalMeta.set(scopedKey, { label: multi ? `${s.label} ${label}` : label, sparse: true, unit: key });
+              for (const row of traffic) found.push({ date: row.date, key, value: row[key] });
+            }
+          }
+        } else if (by === 'job') {
+          const feeds = jobSeries ? await jobSeries(s.id) : [];
+          found = [];
+          for (const feed of feeds) {
+            const key = multi ? `${s.label} ${feed.id}` : feed.id;
+            cur.set(key, 0);
+            goalMeta.set(key, { label: multi ? `${s.label} ${feed.label}` : feed.label, sparse: true, summary: 'latest' });
+            const points = Object.entries(feed.points || {}).sort(([a], [b]) => a.localeCompare(b));
+            metricTotals.set(key, {
+              value: points.findLast(([date]) => date >= r.from && date <= r.to)?.[1] ?? null,
+              previous: points.findLast(([date]) => date >= prevFrom && date <= prevTo)?.[1] ?? null,
+            });
+            for (const [date, value] of points) {
+              if (date >= prevFrom && date <= r.to) found.push({ date, key: feed.id, value });
+            }
+          }
+        } else if (by === 'citation') {
+          const result = citationDays ? await citationDays(s, prevFrom, r.to) : { dates: [], rows: [] };
+          for (const date of result.dates) citationDates.add(date);
+          if (result.dates.length) {
+            for (const [key, label] of [['answers', 'Answers checked'], ['citing', 'Answers with citations'], ['own', 'Answers citing the tracked site']]) {
+              if (!cur.has(key)) cur.set(key, 0);
+              goalMeta.set(key, { label, summaryMetric: true });
+            }
+          }
+          found = result.rows;
+        } else if (by === 'goal' || by === 'metric') {
+          const g = by === 'goal' && goalDays ? await goalDays(s, prevFrom, r.to).catch((err) => ({ goals: [], rows: [], errors: [err.message] })) : { goals: [], rows: [] };
+          for (const message of g.errors || []) errors.push({ site: s.label, message });
+          found = g.rows.slice();
           for (const goal of g.goals) {
             const key = multi ? `${s.label} ${goal.key}` : goal.key;
             cur.set(key, cur.get(key) || 0);
+            if (goal.sparse) goalMeta.set(key, { sparse: true });
           }
-          found = g.rows;
+          if (daily && customMetrics && !s.demo) {
+            const days = (Date.parse(r.to) - Date.parse(prevFrom)) / DAY_MS + 1;
+            const dates = Array.from({ length: days }, (_, i) => addDays(prevFrom, i));
+            const window = { key: 'timeline', days, dates, start: prevFrom, end: r.to, prevStart: prevFrom };
+            const { metrics } = await customMetrics.forSite(s.id, '', { window });
+            for (const m of metrics) {
+              if (m.error) {
+                errors.push({ site: s.label, message: `${m.label}: ${m.error.message}` });
+                continue;
+              }
+              const base = `metric:${m.id}`;
+              const key = multi ? `${s.label} ${base}` : base;
+              cur.set(key, 0);
+              goalMeta.set(key, { label: multi ? `${s.label} ${m.label}` : m.label, summary: m.summary, unit: m.unit });
+              metricTotals.set(key, {
+                value: metricTotal(m.values.slice(-r.days), m.summary),
+                previous: metricTotal(m.values.slice(0, r.days), m.summary),
+              });
+              dates.forEach((date, i) => {
+                if (Number.isFinite(m.values[i])) found.push({ date, key: base, value: m.values[i] });
+              });
+            }
+          }
         } else {
           found = await dailyBreakdown(s, by, prevFrom, r.to);
         }
         for (const row of found) {
           const base = by === 'source' ? sourceFamily(row.key) : row.key;
-          const key = multi && (by === 'page' || by === 'goal') ? `${s.label} ${base}` : base;
+          if (by === 'citation' && base.startsWith('domain:')) goalMeta.set(base, { label: base.slice(7) });
+          const key = multi && ['page', 'goal', 'metric', 'job', 'bing'].includes(by) ? `${s.label} ${base}` : base;
           const map = row.date >= r.from ? cur : row.date <= prevTo ? prev : null;
           if (!map) continue;
           map.set(key, (map.get(key) || 0) + row.value);
@@ -710,23 +780,22 @@ export function createCalendar({ store, history, annotations, extensions = null,
     const total = [...cur.values()].reduce((a, b) => a + b, 0);
     const rows = [...new Set([...cur.keys(), ...prev.keys()])]
       .map((key) => {
-        const value = cur.get(key) || 0;
-        const before = prev.get(key) || 0;
-        return { key, value, previous: before, change: before ? Math.round(((value - before) / before) * 1000) / 1000 : null, share: total ? Math.round((value / total) * 1000) / 1000 : 0 };
+        const { value, previous: before } = metricTotals.get(key) || { value: cur.get(key) || 0, previous: prev.get(key) || 0 };
+        return { key, value, previous: before, change: before && value != null ? Math.round(((value - before) / before) * 1000) / 1000 : null, share: total ? Math.round((value / total) * 1000) / 1000 : 0, ...goalMeta.get(key) };
       })
       .filter((row) => !only || row.key === only)
-      .sort((a, b) => b.value - a.value || b.previous - a.previous)
+      .sort((a, b) => Number(Boolean(b.summaryMetric)) - Number(Boolean(a.summaryMetric)) || b.value - a.value || b.previous - a.previous)
       .slice(0, Math.min(200, Math.max(1, Number(limit) || 25)));
     const dates = [];
     if (daily) {
       for (let d = r.from; d <= r.to; d = addDays(d, 1)) dates.push(d);
-      for (const row of rows) row.days = dates.map((d) => perDay.get(row.key)?.get(d) || 0);
+      for (const row of rows) row.days = dates.map((d) => perDay.get(row.key)?.get(d) ?? ((by === 'citation' && !citationDates.has(d)) || row.sparse || (row.summary && row.summary !== 'sum') ? null : 0));
     }
     return {
       from: r.from, to: r.to, previous: { from: prevFrom, to: addDays(r.from, -1) }, site: sc.key, by,
       ...(daily ? { dates } : {}),
-      metric: by === 'query' ? 'clicks' : by === 'goal' ? 'people' : 'sessions',
-      note: 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
+      metric: by === 'bing' ? 'clicks' : by === 'job' || by === 'metric' ? 'value' : by === 'citation' ? 'answers' : by === 'query' ? 'clicks' : by === 'goal' ? 'people' : 'sessions',
+      note: by === 'bing' ? 'Daily search traffic reported by Bing Webmaster Tools.' : by === 'job' ? 'Saved values from Timeline Jobs.' : by === 'metric' ? 'Daily values from connected metrics.' : by === 'citation' ? 'Answers citing each domain. Days without checks are blank.' : by === 'goal' ? 'Daily counts by goal or metric.' : 'Stored per day as the top 100 rows, so long-tail totals are slightly low.',
       rows,
       errors,
     };
@@ -735,11 +804,12 @@ export function createCalendar({ store, history, annotations, extensions = null,
   async function rangeEvents({ from = '', to = '', site = 'all' } = {}) {
     const r = span(from, to);
     const sc = await scope(site);
-    const [events, alerts] = await Promise.all([eventsFor(sc, r.from, r.to), alertsFor(sc, r.from, r.to)]);
+    const [events, alerts, customTypes] = await Promise.all([eventsFor(sc, r.from, r.to), alertsFor(sc, r.from, r.to), annotations.customTypes?.(sc.scopes) || []]);
     return {
       from: r.from, to: r.to, site: sc.key,
-      events: events.map(({ id, date, label, kind, source, url, scope: sc2, page, author, body }) => ({ id, date, label, kind, source, url, scope: sc2, ...(page ? { page } : {}), ...(author ? { author, body: body ? String(body).slice(0, 400) : undefined } : {}) })),
-      alerts: alerts.map(({ id, day, title, detail, rule, direction, link }) => ({ id, date: day, title, detail, rule, direction, link })),
+      events: events.map(({ id, date, label, kind, source, url, scope: sc2, page, author, body, eventType, value }) => ({ id, date, label, kind, source, url, scope: sc2, ...(kind === 'custom' ? { eventType, value, ...(body ? { body: String(body).slice(0, 400) } : {}) } : {}), ...(page ? { page } : {}), ...(author ? { author, body: body ? String(body).slice(0, 400) : undefined } : {}) })),
+      customTypes,
+      alerts: alerts.map((a) => ({ ...timelineAlert(a), date: a.day })),
     };
   }
 

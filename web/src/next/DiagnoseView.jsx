@@ -48,7 +48,8 @@ export function DiagnoseView({ site, params }) {
   const timeline = `#/site/${site.id}/pages?article=${encodeURIComponent(path)}`;
 
   return (
-    <Page title="Diagnose" sub={`Run a check on a page. Each run is posted on that page’s timeline · ${site.label}`}>
+    <Page title="Page checks" sub={`Run a check on a page. Each run is posted on that page’s timeline · ${site.label}`}
+      back={params.get('path') ? { href: `#/site/${site.id}/pages?article=${encodeURIComponent(params.get('path'))}`, label: 'Back to the page' } : { href: `#/site/${site.id}/pages`, label: 'Pages' }}>
       {site.demo && <p class="nx-note-line"><Icon name="triangle" size={14} /><span>The sample site can’t be checked. Open one of your own sites.</span></p>}
       <div class="dg-pick">
         <label class="dg-pl" for="dg-page">Page</label>

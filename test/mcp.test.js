@@ -39,7 +39,7 @@ test('initialize, tools/list and unknown methods', async () => {
   assert.deepEqual(list.result.tools.map((t) => t.name), TOOLS.map((t) => t.name));
   assert.ok(list.result.tools.every((t) => t.inputSchema.type === 'object'));
   // Only the comment tools and to-do write-ups write; delete is the one destructive tool.
-  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment', 'add_todo', 'report_todo']);
+  assert.deepEqual(list.result.tools.filter((t) => !t.annotations.readOnlyHint).map((t) => t.name), ['add_comment', 'delete_comment', 'add_todo', 'report_todo', 'save_site_config']);
   assert.equal(list.result.tools.find((t) => t.name === 'delete_comment').annotations.destructiveHint, true);
   assert.equal((await mcp.handle({ jsonrpc: '2.0', id: 4, method: 'nope' })).error.code, -32601);
   assert.equal((await mcp.handle({ id: 5 })).error.code, -32600);

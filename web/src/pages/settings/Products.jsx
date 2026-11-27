@@ -4,72 +4,12 @@ import { useAsync, navigate } from '../../hooks.js';
 import { Card, ErrorState, Loading } from '../../components/ui.jsx';
 import { Icon } from '../../components/icons.jsx';
 import { GoalsEditor } from './Goals.jsx';
+import { BrandIcon } from '../../components/BrandIcon.jsx';
+
+const HOST_BRAND = { firebase: 'firebase', vercel: 'vercel', 'github-pages': 'github' };
 
 // Settings → Sites & products: a product is set up stage by stage, the same order as its
 // journey: domains & hosting → analytics → code & releases → distribution → community → goals.
-// The list only: adding and editing open ProductForm on its own (Settings → Sites & products).
-export function ProductsCard({ setup, onReload, onEdit }) {
-  const [error, setError] = useState(null);
-
-  async function add(product) {
-    setError(null);
-    try {
-      const saved = await api.post('/products/setup', product);
-      navigate(`/product/${saved.id}`);
-    } catch (err) {
-      setError(err);
-    }
-  }
-
-  async function remove(id) {
-    setError(null);
-    try {
-      await api.del(`/products/${id}`);
-      onReload();
-    } catch (err) {
-      setError(err);
-    }
-  }
-
-  const { suggestions } = setup;
-  // A site's product shows in the sites table; only products without a site list here.
-  const products = setup.products.filter((p) => !p.siteId);
-  const hostingLabel = (p) => setup.hosting.find((h) => h.key === p.hosting?.provider)?.label;
-
-  return (
-    <Card title={`Products without a website (${products.length})`}
-      actions={suggestions.length ? (
-        <div class="row">
-          {suggestions.map((s) => (
-            <button key={s.id} class="btn ghost" type="button" onClick={() => add(s)}><Icon name="sparkles" size={13} /> Add {s.label}</button>
-          ))}
-        </div>
-      ) : null} flush>
-      {products.length > 0 && (
-        <table class="data">
-          <thead><tr><th>Product</th><th>Domains</th><th>Hosting</th><th>Sources</th><th /></tr></thead>
-          <tbody>
-            {products.map((p) => (
-              <tr key={p.id}>
-                <td><a href={`#/product/${p.id}`}><b>{p.label}</b></a></td>
-                <td class="small mono">{(p.domains || []).map((d) => d.name).join(', ') || <span class="muted">—</span>}</td>
-                <td class="small">{hostingLabel(p) || <span class="muted">not set</span>}</td>
-                <td class="small muted">{[p.repos.length && `${p.repos.length} repo${p.repos.length > 1 ? 's' : ''}`, p.extensionIds.length && `${p.extensionIds.length} extension${p.extensionIds.length > 1 ? 's' : ''}`, p.keywords?.length && `${p.keywords.length} keywords`, p.goals?.length && `${p.goals.length} goal${p.goals.length > 1 ? 's' : ''}`].filter(Boolean).join(' · ')}</td>
-                <td class="num nowrap">
-                  <button class="btn ghost" type="button" onClick={() => onEdit(p.id)}>Edit</button>
-                  <button class="btn ghost danger" type="button" onClick={() => remove(p.id)}>Remove</button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      {!products.length && <p class="muted inset">None yet. Most products have a website and are set up with their site.</p>}
-      {error && <div style={{ padding: '0 16px 12px' }}><ErrorState error={error} /></div>}
-    </Card>
-  );
-}
-
 const bareHost = (host) => String(host || '').toLowerCase().replace(/^www\./, '');
 
 // Form state for a product (or a site's product), with defaults from its site.
@@ -97,7 +37,7 @@ export function useFocusStage(focus, ready = true) {
 }
 
 // Products without a website. A site's product is edited with the site (Settings → Sites & products).
-export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
+export function ProductForm({ initial, setup, focus, onCancel, onSaved, onRemove }) {
   const { options } = setup;
   const [form, setForm] = useState(() => productFormState(initial, setup));
   useFocusStage(focus);
@@ -124,7 +64,7 @@ export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
           <input required value={form.label} placeholder="Cooldesk" onInput={(e) => set({ label: e.currentTarget.value })} />
         </label>
         {!options.sites.length || (
-          <small class="muted">Has a website? Set it up in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a> instead: the site and its product are edited together there.</small>
+          <small class="muted">Has a website? <a href="#/account?tab=sites&edit=new">Add it as a site instead</a>: the site and everything it runs on are set up together.</small>
         )}
       </Card>
       <ProductStages form={form} set={set} setup={setup} />
@@ -133,6 +73,7 @@ export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
       <div class="row">
         <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save product'}</button>
         <button class="btn ghost" type="button" onClick={onCancel}>Cancel</button>
+        {onRemove && <button class="btn ghost danger" type="button" onClick={onRemove}>Remove {initial.label}</button>}
       </div>
     </form>
   );
@@ -142,9 +83,11 @@ export function ProductForm({ initial, setup, focus, onCancel, onSaved }) {
 // store listings, community and goals. `form.siteId` is the site it belongs to;
 // `inSite` says the site editor holds them, so a site not saved yet still counts.
 // only: one stage's key (domains, hosting, code, distribution, community, goals), for editing it on its own.
-export function ProductStages({ form, set, setup, inSite = false, only = '' }) {
+// `skip`: stages the caller draws itself (the site form puts Domains under the site's address).
+// `hint`: the site's address, so repos and Vercel projects that match it are suggested.
+export function ProductStages({ form, set, setup, inSite = false, only = '', skip = [], hint = '' }) {
   const { options } = setup;
-  const show = (key) => !only || only === key;
+  const show = (key) => (!only || only === key) && !skip.includes(key);
   return (
     <>
       {show('domains') && (
@@ -155,14 +98,14 @@ export function ProductStages({ form, set, setup, inSite = false, only = '' }) {
       )}
 
       {show('hosting') && (
-      <Stage icon="rocket" title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel give Kauzl a deploy feed; other hosts are recorded for context." done={hostingState(form.hosting)}>
-        <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} onChange={(hosting) => set({ hosting })} />
+      <Stage icon="rocket" brand={HOST_BRAND[form.hosting?.provider]} title="Hosting & deploys" sub="Where the site runs. Firebase and Vercel send each deploy to the Timeline; other hosts are noted for context." done={hostingState(form.hosting)}>
+        <Hosting hosting={form.hosting || {}} setup={setup} siteId={form.siteId || (inSite ? 'new' : '')} hint={hint} onChange={(hosting) => set({ hosting })} />
       </Stage>
       )}
 
       {show('code') && (
-      <Stage icon="github" title="Code & releases" sub="Ship → GitHub, Articles and Funnels read these repos, plus the Vercel project’s repo and any repo whose homepage is the site. Releases mark the timeline." done={form.repos.length > 0}>
-        <Repos repos={options.repos} selected={form.repos} onChange={(repos) => set({ repos })} />
+      <Stage icon="github" brand="github" title="Code & releases" sub="Releases from these repos mark the Timeline, and Articles and Funnels read their code. The Vercel project’s repo is added for you." done={form.repos.length > 0}>
+        <Repos repos={options.repos} selected={form.repos} hint={hint || form.label} onChange={(repos) => set({ repos })} />
       </Stage>
       )}
 
@@ -177,7 +120,8 @@ export function ProductStages({ form, set, setup, inSite = false, only = '' }) {
       </Stage>
       )}
 
-      {show('community') && (
+      {/* Community (keywords for mentions) is hidden for now (2026-11-27); saved keywords are kept. */}
+      {false && show('community') && (
       <Stage icon="chat" title="Community" sub="Posts and threads that bring traffic. The product name, domain and repos are searched automatically; add other names people use." done={form.keywords.length > 0}>
         <Keywords keywords={form.keywords} onChange={(keywords) => set({ keywords })} />
         <div class="row small">
@@ -215,11 +159,11 @@ function hostingState(h) {
   return true;
 }
 
-function Stage({ id, icon, title, sub, done, children }) {
+function Stage({ id, icon, brand = '', title, sub, done, children }) {
   return (
     <section class="card setup-stage" id={id ? `stage-${id}` : undefined}>
       <header class="card-head">
-        <Icon name={icon} size={15} />
+        {brand ? <BrandIcon name={brand} small /> : <Icon name={icon} size={15} />}
         <h2>{title}</h2>
         <span class={`status-dot ${done === 'warn' ? 'warn' : done ? 'good' : 'off'}`} title={done === 'warn' ? 'Needs one more step' : done ? 'Set' : 'Not set'} />
         <span class="spacer" />
@@ -301,40 +245,76 @@ function DomainRow({ domain, registrars, hostingNames, onChange, onRemove, onHos
   );
 }
 
-function Hosting({ hosting, setup, siteId, onChange }) {
+// Words in a host or name that can match a repo: "cool-desk.com" → ["cooldesk"], "streamoverlay.kazekit.com" → ["streamoverlay"].
+// Short words ("cool", "desk") would match too many unrelated repos, so only 5+ letters count.
+function nameWords(text) {
+  const base = String(text || '').toLowerCase().replace(/^www\./, '').split('.')[0];
+  const parts = base.split(/[^a-z0-9]+/).filter((w) => w.length >= 5);
+  const joined = base.replace(/[^a-z0-9]/g, '');
+  return [...new Set([...parts, ...(joined.length >= 5 ? [joined] : [])])];
+}
+
+function Hosting({ hosting, setup, siteId, hint = '', onChange }) {
   const provider = hosting.provider || '';
   const chosen = setup.hosting.find((h) => h.key === provider);
+  const host = String(hint || '').toLowerCase().replace(/^www\./, '');
+  // The Vercel project that serves this address, if there is one.
+  const vercelMatch = provider === 'vercel' && !hosting.vercel?.projectId && host
+    ? setup.vercel.projects?.find((p) => p.domains?.some((d) => d.replace(/^www\./, '') === host)) : null;
   return (
     <div class="stack gap-10">
       <div class="provider-grid" role="radiogroup" aria-label="Hosting provider">
         {setup.hosting.map((h) => (
           <button key={h.key} type="button" role="radio" aria-checked={provider === h.key} class={`provider${provider === h.key ? ' on' : ''}`}
             onClick={() => onChange(provider === h.key ? {} : { provider: h.key, ...(h.key === 'firebase' ? { firebase: hosting.firebase } : {}), ...(h.key === 'vercel' ? { vercel: hosting.vercel } : {}) })}>
-            <b>{h.label}</b>
-            <small>{h.feed ? 'Deploy feed' : 'Recorded only'}</small>
+            {HOST_BRAND[h.key] ? <BrandIcon name={HOST_BRAND[h.key]} small /> : <span class="provider-letter" aria-hidden="true">{h.label[0]}</span>}
+            <span class="provider-b"><b>{h.label}</b><small>{h.feed ? 'Deploys on Timeline' : 'Noted only'}</small></span>
           </button>
         ))}
       </div>
-      {provider === 'firebase' && <FirebaseBackend value={hosting.firebase || {}} siteId={siteId} onChange={(firebase) => onChange({ ...hosting, firebase })} />}
-      {provider === 'vercel' && (
-        setup.vercel.connected ? (
-          <label class="field" style={{ maxWidth: '360px' }}>Vercel project
-            <select value={hosting.vercel?.projectId || ''} onChange={(e) => onChange({ ...hosting, vercel: e.currentTarget.value ? { projectId: e.currentTarget.value } : undefined })}>
-              <option value="">— pick a project —</option>
-              {setup.vercel.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
-            </select>
-            {setup.vercel.error && <small>{setup.vercel.error}</small>}
-            {!siteId && <small>Deploys are matched to a site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a>.</small>}
-          </label>
-        ) : <p class="note m-0">Connect Vercel in <a href="#/settings?i=vercel">Integrations → Vercel</a> to read deploys.</p>
+
+      {provider === 'firebase' && (
+        <div class="host-panel">
+          <p class="host-panel-h"><BrandIcon name="firebase" small /><b>Link the App Hosting backend</b></p>
+          <FirebaseBackend value={hosting.firebase || {}} siteId={siteId} onChange={(firebase) => onChange({ ...hosting, firebase })} />
+        </div>
       )}
+
+      {provider === 'vercel' && (
+        <div class="host-panel">
+          <p class="host-panel-h"><BrandIcon name="vercel" small /><b>{setup.vercel.connected ? 'Pick the Vercel project' : 'Connect Vercel to read deploys'}</b></p>
+          {setup.vercel.connected ? (
+            <>
+              {vercelMatch && (
+                <button type="button" class="host-suggest" onClick={() => onChange({ ...hosting, vercel: { projectId: vercelMatch.id } })}>
+                  <Icon name="sparkles" size={13} /><span><b>{vercelMatch.name}</b> serves {host}</span><span class="host-suggest-go">Use it</span>
+                </button>
+              )}
+              <label class="field host-field">Project
+                <select value={hosting.vercel?.projectId || ''} onChange={(e) => onChange({ ...hosting, vercel: e.currentTarget.value ? { projectId: e.currentTarget.value } : undefined })}>
+                  <option value="">Choose a project…</option>
+                  {setup.vercel.projects.map((p) => <option key={p.id} value={p.id}>{p.name}{p.domains[0] ? ` · ${p.domains[0]}` : ''}</option>)}
+                </select>
+                {setup.vercel.error && <small class="bad">{setup.vercel.error}</small>}
+              </label>
+              {!siteId && <small class="muted">Deploys are matched to a site: set this up from the site in <a href="#/account?tab=sites">Sites &amp; products</a>.</small>}
+            </>
+          ) : (
+            <div class="host-connect">
+              <span class="muted small">Kauzl reads production deploys and marks each one on the Timeline.</span>
+              <a class="btn" href="#/account?i=vercel">Connect Vercel</a>
+            </div>
+          )}
+        </div>
+      )}
+
       {chosen && !chosen.feed && (
-        <>
-          <label class="field" style={{ maxWidth: '360px' }}><span class="field-label">Plan or note <small>optional</small></span>
-            <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : provider === 'fly' ? 'App name, e.g. my-app (one machine, sin)' : ''} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
+        <div class="host-panel">
+          <label class="field host-field"><span class="field-label">Plan or note <small>optional</small></span>
+            <input value={hosting.note || ''} placeholder={provider === 'hostinger' ? 'Business Web Hosting, renews Mar' : provider === 'fly' ? 'App name, e.g. my-app (one machine, sin)' : 'Anything worth remembering'} onInput={(e) => onChange({ ...hosting, note: e.currentTarget.value })} />
           </label>
-          <p class="note m-0">{chosen.label} has no deploy feed Kauzl can read, so the Deploys stage uses GitHub releases, Web Store versions and the notes you add on charts.</p>
-        </>
+          <small class="muted">{chosen.label} has no deploy feed Kauzl can read, so GitHub releases, Web Store versions and your own notes mark changes on the Timeline.</small>
+        </div>
       )}
     </div>
   );
@@ -367,33 +347,69 @@ function FirebaseBackend({ value, siteId, onChange }) {
         <button class="btn" type="button" disabled={!project || busy} onClick={discover}>{busy ? 'Looking…' : 'Find backends'}</button>
       </div>
       {found && !found.length && <small class="muted">No App Hosting traffic in that project in the last 3 days.</small>}
-      {found?.map((s) => (
-        <label class="check" key={s.service}>
-          <input type="radio" name="fb-backend" checked={value.service === s.service} onChange={() => onChange({ project, service: s.service, location: s.location })} />
-          <span class="mono">{s.service}</span> <span class="muted small">{s.hosts?.[0] || ''} · {s.requests} requests</span>
-        </label>
-      ))}
-      {value.service && <small>Linked backend: <span class="mono">{value.project} / {value.service}</span></small>}
-      {value.service && !siteId && <small class="muted">Request logs are stored per site: set this up from the site in <a href="#/settings?tab=sites">Settings → Sites &amp; products</a>.</small>}
+      {found?.length > 0 && (
+        <div class="host-options" role="radiogroup" aria-label="App Hosting backend">
+          {found.map((s) => (
+            <button key={s.service} type="button" role="radio" aria-checked={value.service === s.service} class={`host-option${value.service === s.service ? ' on' : ''}`}
+              onClick={() => onChange({ project, service: s.service, location: s.location })}>
+              <b class="mono">{s.service}</b><small>{s.hosts?.[0] || s.location} · {s.requests} requests in 3 days</small>
+            </button>
+          ))}
+        </div>
+      )}
+      {value.service && <p class="host-linked"><span class="nx-dot on" aria-hidden="true" />Linked to <span class="mono">{value.project} / {value.service}</span></p>}
+      {value.service && !siteId && <small class="muted">Request logs are stored per site: set this up from the site in <a href="#/account?tab=sites">Sites &amp; products</a>.</small>}
       {error && <small class="muted">{error}</small>}
     </div>
   );
 }
 
-export function Repos({ repos, selected, onChange }) {
+// Repos as chips: the linked ones, repos named like the site (one click), and search for the rest.
+export function Repos({ repos, selected, onChange, hint = '' }) {
   const [filter, setFilter] = useState('');
-  if (!repos.length) return <small class="muted">Add a GitHub token in <a href="#/settings?i=github">Integrations → GitHub</a> to pick repos.</small>;
+  if (!repos.length) {
+    return (
+      <div class="host-connect">
+        <span class="muted small">Connect GitHub to pick repos. Releases then show on the Timeline.</span>
+        <a class="btn" href="#/account?i=github">Connect GitHub</a>
+      </div>
+    );
+  }
+  const add = (r) => onChange([...selected, r]);
+  const drop = (r) => onChange(selected.filter((v) => v !== r));
+  const words = nameWords(hint);
+  const suggested = repos.filter((r) => !selected.includes(r) && words.some((w) => r.split('/')[1]?.toLowerCase().replace(/[^a-z0-9]/g, '').includes(w))).slice(0, 4);
   const q = filter.trim().toLowerCase();
-  const shown = repos.filter((r) => selected.includes(r) || (q && r.toLowerCase().includes(q)));
+  const results = q ? repos.filter((r) => !selected.includes(r) && r.toLowerCase().includes(q)).slice(0, 8) : [];
   return (
-    <>
-      <input type="search" placeholder={`Search ${repos.length} synced repos`} value={filter} onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Search repos" style={{ maxWidth: '360px' }} />
-      {shown.slice(0, 20).map((r) => (
-        <label class="check mono small" key={r}>
-          <input type="checkbox" checked={selected.includes(r)} onChange={(e) => onChange(e.currentTarget.checked ? [...selected, r] : selected.filter((v) => v !== r))} /> {r}
-        </label>
-      ))}
-    </>
+    <div class="repo-pick">
+      {selected.length > 0 && (
+        <div class="repo-chips">
+          {selected.map((r) => (
+            <span key={r} class="repo-chip"><BrandIcon name="github" small /><span class="mono">{r}</span>
+              <button type="button" class="chip-x" aria-label={`Unlink ${r}`} onClick={() => drop(r)}><Icon name="x" size={11} /></button>
+            </span>
+          ))}
+        </div>
+      )}
+      {suggested.length > 0 && (
+        <div class="repo-suggest">
+          <span class="muted small">Looks like this site:</span>
+          {suggested.map((r) => <button key={r} type="button" class="btn ghost" onClick={() => add(r)}><Icon name="plus" size={12} /> <span class="mono">{r}</span></button>)}
+        </div>
+      )}
+      <div class="repo-search">
+        <input type="search" placeholder={`Search ${repos.length} repos to link`} value={filter} onInput={(e) => setFilter(e.currentTarget.value)} aria-label="Search repos" />
+        {results.length > 0 && (
+          <ul class="repo-results">
+            {results.map((r) => (
+              <li key={r}><button type="button" onClick={() => { add(r); setFilter(''); }}><span class="mono">{r}</span><span class="repo-add">Link</span></button></li>
+            ))}
+          </ul>
+        )}
+        {q && !results.length && <small class="muted">No repo matches “{filter}”.</small>}
+      </div>
+    </div>
   );
 }
 

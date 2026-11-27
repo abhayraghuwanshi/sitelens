@@ -7,8 +7,20 @@ import { Icon } from '../components/icons.jsx';
 // The hosted Studio (fly.toml's STUDIO_HOST), where sharing lives.
 const HOSTED = 'https://kauzl.com';
 
-export function SiteAccess({ site, hosted }) {
+export function SiteAccess({ site, hosted, browser = false }) {
   if (!hosted) return <DesktopNote site={site} />;
+  // No sign-in (this browser only): there's no account to share from.
+  if (browser) {
+    return (
+      <section class="card card-plain nx-access" aria-label="People with access">
+        <div>
+          <h3 class="nx-fn-title">People with access</h3>
+          <p class="muted small m-0">You’re using Kauzl without signing in, so {site.label} lives only in this browser. Sign in with an invited account to share it with your team, view only.</p>
+        </div>
+        <div class="nx-access-add"><a class="btn primary" href="/login">Sign in to share</a></div>
+      </section>
+    );
+  }
   return <SharedList site={site} />;
 }
 

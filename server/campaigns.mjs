@@ -17,6 +17,7 @@ import { runReport } from './ga-limit.mjs';
 import { getRange, hostFilter } from '../shared/sitelens/reports.js';
 import { createCache } from './cache.mjs';
 import { ValidationError } from './store.mjs';
+import { cleanPair, campaignKey } from '../shared/traffic-source.js';
 
 const TTL = 10 * 60_000;
 const MAX_GOALS = 3;
@@ -42,7 +43,8 @@ export function campaignGoals(config) {
 // firstSeen: { sessionCampaignName, date }
 export function summarizeCampaigns({ rows = [], previous = [], goalRows = [], firstSeen = [], goals = [] }) {
   const byName = new Map();
-  const key = (c) => String(c).trim().toLowerCase();
+  // Launch_Post, launch post and launch-post are one campaign.
+  const key = campaignKey;
   const get = (name) => {
     const k = key(name);
     if (!byName.has(k)) byName.set(k, { campaign: String(name).trim(), sessions: 0, engaged: 0, keyEvents: 0, previous: 0, goals: {}, firstDay: null, parts: new Map() });
@@ -51,9 +53,10 @@ export function summarizeCampaigns({ rows = [], previous = [], goalRows = [], fi
   for (const r of rows) {
     if (!isTagged(r.sessionCampaignName)) continue;
     const c = get(r.sessionCampaignName);
-    const content = isTagged(r.sessionManualAdContent) ? r.sessionManualAdContent : '';
-    const pk = `${r.sessionSource}|${r.sessionMedium}|${content}`;
-    const p = c.parts.get(pk) || { source: r.sessionSource || '(not set)', medium: r.sessionMedium || '(not set)', content, sessions: 0, engaged: 0, keyEvents: 0, goals: {} };
+    const content = isTagged(r.sessionManualAdContent) ? campaignKey(r.sessionManualAdContent) : '';
+    const { source, medium } = cleanPair(r.sessionSource, r.sessionMedium);
+    const pk = `${source}|${medium}|${content}`;
+    const p = c.parts.get(pk) || { source, medium, content, sessions: 0, engaged: 0, keyEvents: 0, goals: {} };
     for (const t of [c, p]) {
       t.sessions += n(r.sessions);
       t.engaged += n(r.engagedSessions);
@@ -69,8 +72,9 @@ export function summarizeCampaigns({ rows = [], previous = [], goalRows = [], fi
     const id = goalOf.get(r.eventName);
     c.goals[id] = (c.goals[id] || 0) + n(r.totalUsers);
     // Variants aren't in the goal report; credit the source/medium row.
+    const pair = cleanPair(r.sessionSource, r.sessionMedium);
     for (const p of c.parts.values()) {
-      if (p.source === r.sessionSource && p.medium === r.sessionMedium) {
+      if (p.source === pair.source && p.medium === pair.medium) {
         p.goals[id] = (p.goals[id] || 0) + n(r.totalUsers);
         break;
       }
@@ -89,20 +93,31 @@ export function summarizeCampaigns({ rows = [], previous = [], goalRows = [], fi
     .sort((a, b) => b.sessions - a.sessions || b.previous - a.previous);
 }
 
-// Every source / medium, tagged or not.
+// Every source / medium, tagged or not. Spellings of one place merge
+// (Facebook / Social, fb / social, m.facebook.com / referral → facebook /
+// social); `aka` lists the raw spellings that were merged in.
 export function summarizeSources(rows = [], previous = []) {
-  const prev = new Map(previous.map((r) => [`${r.sessionSource}|${r.sessionMedium}`, n(r.sessions)]));
+  const pairKey = (r) => {
+    const { source, medium } = cleanPair(r.sessionSource, r.sessionMedium);
+    return `${source}|${medium}`;
+  };
+  const prev = new Map();
+  for (const r of previous) prev.set(pairKey(r), (prev.get(pairKey(r)) || 0) + n(r.sessions));
   const total = rows.reduce((t, r) => t + n(r.sessions), 0);
-  return rows
-    .map((r) => ({
-      source: r.sessionSource || '(not set)',
-      medium: r.sessionMedium || '(not set)',
-      sessions: n(r.sessions),
-      engaged: n(r.engagedSessions),
-      keyEvents: n(r.keyEvents),
-      previous: prev.get(`${r.sessionSource}|${r.sessionMedium}`) || 0,
-      share: total ? n(r.sessions) / total : 0,
-    }))
+  const byPair = new Map();
+  for (const r of rows) {
+    const k = pairKey(r);
+    const [source, medium] = k.split('|');
+    const s = byPair.get(k) || { source, medium, sessions: 0, engaged: 0, keyEvents: 0, previous: prev.get(k) || 0, share: 0, aka: [] };
+    s.sessions += n(r.sessions);
+    s.engaged += n(r.engagedSessions);
+    s.keyEvents += n(r.keyEvents);
+    const raw = `${r.sessionSource || '(not set)'} / ${r.sessionMedium || '(not set)'}`;
+    if (raw !== `${source} / ${medium}` && !s.aka.includes(raw)) s.aka.push(raw);
+    byPair.set(k, s);
+  }
+  return [...byPair.values()]
+    .map((s) => ({ ...s, share: total ? s.sessions / total : 0 }))
     .sort((a, b) => b.sessions - a.sessions);
 }
 

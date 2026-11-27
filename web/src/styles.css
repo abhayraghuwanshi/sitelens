@@ -716,13 +716,18 @@ details.advanced[open] > summary { margin-bottom: 10px; }
 .goal-auto { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; justify-content: space-between; padding: 10px 12px; border: 1px dashed var(--border-strong); border-radius: var(--radius); }
 .goal-rows { display: flex; flex-direction: column; gap: 8px; }
 .goal-row { display: grid; grid-template-columns: minmax(120px, 1.3fr) minmax(130px, 1fr) minmax(140px, 1.3fr) 104px 96px 34px; gap: 8px; align-items: center; }
+.goal-row.goal-head { display: grid; }
 .goal-head { font-size: var(--text-xs); color: var(--text-3); font-weight: 500; }
 .goal-row .goal-warn { grid-column: 1 / -1; color: var(--warning); font-size: var(--text-sm); margin-top: -2px; }
 .goal-row input, .goal-row select { width: 100%; min-width: 0; }
+.goal-row .goal-alert { grid-column: 1 / -1; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--text-2); margin-top: -2px; }
+.goal-row .goal-alert input[type="checkbox"] { width: auto; }
+.goal-row .goal-alert input[type="number"] { width: 64px; }
+.goal-row .goal-alert select { width: auto; }
 button.chip { cursor: pointer; border: 0; font: inherit; }
 button.chip:hover { background: var(--surface-hover); }
 @media (max-width: 820px) {
-  .goal-head { display: none; }
+  .goal-head, .goal-row.goal-head { display: none; }
   .goal-row { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); padding-bottom: 10px; border-bottom: 1px solid var(--grid); }
   .goal-row > button { justify-self: end; }
 }
@@ -1164,3 +1169,11 @@ table.data.compact .cell-path { max-width: none; }
 .mark-windows { --mark: #0078d4; } .mark-apple { --mark: #555; } .mark-android { --mark: #3ddc84; --mark-ink: #08311a; } .mark-linux { --mark: #333; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .mark-x, :root:not([data-theme="light"]) .mark-github, :root:not([data-theme="light"]) .mark-devto, :root:not([data-theme="light"]) .mark-medium { box-shadow: inset 0 0 0 1px var(--border-strong); } }
 :root[data-theme="dark"] .mark-x, :root[data-theme="dark"] .mark-github, :root[data-theme="dark"] .mark-devto, :root[data-theme="dark"] .mark-medium { box-shadow: inset 0 0 0 1px var(--border-strong); }
+
+/* Account → Claude & agents: the MCP tools */
+.mcp-tools-card .card-head h2 { font-size: var(--text-xl); }
+.mcp-tools-h { font-size: var(--text-lg); font-weight: 600; margin: 0 0 8px; }
+.mcp-tools-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.mcp-tools-list li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; }
+.mcp-tools-list code { flex: 0 0 170px; }
+@media (max-width: 640px) { .mcp-tools-list code { flex-basis: 100%; } }

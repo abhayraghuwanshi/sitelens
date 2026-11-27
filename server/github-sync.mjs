@@ -228,8 +228,25 @@ export function createGitHubSync({ dbPath, getToken, fetchImpl = fetch, log = co
     }
   }
 
+  async function timelineMetric(repo, metric, day) {
+    const token = await getToken();
+    if (!token) throw new SourceError('Connect GitHub in Account to run this job.', { kind: 'needs-github' });
+    if (!/^[\w.-]+\/[\w.-]+$/.test(repo) || repo.split('/').some((part) => part === '.' || part === '..') || !['views', 'pulls', 'issues'].includes(metric)) {
+      throw new SourceError('Choose a repository and metric.', { kind: 'validation' });
+    }
+    if (metric === 'views') {
+      const name = repo.split('/').map(encodeURIComponent).join('/');
+      const { data } = await gh(`/repos/${name}/traffic/views?per=day`, token);
+      return Object.fromEntries((data.views || []).map(({ timestamp, count }) => [timestamp.slice(0, 10), count]));
+    }
+    const q = new URLSearchParams({ q: `repo:${repo} is:open is:${metric === 'pulls' ? 'pr' : 'issue'}`, per_page: '1' });
+    const { data } = await gh(`/search/issues?${q}`, token);
+    if (data.incomplete_results || !Number.isFinite(data.total_count)) throw new Error('GitHub did not return a complete count.');
+    return { [day]: data.total_count };
+  }
+
   return {
-    dbPath,
+    dbPath, timelineMetric,
     status: () => ({ ...state, running: Boolean(running) }),
     // A new token: the last error was about the old one (or none at all).
     reset() {

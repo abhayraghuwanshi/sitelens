@@ -30,7 +30,7 @@ export function Results({ site, range, n = '5', title = 'What it led to', more =
   const metrics = useAsync(() => api.get(`/sites/${site.id}/metrics${qs({ range })}`).catch(() => ({ metrics: [] })), [site.id, range]);
   if (!products.data || (!out.data && out.loading)) return <section class="card card-plain"><Loading height={160} /></section>;
   const all = out.data?.goals?.list || [];
-  const outcomesHref = `#/site/${site.id}/goals`;
+  const outcomesHref = `#/site/${site.id}/timeline?by=goal`;
 
   // On the site: the outcome first, then the steps that lead to it, biggest first.
   const onSite = all.filter((g) => g.source === 'event' || g.source === 'page')

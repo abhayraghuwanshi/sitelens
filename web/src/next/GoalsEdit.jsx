@@ -23,19 +23,8 @@ export function GoalsEdit({ site, done }) {
 
   if (setup.error) return <ErrorState error={setup.error} onRetry={setup.reload} />;
   if (!form || config.loading) return <Loading height={240} />;
-  const fileGoals = config.data?.config?.goals?.length || 0;
-  if (fileGoals) {
-    return (
-      <section class="card card-plain nx-goals-file">
-        <p class="m-0"><Icon name="target" size={14} /> <b>{site.label}’s {fileGoals} goal{fileGoals === 1 ? '' : 's'} come from its <code>.sitelens.yml</code></b>, in the site’s repo. That file is what’s measured, so goals are changed there.</p>
-        <div class="row">
-          <a class="btn primary" href={`#/site/${site.id}/setup`}>Edit the file’s goals</a>
-          <button class="btn ghost" type="button" onClick={done}>Back</button>
-        </div>
-        <p class="muted small m-0">Claude can change it for you too: ask it to update the site’s goals (the Kauzl MCP tools read and check the file).</p>
-      </section>
-    );
-  }
+  const fileGoals = config.data?.config?.goals;
+  if (fileGoals?.length) return <FileGoalsEdit site={site} initial={fileGoals} file={config.data} form={form} done={done} />;
 
   async function save(e) {
     e.preventDefault();
@@ -50,7 +39,7 @@ export function GoalsEdit({ site, done }) {
         previousId: existing?.id,
         domains: form.domains.length ? form.domains : [{ name: String(site.host || '').replace(/^www\./, '') }],
       });
-      done();
+      done({ saved: true });
     } catch (err) {
       setError(err);
       setSaving(false);
@@ -66,6 +55,63 @@ export function GoalsEdit({ site, done }) {
       {error && <ErrorState error={error} />}
       <div class="row">
         <button class="btn primary" type="submit" disabled={saving}>{saving ? 'Saving…' : 'Save goals'}</button>
+        <button class="btn ghost" type="button" onClick={done}>Cancel</button>
+      </div>
+    </form>
+  );
+}
+
+// The goals in the site's .sitelens.yml, as the same form. Saving rewrites just the file's
+// goals: part (each goal keeps its comment). By default it goes into Kauzl's own copy of the
+// file, which applies right away; a file read from GitHub can instead get a pull request.
+function FileGoalsEdit({ site, initial, file, form, done }) {
+  const [goals, setGoals] = useState(initial);
+  const [saving, setSaving] = useState('');
+  const [error, setError] = useState(null);
+  const [pr, setPr] = useState(null);
+  const inRepo = file.source?.type === 'repo';
+  const where = inRepo ? `${file.source.repo}/${file.source.path}` : '';
+  const yamlHref = `#/account?tab=sites&edit=${encodeURIComponent(site.id)}&part=config`;
+
+  async function save(to) {
+    setSaving(to);
+    setError(null);
+    try {
+      const out = await api.post(`/sites/${site.id}/config/goals`, { goals, to });
+      if (out.saved === 'pr') setPr(out);
+      else done({ saved: true });
+    } catch (err) {
+      setError(err);
+    } finally {
+      setSaving('');
+    }
+  }
+
+  if (pr) {
+    return (
+      <section class="card card-plain stack gap-10">
+        <p class="m-0"><Icon name="target" size={14} /> Opened <a href={pr.url} target="_blank" rel="noreferrer">pull request #{pr.number}</a> on {pr.repo}. The new goals count once it’s merged.</p>
+        <div class="row"><button class="btn primary" type="button" onClick={done}>Back to Goals</button></div>
+      </section>
+    );
+  }
+  return (
+    <form class="stack nx-goals-edit" onSubmit={(e) => { e.preventDefault(); save('kauzl'); }}>
+      <p class="note m-0">
+        {inRepo
+          ? <>These goals come from <code>{where}</code>. Saving keeps them in Kauzl and they count right away; Kauzl uses its own copy of the file from then on. To change the repo instead, open a pull request.</>
+          : 'These goals are kept in Kauzl. Saving applies them right away.'}
+        {' '}<a href={yamlHref}>Edit as YAML</a>
+      </p>
+      <section class="card card-plain">
+        <GoalsEditor goals={goals} onChange={setGoals} siteId={site.id} fromFile
+          hasStore={form.extensionIds.length > 0 || goals.some((g) => g.source === 'installs')}
+          hasRepos={form.repos.length > 0 || goals.some((g) => g.source === 'downloads' || g.source === 'stars')} />
+      </section>
+      {error && <ErrorState error={error} />}
+      <div class="row">
+        <button class="btn primary" type="submit" disabled={Boolean(saving)}>{saving === 'kauzl' ? 'Saving…' : 'Save goals'}</button>
+        {inRepo && <button class="btn" type="button" disabled={Boolean(saving)} onClick={() => save('repo')}>{saving === 'repo' ? 'Opening…' : 'Open pull request instead'}</button>}
         <button class="btn ghost" type="button" onClick={done}>Cancel</button>
       </div>
     </form>

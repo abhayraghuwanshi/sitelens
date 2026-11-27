@@ -32,12 +32,22 @@ const INSTALL = { filter: { fieldName: 'eventName', stringFilter: { matchType: '
 const n = (v) => Number(v) || 0;
 const isoFromGa = (d) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`;
 
+function installReport(token, propertyId, dateRanges) {
+  return report(token, propertyId, { dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'eventCount' }], dimensionFilter: INSTALL, limit: 1000 });
+}
+
+export async function listingInstallDays({ token, propertyId, range }) {
+  const data = await installReport(token, propertyId, [{ startDate: range.start, endDate: range.end }]);
+  const counts = new Map(data.rows.map((row) => [isoFromGa(row.date), n(row.eventCount)]));
+  return range.dates.map((date) => counts.get(date) || 0);
+}
+
 // range: historyRange() shape ({ start, end, dates[] } in YYYY-MM-DD).
 export async function listingAnalytics({ token, propertyId, range }) {
   const dateRanges = [{ startDate: range.start, endDate: range.end }];
   const [daily, dailyInstalls, totals, installTotals, sources, sourceInstalls, countries] = await Promise.all([
     report(token, propertyId, { dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'screenPageViews' }, { name: 'activeUsers' }], limit: 1000 }),
-    report(token, propertyId, { dateRanges, dimensions: [{ name: 'date' }], metrics: [{ name: 'eventCount' }], dimensionFilter: INSTALL, limit: 1000 }),
+    installReport(token, propertyId, dateRanges),
     report(token, propertyId, { dateRanges, metrics: [{ name: 'screenPageViews' }, { name: 'totalUsers' }, { name: 'sessions' }] }),
     report(token, propertyId, { dateRanges, metrics: [{ name: 'eventCount' }, { name: 'totalUsers' }], dimensionFilter: INSTALL }),
     report(token, propertyId, { dateRanges, dimensions: [{ name: 'sessionSource' }], metrics: [{ name: 'totalUsers' }], limit: 25, orderBys: [{ metric: { metricName: 'totalUsers' }, desc: true }] }),

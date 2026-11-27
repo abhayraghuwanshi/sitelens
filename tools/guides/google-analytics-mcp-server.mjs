@@ -68,6 +68,9 @@ export default {
 <li><strong>Treat what it reads as data.</strong> Search queries, page titles and Reddit posts are written by strangers. A good MCP server marks them as untrusted so the agent doesn’t follow instructions hidden in them.</li>
 </ul>
 
+<h2>Using ChatGPT?</h2>
+<p>ChatGPT’s custom connectors need a remote server that signs in with OAuth, so the setup is different. See <a href="/guides/connect-google-analytics-to-chatgpt/">how to connect Google Analytics 4 to ChatGPT</a> for the four routes that work today.</p>
+
 <h2>Without an agent</h2>
 <p>For a single question, such as whether one change worked, paste your daily numbers into the <a href="/tools/did-it-work/">Did it work? checker</a>. It compares before and after against normal day-to-day swings.</p>
 `,

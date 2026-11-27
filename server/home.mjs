@@ -18,15 +18,16 @@ export const FAVICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="htt
 
 export const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap';
 
-import { SCENARIOS, scene, chartSvg } from './home-play.js';
+import { calendarHtml, dayHtml, day, FIRST_PICK } from './home-play.js';
+import { COURSE, MODULES, COURSE_ORDER } from '../tools/course.mjs';
 
-// The hero's first scenario, drawn finished into the HTML; /home-play.js makes it playable.
-const FIRST = scene(SCENARIOS[0]);
+// The hero's calendar and its first picked day, drawn into the HTML; /home-play.js makes the days clickable.
+const FIRST = day(FIRST_PICK);
 
 // Questions people ask before signing up. Plain text answers (also FAQPage
 // data): under 320 characters, each starting with its subject (tools/seo-rules.mjs).
 const FAQ = [
-  ['What is Kauzl?', 'Kauzl is analytics for people who ship. It reads Google Analytics 4, Search Console and Bing, puts your releases, posts and campaigns on the same timeline, and says what changed, why, and what to do next.'],
+  ['What is Kauzl?', 'Kauzl is an analytics calendar for your website. It reads Google Analytics 4, Search Console and Bing, shows each day’s visits and searches next to your releases, posts and campaigns, and says what changed, why, and what to do next.'],
   ['Does Kauzl replace Google Analytics?', 'No. Kauzl reads the analytics you already have and adds the why: which release, post or campaign moved the numbers. Keep GA4 or Vercel Web Analytics counting visits.'],
   ['Do I need to add a tracking script?', 'No. Kauzl adds no script to your site. It connects to the tools you already use, read-only, so there is nothing to install and nothing new for visitors to block.'],
   ['What access does Kauzl need?', 'Kauzl asks Google for read-only access to the Analytics property and Search Console site you pick. GitHub, Reddit, the Chrome Web Store and the other sources are optional, and you add only the ones you use.'],
@@ -40,7 +41,7 @@ const LD = JSON.stringify([
   { '@context': 'https://schema.org', '@type': 'Organization', name: 'Kauzl', url: 'https://kauzl.com/', logo: 'https://kauzl.com/tools/assets/og.png' },
   { '@context': 'https://schema.org', '@type': 'WebSite', name: 'Kauzl', url: 'https://kauzl.com/' },
   { '@context': 'https://schema.org', '@type': 'SoftwareApplication', name: 'Kauzl', applicationCategory: 'BusinessApplication', operatingSystem: 'Web',
-    url: 'https://kauzl.com/', description: 'Analytics for people who ship: Kauzl reads Google Analytics 4, Search Console and Bing, puts releases, posts and campaigns on the same timeline, and says what changed and why.' },
+    url: 'https://kauzl.com/', description: 'The analytics calendar for your website: Kauzl reads Google Analytics 4, Search Console and Bing, shows each day next to your releases, posts and campaigns, and says what changed and why.' },
   { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: FAQ.map(([q, a]) => ({ '@type': 'Question', name: q, acceptedAnswer: { '@type': 'Answer', text: a } })) },
 ]).replace(/</g, '\\u003c');
 
@@ -51,18 +52,11 @@ const CHECK = '<svg viewBox="0 0 24 24" width="16" height="16" fill="none" strok
 // real screen as the proof, linked to that screen in the tour
 // (/tour/?to=<view>, built from the design by scripts/build-tour.mjs). Sample numbers.
 const QA = [
-  { key: 'cycles', feature: 'Content cycles', to: 'cycles',
-    q: 'Which articles are worth writing more of?',
-    verdict: ['Cycle 3 measured', 'amber'],
-    a: '<b>Grow</b> the GA4 guide: Google, Bing and ChatGPT all picked it up, and 14 readers signed up. <b>Cut</b> the myths post: six weeks, nothing found it.',
-    visual: `<table class="v-cyc" aria-hidden="true"><thead><tr><th>Article</th><th>Google</th><th>Bing</th><th>AI</th><th>Acted</th><th></th></tr></thead><tbody>
-      ${[['Track AI traffic in GA4', 'on', 'on', 'on', 14, 'Grow', 'good'], ['UTM naming guide', 'on', 'on', '', 6, 'Keep', 'good'], ['Search Console vs GA', 'on', '', '', 1, 'Improve', 'amber'], ['10 analytics myths', '', '', '', 0, 'Cut', 'bad']].map(([t, g, b, ai, n, v, tone]) => `<tr><td>${t}</td><td><i class="${g}"></i></td><td><i class="${b}"></i></td><td><i class="${ai}"></i></td><td class="num">${n}</td><td><span class="vp ${tone}">${v}</span></td></tr>`).join('')}
-    </tbody></table><p class="v-foot">Every 14 days: who picked each article up, and did its readers act</p>` },
-  { key: 'reddit', feature: 'Reddit cycles', to: 'cycles',
+  { key: 'reddit', feature: 'Reddit cycles', to: 'traffic',
     q: 'Which subreddits are worth posting in?',
     verdict: ['Keep 1 · Drop 1', 'amber'],
     a: 'Keep posting in <b>r/SideProject</b>: 2 posts, 140 visits, 6 sign-ups. Drop r/webdev: the mods removed both.',
-    visual: `<table class="v-cyc v-sub" aria-hidden="true"><thead><tr><th>Subreddit</th><th>Upvotes</th><th>Visits</th><th>Sign-ups</th><th></th></tr></thead><tbody>
+    visual: `<table class="v-reddit" aria-hidden="true"><thead><tr><th>Subreddit</th><th>Upvotes</th><th>Visits</th><th>Sign-ups</th><th></th></tr></thead><tbody>
       ${[['r/SideProject', 212, 140, 6, 'Keep', 'good'], ['r/analytics', 38, 41, 1, 'Try again', 'amber'], ['r/webdev', '–', 0, 0, 'Drop', 'bad']].map(([sub, up, v, n, c, tone]) => `<tr><td>${sub}</td><td class="num">${up}</td><td class="num">${v}</td><td class="num">${n}</td><td><span class="vp ${tone}">${c}</span></td></tr>`).join('')}
     </tbody></table><p class="v-foot">Claude drafts the posts, you post them, each link is tagged and measured</p>` },
   { key: 'timeline', feature: 'Timeline', to: 'timeline',
@@ -129,15 +123,6 @@ const LEDGER = [
   ['Sign-ups: 41.', '<b>Up 18% since the pricing change</b>, more than a normal week moves.'],
 ];
 
-const GUIDES = [
-  ['track-chatgpt-traffic-google-analytics', 'Track ChatGPT and AI traffic in GA4', 'Where AI visits hide in Google Analytics, and a regex to group them.'],
-  ['did-a-website-change-work', 'How to tell if a website change worked', 'A fair before/after method for redesigns, launches and pricing changes.'],
-  ['search-console-vs-google-analytics', 'Search Console vs Google Analytics', 'Eight reasons clicks and sessions never match.'],
-  ['kauzl-vs-plausible', 'Kauzl vs Plausible', 'One counts visits, one explains them. When to use which.'],
-  ['google-analytics-alternatives', 'Google Analytics alternatives', 'Nine options, grouped by the reason you want out of GA4.'],
-  ['google-analytics-mcp-server', 'Google Analytics MCP', 'Ask Claude why your traffic moved: setup and prompts.'],
-];
-
 const FREE_TOOLS = [
   ['did-it-work', 'Did it work?', 'Paste daily numbers from before and after a change. Find out if the jump is real.'],
   ['utm-builder', 'UTM Builder', 'Tag campaign links for GA4, in bulk, with naming checks.'],
@@ -194,47 +179,40 @@ nav.links a:hover { color: #fff; }
 .perks { list-style: none; display: flex; flex-wrap: wrap; gap: 8px 18px; padding: 0; margin: 22px 0 0; font-size: 14px; color: var(--ink-text); }
 .perks li { display: inline-flex; align-items: center; gap: 6px; } .perks svg { color: var(--ink-text); }
 
-/* "Ship it": the playable hero card, with the owl perched on top (home-play.js) */
+/* The hero: an analytics calendar you can click (home-play.js), the owl perched on top */
 .play-wrap { position: relative; padding-top: 58px; }
 .play-wrap > svg.owl { position: absolute; top: 0; right: 36px; z-index: 2; filter: drop-shadow(0 10px 18px rgb(0 0 0 / .35)); }
-.play { position: relative; margin: 0; background: var(--surface); color: var(--text); border-radius: 22px; padding: 20px 22px 22px; box-shadow: 0 30px 70px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .04); }
-.play-top { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; color: var(--muted); }
+.play { position: relative; margin: 0; background: var(--surface); color: var(--text); border-radius: 22px; padding: 18px 20px 20px; box-shadow: 0 30px 70px rgb(0 0 0 / .4), 0 0 0 1px rgb(255 255 255 / .04); }
+.play-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; font-size: 13px; color: var(--muted); margin-bottom: 10px; }
+.play-top b { color: var(--text); font-size: 15px; }
 .play-top .sample { font-weight: 600; color: var(--amber-text); background: var(--amber-soft); padding: 1px 9px; border-radius: 99px; }
-.ship { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 12px 0 2px; }
-.ship[hidden] { display: none; }
-.ship-lbl { font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); margin-right: 2px; }
-.ship button { font: 600 13px var(--font); padding: 6px 11px; border-radius: 99px; border: 1px solid var(--line); background: var(--sunk); color: var(--text-2); cursor: pointer; transition: background .15s, border-color .15s, color .15s, transform .1s; }
-.ship button:hover { border-color: var(--amber); color: var(--text); }
-.ship button:active { transform: scale(.96); }
-.ship button[aria-pressed=true] { background: var(--ink); border-color: var(--ink); color: #F6F7F9; }
-.ship button[aria-pressed=true]::before { content: "⚑ "; color: var(--amber); }
-.play-chart { margin: 8px -4px 0; }
-.pc { display: block; width: 100%; height: auto; overflow: visible; }
-.pc-band { fill: var(--sunk); }
-.pc-base { stroke: var(--before); stroke-width: 1; stroke-dasharray: 3 4; }
-.pc-normal, .pc-axis { fill: var(--muted); font: 600 7.5px var(--font); }
-.pc polyline { fill: none; stroke-width: 2.6; stroke-linejoin: round; stroke-linecap: round; }
-.pc-before { stroke: var(--before); }
-.pc-after { stroke: var(--amber); stroke-width: 3; }
-.pc-flag line { stroke: var(--text); stroke-width: 1.2; stroke-dasharray: 2 2.5; } .pc-flag path { fill: var(--amber); } .pc-flag text { fill: var(--text); font: 700 8px var(--font); }
-.pc-end { fill: var(--amber); }
-.play[data-tone=bad] .pc-after, .play[data-tone=bad] .pc-end { stroke: #E5484D; } .play[data-tone=bad] .pc-end { fill: #E5484D; }
-.play-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 10px 0 14px; }
-.play-stats span { display: flex; flex-direction: column; gap: 2px; padding: 8px 12px; border-radius: 12px; background: var(--sunk); font-size: 11.5px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--muted); }
-.play-stats b { font: 800 20px/1.1 var(--head); letter-spacing: -0.02em; text-transform: none; color: var(--text); font-variant-numeric: tabular-nums; }
-.play-stats span:last-child b { color: var(--amber); }
-.play[data-tone=good] .play-stats span:last-child b { color: var(--good); } .play[data-tone=bad] .play-stats span:last-child b { color: #E5484D; } .play[data-tone=muted] .play-stats span:last-child b { color: var(--muted); }
-.play-say { display: flex; gap: 12px; align-items: flex-start; }
-.play-say .who { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 11px; background: var(--ink); flex: none; }
-.play-say > div { flex: 1; min-width: 0; }
-.play-head { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; }
-.play-head .name { font: 800 16px/1 var(--head); letter-spacing: -0.03em; }
-.play-head .verdict { margin-left: auto; }
-.dots { display: none; gap: 3px; } .dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--muted); animation: blinkdot 1s infinite; } .dots i:nth-child(2) { animation-delay: .15s; } .dots i:nth-child(3) { animation-delay: .3s; }
-@keyframes blinkdot { 50% { opacity: .2; } }
-.play.reading .dots { display: inline-flex; }
-.say { margin: 0; font-size: 15px; line-height: 1.5; color: var(--text-2); min-height: 4.5em; }
-.play.live:not(.done) .verdict { visibility: hidden; }
+.cal-wk, .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 5px; }
+.cal-wk { margin-bottom: 4px; font-size: 11px; font-weight: 600; color: var(--muted); text-align: center; }
+.cd { position: relative; height: 40px; padding: 0; border: 0; border-radius: 8px; background: var(--sunk); overflow: hidden; cursor: pointer; font: inherit; color: var(--muted); }
+.cd i { position: absolute; left: 0; right: 0; bottom: 0; background: color-mix(in srgb, var(--before) 55%, transparent); transition: background .15s; }
+.cd .n { position: absolute; left: 5px; top: 3px; z-index: 1; font-size: 10.5px; font-weight: 600; line-height: 1; }
+.cd .mk { position: absolute; right: 3px; top: 2px; z-index: 1; display: grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; background: var(--surface); color: var(--text); }
+.cd .mk svg { width: 11px; height: 11px; }
+.cd.good .mk { color: var(--good); } .cd.amber .mk { color: var(--amber-text); } .cd.bad .mk { color: #C62F35; }
+.cd:hover i { background: color-mix(in srgb, var(--before) 85%, transparent); }
+.cd[aria-pressed=true] { outline: 2.5px solid var(--amber); outline-offset: -2.5px; color: var(--text); }
+.cd[aria-pressed=true] i { background: var(--amber); }
+.dp { margin-top: 14px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 14px; }
+.dp-h { display: flex; align-items: center; gap: 10px; } .dp-h b { font-size: 15px; }
+.dp-head { margin: 6px 0 12px; font-size: 15.5px; font-weight: 600; line-height: 1.4; color: var(--text); }
+.dp-nums { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin-bottom: 12px; }
+.dp-nums > div { display: grid; padding: 8px 12px; border-radius: 12px; background: var(--sunk); font-size: 12px; color: var(--muted); }
+.dp-nums b { font: 800 20px/1.15 var(--head); letter-spacing: -0.02em; color: var(--text); }
+.dp-cols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.15fr); gap: 16px; }
+.dp .dp-lbl { margin: 0 0 4px; font-size: 11px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--muted); }
+.dp-row { display: grid; grid-template-columns: minmax(0, 1fr) auto 4.6em; gap: 8px; padding: 3px 0; font-size: 13px; }
+.dp-row span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-2); } .dp-row span:last-child { text-align: right; }
+.dp-ev { display: flex; gap: 7px; align-items: flex-start; padding: 3px 0; font-size: 13px; color: var(--text-2); line-height: 1.4; }
+.dp-ev svg { flex: none; margin-top: 2px; } .dp-ev.alert svg { color: #C62F35; } .dp-ev.ship svg, .dp-ev.post svg { color: var(--amber-text); }
+.dp-eff, .dp-none { margin: 4px 0 0; font-size: 13px; color: var(--muted); line-height: 1.4; }
+.dp-now { margin: 12px 0 0; padding: 9px 12px; border-radius: 10px; background: var(--amber-soft); font-size: 13.5px; color: var(--text); line-height: 1.45; }
+.dp .good { color: var(--good); } .dp .bad { color: #C62F35; } .dp .muted { color: var(--muted); }
+@media (max-width: 520px) { .dp-cols { grid-template-columns: minmax(0, 1fr); gap: 12px; } .cd { height: 36px; } .cd .mk { display: none; } .cd.marked .n { color: var(--text); } .cd.marked::after { content: ""; position: absolute; right: 5px; top: 5px; width: 6px; height: 6px; border-radius: 50%; background: var(--amber); } }
 .tag { flex: none; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; padding: 2px 8px; border-radius: 6px; background: var(--ink); color: var(--amber); }
 
 /* sections */
@@ -309,15 +287,12 @@ ${QA.map((_, i) => `#qa-${i + 1}:focus-visible ~ .qa-list [for=qa-${i + 1}]`).jo
 .v-week .has i { background: var(--amber); }
 .v-week .mark { font-size: 10px; font-weight: 700; color: var(--amber-text); min-height: 14px; }
 .v-week .d { font-size: 11px; color: var(--muted); }
-.v-cyc { width: 100%; border-collapse: collapse; font-size: 12.5px; }
-.v-cyc th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px 0; }
-.v-cyc td { padding: 7px 6px 7px 0; border-top: 1px solid var(--line); white-space: nowrap; }
-.v-cyc td:first-child { white-space: normal; color: var(--text); font-weight: 600; }
-.v-cyc td i { display: block; width: 9px; height: 9px; border-radius: 50%; border: 2px solid var(--before); box-sizing: border-box; }
-.v-cyc td i.on { background: var(--amber); border-color: var(--amber); }
-.v-cyc .num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; padding-right: 12px; }
-.v-cyc th:nth-child(n+2):not(:last-child) { text-align: center; } .v-cyc:not(.v-sub) td:nth-child(n+2):nth-child(-n+4) i { margin: 0 auto; }
-.v-sub th:nth-child(n+2):not(:last-child) { text-align: right; padding-right: 12px; }
+.v-reddit { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.v-reddit th { text-align: left; font-size: 10.5px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; color: var(--muted); padding: 0 6px 6px 0; }
+.v-reddit td { padding: 7px 6px 7px 0; border-top: 1px solid var(--line); white-space: nowrap; }
+.v-reddit td:first-child { white-space: normal; color: var(--text); font-weight: 600; }
+.v-reddit .num { text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; padding-right: 12px; }
+.v-reddit th:nth-child(n+2):not(:last-child) { text-align: right; padding-right: 12px; }
 .vp { display: inline-block; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 99px; }
 .vp.good { color: var(--good); background: var(--good-soft); } .vp.amber { color: var(--amber-text); background: var(--amber-soft); } .vp.bad { color: #C62F35; background: #FDECEC; }
 .v-camp { width: 100%; border-collapse: collapse; }
@@ -448,14 +423,7 @@ footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, 
 @keyframes nudge { 0%, 100% { transform: none; } 10% { transform: translateY(-3px); } 20% { transform: none; } }
 @keyframes drop { 0% { transform: translateY(-40px); opacity: 0; } 60% { transform: translateY(3px); opacity: 1; } }
 @media (prefers-reduced-motion: no-preference) {
-  .play.shipping .pc-flag > * { animation: drop .5s cubic-bezier(.3, 1.4, .5, 1) both; }
-  .play.shipping .pc-band, .play.shipping .pc-base, .play.shipping .pc-normal { animation: fade-up .5s .5s both; }
-  .play.shipping .pc-after { stroke-dasharray: 1; animation: draw 1.1s .55s cubic-bezier(.5, 0, .3, 1) both; }
-  .play.shipping .pc-end { opacity: 0; }
-  .play.done .pc-end { transform-box: fill-box; transform-origin: center; animation: pop .4s both; }
-  .play.done .verdict { animation: pop .45s both; }
-  .play.done .play-stats b { animation: fade-up .35s both; } .play.done .play-stats span:nth-child(2) b { animation-delay: .08s; } .play.done .play-stats span:nth-child(3) b { animation-delay: .16s; }
-  .play.live .ship button:not([aria-pressed=true]) { animation: nudge 2.4s 4s 2 ease-in-out; }
+  .dp.in > * { animation: fade-up .3s both; } .dp.in > :nth-child(n+3) { animation-delay: .05s; }
   .qa-panels > .qa-a:is(${QA.map((_, i) => `#qa-${i + 1}:checked ~ .qa-panels .p${i + 1}`).join(', ')}) {
     & .verdict { animation: pop .45s .25s both; }
     & .qa-text { animation: fade-up .4s .1s both; }
@@ -469,7 +437,7 @@ footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, 
     & .v-camp tr:nth-child(2) .bar i, & .v-ba .t.a i { animation-delay: .35s; } & .v-camp tr:nth-child(3) .bar i { animation-delay: .5s; }
     & .v-a li { animation: fade-up .35s both; } & .v-a li:nth-child(2) { animation-delay: .25s; } & .v-a li:nth-child(3) { animation-delay: .4s; }
     & .v-task .tick { animation: pop .4s .15s both; }
-    & .v-cyc tbody tr { animation: fade-up .35s both; } & .v-cyc tbody tr:nth-child(2) { animation-delay: .08s; } & .v-cyc tbody tr:nth-child(3) { animation-delay: .16s; } & .v-cyc tbody tr:nth-child(4) { animation-delay: .24s; }
+    & .v-reddit tbody tr { animation: fade-up .35s both; } & .v-reddit tbody tr:nth-child(2) { animation-delay: .08s; } & .v-reddit tbody tr:nth-child(3) { animation-delay: .16s; } & .v-reddit tbody tr:nth-child(4) { animation-delay: .24s; }
     & .vp { animation: pop .4s .45s both; }
   }
   @supports (animation-timeline: view()) {
@@ -479,10 +447,9 @@ footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, 
 @media (prefers-color-scheme: dark) {
   .final, .tag { border: 1px solid var(--ink-line); }
   .verdict.bad, .vp.bad { color: #FF8A8E; background: #2A1416; } 
-  .ship button[aria-pressed=true] { background: var(--amber); border-color: var(--amber); color: #121522; }
-  .ship button[aria-pressed=true]::before { color: #121522; }
   .play { box-shadow: 0 30px 70px rgb(0 0 0 / .5), 0 0 0 1px var(--line); }
-  .play-say .who, .st-story .who { border: 1px solid var(--line); }
+  .st-story .who { border: 1px solid var(--line); }
+  .cd.bad .mk, .dp .bad, .dp-ev.alert svg { color: #FF8A8E; }
   .steps li:last-child::before { border-color: #3A3C45; }
   section.band { border-block: 1px solid var(--ink-line); }
   /* Ink owls would vanish on dark cards: draw them light. */
@@ -512,16 +479,17 @@ footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, 
 // them and borrow their site.js for the owl's moving eyes.
 export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = {}) {
   const q = v ? `?v=${encodeURIComponent(v)}` : '';
-  const enter = signedIn ? '/' : '/login';
+  // No sign-in needed: /start opens Kauzl in this browser.
+  const enter = signedIn ? '/' : '/start';
   const toolsLink = (html) => (tools ? html : '');
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Kauzl · You shipped it. Did it work?</title>
-<meta name="description" content="Did what you shipped work? Kauzl puts releases, posts and campaigns on the same timeline as traffic, search and AI answers.">
+<title>Kauzl · The analytics calendar for your website</title>
+<meta name="description" content="Kauzl is an analytics calendar for your site: each day’s traffic, search and AI answers next to what you shipped, posted and launched, and what moved and why.">
 <link rel="canonical" href="https://kauzl.com/">
-<meta property="og:title" content="Kauzl · You shipped it. Did it work?"><meta property="og:description" content="Kauzl lines up every change you ship with what happened next: traffic, search, mentions and AI answers."><meta property="og:type" content="website">
+<meta property="og:title" content="Kauzl · The analytics calendar for your website"><meta property="og:description" content="Each day’s traffic, search and AI answers on a calendar, next to what you shipped, posted and launched. Kauzl says what moved and why."><meta property="og:type" content="website">
 <meta property="og:url" content="https://kauzl.com/"><meta property="og:site_name" content="Kauzl">
-<meta property="og:image" content="https://kauzl.com/tools/assets/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Kauzl: you shipped it. Did it work? An owl over a before-and-after chart.">
+<meta property="og:image" content="https://kauzl.com/tools/assets/og.png"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:image:alt" content="Kauzl, the analytics calendar: an owl over a month of website traffic, one day picked and explained.">
 <meta name="twitter:card" content="summary_large_image">
 <script type="application/ld+json">${LD}</script>
 <meta name="theme-color" content="#121522">
@@ -535,37 +503,30 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
 <body data-page="home:">
 <header class="top"><div class="wrap">
   <a class="brand" href="/home" aria-label="Kauzl home">${owl(30, { variant: 'paper' })}<span class="word">kauzl</span></a>
-  <nav class="links" aria-label="Sections"><a href="#inside">Look inside</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a class="keep" href="/tools/">Free tools</a><a href="/guides/">Guides</a>')}</nav>
+  <nav class="links" aria-label="Sections"><a href="#inside">Look inside</a><a href="#features">Features</a><a href="#how">How it works</a>${toolsLink('<a class="keep" href="/tools/">Free tools</a><a href="/guides/">Course</a>')}</nav>
   <a class="btn amber small" href="${enter}">Open Kauzl</a>
 </div></header>
 
 <main>
   <div class="hero"><div class="wrap hero-in">
     <div>
-      <p class="eyebrow">Analytics for people who ship</p>
-      <h1>You shipped it.<br><em>Did it work?</em></h1>
-      <p class="lead">Kauzl puts your releases, posts and campaigns on the same timeline as your traffic, search and AI answers. It tells you what moved, why, and what to do next.</p>
+      <p class="eyebrow">Analytics calendar</p>
+      <h1>See what happened,<br><em>day by day.</em></h1>
+      <p class="lead">Kauzl puts your visits, search and AI answers on a calendar, next to what you shipped, posted and launched. It tells you what moved, why, and what to do next.</p>
       <div class="ctas">
         <a class="btn amber" href="#inside">Look inside</a>
-        ${signedIn ? `<a class="btn ghost" href="${enter}">Open Kauzl</a>` : '<a class="btn ghost" href="#early-access">Get early access</a>'}
+        <a class="btn ghost" href="${enter}">${signedIn ? 'Open Kauzl' : 'Start, no sign-in'}</a>
       </div>
       <ul class="perks"><li>${CHECK}Look around, no sign-up</li><li>${CHECK}No tracking script</li></ul>
     </div>
 
     <div class="play-wrap">
       ${owl(78, { variant: 'paper' })}
-      <figure class="play" id="play" data-tone="${FIRST.tone}">
-        <div class="play-top"><span class="play-metric">${FIRST.metric} a day</span><span class="sample">Try it · sample data</span></div>
-        <div class="ship" role="group" aria-label="Pick something to ship" hidden>
-          <span class="ship-lbl">Ship</span>${SCENARIOS.map((x, i) => `<button type="button" data-s="${x.key}" aria-pressed="${i ? 'false' : 'true'}">${x.label}</button>`).join('')}
-        </div>
-        <div class="play-chart">${chartSvg(FIRST)}</div>
-        <div class="play-stats"><span>Before<b>${FIRST.nums.before}</b></span><span>After<b>${FIRST.nums.after}</b></span><span>Change<b>${FIRST.nums.change}</b></span></div>
-        <div class="play-say">
-          <span class="who">${owl(26, { variant: 'paper' })}</span>
-          <div><p class="play-head"><span class="name">kauzl</span><span class="dots" aria-hidden="true"><i></i><i></i><i></i></span><span class="verdict ${FIRST.tone}">${FIRST.verdict}</span></p>
-          <p class="say" aria-hidden="true">${FIRST.text}</p><p class="play-live sr" aria-live="polite">${FIRST.verdict}. ${FIRST.text}</p></div>
-        </div>
+      <figure class="play" id="play">
+        <div class="play-top"><b>March · visits a day</b><span class="sample">Pick a day · sample data</span></div>
+        ${calendarHtml(FIRST_PICK)}
+        <div class="dp">${dayHtml(FIRST_PICK)}</div>
+        <p class="cal-live sr" aria-live="polite">${FIRST.label}. ${FIRST.head}</p>
       </figure>
     </div>
   </div></div>
@@ -579,7 +540,7 @@ export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = 
 
   <section id="features"><div class="wrap">
     <p class="kicker">What’s inside</p><h2 class="title">Answers, not dashboards</h2>
-    <p class="sub">Every part of Kauzl ends in a decision, not a chart to read: which articles to grow, which subreddits to keep, which link brought sign-ups, whether your fix helped. The proof sits underneath.</p>
+    <p class="sub">See which subreddits are worth posting in, which links brought sign-ups, and whether your latest fix helped. Each answer shows the numbers behind it.</p>
     <div class="qa">
       ${QA.map((x, i) => `<input class="qa-r" type="radio" name="qa" id="qa-${i + 1}" aria-label="${x.q}"${i ? '' : ' checked'}>`).join('')}
       <div class="qa-list">
@@ -676,10 +637,14 @@ curl -X POST https://kauzl.com/m/&lt;metric-key&gt; \\
 </main>
 
 <footer><div class="wrap">
-  <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches what you ship.</p><p class="why"><b>Why an owl</b> · <em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”. Its left eye is before you shipped, the right one after.</p></div></div>
-  <nav class="foot-col" aria-label="Kauzl"><h2>Kauzl</h2><ul><li><a href="#inside">Look inside</a></li><li><a href="#features">Features</a></li><li><a href="#how">How it works</a></li><li><a href="#faq">FAQ</a></li><li><a href="${enter}">Open Kauzl</a></li></ul></nav>
+  <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches your site, day by day.</p><p class="why"><b>Why an owl</b> · <em>Kauz</em> is German for a small owl, and Kauzl sounds like “causal”. Its left eye is before you shipped, the right one after.</p></div></div>
+  <nav class="foot-col" aria-label="Kauzl"><h2>Kauzl</h2><ul><li><a href="#inside">Look inside</a></li><li><a href="#features">Features</a></li><li><a href="#how">How it works</a></li><li><a href="#faq">FAQ</a></li><li><a href="${enter}">Open Kauzl</a></li><li><a href="/privacy">Privacy policy</a></li><li><a href="/terms">Terms of service</a></li></ul></nav>
 ${tools ? `  <nav class="foot-col" aria-label="Free tools"><h2>Free tools</h2><ul>${FREE_TOOLS.map(([slug, name]) => `<li><a href="/tools/${slug}/">${name}</a></li>`).join('')}<li><a href="/tools/">All tools →</a></li></ul></nav>
-  <nav class="foot-col" aria-label="Guides"><h2>Guides</h2><ul>${GUIDES.slice(0, 4).map(([slug, name]) => `<li><a href="/guides/${slug}/">${name}</a></li>`).join('')}<li><a href="/guides/">All guides →</a></li></ul></nav>
+  <nav class="foot-col" aria-label="Free course"><h2>Free course</h2><ul>${COURSE_ORDER.slice(0, 4).map((slug) => {
+    const mod = MODULES.find((m) => m.lessons.some((l) => l.slug === slug));
+    const lesson = mod.lessons.find((l) => l.slug === slug);
+    return `<li><a href="/guides/${slug}/">Lesson ${COURSE_ORDER.indexOf(slug) + 1} · ${lesson.name}</a></li>\n`;
+  })}<li><a href="/guides/">All ${COURSE_ORDER.length} lessons →</a></li></ul></nav>
 ` : ''}</div></footer>
 <script type="module" src="/home-play.js${q}"></script>
 ${tools ? `<script type="module" src="/tools/assets/site.js${q}"></script>` : ''}

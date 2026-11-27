@@ -15,7 +15,7 @@ export function Campaigns({ site, range }) {
   if (data.error) return <ErrorState error={data.error} onRetry={data.reload} />;
   const d = data.data;
   if (d.needsGa4) {
-    return <Card title="Campaigns"><p class="muted m-0">Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/site/${site.id}/setup`}>its settings</a>.</p></Card>;
+    return <Card title="Campaigns"><p class="muted m-0">Campaigns come from Google Analytics. Connect a GA4 property for {site.label} in <a href={`#/account?tab=sites&edit=${encodeURIComponent(site.id)}`}>its settings</a>.</p></Card>;
   }
   return (
     <>
@@ -113,7 +113,7 @@ function SourceTable({ data }) {
           <tbody>
             {rows.map((s) => (
               <tr key={`${s.source}|${s.medium}`}>
-                <td class="cmp-name"><span>{s.source} <span class="muted">/ {s.medium}</span></span></td>
+                <td class="cmp-name" title={s.aka?.length ? `Also tagged as ${s.aka.join(', ')}` : undefined}><span>{s.source} <span class="muted">/ {s.medium}</span>{s.aka?.length ? <span class="muted"> · +{s.aka.length} spelling{s.aka.length > 1 ? 's' : ''}</span> : null}</span></td>
                 <td class="num" data-label="Visits">{formatNumber(s.sessions)} <Delta current={s.sessions} previous={s.previous} /></td>
                 <td class="num" data-label="Share">{formatPercent(s.share, 0)}</td>
                 <td class="num" data-label="Engaged">{rate(s.engaged, s.sessions)}</td>

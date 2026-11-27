@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { Icon } from '../components/icons.jsx';
 import { SECTIONS, hrefFor, viewsFor, hasWarehouse } from './nav.js';
 
-// ⌘K: jump to a site, a view or one of a report's tabs. Typing filters; Enter
+// Jump to a site, a view or one of a report's tabs. Typing filters; Enter
 // opens the first match; arrows move; Escape closes.
 export function Jump({ sites, scope, onClose, viewer }) {
   const [q, setQ] = useState('');

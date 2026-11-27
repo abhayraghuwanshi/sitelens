@@ -58,6 +58,37 @@ test('summarizeSources: share and previous per source / medium', () => {
   assert.deepEqual(out.map((s) => [s.source, s.share, s.previous]), [['google', 0.75, 60], ['reddit', 0.25, 0]]);
 });
 
+test('summarizeSources: spellings of one place merge, with the raw ones kept', () => {
+  const out = summarizeSources(
+    [
+      { sessionSource: 'Facebook', sessionMedium: 'Social', sessions: '10', engagedSessions: '4', keyEvents: '1' },
+      { sessionSource: 'fb', sessionMedium: 'social-media', sessions: '5', engagedSessions: '1', keyEvents: '0' },
+      { sessionSource: 'facebook', sessionMedium: 'social', sessions: '3', engagedSessions: '1', keyEvents: '0' },
+      { sessionSource: 'facebook', sessionMedium: 'cpc', sessions: '2', engagedSessions: '0', keyEvents: '0' },
+    ],
+    [{ sessionSource: 'FB', sessionMedium: 'Social', sessions: '6' }, { sessionSource: 'facebook', sessionMedium: 'social', sessions: '1' }],
+  );
+  assert.deepEqual(out.map((s) => [s.source, s.medium, s.sessions, s.previous]), [['facebook', 'social', 18, 7], ['facebook', 'cpc', 2, 0]]);
+  assert.deepEqual(out[0].aka, ['Facebook / Social', 'fb / social-media']);
+  assert.equal(out[0].engaged, 6);
+  assert.equal(out[0].share, 0.9);
+});
+
+test('summarizeCampaigns: Launch_Post and launch-post are one campaign; its sources merge too', () => {
+  const out = summarizeCampaigns({
+    rows: [
+      { sessionCampaignName: 'Launch_Post', sessionSource: 'Reddit', sessionMedium: 'Social', sessionManualAdContent: '', sessions: '4', engagedSessions: '1', keyEvents: '0' },
+      { sessionCampaignName: 'launch-post', sessionSource: 'out.reddit.com', sessionMedium: 'social', sessionManualAdContent: '', sessions: '6', engagedSessions: '2', keyEvents: '1' },
+    ],
+    goalRows: [{ sessionCampaignName: 'launch post', sessionSource: 'reddit', sessionMedium: 'SOCIAL', eventName: 'sign_up', totalUsers: '2' }],
+    goals: [{ id: 'su', label: 'Sign-ups', event: 'sign_up' }],
+  });
+  assert.equal(out.length, 1);
+  assert.equal(out[0].campaign, 'Launch_Post');
+  assert.equal(out[0].sessions, 10);
+  assert.deepEqual(out[0].parts.map((p) => [p.source, p.medium, p.sessions, p.goals.su]), [['reddit', 'social', 10, 2]]);
+});
+
 test('summarizeAds: cost per key event, and unlinked when nothing was spent or clicked', () => {
   const linked = summarizeAds([
     { sessionGoogleAdsCampaignName: 'Brand', advertiserAdCost: '40', advertiserAdClicks: '20', advertiserAdImpressions: '300', sessions: '18', keyEvents: '4' },

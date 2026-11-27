@@ -9,6 +9,8 @@
 // page, trust it and quote it: a direct answer near the top, questions with
 // self-contained answers, honest disclosure, dates, and machine-readable data.
 
+import { COURSE } from './course.mjs';
+
 export const LIMITS = {
   title: { min: 15, max: 60 }, // Google cuts at about 600px (~60 characters); Bing flags long titles
   description: { min: 25, max: 160 }, // Bing Webmaster Tools flags outside 25-160
@@ -19,6 +21,7 @@ export const LIMITS = {
 };
 
 export const SITE_ORIGIN = 'https://kauzl.com';
+const COURSE_NAME = COURSE.name;
 
 const text = (s) => [...String(s ?? '').replace(/<[^>]+>/g, '').replace(/&(?:amp|lt|gt|quot|#39);/g, (e) => ({ '&amp;': '&', '&lt;': '<', '&gt;': '>', '&quot;': '"', '&#39;': "'" }[e])).trim()].length;
 const meta = (html, attr, name) => html.match(new RegExp(`<meta ${attr}="${name.replace(/[.:]/g, '\\$&')}" content="([^"]*)"`))?.[1];
@@ -68,16 +71,71 @@ export function checkPage(html, { url }) {
 
   const blocks = [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
   if (!blocks.length) fail('structured-data', 'Add JSON-LD structured data: it is how search engines and AI assistants know what the page is.');
+  const lds = [];
   for (const [, json] of blocks) {
     let data;
     try { data = JSON.parse(json); } catch { fail('structured-data', 'A JSON-LD block is not valid JSON.'); continue; }
-    for (const item of [data].flat()) {
-      if (!item['@context'] || !item['@type']) fail('structured-data', 'Every JSON-LD block needs @context and @type.');
-      if (item['@type'] === 'Article') {
-        for (const k of ['headline', 'datePublished', 'dateModified', 'author', 'publisher']) if (!item[k]) fail('structured-data', `The Article needs ${k}.`);
-        if (item.headline && text(item.headline) > LIMITS.headline.max) fail('structured-data', `The Article headline is over ${LIMITS.headline.max} characters.`);
+    lds.push(...[data].flat());
+  }
+  const courseUrl = `${SITE_ORIGIN}/guides/`;
+  const courseId = `${SITE_ORIGIN}/guides/#course`;
+  const isCoursePage = /^\/guides\/?$/i.test(new URL(url).pathname);
+  const isLessonPage = /^\/guides\/[^/?#]+\/?$/i.test(new URL(url).pathname);
+  const pageUrl = new URL(url).origin + new URL(url).pathname;
+  const moduleOfCrumb = (item) => String(item || '').match(/#module-([a-z0-9-]+)$/i)?.[1];
+  for (const item of lds) {
+    const types = Array.isArray(item['@type']) ? item['@type'] : [item['@type']];
+    if (!item['@context'] || !item['@type']) fail('structured-data', 'Every JSON-LD block needs @context and @type.');
+    if (types.includes('Article') || types.includes('LearningResource')) {
+      const isLesson = types.includes('LearningResource');
+      for (const k of ['headline', 'datePublished', 'dateModified', 'author', 'publisher']) if (!item[k]) fail('structured-data', `The Article needs ${k}.`);
+      if (item.headline && text(item.headline) > LIMITS.headline.max) fail('structured-data', `The Article headline is over ${LIMITS.headline.max} characters.`);
+      if (isLesson) {
+        // A lesson is an Article and a LearningResource of the one Kauzl course.
+        if (!types.includes('Article') || !types.includes('LearningResource')) fail('structured-data', 'A lesson should be an Article and a LearningResource.');
+        if (item['@id'] !== `${pageUrl}#lesson`) fail('structured-data', `The lesson @id should end in #lesson (found ${item['@id']}).`);
+        for (const k of ['learningResourceType', 'educationalLevel', 'timeRequired', 'position', 'teaches', 'isPartOf']) if (item[k] === undefined) fail('structured-data', `The lesson needs ${k}.`);
+        if (item.learningResourceType !== 'Lesson') fail('structured-data', 'The lesson should be learningResourceType "Lesson".');
+        if (item.educationalLevel !== 'Beginner') fail('structured-data', 'The lesson should be educationalLevel "Beginner".');
+        if (!/^PT\d+M$/.test(String(item.timeRequired))) fail('structured-data', `The lesson timeRequired should be an ISO duration like "PT<minutes>M" (found ${item.timeRequired}).`);
+        if (typeof item.position !== 'number') fail('structured-data', 'The lesson should have a numeric position.');
+        if (!Array.isArray(item.teaches)) fail('structured-data', 'The lesson should teach its goal as an array of strings.');
+        const part = item.isPartOf || {};
+        if (part['@id'] !== courseId) fail('structured-data', `The lesson should be part of the course (${courseId}).`);
+        if (part.name !== COURSE_NAME || part.url !== courseUrl) fail('structured-data', `The lesson isPartOf should name and link the course (${courseUrl}).`);
       }
-      if (item['@type'] === 'FAQPage' && !(item.mainEntity?.length >= LIMITS.faq.min)) fail('structured-data', `An FAQPage needs at least ${LIMITS.faq.min} questions.`);
+    }
+    if (types.includes('FAQPage') && !(item.mainEntity?.length >= LIMITS.faq.min)) fail('structured-data', `An FAQPage needs at least ${LIMITS.faq.min} questions.`);
+    if (types.includes('Course')) {
+      // The course page describes one free course, with its modules and parts.
+      if (item['@id'] !== courseId) fail('structured-data', `The Course @id should be ${courseId}.`);
+      for (const k of ['name', 'description', 'url', 'inLanguage', 'provider', 'isAccessibleForFree', 'educationalLevel', 'offers', 'hasCourseInstance', 'teaches', 'syllabusSections', 'hasPart']) if (item[k] === undefined) fail('structured-data', `The Course needs ${k}.`);
+      if (item.inLanguage !== 'en') fail('structured-data', 'The Course should be inLanguage "en".');
+      const provider = item.provider || {};
+      // The plan pins the provider url to the bare origin with its trailing slash.
+      if (provider['@type'] !== 'Organization' || provider.name !== 'Kauzl' || provider.url !== `${SITE_ORIGIN}/`) fail('structured-data', 'The Course should name Kauzl (Organization) as provider.');
+      if (item.isAccessibleForFree !== true) fail('structured-data', 'The Course should be isAccessibleForFree.');
+      if (item.educationalLevel !== 'Beginner') fail('structured-data', 'The Course should be educationalLevel "Beginner".');
+      const offer = item.offers || {};
+      if (Number(offer.price) !== 0 || offer.priceCurrency !== 'USD') fail('structured-data', 'The Course offer should be free: price 0, USD.');
+      const instance = item.hasCourseInstance || {};
+      if (instance.courseMode !== 'Online') fail('structured-data', 'The Course instance should be courseMode "Online".');
+      if (!/^PT\d+M$/.test(String(instance.courseWorkload))) fail('structured-data', `The Course instance should have courseWorkload like "PT<minutes>M" (found ${instance.courseWorkload}).`);
+      if (!Array.isArray(item.teaches) || !item.teaches.length) fail('structured-data', 'The Course should teach, one short line per module.');
+      if (!Array.isArray(item.syllabusSections) || !item.syllabusSections.length) fail('structured-data', 'The Course should have syllabusSections.');
+      for (const s of item.syllabusSections) if (!s?.name || !s?.description || !s?.timeRequired) fail('structured-data', 'Each course Syllabus should have name, description and timeRequired.');
+      if (!Array.isArray(item.hasPart) || !item.hasPart.length) fail('structured-data', 'The Course should have hasPart, its lessons in order.');
+    }
+    if (types.includes('BreadcrumbList')) {
+      const items = [...(item.itemListElement || [])].sort((a, b) => (a.position || 0) - (b.position || 0)).map((x) => x.item);
+      if (isCoursePage && items.length !== 1) fail('structured-data', `The course page should have one breadcrumb item, the course (found ${items.length}).`);
+      if (isLessonPage) {
+        if (items.length !== 3) fail('structured-data', `A lesson page should have a 3-item BreadcrumbList: Course, module, lesson (found ${items.length}).`);
+        if (items[0] !== courseUrl) fail('structured-data', `The first breadcrumb item should be the course (${courseUrl}).`);
+        const moduleId = moduleOfCrumb(items[1]);
+        if (!moduleId) fail('structured-data', `The second breadcrumb item should be the module (#module-<id>) (found ${items[1]}).`);
+        if (items[2] !== pageUrl) fail('structured-data', `The third breadcrumb item should be the lesson (${items[2]}).`);
+      }
     }
   }
   return problems;
@@ -108,6 +166,39 @@ export function checkGuide(g) {
   if (g.kicker === 'Compare') {
     if (!/we make kauzl/i.test(g.lead || '')) fail('disclosure', 'A comparison must say in its lead that we make Kauzl.');
     if (/[$€£]\s?\d/.test(`${g.body} ${(g.inShort || []).join(' ')} ${faq.flat().join(' ')}`)) fail('no-prices', 'Don’t quote prices in a comparison: they change, and AI assistants keep repeating the old one.');
+  }
+  // The lesson's own three halves: what it teaches (goal), what to do (steps)
+  // and the self-check (check). Optional for now; the final content phase makes
+  // them required for every lesson in MODULES.
+  const goal = g.goal || [];
+  if (goal.length) {
+    if (goal.length < 2 || goal.length > 3) fail('goal', `A lesson should teach its goal in ${2}-3 items (found ${goal.length}).`);
+    for (const t of goal) {
+      const s = String(t || '');
+      if (text(s) > 90) fail('goal', `Each goal item should be ${90} characters or fewer (found ${text(s)}).`);
+      if (!/^(Use|Know|Pick|Write|Set|Check|Connect|Track|Read|Compare|Choose|Build|Add|Send|Ask|Test|Install|Tag|Find|Plan|Decide|Measure|Improve|Watch|Try|Turn)\b/.test(s.trim())) fail('goal', `Each goal should start with a verb (found “${s.trim()}”).`);
+    }
+  }
+  const steps = g.steps || [];
+  if (steps.length) {
+    if (steps.length < 2 || steps.length > 5) fail('steps', `A lesson should have ${2}-5 steps (found ${steps.length}).`);
+    for (const s of steps) {
+      const t = String(s?.text || '');
+      if (text(t) > 140) fail('steps', `Each step should be ${140} characters or fewer (found ${text(t)}).`);
+      const href = String(s?.href || '');
+      if (href && !/^(https?:\/\/|\/(tools|guides|home)\/)/.test(href)) fail('steps', `A step href should be absolute or a built page path (found ${href}).`);
+    }
+  }
+  const check = g.check || [];
+  if (check.length) {
+    if (check.length < 1 || check.length > 3) fail('check', `A lesson should have ${1}-3 check questions (found ${check.length}).`);
+    for (const q of check) {
+      if (!/\?\s*$/.test(String(q?.q || ''))) fail('check', `Each check question should end in "?" (found “${q?.q || ''}”).`);
+      const options = q?.options || [];
+      if (options.length < 2 || options.length > 4) fail('check', `Each check question should have ${2}-4 options (found ${options.length}).`);
+      if (!Number.isInteger(q?.answer) || q.answer < 0 || q.answer >= options.length) fail('check', `Each check answer should be a valid option index (found ${q?.answer}).`);
+      if (text(String(q?.why || '')) > 200) fail('check', `Each check answer should be ${200} characters or fewer (found ${text(String(q?.why || ''))}).`);
+    }
   }
   return problems;
 }

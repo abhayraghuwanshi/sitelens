@@ -699,6 +699,9 @@ pre.sql { margin: 0; font: 12.5px/1.6 var(--mono); white-space: pre-wrap; color:
 .insp-in { display: grid; gap: 12px; }
 .insp-h { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .insp-h > b { min-width: 0; }
+/* The open details: each content block gets its own surface, so the copy reads
+   in hierarchy instead of one flat wall of text on one background. */
+.insp-in > .ib { background: var(--surface-2); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
 .main > .linkish { align-self: flex-start; }
 .small2 { font-size: 12px; }
 .insp .dstats { grid-template-columns: repeat(2, minmax(0, 1fr)); }

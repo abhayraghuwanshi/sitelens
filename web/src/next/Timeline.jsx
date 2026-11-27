@@ -6,12 +6,14 @@ import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ClaudeComments } from '../components/ClaudeComments.jsx';
 import { TimelineAdd } from '../pages/Calendar.jsx';
+import { TimelineCreate } from './TimelineCreate.jsx';
 import { Page, OptionsSheet } from './Page.jsx';
-import { Ask, Waiting, SetupNote } from './TimelineTop.jsx';
+import { SetupNote } from './TimelineTop.jsx';
 import { pushPanel } from './Panel.jsx';
 import { useSiteProduct } from '../product.js';
 import { People, REGION } from './Live.jsx';
 import { DayMap, dayPlaces } from './DayMap.jsx';
+import { HEAT, mix, amountFill, peakFill, shareFill, changeFill, amountLegendStops, changeLegendStops, changeTone, toneClass } from './heatmap.js';
 
 // Timeline (docs/redesign → Timeline): every day of a site as a map, with an
 // inspector beside it. One bar of controls in the header: the period (a menu,
@@ -34,13 +36,39 @@ const shiftMonth = (ym, n) => { const [y, m] = ym.split('-').map(Number); return
 const METRICS = [['sessions', 'Visits'], ['users', 'People'], ['views', 'Page views'], ['clicks', 'Search clicks'], ['spent', 'Ad spend'], ['earned', 'Ad earnings']];
 // Money metrics (Traffic → Ad money): shown only for sites with any, in the GA4 currency.
 const MONEY = new Set(['spent', 'earned']);
-const LENSES = { page: { name: 'Landing pages', one: 'page', of: 'sessions' }, source: { name: 'Sources', one: 'source', of: 'sessions' }, query: { name: 'Searches', one: 'search', of: 'clicks' }, goal: { name: 'Goals', one: 'goal', of: 'sessions', unit: 'people reaching it' } };
+const LENSES = { page: { name: 'Landing pages', one: 'page', of: 'sessions', picker: true }, source: { name: 'Sources', one: 'source', of: 'sessions', picker: true }, query: { name: 'Searches', one: 'search', of: 'clicks', picker: true }, goal: { name: 'Goals', one: 'goal', of: 'sessions', picker: true }, citation: { name: 'Citation sources', one: 'citation source', picker: true }, metric: { name: 'Connected metrics', one: 'connected metric', picker: true }, job: { name: 'Job results', one: 'job', picker: true }, bing: { name: 'Bing search', one: 'Bing metric', picker: true } };
 const ZOOMS = { day: 1, '7d': 7, '28d': 28 };
 // Marks: what you did and what happened, by kind.
-const KINDS = { deploy: ['rocket', 'Deploys'], release: ['github', 'Releases'], post: ['megaphone', 'Posts'], ad: ['target', 'Ads'], mention: ['chat', 'Mentions'], note: ['star', 'Notes'], alert: ['bell', 'Alerts'] };
-const kindOf = (k) => (k === 'deploy' ? 'deploy' : k === 'release' || k === 'extension' ? 'release' : k === 'post' ? 'post' : k === 'ad' ? 'ad' : k === 'mention' ? 'mention' : 'note');
-const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-7)', 'var(--series-4)', 'var(--series-5)', 'var(--series-3)', 'var(--series-8)', 'var(--series-6)'];
+const KINDS = { deploy: ['rocket', 'Deploys'], release: ['github', 'Releases'], post: ['megaphone', 'Posts'], ad: ['target', 'Ads'], mention: ['chat', 'Mentions'], note: ['star', 'Notes'], custom: ['layers', 'Custom events'], alert: ['bell', 'Alerts'] };
+const kindOf = (k) => (k === 'custom' ? 'custom' : k === 'deploy' ? 'deploy' : k === 'release' || k === 'extension' ? 'release' : k === 'post' ? 'post' : k === 'ad' ? 'ad' : k === 'mention' ? 'mention' : 'note');
+const CHANGE_RULES = new Set(['traffic', 'search', 'installs', 'goals']);
+const BREAKDOWN_REPORTS = {
+  page: ['pages', 'View pages'], source: ['traffic', 'View traffic report'],
+  query: ['search', 'View search report'],
+};
+
+function timelineChange(alert) {
+  if (!CHANGE_RULES.has(alert.rule) || !Number.isFinite(alert.value) || !Number.isFinite(alert.baseline)) {
+    return { label: alert.title || alert.label, detail: alert.detail };
+  }
+  return {
+    label: (alert.title || alert.label).replace('sessions ', 'visits ').replace(/\s+[+−-]?\d+(?:[.,]\d+)?%$/, ''),
+    detail: `${metricNumber(alert.value)} that day · ${metricNumber(alert.baseline)} per day over the previous 7 days`,
+  };
+}
+
+const COLORS = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)', 'var(--series-7)', 'var(--series-8)'];
 const pageName = (p) => (p === '/' ? 'Home page' : p);
+
+function metricAmount(values, summary) {
+  const known = values.filter(Number.isFinite);
+  if (!known.length) return null;
+  if (summary === 'latest') return known.at(-1);
+  const total = known.reduce((a, b) => a + b, 0);
+  return summary === 'average' ? total / known.length : total;
+}
+
+const metricNumber = (value) => value == null ? '—' : value.toLocaleString('en-US', { maximumFractionDigits: 1 });
 
 // A usual day: the same weekday over the four weeks before (the median, like the
 // server's own baseline, which visits use directly so every sentence agrees).
@@ -52,20 +80,25 @@ export function usualOf(map, date, k) {
   return vals.length % 2 ? vals[mid] : (vals[mid - 1] + vals[mid]) / 2;
 }
 
-export function Timeline({ site, sites, params, waiting = null }) {
+export function Timeline({ site, sites, params }) {
   const scope = site ? site.id : 'all';
-  const last = iso(Date.now() - DAY); // whole days only: yesterday is the latest
+  const today = iso(Date.now());
+  const yesterday = addD(today, -1);
+  const custom = params.get('by') === 'custom';
+  const last = custom || params.get('by') === 'job' ? today : yesterday;
   const zoom = ['day', '7d', '28d', 'month', 'year'].includes(params.get('z')) ? params.get('z') : 'month';
   const end = params.get('end') && params.get('end') <= last ? params.get('end') : last;
   const month = /^\d{4}-\d{2}$/.test(params.get('month') || '') ? params.get('month') : last.slice(0, 7);
   const metric = METRICS.some(([k]) => k === params.get('m')) ? params.get('m') : 'sessions';
-  const lens = ['change', 'amount', ...Object.keys(LENSES)].includes(params.get('by')) ? params.get('by') : 'change';
+  const lens = ['change', 'amount', 'custom', ...Object.keys(LENSES)].includes(params.get('by')) ? params.get('by') : 'amount';
   const focus = params.get('f') || '';
   const asLine = params.get('v') === 'line' && zoom !== 'day';
   const picked = params.get('day') || '';
   const [marks, setMarks] = usePersistent('tl-marks', Object.keys(KINDS).join(','));
-  // Saved before "Ads" existed: show it until it's turned off ("-ad" remembers that).
-  const layers = [...marks.split(',').filter((k) => k && k !== '-ad'), ...(marks.includes('ad') ? [] : ['ad'])];
+  // Marks introduced after the preference was saved start visible.
+  const defaultMarks = ['ad', 'custom'];
+  const savedMarks = new Set(marks.split(',').filter(Boolean));
+  const layers = Object.keys(KINDS).filter((kind) => savedMarks.has(kind) || (defaultMarks.includes(kind) && !savedMarks.has(`-${kind}`)));
   const [menu, setMenu] = useState('');
   const [adding, setAdding] = useState(false);
   const phone = usePhone();
@@ -83,28 +116,44 @@ export function Timeline({ site, sites, params, waiting = null }) {
   const first = days[0];
   const lastData = days.filter((d) => d <= last).at(-1) || first;
   const back = zoom === 'year' ? 28 : Math.max(28, days.length);
-  const metrics = useAsync(() => api.get(`/calendar/metrics${qs({ site: scope, from: addD(first, -back), to: lastData })}`), [scope, first, lastData]);
+  const metrics = useAsync(() => api.get(`/calendar/metrics${qs({ site: scope, from: addD(first, -back), to: lastData < yesterday ? lastData : yesterday })}`), [scope, first, lastData]);
   const events = useAsync(() => api.get(`/calendar/events${qs({ site: scope, from: first, to: lastData })}`), [scope, first, lastData]);
   const L = LENSES[lens];
-  const lead = useAsync(() => (L ? api.get(`/calendar/breakdown${qs({ site: scope, from: addD(first, -back), to: lastData, by: lens, limit: 12, daily: 1 })}`) : null), [scope, first, lastData, lens]);
+  const hasMetricPicker = custom || Boolean(L?.picker);
+  const lead = useAsync(() => (L ? api.get(`/calendar/breakdown${qs({ site: scope, from: addD(first, -back), to: lastData, by: lens, limit: hasMetricPicker ? 200 : 12, daily: 1 })}`) : null), [scope, first, lastData, lens]);
 
   const map = new Map((metrics.data?.days || []).map((d) => [d.date, d]));
   const usual = (d, k = metric) => usualOf(map, d, k);
   const evList = [
     ...(events.data?.events || []).map((e) => ({ date: e.date, kind: kindOf(e.kind), label: e.label, url: e.url })),
-    ...(events.data?.alerts || []).map((a) => ({ date: a.date, kind: 'alert', label: a.title })),
+    ...(events.data?.alerts || []).map((a) => ({ date: a.date, kind: 'alert', ...timelineChange(a) })),
   ].filter((e) => layers.includes(e.kind));
   const evOn = (d) => evList.filter((e) => e.date === d);
 
+  const customTypes = events.data?.site === scope ? events.data.customTypes || [] : [];
+  const customDates = days.filter((date) => date <= last);
+  const customTotals = new Map();
+  for (const event of events.data?.site === scope ? events.data.events || [] : []) {
+    if (event.kind !== 'custom' || !event.eventType) continue;
+    const key = event.eventType.toLowerCase();
+    if (!customTotals.has(key)) customTotals.set(key, new Map());
+    const totals = customTotals.get(key);
+    totals.set(event.date, (totals.get(event.date) || 0) + event.value);
+  }
+  const breakdown = custom ? {
+    by: 'custom', dates: customDates,
+    rows: customTypes.map((type) => ({ ...type, days: customDates.map((date) => customTotals.get(type.key)?.get(date) ?? 0) })),
+  } : lead.data;
+
   // Each lens item's value per day, over the window and the days before it.
-  const items = (lead.data?.rows || []).map((r, i) => {
-    const byDate = new Map(lead.data.dates.map((d, j) => [d, r.days[j]]));
-    const inWin = days.filter((d) => d <= last).map((d) => byDate.get(d) || 0);
+  const items = (breakdown?.by === lens ? breakdown.rows : []).map((r, i) => {
+    const byDate = new Map(breakdown.dates.map((d, j) => [d, r.days[j]]));
+    const inWin = days.filter((d) => d <= last).map((d) => hasMetricPicker ? byDate.get(d) ?? null : byDate.get(d) || 0);
     const before = days.filter((d) => d <= last).map((d) => byDate.get(addD(d, -days.length)) ?? null);
-    const total = inWin.reduce((a, b) => a + b, 0);
-    const prev = zoom === 'year' || before.some((v) => v === null) ? null : before.reduce((a, b) => a + b, 0);
-    const since = lead.data.dates.find((d) => byDate.get(d) > 0);
-    return { key: r.key, color: COLORS[i % COLORS.length], byDate, series: inWin, total, prev, fresh: since && since >= first ? since : null };
+    const total = metricAmount(inWin, r.summary);
+    const prev = zoom === 'year' || (!hasMetricPicker && before.some((v) => v === null)) ? null : metricAmount(before, r.summary);
+    const since = breakdown.dates.find((d) => byDate.get(d) > 0);
+    return { key: r.key, label: r.label || (lens === 'page' ? pageName(r.key) : r.key), summary: r.summary, unit: (lens === 'page' || lens === 'source') ? 'visits' : lens === 'query' ? 'clicks' : r.unit, color: COLORS[i % COLORS.length], byDate, series: inWin, total, prev, fresh: since && since >= first ? since : null };
   });
   const ofDay = (d) => (L ? map.get(d)?.[L.of] || 0 : 0);
   const share = (it, d) => (ofDay(d) ? (it.byDate.get(d) || 0) / ofDay(d) : 0);
@@ -117,20 +166,20 @@ export function Timeline({ site, sites, params, waiting = null }) {
       .filter((x) => x.isNew || (x.ratio && !hot(addD(d, -1), x.it)))
       .sort((a, b) => Number(b.isNew) - Number(a.isNew) || b.ratio - a.ratio)[0];
   };
-  const focused = items.find((it) => it.key === focus);
+  const focused = items.find((it) => it.key === focus) || (lens === 'citation' ? items.find((it) => it.key === 'citing') : lens === 'bing' ? items.find((it) => it.unit === 'clicks') : undefined);
+  const focusedPeak = hasMetricPicker && focused ? Math.max(1, ...focused.series.map((v) => v || 0)) : 1;
   const max = Math.max(1, ...days.map((d) => map.get(d)?.[metric] || 0));
   const fill = (d) => {
     const row = map.get(d);
-    if (!row || row[metric] === null) return '';
-    if (focused) return `background:color-mix(in srgb, ${focused.color} ${Math.round(Math.min(share(focused, d) * 130, 72))}%, var(--surface))`;
+    if (!hasMetricPicker && (!row || row[metric] === null)) return '';
+    if (focused && hasMetricPicker) return peakFill(focused.byDate.get(d), focusedPeak, focused.color);
+    if (focused) return shareFill(share(focused, d), focused.color);
     // Money is shaded by amount: a usual day of ad spend is usually nothing.
-    if (lens === 'amount' || (lens === 'change' && MONEY.has(metric))) return row[metric] ? `background:color-mix(in srgb, var(--accent) ${Math.round(6 + (row[metric] / max) * 64)}%, var(--surface))` : '';
+    if (lens === 'amount' || (lens === 'change' && MONEY.has(metric))) return amountFill(row[metric], max);
     if (lens !== 'change') return '';
     const u = usual(d);
     if (!u) return '';
-    const c = row[metric] / u - 1;
-    const a = Math.min(Math.abs(c), 0.6);
-    return a < 0.05 ? '' : `background:color-mix(in srgb, var(${c > 0 ? '--good-ink' : '--critical-ink'}) ${Math.round(8 + (a / 0.6) * 34)}%, var(--surface))`;
+    return changeFill(row[metric] / u - 1);
   };
   const money = moneyFormat(metrics.data?.currency);
   // A metric's value as text: money in the currency, counts as counts (vk: short).
@@ -139,7 +188,7 @@ export function Timeline({ site, sites, params, waiting = null }) {
   // On a phone the calendar is the screen and one day (the picked one, else yesterday)
   // sits in a sheet docked above the tab bar (DaySheet).
   const phoneDay = picked && picked <= last ? picked : last;
-  const ctx = { map, metric, lens, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today: iso(Date.now()) };
+  const ctx = { map, metric, lens, items, hasMetricPicker, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today };
   const touch = useRef(null);
   // A day picked on a phone stays in sight above the sheet that rose to show it, as Maps
   // keeps a picked place visible above its card.
@@ -173,20 +222,24 @@ export function Timeline({ site, sites, params, waiting = null }) {
   };
 
   // Header controls.
-  const periodLabel = zoom === 'day' ? (end === last ? 'Yesterday' : fmtD(end, { weekday: 'short', day: 'numeric', month: 'short' }))
+  const periodLabel = zoom === 'day' ? (end === today ? 'Today' : end === yesterday ? 'Yesterday' : fmtD(end, { weekday: 'short', day: 'numeric', month: 'short' }))
     : zoom === 'month' ? (phone ? fmtD(`${month}-01`, { month: 'short', year: 'numeric' }) : monthName(month))
     : zoom === 'year' ? 'Last 12 months'
     : end === last ? `Last ${ZOOMS[zoom]} days` : `${fmtD(first, { day: 'numeric', month: 'short' })} – ${fmtD(end, { day: 'numeric', month: 'short' })}`;
   const step = (dir) => (zoom === 'month' ? go({ month: shiftMonth(month, dir), day: '' }) : go({ end: addD(end, dir * ZOOMS[zoom]), day: '' }));
   const offNext = zoom === 'year' || (zoom === 'month' ? month >= last.slice(0, 7) : end >= last);
   const months = Array.from({ length: 6 }, (_, i) => shiftMonth(last.slice(0, 7), -i));
-  const byLabel = L ? `By ${L.one}` : lens === 'amount' ? 'Amount' : 'vs usual';
+  const byLabel = custom ? 'Custom events' : L?.name || (lens === 'amount' ? 'Daily totals' : 'vs usual');
   const lensItems = (
     <>
-      <MenuItem on={lens === 'change'} onClick={() => go({ by: '', f: '' })}>Change vs usual</MenuItem>
-      <MenuItem on={lens === 'amount'} onClick={() => go({ by: 'amount', f: '' })}>Amount</MenuItem>
+      <MenuItem on={lens === 'amount'} onClick={() => go({ by: '', f: '' })}>Daily totals</MenuItem>
+      <MenuItem on={lens === 'change'} onClick={() => go({ by: 'change', f: '' })}>Change vs usual</MenuItem>
       <hr /><span class="tl-lab">Break down by</span>
       {Object.entries(LENSES).map(([k, x]) => <MenuItem key={k} on={lens === k} onClick={() => go({ by: k, f: '' })}>{x.name}</MenuItem>)}
+      {customTypes.length > 0 && <>
+        <hr /><span class="tl-lab">Custom event types</span>
+        {customTypes.map(({ key, label }) => <MenuItem key={key} on={custom && focus === key} onClick={() => go({ by: 'custom', f: key })}>{label}</MenuItem>)}
+      </>}
     </>
   );
   const markRows = Object.entries(KINDS).map(([k, [ic, l]]) => {
@@ -194,7 +247,11 @@ export function Timeline({ site, sites, params, waiting = null }) {
     const n = [...(events.data?.events || []).map((e) => kindOf(e.kind)), ...(events.data?.alerts || []).map(() => 'alert')].filter((x) => x === k).length;
     return (
       <button key={k} type="button" class="nx-pop-row" role="menuitemcheckbox" aria-checked={on}
-        onClick={() => setMarks([...(on ? layers.filter((x) => x !== k) : [...layers, k]), ...(on && k === 'ad' ? ['-ad'] : [])].join(','))}>
+        onClick={() => {
+          savedMarks.delete(on ? k : `-${k}`);
+          if (!on || defaultMarks.includes(k)) savedMarks.add(on ? `-${k}` : k);
+          setMarks([...savedMarks].join(','));
+        }}>
         <span class={`tl-cbx${on ? ' on' : ''}`}>{on && <Icon name="check" size={11} />}</span><Icon name={ic} size={14} />{l}<span class="nx-pop-meta">{n}</span>
       </button>
     );
@@ -206,56 +263,120 @@ export function Timeline({ site, sites, params, waiting = null }) {
       <button type="button" class={asLine ? 'on' : ''} aria-pressed={asLine} title="Line" aria-label="Line" onClick={() => go({ v: 'line' })}><Icon name="chart" size={15} />{phone && ' Line'}</button>
     </span>
   );
-  const addBtn = <button type="button" class="nx-icon-btn" title="Add a post or note" aria-label="Add a post or note" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>;
+  const jobsHref = site ? `#/site/${encodeURIComponent(site.id)}/jobs` : '#/jobs';
+  const addBtn = !site?.shared && <button type="button" class="nx-icon-btn" title="Add to Timeline" aria-label="Add to Timeline" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>;
+  const pickerLabel = { page: 'landing page', source: 'traffic source', query: 'search query', citation: 'citation source', goal: 'goal metric', metric: 'connected metric', job: 'job result', bing: 'Bing metric', custom: 'custom event type' }[lens];
+  const pickerNames = { bing: 'Bing metrics', page: 'landing pages', source: 'traffic sources', query: 'searches', custom: 'event types' }[lens] || 'metrics';
+  const pickerPrompt = { page: 'Choose a landing page', source: 'Choose a source', query: 'Choose a search', custom: 'Choose an event type' }[lens] || 'Choose a metric';
+  const metricPicker = hasMetricPicker && (
+    <select class="tl-pbtn tl-goal-metric" aria-label={`Timeline ${pickerLabel}`} value={focused?.key || ''}
+      disabled={!items.length} onChange={(e) => go({ f: e.currentTarget.value })}>
+      <option value="" disabled={lens === 'citation' && items.length > 0}>{(custom ? events.loading : lead.loading) ? `Loading ${pickerNames}…` : items.length ? pickerPrompt : `No ${pickerNames} available`}</option>
+      {items.map((item) => {
+        const period = item.summary === 'average' ? 'daily average' : item.summary === 'latest' ? 'latest' : 'total';
+        const amount = item.total == null ? 'No data' : `${metricNumber(item.total)} ${lens === 'citation' ? 'answers' : item.unit && !['goal', 'metric'].includes(lens) ? item.unit : period}`;
+        return <option key={item.key} value={item.key}>{item.label} · {amount}</option>;
+      })}
+    </select>
+  );
+  const timelinePicker = L || custom ? metricPicker : (
+    <select class="tl-pbtn tl-goal-metric" aria-label="Timeline metric" value={metric}
+      onChange={(e) => go({ m: e.currentTarget.value === 'sessions' ? '' : e.currentTarget.value })}>
+      {METRICS.filter(([key]) => !MONEY.has(key) || key === metric || days.some((date) => map.get(date)?.[key] != null))
+        .map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+    </select>
+  );
+  const metricErrors = hasMetricPicker && lead.data?.by === lens && lead.data.errors?.length > 0
+    ? <p class="nx-note-line warn">{lead.data.errors.map((e) => `${e.site}: ${e.message}`).join(' · ')}</p>
+    : null;
+  const pickerSlot = (
+    <span class="tl-picker-slot">
+      {timelinePicker}
+      {timelinePicker && <Icon name="updown" size={11} />}
+    </span>
+  );
+  const report = site && BREAKDOWN_REPORTS[lens];
+  const metricSetup = site && !site.demo && !site.shared && lens === 'metric'
+    ? `#/account?${new URLSearchParams({ i: 'metrics', edit: 'new', site: site.id, timeline: '1' })}`
+    : '';
+  const reportLink = site && !site.demo && !site.shared && lens === 'bing'
+    ? <a class="tl-report-link" href="#/account?i=bing">Bing settings <Icon name="chevron" size={11} /></a>
+    : metricSetup ? <a class="tl-report-link" href={metricSetup}>Add a connected metric <Icon name="chevron" size={11} /></a>
+    : site && !site.demo && !site.shared && lens === 'goal' ? <a class="tl-report-link" href={`#/site/${site.id}/goals?edit=1`}><Icon name="target" size={11} /> Edit goals</a>
+    : report && <a class="tl-report-link" href={`#/site/${site.id}/${report[0]}`}>{report[1]} <Icon name="chevron" size={11} /></a>;
   const controls = (
-    <div class="tl-ctl">
-      <div class="tl-period">
-        <button type="button" class="nx-icon-btn" aria-label="Earlier" disabled={zoom === 'year'} onClick={() => step(-1)}><Icon name="chevron" size={14} class="flip" /></button>
-        <Menu name="period" open={menu} setOpen={setMenu} label={<>{periodLabel} <Icon name="updown" size={12} /></>} cls="tl-pbtn">
-          <MenuItem on={zoom === 'day' && end === last} onClick={() => go({ z: 'day', end: '', day: '' })}>Yesterday</MenuItem>
-          <MenuItem on={zoom === '7d' && end === last} onClick={() => go({ z: '7d', end: '', day: '' })}>Last 7 days</MenuItem>
-          <MenuItem on={zoom === '28d' && end === last} onClick={() => go({ z: '28d', end: '', day: '' })}>Last 28 days</MenuItem>
-          <hr />
-          {months.map((ym) => <MenuItem key={ym} on={zoom === 'month' && month === ym} onClick={() => go({ z: '', month: ym === last.slice(0, 7) ? '' : ym, day: '' })}>{monthName(ym)}</MenuItem>)}
-          <hr />
-          <MenuItem on={zoom === 'year'} onClick={() => go({ z: 'year', day: '' })}>Last 12 months</MenuItem>
-        </Menu>
-        <button type="button" class="nx-icon-btn" aria-label="Later" disabled={offNext} onClick={() => step(1)}><Icon name="chevron" size={14} /></button>
+    <div class="tl-ctl" role="group" aria-label="Timeline controls">
+      <div class="tl-toolbar">
+        <div class="tl-period">
+          <button type="button" class="nx-icon-btn" aria-label="Earlier" disabled={zoom === 'year'} onClick={() => step(-1)}><Icon name="chevron" size={14} class="flip" /></button>
+          <Menu name="period" open={menu} setOpen={setMenu} label={<>{periodLabel} <Icon name="updown" size={12} /></>} cls="tl-pbtn">
+            <MenuItem on={zoom === 'day' && end === yesterday} onClick={() => go({ z: 'day', end: last === today ? yesterday : '', day: '' })}>Yesterday</MenuItem>
+            <MenuItem on={zoom === '7d' && end === last} onClick={() => go({ z: '7d', end: '', day: '' })}>Last 7 days</MenuItem>
+            <MenuItem on={zoom === '28d' && end === last} onClick={() => go({ z: '28d', end: '', day: '' })}>Last 28 days</MenuItem>
+            <hr />
+            {months.map((ym) => <MenuItem key={ym} on={zoom === 'month' && month === ym} onClick={() => go({ z: '', month: ym === last.slice(0, 7) ? '' : ym, day: '' })}>{monthName(ym)}</MenuItem>)}
+            <hr />
+            <MenuItem on={zoom === 'year'} onClick={() => go({ z: 'year', day: '' })}>Last 12 months</MenuItem>
+          </Menu>
+          <button type="button" class="nx-icon-btn" aria-label="Later" disabled={offNext} onClick={() => step(1)}><Icon name="chevron" size={14} /></button>
+        </div>
+        {phone ? (
+          <span class="tl-bar">
+            <OptionsSheet title="Timeline view" label="View options">
+              <section class="nx-opts-sec"><h3 class="nx-label-sm">Colour the days</h3><div class="nx-pop-list">{lensItems}</div></section>
+              {zoom !== 'day' && <section class="nx-opts-sec"><h3 class="nx-label-sm">Draw as</h3>{drawAs}</section>}
+              <section class="nx-opts-sec"><h3 class="nx-label-sm">Marks on the days</h3><div class="nx-pop-list">{markRows}</div></section>
+            </OptionsSheet>
+            {addBtn}
+          </span>
+        ) : (
+          <span class="tl-bar">
+            <span class="tl-filter-group">
+              <Menu name="by" open={menu} setOpen={setMenu} label={<>{byLabel} <Icon name="updown" size={11} /></>} cls="nx-chip tl-breakdown" title="What colours the days">{lensItems}</Menu>
+              {pickerSlot}
+            </span>
+            <Menu name="marks" open={menu} setOpen={setMenu} label={<>{marksLabel} <Icon name="updown" size={11} /></>} cls="nx-chip">{markRows}</Menu>
+            {zoom !== 'day' && drawAs}
+            {addBtn}
+          </span>
+        )}
       </div>
-      {phone ? (
-        <span class="tl-bar">
-          <OptionsSheet title="Timeline view" label={`${byLabel}${asLine ? ' · Line' : ''}${layers.length < Object.keys(KINDS).length ? ` · ${marksLabel}` : ''}`}>
-            <section class="nx-opts-sec"><h3 class="nx-label-sm">Colour the days</h3><div class="nx-pop-list">{lensItems}</div></section>
-            {zoom !== 'day' && <section class="nx-opts-sec"><h3 class="nx-label-sm">Draw as</h3>{drawAs}</section>}
-            <section class="nx-opts-sec"><h3 class="nx-label-sm">Marks on the days</h3><div class="nx-pop-list">{markRows}</div></section>
-          </OptionsSheet>
-          {addBtn}
-        </span>
-      ) : (
-        <span class="tl-bar">
-          <Menu name="by" open={menu} setOpen={setMenu} label={<>{byLabel} <Icon name="updown" size={11} /></>} cls="nx-chip" title="What colours the days">{lensItems}</Menu>
-          <Menu name="marks" open={menu} setOpen={setMenu} label={<>{marksLabel} <Icon name="updown" size={11} /></>} cls="nx-chip">{markRows}</Menu>
-          {zoom !== 'day' && drawAs}
-          {addBtn}
-        </span>
-      )}
+      {phone && pickerSlot}
     </div>
   );
 
-  const loading = !metrics.data || (L && !lead.data && !lead.error);
+  const addForm = adding && (
+    <TimelineCreate scope={scope} sites={sites} date={zoom === 'day' ? end : picked || last} today={today} customTypes={customTypes} jobsHref={jobsHref}
+      onClose={() => setAdding(false)} onAdded={(event) => {
+        setAdding(false);
+        if (event?.kind === 'custom') {
+          go({ by: 'custom', f: event.eventType.toLowerCase(), z: '', end: '', month: event.date.slice(0, 7), day: event.date });
+        }
+        events.reload();
+      }} onGoalSaved={(target) => {
+        setAdding(false);
+        if (scope === 'all') location.hash = `/site/${target.id}/timeline?by=goal`;
+        else {
+          if (lens === 'goal') lead.reload();
+          go({ by: 'goal', f: '' });
+        }
+      }} />
+  );
+
+  const loading = !metrics.data || (custom && events.loading && !events.data) || (L && lead.data?.by !== lens && !lead.error);
   const err = metrics.error || events.error || lead.error;
 
   if (phone && zoom !== 'day') {
     return (
       <div class="nx-page tl-phone">
-        {/* No "waiting on you" line here: the Inbox tab's badge already says it. */}
-        {adding && <TimelineAdd site={scope} sites={sites} date={phoneDay} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); events.reload(); }} />}
+        {addForm}
         {controls}
         {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
           : loading ? <Loading height={320} owl label="Reading every day…" />
           : (
             <>
-              <Tiles days={days} ctx={ctx} />
+              {metricErrors}
+              {reportLink}
               <div class="tl-map card card-plain">
                 {asLine ? <LineView days={days} items={items} ctx={ctx} evList={evList} />
                   : zoom === 'year' ? <YearGrid days={days} ctx={ctx} />
@@ -265,7 +386,7 @@ export function Timeline({ site, sites, params, waiting = null }) {
               </div>
             </>
           )}
-        {site && <><Ask site={site} span={null} /><SetupNote site={site} /></>}
+        {site && <SetupNote site={site} />}
         <DaySheet picked={picked} swipe={swipe}>
           <DayPanel key={phoneDay} site={site} scope={scope} date={phoneDay} ctx={ctx} />
         </DaySheet>
@@ -275,14 +396,15 @@ export function Timeline({ site, sites, params, waiting = null }) {
 
   return (
     <Page title="Timeline" sub={`Every day: how it went, where people landed, what shipped${site ? '' : ' · all sites'}`} actions={controls}>
-      {site && <><Ask site={site} span={null} /><Waiting site={site} waiting={waiting} /><SetupNote site={site} /></>}
-      {adding && <TimelineAdd site={scope} sites={sites} date={picked || last} today={ctx.today} onClose={() => setAdding(false)} onAdded={() => { setAdding(false); events.reload(); }} />}
+      {site && <SetupNote site={site} />}
+      {addForm}
       {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
         : loading ? <Loading height={420} owl label="Reading every day…" />
         : (
           <>
             {metrics.data.errors?.length > 0 && <p class="nx-note-line warn">{metrics.data.errors.map((e) => `${e.site}: ${e.message}`).join(' · ')}</p>}
-            <Tiles days={days} ctx={ctx} />
+            {metricErrors}
+            {reportLink}
             <div class={`tl-split${zoom === 'day' ? ' one' : ''}`}>
               <div class="tl-map card card-plain">
                 {zoom === 'day' ? <DayPanel site={site} scope={scope} date={end} ctx={ctx} inline />
@@ -449,39 +571,22 @@ export function Spark({ vals, dates, color = 'var(--accent)', unit = '', cls = '
   );
 }
 
-function Tiles({ days, ctx }) {
-  const ds = days.filter((d) => d <= ctx.last && ctx.map.get(d));
-  return (
-    <div class="tl-tiles">
-      {METRICS.map(([k, l]) => {
-        const vals = ds.map((d) => ctx.map.get(d)[k]);
-        if (vals.every((v) => v === null)) return null;
-        const tot = vals.reduce((a, v) => a + (v || 0), 0);
-        const us = ds.reduce((a, d) => a + (ctx.usual(d, k) || 0), 0);
-        const c = us ? tot / us - 1 : null;
-        const on = ctx.metric === k && (ctx.lens === 'change' || ctx.lens === 'amount');
-        return (
-          <button key={k} type="button" class={`tl-tile${on ? ' on' : ''}`} aria-pressed={on} onClick={() => ctx.go({ m: k === 'sessions' ? '' : k, ...(ctx.L ? { by: '', f: '' } : {}) })}>
-            <small>{l}</small>
-            <b>{ctx.vk(tot, k)}{!(MONEY.has(k) && c === null) && <span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)}</span>}</b>
-            <Spark vals={vals} dates={ds} unit={l.toLowerCase()} format={MONEY.has(k) ? (v) => ctx.vf(v, k) : null} />
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
 function Cell({ d, ctx }) {
   const n = Number(d.slice(8));
   const row = ctx.map.get(d);
   const future = d > ctx.last;
-  if (future || !row) {
-    return <div class={`tl-day fut${d === ctx.today ? ' today' : ''}`} role="gridcell"><span class="tl-dn">{n}</span>{d === ctx.today && !ctx.phone && <span class="tl-dv muted">today</span>}</div>;
+  if (future) {
+    return <div class={`tl-day fut${d === ctx.today ? ' today' : ''}`} role="gridcell" data-state="future"><span class="tl-dn">{n}</span>{d === ctx.today && !ctx.phone && <span class="tl-dv muted">today</span>}</div>;
+  }
+  // A past day with no row is *no data*, distinct from a future day and from a zero.
+  if (!row && !['custom', 'job'].includes(ctx.lens)) {
+    return <div class={`tl-day nodata${d === ctx.today ? ' today' : ''}`} role="gridcell" data-state="no-data"><span class="tl-dn">{n}</span><span class="tl-dv muted">—</span></div>;
   }
   const ev = ctx.evOn(d);
   let val = null;
-  if (ctx.focused) {
+  if (ctx.hasMetricPicker) {
+    if (ctx.focused) val = <span class="tl-dv">{metricNumber(ctx.focused.byDate.get(d))}</span>;
+  } else if (ctx.focused) {
     const v = ctx.focused.byDate.get(d) || 0;
     val = <span class="tl-dv">{fmt(v)}{!ctx.phone && <small class="muted">{Math.round(ctx.share(ctx.focused, d) * 100)}%</small>}</span>;
   } else if (ctx.L) {
@@ -494,12 +599,12 @@ function Cell({ d, ctx }) {
   } else {
     const v = row[ctx.metric];
     const u = ctx.usual(d);
-    const c = v !== null && u ? v / u - 1 : null;
-    val = v === null ? <span class="tl-dv muted">—</span>
-      : <span class="tl-dv">{ctx.phone ? ctx.vk(v) : ctx.vf(v)}{!ctx.phone && ctx.lens === 'change' && c !== null && <small class={c >= 0 ? 'good' : 'bad'}>{pct(c)}</small>}</span>;
+    const c = v != null && u ? v / u - 1 : null;
+    val = v == null ? <span class="tl-dv muted">—</span>
+      : <span class="tl-dv">{ctx.phone ? ctx.vk(v) : ctx.vf(v)}{!ctx.phone && ctx.lens === 'change' && c !== null && <small class={toneClass(changeTone(c))}>{pct(c)}</small>}</span>;
   }
   return (
-    <button type="button" class={`tl-day${ctx.picked === d ? ' sel' : ''}`} style={ctx.fill(d)} aria-label={fmtD(d, { weekday: 'long', day: 'numeric', month: 'long' })}
+    <button type="button" class={`tl-day${ctx.picked === d ? ' sel' : ''}${(!ctx.hasMetricPicker && !ctx.L && !ctx.focused && row[ctx.metric] == null) ? ' nodata' : ''}`} data-state={(!ctx.hasMetricPicker && !ctx.L && !ctx.focused) ? (row[ctx.metric] == null ? 'no-data' : (row[ctx.metric] === 0 ? 'zero' : 'data')) : undefined} style={ctx.fill(d)} aria-label={fmtD(d, { weekday: 'long', day: 'numeric', month: 'long' })}
       onClick={() => ctx.go({ day: ctx.picked === d ? '' : d })}>
       <span class="tl-dtop">
         <span class="tl-dn">{n}</span>
@@ -529,18 +634,18 @@ function WeekView({ days, ctx }) {
     <div class="tl-week">
       {days.map((d) => {
         const row = ctx.map.get(d);
-        const v = row?.[ctx.metric] ?? null;
+        const v = ctx.hasMetricPicker ? ctx.focused?.byDate.get(d) ?? null : row?.[ctx.metric] ?? null;
         const u = ctx.usual(d);
-        const c = v !== null && u ? v / u - 1 : null;
+        const c = v != null && u ? v / u - 1 : null;
         return (
           <button key={d} type="button" class={`tl-wcol${ctx.picked === d ? ' sel' : ''}`} onClick={() => ctx.go({ day: ctx.picked === d ? '' : d })}>
             <span class="tl-wtop" style={ctx.fill(d)}>
               <span class="muted small">{fmtD(d, { weekday: 'short', day: 'numeric' })}</span>
-              <b>{ctx.vf(v)}</b>
-              <small class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{pct(c)} vs usual</small>
+              <b>{ctx.hasMetricPicker ? metricNumber(v) : ctx.vf(v)}</b>
+              {ctx.lens !== 'amount' && !ctx.hasMetricPicker && <small class={toneClass(changeTone(c))}>{pct(c)} vs usual</small>}
             </span>
             <span class="tl-wev">
-              {ctx.L && (() => { const j = ctx.jumpOn(d); return j ? <span><i style={`background:${j.it.color}`} />{ctx.lens === 'page' ? pageName(j.it.key) : j.it.key}</span> : null; })()}
+              {ctx.L && !ctx.hasMetricPicker && (() => { const j = ctx.jumpOn(d); return j ? <span><i style={`background:${j.it.color}`} />{ctx.lens === 'page' ? pageName(j.it.key) : j.it.key}</span> : null; })()}
               {ctx.evOn(d).map((e, i) => <span key={i} class={e.kind === 'alert' ? 'bad' : ''}><Icon name={KINDS[e.kind][0]} size={12} /> {e.label}</span>)}
             </span>
           </button>
@@ -565,7 +670,7 @@ function YearGrid({ days, ctx }) {
               {ds.map((d) => {
                 const ev = ctx.evOn(d);
                 return <button key={d} type="button" class={`tl-sq${ev.some((e) => e.kind === 'alert') ? ' al' : ev.length ? ' ev' : ''}`} style={ctx.fill(d) || 'background:var(--surface-2)'}
-                  title={`${fmtD(d, { weekday: 'short', day: 'numeric', month: 'short' })} · ${ctx.vf(ctx.map.get(d)?.[ctx.metric])}${ev.length ? ` · ${ev.map((e) => e.label).join(', ')}` : ''}`}
+                  title={`${fmtD(d, { weekday: 'short', day: 'numeric', month: 'short' })} · ${ctx.hasMetricPicker ? metricNumber(ctx.focused?.byDate.get(d)) : ctx.vf(ctx.map.get(d)?.[ctx.metric])}${ev.length ? ` · ${ev.map((e) => e.label).join(', ')}` : ''}`}
                   aria-label={d} onClick={() => ctx.go({ z: '', month: ym, day: d })} />;
               })}
             </div>
@@ -583,24 +688,28 @@ function LineView({ days, items, ctx, evList }) {
   const weekly = all.length > 120;
   const groups = weekly ? Array.from({ length: Math.floor(all.length / 7) }, (_, i) => all.slice(all.length - 7 * (i + 1), all.length - 7 * i)).reverse() : all.map((d) => [d]);
   const n = groups.length;
+  if (ctx.hasMetricPicker && !ctx.focused) return <p class="nx-empty">{ctx.lens === 'citation' ? 'No AI answer checks recorded in this period.' : ctx.lens === 'custom' ? 'Choose an event type to plot its values.' : ctx.lens === 'page' ? 'Choose a landing page to plot its visits.' : ctx.lens === 'source' ? 'Choose a source to plot its visits.' : ctx.lens === 'query' ? 'Choose a search to plot its clicks.' : 'Choose a metric to plot its values.'}</p>;
   if (n < 2) return <p class="nx-empty">Not enough days in this window yet.</p>;
   const sum = (g, f) => g.reduce((a, d) => a + (f(d) || 0), 0);
   let series;
-  if (ctx.L) {
-    const top = items.slice(0, 5);
-    series = top.map((it) => ({ label: ctx.lens === 'page' ? pageName(it.key) : it.key, color: it.color, vals: groups.map((g) => sum(g, (d) => it.byDate.get(d))), faded: Boolean(ctx.focused) && ctx.focused.key !== it.key }));
+  if (ctx.L || ctx.lens === 'custom') {
+    const top = ctx.hasMetricPicker && ctx.focused ? [ctx.focused] : items.slice(0, 5);
+    series = top.map((it) => ({ label: ctx.lens === 'page' ? pageName(it.key) : it.label, color: it.color, vals: groups.map((g) => ctx.hasMetricPicker ? metricAmount(g.map((d) => it.byDate.get(d)), it.summary) : sum(g, (d) => it.byDate.get(d))), faded: Boolean(ctx.focused) && ctx.focused.key !== it.key }));
   } else {
-    series = [
-      { label: METRICS.find(([k]) => k === ctx.metric)[1], color: 'var(--accent)', vals: groups.map((g) => sum(g, (d) => ctx.map.get(d)?.[ctx.metric])), area: true },
-      { label: 'A usual day', color: 'var(--text-3)', vals: groups.map((g) => sum(g, (d) => ctx.usual(d))), dashed: true },
-    ];
+    series = [{ label: METRICS.find(([k]) => k === ctx.metric)[1], color: 'var(--accent)', vals: groups.map((g) => sum(g, (d) => ctx.map.get(d)?.[ctx.metric])), area: true }];
+    if (ctx.lens === 'change') {
+      series.push({ label: 'A usual day', color: 'var(--text-3)', vals: groups.map((g) => sum(g, (d) => ctx.usual(d))), dashed: true });
+    }
+  }
+  if (ctx.lens === 'citation' && !series.some((s) => s.vals.some(Number.isFinite))) {
+    return <p class="nx-empty">No AI answer checks recorded in this period.</p>;
   }
   const mx = niceTop(Math.max(1, ...series.flatMap((s) => s.vals)));
   const W = 600;
   const H = 200;
   const X = (i) => (i / (n - 1)) * W;
   const Y = (v) => H - (v / mx) * H;
-  const path = (vals) => vals.map((v, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  const path = (vals) => vals.map((v, i) => v == null ? '' : `${i && vals[i - 1] != null ? 'L' : 'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
   const gi = (d) => groups.findIndex((g) => g.includes(d));
   const marks = evList.map((e) => ({ ...e, i: gi(e.date) })).filter((e) => e.i >= 0);
   const hx = hi >= 0 ? hi / (n - 1) : 0;
@@ -614,15 +723,18 @@ function LineView({ days, items, ctx, evList }) {
             <g key={s.label}>
               {s.area && <path d={`${path(s.vals)} L${W},${H} L0,${H} Z`} fill={s.color} opacity=".1" />}
               <path d={path(s.vals)} fill="none" stroke={s.color} stroke-width={s.dashed || s.faded ? 1.5 : 2} stroke-dasharray={s.dashed ? '4 4' : undefined} opacity={s.faded ? 0.25 : 1} vector-effect="non-scaling-stroke" />
+              {ctx.lens === 'citation' && s.vals.map((v, i) => v == null ? null : (
+                <circle key={i} cx={X(i)} cy={Y(v)} r="2.5" fill={s.color} />
+              ))}
             </g>
           ))}
           {hi >= 0 && <line x1={X(hi)} x2={X(hi)} y1="0" y2={H} stroke="var(--text-3)" stroke-width="1" stroke-dasharray="3 3" vector-effect="non-scaling-stroke" />}
         </svg>
-        {hi >= 0 && series.filter((s) => !s.faded).map((s) => <i key={s.label} class="tl-sdot" style={`left:${hx * 100}%;top:${(Y(s.vals[hi]) / H) * 100}%;background:${s.color}`} />)}
+        {hi >= 0 && series.filter((s) => !s.faded && s.vals[hi] != null).map((s) => <i key={s.label} class="tl-sdot" style={`left:${hx * 100}%;top:${(Y(s.vals[hi]) / H) * 100}%;background:${s.color}`} />)}
         {hi >= 0 && (
           <div class={`tl-ltip${hx > 0.65 ? ' r' : ''}`} style={`left:${hx * 100}%`}>
             <b>{weekly ? `Week of ${fmtD(groups[hi][0], { day: 'numeric', month: 'short' })}` : fmtD(groups[hi][0], { weekday: 'short', day: 'numeric', month: 'short' })}</b>
-            {[...series].sort((a, b) => (b.dashed ? -1 : 0) || b.vals[hi] - a.vals[hi]).map((s) => <span key={s.label}><i style={`background:${s.color}`} /><em>{s.label}</em><b>{ctx.L ? fmt(s.vals[hi]) : ctx.vf(s.vals[hi])}</b></span>)}
+            {[...series].sort((a, b) => (b.dashed ? -1 : 0) || b.vals[hi] - a.vals[hi]).map((s) => <span key={s.label}><i style={`background:${s.color}`} /><em>{s.label}</em><b>{(ctx.L || ctx.lens === 'custom') ? metricNumber(s.vals[hi]) : ctx.vf(s.vals[hi])}</b></span>)}
           </div>
         )}
         <div class="tl-cols">
@@ -651,14 +763,17 @@ function LineView({ days, items, ctx, evList }) {
 const niceTop = (v) => { const p = 10 ** Math.floor(Math.log10(v)); return (Math.ceil((v / p) * 2) / 2) * p; };
 
 function ScaleKey({ ctx, asLine }) {
+  if (asLine && ctx.hasMetricPicker && !ctx.focused) return null;
   if (asLine) return <p class="tl-scale">Each point is a day; click one to open it.</p>;
+  if (ctx.hasMetricPicker) return <p class="tl-scale">{ctx.focused ? <><b>{ctx.focused.label}</b> per day. Darker days have higher values.</> : ctx.lens === 'citation' ? 'No AI answer checks recorded in this period.' : ctx.lens === 'custom' ? 'Choose an event type to see its daily values.' : ctx.lens === 'page' ? 'Choose a landing page to see its daily visits.' : ctx.lens === 'source' ? 'Choose a source to see its daily visits.' : ctx.lens === 'query' ? 'Choose a search to see its daily clicks.' : 'Choose a goal or metric to see its daily values.'}</p>;
   if (ctx.focused) return <p class="tl-scale"><b>{ctx.focused.key}</b>: its {ctx.L.unit || (ctx.L.of === 'clicks' ? 'clicks' : 'visits')} each day; darker is a bigger share. <button type="button" class="todo-link" onClick={() => ctx.go({ f: '' })}>Stop</button></p>;
   if (ctx.L) return <p class="tl-scale">A day is named when something starts: a new {ctx.L.one}, or one rising to 2× its usual share.</p>;
-  if (ctx.lens === 'amount' || MONEY.has(ctx.metric)) return <p class="tl-scale">{MONEY.has(ctx.metric) ? 'Less' : 'Fewer'} <i style="background:color-mix(in srgb, var(--accent) 10%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 38%, var(--surface))" /><i style="background:color-mix(in srgb, var(--accent) 70%, var(--surface))" /> More</p>;
+  if (ctx.lens === 'amount' || MONEY.has(ctx.metric)) return <p class="tl-scale">{MONEY.has(ctx.metric) ? 'Less' : 'Fewer'} {amountLegendStops().map((p) => <i key={p} style={mix(HEAT.AMOUNT_COLOR, p)} />)} More</p>;
+  const [strong, weak] = changeLegendStops();
   return (
     <p class="tl-scale">Below a usual day
-      <i style="background:color-mix(in srgb, var(--critical-ink) 40%, var(--surface))" /><i style="background:color-mix(in srgb, var(--critical-ink) 18%, var(--surface))" /><i style="background:var(--surface)" />
-      <i style="background:color-mix(in srgb, var(--good-ink) 18%, var(--surface))" /><i style="background:color-mix(in srgb, var(--good-ink) 40%, var(--surface))" /> Above
+      <i style={mix(HEAT.DOWN_COLOR, strong)} /><i style={mix(HEAT.DOWN_COLOR, weak)} /><i style={`background:${HEAT.SURFACE}`} />
+      <i style={mix(HEAT.UP_COLOR, weak)} /><i style={mix(HEAT.UP_COLOR, strong)} /> Above
     </p>
   );
 }
@@ -667,12 +782,19 @@ function ScaleKey({ ctx, asLine }) {
 function WindowPanel({ days, zoom, label, items, ctx, evList }) {
   const ds = days.filter((d) => d <= ctx.last && ctx.map.get(d)?.[ctx.metric] != null);
   const ml = METRICS.find(([k]) => k === ctx.metric)[1];
-  const rows = ds.map((d) => ({ d, v: ctx.map.get(d)[ctx.metric], c: ctx.usual(d) ? ctx.map.get(d)[ctx.metric] / ctx.usual(d) - 1 : null })).filter((x) => x.c !== null);
-  const best = [...rows].sort((a, b) => b.c - a.c).slice(0, 3).filter((x) => x.c > 0);
-  const worst = [...rows].sort((a, b) => a.c - b.c).slice(0, 3).filter((x) => x.c < 0);
+  const totals = ctx.lens === 'amount';
+  const rows = ds.map((d) => {
+    const v = ctx.map.get(d)[ctx.metric];
+    const baseline = totals ? null : ctx.usual(d);
+    return { d, v, c: baseline ? v / baseline - 1 : null };
+  });
+  const best = totals
+    ? rows.sort((a, b) => b.v - a.v).slice(0, 3)
+    : rows.filter((x) => x.c > 0).sort((a, b) => b.c - a.c).slice(0, 3);
+  const worst = rows.filter((x) => x.c < 0).sort((a, b) => a.c - b.c).slice(0, 3);
   const dayRow = (x) => (
-    <button key={x.d} type="button" class="tl-brow" onClick={() => ctx.go({ day: x.d })}>
-      <span>{fmtD(x.d, { weekday: 'short', day: 'numeric', month: 'short' })}</span><b>{ctx.vf(x.v)}</b><span class={x.c >= 0 ? 'good' : 'bad'}>{pct(x.c)}</span>
+    <button key={x.d} type="button" class={`tl-brow${totals ? ' tl-brow-total' : ''}`} onClick={() => ctx.go({ day: x.d })}>
+      <span>{fmtD(x.d, { weekday: 'short', day: 'numeric', month: 'short' })}</span><b>{ctx.vf(x.v)}</b>{!totals && <span class={toneClass(changeTone(x.c))}>{pct(x.c)}</span>}
     </button>
   );
   const effect = (date) => {
@@ -682,17 +804,30 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
     const before = s([1, 2, 3].map((i) => addD(date, -i)));
     return before ? s(after) / before - 1 : null;
   };
-  const shipped = [...evList].sort((a, b) => (a.date < b.date ? 1 : -1)).slice(0, 8);
+  const latest = [...evList].sort((a, b) => b.date.localeCompare(a.date));
+  const changes = latest.filter((event) => event.kind === 'alert').slice(0, 5);
+  const shipped = latest.filter((event) => event.kind !== 'alert').slice(0, 8);
   return (
     <div class="tl-in">
       <div class="tl-in-h"><b>{zoom === 'month' && label === monthName(ctx.last.slice(0, 7)) ? `${label}, so far` : label}</b><span class="muted small">{ctx.phone ? 'Tap a day for detail' : 'Pick a day for detail'}</span></div>
-      {ctx.L ? (
+      <div class="tl-sec">
+        <h3 class="nx-label-sm">Key changes</h3>
+        {changes.length ? changes.map((event, i) => (
+          <button key={i} type="button" class="tl-erow tl-change-row" onClick={() => ctx.go({ day: event.date })}>
+            <span class="muted">{fmtD(event.date, { day: 'numeric', month: 'short' })}</span>
+            <Icon name="bell" size={13} />
+            <span><b>{event.label}</b>{event.detail && <small class="muted">{event.detail}</small>}</span>
+          </button>
+        )) : <p class="muted small m-0">No key changes shown for this period.</p>}
+      </div>
+      {ctx.hasMetricPicker ? null : ctx.L ? (
         <div class="tl-sec">
           <h3 class="nx-label-sm">What’s moving · {ctx.L.name.toLowerCase()}</h3>
           {items.length ? [...items].sort((a, b) => (b.prev ? b.total / b.prev : 99) - (a.prev ? a.total / a.prev : 99)).slice(0, 8).map((it) => {
             const c = it.prev ? it.total / it.prev - 1 : null;
-            const tag = it.fresh ? `New ${fmtD(it.fresh, { day: 'numeric', month: 'short' })}` : c === null ? '' : c > 0.3 ? 'Rising' : c < -0.2 ? 'Falling' : 'Steady';
-            const tone = it.fresh || c > 0.3 ? 'good' : c < -0.2 ? 'bad' : 'muted';
+            const t = changeTone(c);
+            const tag = it.fresh ? `New ${fmtD(it.fresh, { day: 'numeric', month: 'short' })}` : c === null ? '' : (t === 'up' || t === 'up2') ? 'Rising' : (t === 'down' || t === 'down2') ? 'Falling' : 'Steady';
+            const tone = it.fresh || t === 'up' || t === 'up2' ? 'good' : (t === 'down' || t === 'down2') ? 'bad' : 'muted';
             return (
               <button key={it.key} type="button" class={`tl-mrow${ctx.focused?.key === it.key ? ' on' : ''}`} title={ctx.focused?.key === it.key ? 'Showing on the calendar; click again to stop' : 'Show it on the calendar'}
                 onClick={() => ctx.go({ f: ctx.focused?.key === it.key ? '' : it.key })}>
@@ -706,20 +841,20 @@ function WindowPanel({ days, zoom, label, items, ctx, evList }) {
         </div>
       ) : (
         <>
-          {best.length > 0 && <div class="tl-sec"><h3 class="nx-label-sm">Best days · {ml}</h3>{best.map(dayRow)}</div>}
+          {best.length > 0 && <div class="tl-sec"><h3 class="nx-label-sm">{totals ? 'Highest daily totals' : 'Best days'} · {ml}</h3>{best.map(dayRow)}</div>}
           {worst.length > 0 && <div class="tl-sec"><h3 class="nx-label-sm">Worst days</h3>{worst.map(dayRow)}</div>}
         </>
       )}
       <div class="tl-sec">
-        <h3 class="nx-label-sm">What happened</h3>
+        <h3 class="nx-label-sm">Activity</h3>
         {shipped.length ? shipped.map((e, i) => {
-          const c = e.kind === 'alert' || e.kind === 'mention' ? undefined : effect(e.date);
+          const c = totals || e.kind === 'alert' || e.kind === 'mention' ? undefined : effect(e.date);
           return (
             <button key={i} type="button" class="tl-erow" onClick={() => ctx.go({ day: e.date })}>
               <span class="muted">{fmtD(e.date, { day: 'numeric', month: 'short' })}</span>
               <span class={e.kind === 'alert' ? 'bad' : ''}><Icon name={KINDS[e.kind][0]} size={13} /></span>
               <span class="tl-et">{e.label}</span>
-              <span>{c === undefined ? '' : c === null ? <span class="muted" title="The 3 days after it aren’t in yet">too early</span> : <span class={c >= 0 ? 'good' : 'bad'} title="Visits, the 3 days after against the 3 before">{pct(c)}</span>}</span>
+              <span>{c === undefined ? '' : c === null ? <span class="muted" title="The 3 days after it aren’t in yet">too early</span> : <span class={toneClass(changeTone(c))} title="Visits, the 3 days after against the 3 before">{pct(c)}</span>}</span>
             </button>
           );
         }) : <p class="muted small m-0">Nothing marked in this window. Add a post or note with +.</p>}
@@ -760,7 +895,8 @@ export function DayPanel({ site, scope, date, ctx, onClose, inline }) {
     return before ? s([1, 2, 3].map((i) => addD(date, i))) / before - 1 : undefined;
   };
   const row = ctx.map.get(date);
-  const marks = d.data ? [...(d.data.events || []).map((e) => ({ kind: kindOf(e.kind), label: e.label, url: e.url })), ...(d.data.alerts || []).map((a) => ({ kind: 'alert', label: a.title || a.label }))] : [];
+  const changes = (d.data?.alerts || []).map((alert) => ({ id: alert.id, ...timelineChange(alert) }));
+  const marks = (d.data?.events || []).map((event) => ({ kind: kindOf(event.kind), label: event.label, url: event.url, detail: event.kind === 'custom' ? event.body : '' }));
   const ef = marks.some((m) => m.kind !== 'alert' && m.kind !== 'mention') ? effect() : undefined;
   return (
     <div class="tl-in">
@@ -772,70 +908,106 @@ export function DayPanel({ site, scope, date, ctx, onClose, inline }) {
         </span>
         {onClose && <button type="button" class="nx-icon-btn" aria-label="Back to the whole period" title="Back to the whole period" onClick={onClose}><Icon name="x" size={14} /></button>}
       </div>
+      {ctx.hasMetricPicker && ctx.items?.length > 0 && (!['page', 'source', 'query'].includes(ctx.lens) || ctx.focused) && (
+        <div class="tl-sec">
+          <h3 class="nx-label-sm">{ctx.lens === 'bing' ? 'Bing search' : ctx.lens === 'job' ? 'Job results' : ctx.lens === 'metric' ? 'Connected metrics' : ctx.lens === 'custom' ? 'Custom event totals' : ctx.lens === 'page' ? 'Landing page visits' : ctx.lens === 'source' ? 'Visits from this source' : ctx.lens === 'query' ? 'Search clicks' : ctx.lens === 'citation' ? 'Citation sources' : 'Goals and product metrics'}</h3>
+          {(ctx.focused ? [ctx.focused] : ctx.items).map((item) => (
+            <div key={item.key} class="tl-num"><span>{item.label}</span><b>{metricNumber(item.byDate.get(date))}</b><span class="muted">{item.unit}</span></div>
+          ))}
+        </div>
+      )}
       {d.error ? <ErrorState error={d.error} onRetry={d.reload} /> : !d.data ? <Loading height={200} /> : (
         <>
-          <p class="tl-story"><b>{d.data.headline}</b>{d.data.lines?.length ? ' ' : ''}{d.data.lines?.slice(0, 2).map((l) => l.text).join(' ')}</p>
-          <div class="tl-sec">
+          {changes.length > 0 && (
+            <div class="tl-sec tl-day-section">
+              <h3 class="nx-label-sm">Key changes</h3>
+              {changes.map((event) => (
+                <div key={event.id} class="tl-day-change">
+                  <Icon name="bell" size={14} />
+                  <span><b>{event.label}</b>{event.detail && <small class="muted">{event.detail}</small>}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div class="tl-sec tl-day-section">
             <div class="tl-cmprow">
-              <h3 class="nx-label-sm">Against</h3>
+              <h3 class="nx-label-sm">Daily activity</h3>
               <span class="tl-seg small" role="group" aria-label="Compare with">
-                <button type="button" class={cmp === 'usual' ? 'on' : ''} onClick={() => setCmp('usual')}>Usual {wd}</button>
-                <button type="button" class={cmp === 'week' ? 'on' : ''} onClick={() => setCmp('week')}>Last {wd}</button>
+                <button type="button" class={cmp === 'usual' ? 'on' : ''} aria-pressed={cmp === 'usual'} onClick={() => setCmp('usual')}>Usual {wd}</button>
+                <button type="button" class={cmp === 'week' ? 'on' : ''} aria-pressed={cmp === 'week'} onClick={() => setCmp('week')}>Last {wd}</button>
               </span>
             </div>
-            <div class="tl-nums">
+            <table class="tl-comparison" aria-label="Daily activity comparison">
+              <thead><tr><th scope="col">Metric</th><th scope="col">This day</th><th scope="col">{cmp === 'week' ? 'Last week' : 'Typical'}</th><th scope="col">Difference</th></tr></thead>
+              <tbody>
               {METRICS.map(([k, l]) => {
                 const v = row?.[k] ?? null;
                 if (v === null) return null;
                 const b = baseOf(k);
                 if (MONEY.has(k) && !v && !b) return null; // no ad spend that day or usually: nothing to say
-                const c = b ? v / b - 1 : null;
+                const difference = b == null ? null : MONEY.has(k) ? v - b : Math.round(v) - Math.round(b);
                 const vf = ctx.vf || ((x, key) => (MONEY.has(key) && x != null ? x.toLocaleString('en-US', { maximumFractionDigits: 2 }) : fmt(x)));
-                return <div key={k} class="tl-num"><span>{l}</span><b>{vf(v, k)}</b><span class="muted">{vf(b, k)}</span><span class={c === null ? 'muted' : c >= 0 ? 'good' : 'bad'}>{c !== null && c >= 0.95 ? `${Math.round((1 + c) * 10) / 10}×` : pct(c)}</span></div>;
+                const magnitude = MONEY.has(k) ? Math.round(Math.abs(difference) * 100) / 100 : Math.round(Math.abs(difference));
+                const change = difference == null ? '—' : magnitude === 0 ? 'Same' : `${difference > 0 ? '+' : '−'}${vf(magnitude, k)}`;
+                return (
+                  <tr key={k}>
+                    <th scope="row">{l}</th><td><b>{vf(v, k)}</b></td><td class="muted">{vf(b, k)}</td>
+                    <td class={difference == null || magnitude === 0 ? 'muted' : difference > 0 ? 'good' : 'bad'}>{change}</td>
+                  </tr>
+                );
               })}
-            </div>
+              </tbody>
+            </table>
           </div>
-          {hours && (
-            <div class="tl-sec">
-              <h3 class="nx-label-sm">By hour{peak >= 0 && hours[peak] ? <span class="tl-peak"> · busiest {String(peak).padStart(2, '0')}:00</span> : null}</h3>
-              <div class="tl-hours" role="img" aria-label={`Visits by hour: ${hours.map((v, h) => `${h}:00 ${v}`).join(', ')}`}>
-                {hours.map((v, h) => <span key={h} class="tl-hb" onMouseEnter={() => setHh(h)} onMouseLeave={() => setHh(-1)}><i style={`height:${Math.max(v ? 4 : 1, Math.round((v / hmax) * 40))}px`} class={h === peak || h === hh ? 'pk' : ''} /></span>)}
-                {hh >= 0 && <span class={`tl-tip${hh > 16 ? ' r' : hh < 7 ? ' l' : ''}`} style={`left:${((hh + 0.5) / 24) * 100}%;top:-6px`}>{String(hh).padStart(2, '0')}:00 · <b>{fmt(hours[hh])}</b> visit{hours[hh] === 1 ? '' : 's'}</span>}
-                <span class="tl-hl"><span>00</span><span>06</span><span>12</span><span>18</span><span /></span>
-              </div>
-            </div>
-          )}
-          <div class="tl-sec">
-            <div class="tl-dtabs" role="tablist">
-              {[['page', 'Pages'], ['source', 'Sources'], ['query', 'Searches'], ...(scope !== 'all' ? [['trend', 'Trends']] : []), ['country', 'Countries']].map(([k, l]) => (
-                <button key={k} type="button" role="tab" aria-selected={tab === k} class={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
-              ))}
-            </div>
-            {tab === 'trend' ? <DayTrends scope={scope} date={date} wd={wd} /> : lists[tab].length ? lists[tab].slice(0, 6).map((x) => {
-              const gain = x.expected === undefined ? null : x.value - x.expected;
-              const flat = gain !== null && Math.abs(gain) < Math.max(3, x.expected * 0.15);
-              const fresh = gain !== null && !x.expected && x.value > 0;
-              return (
-                <div key={x.label} class="tl-srow">
-                  <span class="tl-sl">{tab === 'page' && scope !== 'all' && x.label.startsWith('/') ? <a href={pushPanel({ kind: 'page', key: x.label })}>{pageName(x.label)}</a> : <span>{tab === 'page' ? pageName(x.label) : x.label}</span>}<i style={`width:${listTotal ? Math.max(2, Math.round((x.value / listTotal) * 100)) : 0}%`} /></span>
-                  <b>{fmt(x.value)}</b>
-                  <span class={gain === null ? 'muted' : fresh ? 'good' : flat ? 'muted' : gain > 0 ? 'good' : 'bad'}>{gain === null ? '' : fresh ? 'new' : flat ? 'as usual' : `${gain > 0 ? '+' : '−'}${fmt(Math.abs(gain))}`}</span>
+          <DayGoalsAndRetention site={site} scope={scope} date={date} countries={lists?.country} phone={ctx.phone}>
+            {hours && (
+              <div class="tl-sec tl-day-section">
+                <h3 class="nx-label-sm">Visits by hour{peak >= 0 && hours[peak] ? <span class="tl-peak"> · Peak at {String(peak).padStart(2, '0')}:00</span> : null}</h3>
+                <div class="tl-hours" role="img" aria-label={`Visits by hour: ${hours.map((v, h) => `${h}:00 ${v}`).join(', ')}`}>
+                  {hours.map((v, h) => <span key={h} class="tl-hb" onMouseEnter={() => setHh(h)} onMouseLeave={() => setHh(-1)}><i style={`height:${Math.max(v ? 4 : 1, Math.round((v / hmax) * 40))}px`} class={h === peak || h === hh ? 'pk' : ''} /></span>)}
+                  {hh >= 0 && <span class={`tl-tip${hh > 16 ? ' r' : hh < 7 ? ' l' : ''}`} style={`left:${((hh + 0.5) / 24) * 100}%;top:-6px`}>{String(hh).padStart(2, '0')}:00 · <b>{fmt(hours[hh])}</b> visit{hours[hh] === 1 ? '' : 's'}</span>}
+                  <span class="tl-hl"><span>00</span><span>06</span><span>12</span><span>18</span><span /></span>
                 </div>
-              );
-            }) : <p class="muted small m-0">{tab === 'query' ? 'Search Console hasn’t reported this day yet, or nothing came from search.' : 'Nothing recorded.'}</p>}
-          </div>
-          <DayGoalsAndRetention site={site} scope={scope} date={date} countries={lists?.country} phone={ctx.phone} />
+              </div>
+            )}
+            <div class="tl-sec tl-day-section">
+              <h3 class="nx-label-sm">Traffic breakdown</h3>
+              <div class="tl-dtabs" role="tablist" aria-label="Traffic breakdown">
+                {[['page', 'Pages'], ['source', 'Sources'], ['query', 'Searches'], ...(scope !== 'all' ? [['trend', 'Trends']] : []), ['country', 'Countries']].map(([k, l]) => (
+                  <button key={k} type="button" role="tab" aria-selected={tab === k} class={tab === k ? 'on' : ''} onClick={() => setTab(k)}>{l}</button>
+                ))}
+              </div>
+              {tab === 'trend' ? <DayTrends scope={scope} date={date} wd={wd} /> : lists[tab].length ? <>
+                <div class="tl-srow tl-breakdown-head" aria-hidden="true">
+                  <span>{{ page: 'Landing page', source: 'Source', query: 'Search query', country: 'Country' }[tab]}</span>
+                  <span>{tab === 'query' ? 'Clicks' : 'Visits'}</span>
+                  <span>{lists[tab].some((item) => item.expected != null) ? 'Vs. typical' : ''}</span>
+                </div>
+                {lists[tab].slice(0, 6).map((x) => {
+                const gain = x.expected == null ? null : x.value - x.expected;
+                const flat = gain !== null && Math.abs(gain) < Math.max(3, x.expected * 0.15);
+                const fresh = gain !== null && !x.expected && x.value > 0;
+                return (
+                  <div key={x.label} class="tl-srow">
+                    <span class="tl-sl">{tab === 'page' && scope !== 'all' && x.label.startsWith('/') ? <a href={pushPanel({ kind: 'page', key: x.label })}>{pageName(x.label)}</a> : <span>{tab === 'page' ? pageName(x.label) : x.label}</span>}<i style={`width:${listTotal ? Math.max(2, Math.round((x.value / listTotal) * 100)) : 0}%`} /></span>
+                    <b>{fmt(x.value)}</b>
+                    <span class={gain === null ? 'muted' : fresh ? 'good' : flat ? 'muted' : gain > 0 ? 'good' : 'bad'}>{gain === null ? '' : fresh ? 'new' : flat ? 'as usual' : `${gain > 0 ? '+' : '−'}${fmt(Math.abs(gain))}`}</span>
+                  </div>
+                );
+              })}</> : <p class="muted small m-0">{tab === 'query' ? 'Search Console hasn’t reported this day yet, or nothing came from search.' : 'Nothing recorded.'}</p>}
+            </div>
+          </DayGoalsAndRetention>
           <div class="tl-sec">
             <h3 class="nx-label-sm">What happened</h3>
             {marks.map((e, i) => (
               <div key={i} class="tl-erow static">
                 <span class={e.kind === 'alert' ? 'bad' : ''}><Icon name={KINDS[e.kind][0]} size={14} /></span>
-                <span class="tl-et">{e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer">{e.label}</a> : e.label}</span>
+                <span class="tl-et">{e.url ? <a href={e.url} target="_blank" rel="noopener noreferrer">{e.label}</a> : e.label}{e.detail && <small class="muted tl-event-detail">{e.detail}</small>}</span>
               </div>
             ))}
             {ef !== undefined && (
               <p class="tl-effect">{ef === null ? <span class="muted">Too early to judge: the 3 days after aren’t in yet.</span>
-                : <>Visits <b class={ef >= 0 ? 'good' : 'bad'}>{pct(ef)}</b> in the 3 days after, against the 3 before.</>}</p>
+                : <>Visits <b class={toneClass(changeTone(ef))}>{pct(ef)}</b> in the 3 days after, against the 3 before.</>}</p>
             )}
             {!marks.length && !adding && (() => {
               // Nothing marked: on an unusual day, ask what caused it; on a quiet one, say what shows here.
@@ -875,7 +1047,7 @@ const REGION_OF = (p) => REGION[p.country] || '';
 // Sites without the export (or a day it hasn't reached) get one quiet line, not a card.
 const WAREHOUSE_LINKS = { 'needs-warehouse': '#/settings?tab=sites', auth: '#/settings?i=google' };
 
-function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
+function DayGoalsAndRetention({ site, scope, date, countries, phone, children }) {
   const single = scope !== 'all';
   const [place, setPlace] = useState('');
   useEffect(() => setPlace(''), [scope, date]);
@@ -912,14 +1084,14 @@ function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
       </div>
     </div>
   );
-  if (!single) return mapSec || null;
+  if (!single) return <>{children}{mapSec}</>;
   const counts = new Map((summary?.goals || []).map((g) => [g.key, g]));
   const err = config.error || product.error || activity.error;
   const quiet = (text, link) => (
-    <>{mapSec}<div class="tl-sec">
+    <><div class="tl-sec tl-day-section">
       <h3 class="nx-label-sm">Goals · returning visits</h3>
       <p class="muted small m-0">{text}{link}</p>
-    </div></>
+    </div>{children}{mapSec}</>
   );
 
   if (err?.kind === 'needs-warehouse') {
@@ -929,14 +1101,14 @@ function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
   if (err?.kind === 'auth') return quiet(`${err.message} `, <a href={WAREHOUSE_LINKS.auth}>Sign in →</a>);
   if (err) {
     return (
-      <>{mapSec}<div class="tl-sec">
+      <><div class="tl-sec tl-day-section">
         <h3 class="nx-label-sm">Goals · returning visits</h3>
         <ErrorState error={err} onRetry={() => { config.reload(); product.reload(); activity.reload(); }} />
-      </div></>
+      </div>{children}{mapSec}</>
     );
   }
   if (!ready || activity.loading || !summary) {
-    return <>{mapSec}<div class="tl-sec"><h3 class="nx-label-sm">Goals</h3><Loading height={54} /></div></>;
+    return <><div class="tl-sec tl-day-section"><h3 class="nx-label-sm">Goals and returning visits</h3><Loading height={54} /></div>{children}{mapSec}</>;
   }
   if (!summary.sessions) return quiet('The BigQuery export has no visits for this day yet — it usually lands a day later.', null);
 
@@ -944,10 +1116,9 @@ function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
   const shownPeople = people && place ? people.filter((p) => (REGION_OF(p) || p.country) === place) : people;
   return (
     <>
-      {mapSec}
-      <div class="tl-sec">
+      <div class="tl-sec tl-day-section">
         <h3 class="nx-label-sm">Goals</h3>
-        {!goals.length ? <p class="muted small m-0">No goals are set up. <a href={`#/site/${scope}/setup`}>Set up goals →</a></p>
+        {!goals.length ? <p class="muted small m-0">No goals are set up. <a href={`#/site/${scope}/goals?edit=1`}>Set up goals →</a></p>
           : (
             <>
               {trackedGoals.map((goal) => {
@@ -962,12 +1133,12 @@ function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
               })}
               {otherGoals && (
                 <p class="muted small m-0">{trackedGoals.length ? 'Store and GitHub goals aren’t counted per day here. ' : 'This site’s goals are store or GitHub goals, which aren’t counted per day here. '}
-                  <a href={`#/site/${scope}/outcomes`}>See all goals →</a></p>
+                  <a href={`#/site/${scope}/timeline?by=goal`}>See them on the Timeline →</a></p>
               )}
             </>
           )}
       </div>
-      <div class="tl-sec">
+      <div class="tl-sec tl-day-section">
         <h3 class="nx-label-sm">Returning visits</h3>
         <div class="tl-nums">
           <div class="tl-num"><span>New</span><b>{fmt(Math.max(0, summary.sessions - summary.returning))}</b></div>
@@ -976,6 +1147,8 @@ function DayGoalsAndRetention({ site, scope, date, countries, phone }) {
         </div>
         <p class="muted small m-0">Returning: their first visit was before this day. <a href={`#/site/${scope}/journeys?tab=retention`}>Weekly cohorts →</a></p>
       </div>
+      {children}
+      {mapSec}
       <div class="tl-sec">
         {visits.error ? <><h3 class="nx-label-sm">Who came</h3><p class="muted small m-0">{visits.error.message}</p></>
           : !visits.data ? <><h3 class="nx-label-sm">Who came</h3><Loading height={120} /></>
@@ -990,9 +1163,9 @@ function merge(sites, key) {
   const out = new Map();
   for (const s of sites || []) {
     for (const x of s[key] || []) {
-      const cur = out.get(x.label) || { label: x.label, value: 0, expected: 0 };
+      const cur = out.get(x.label) || { label: x.label, value: 0 };
       cur.value += x.value;
-      cur.expected += x.expected || 0;
+      if (x.expected != null) cur.expected = (cur.expected ?? 0) + x.expected;
       out.set(x.label, cur);
     }
   }

@@ -121,3 +121,24 @@ test('one-time import copies older ghstats history and keeps no link to it', asy
     await rm(dir, { recursive: true, force: true });
   }
 });
+
+test('Timeline GitHub metrics read traffic and separate open issues from pull requests', async () => {
+  const sync = createGitHubSync({
+    getToken: async () => 'github-token',
+    fetchImpl: async (url, { headers }) => {
+      const request = new URL(url);
+      assert.equal(headers.Authorization, 'Bearer github-token');
+      assert.equal(request.hostname, 'api.github.com');
+      if (request.pathname === '/repos/me/app/traffic/views') {
+        return Response.json({ views: [{ timestamp: '2026-11-10T00:00:00Z', count: 5 }] });
+      }
+      assert.equal(request.pathname, '/search/issues');
+      const query = request.searchParams.get('q');
+      assert.ok(['repo:me/app is:open is:pr', 'repo:me/app is:open is:issue'].includes(query));
+      return Response.json({ total_count: query.endsWith('is:pr') ? 2 : 7 });
+    },
+  });
+  assert.deepEqual(await sync.timelineMetric('me/app', 'views', '2026-11-11'), { '2026-11-10': 5 });
+  assert.deepEqual(await sync.timelineMetric('me/app', 'pulls', '2026-11-11'), { '2026-11-11': 2 });
+  assert.deepEqual(await sync.timelineMetric('me/app', 'issues', '2026-11-11'), { '2026-11-11': 7 });
+});

@@ -96,13 +96,15 @@ export function loginPage(error, { tools = false, ga = '', joined = false, v = '
     nav: `${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a>`,
     body: `<div class="stage"><main class="card">
   ${owl(80, { variant: 'paper' })}
-  <h1>Sign in to Kauzl</h1>
-  <p class="lead">Kauzl is in early access. Use the Google account you were invited with.</p>
+  <h1>Open Kauzl</h1>
+  <p class="lead">No sign-in needed. Your sites and keys stay with this browser; connect Google, GitHub and the rest with a key.</p>
   ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
+  <a class="google" href="/start">Start in this browser</a>
+  <p class="or">Have an invited account?</p>
   <a class="google" href="/login/google">${G}Sign in with Google</a>
-  <p class="or">Not invited yet?</p>
+  <p class="note">Signing in keeps syncs running while you’re away, and lets you share sites and connect Claude.</p>
+  <p class="or">Want an invited account?</p>
   ${joinForm('login')}
-  <p class="note">We’ll email you when your spot opens. Nothing else.</p>
   <div class="links">
     <a class="opt" href="/login/google?viewer=1"><span><b>Someone shared a site with you</b><small>Sign in to view it, read-only</small></span>${ARROW}</a>
     <a class="opt" href="/demo"><span><b>Look around the demo</b><small>No sign-in needed</small></span>${ARROW}</a>

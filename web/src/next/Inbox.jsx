@@ -78,7 +78,7 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
       <Page title="Add a to-do" sub={site ? `A change to make on ${site.label}` : 'A change to make'} back={{ href: hrefWith('add', ''), label: 'Inbox' }}>
         <section class="card card-plain nx-form-view">
           <NewTodo site={site} onAdded={(t) => { location.hash = `${hrefFor(scope, 'inbox', 'todos').slice(1)}&open=${t.id}`; }} />
-          <p class="note">Add it here, or from a page’s timeline or Diagnose. Tick it off when the change is live: it goes on the Timeline that day, so the charts show whether it helped. An agent with the Kauzl MCP can pick it up and post what it found and changed.</p>
+          <p class="note">Add it here, or from a page’s timeline or its checks. Tick it off when the change is live: it goes on the Timeline that day, so the charts show whether it helped. An agent with the Kauzl MCP can pick it up and post what it found and changed.</p>
         </section>
       </Page>
     );

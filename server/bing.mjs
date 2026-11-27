@@ -223,6 +223,34 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
     };
   }
 
+  async function timelineStatus(site) {
+    const cfg = await config();
+    if (!cfg.key && !cfg.siteMap[site.id]) return null;
+    if (!cfg.key) return { status: 'Needs Bing connection' };
+    try {
+      const siteUrl = await siteUrlFor(site);
+      if (!siteUrl) return { status: 'Link a Bing site' };
+      const lastReported = open().prepare('SELECT MAX(date) AS day FROM traffic WHERE site_url = ?').get(siteUrl)?.day;
+      return { status: lastReported ? 'History available' : 'Waiting for first sync', lastReported, siteUrl };
+    } catch {
+      return { status: 'Connection needs attention' };
+    }
+  }
+
+  async function timelineDays(site, from, to) {
+    if (site.demo || !(await config()).key) return [];
+    const siteUrl = await siteUrlFor(site);
+    if (!siteUrl) return [];
+    try {
+      await refresh(siteUrl);
+    } catch (err) {
+      const saved = storedRange(siteUrl, from, to).traffic;
+      if (!saved.length) throw err;
+      return saved;
+    }
+    return storedRange(siteUrl, from, to).traffic;
+  }
+
   async function overview(site, rangeKey = '28d', { fresh = false } = {}) {
     if (site.demo) throw new EngineError('Bing isn’t available for the sample site.', { status: 409, kind: 'needs-bing' });
     const siteUrl = await siteUrlFor(site);
@@ -454,7 +482,7 @@ export function createBing({ dbPath, store, env = process.env, fetchImpl = fetch
   }
 
   return {
-    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, summary, pageStats, pageQueries, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
+    status, saveKey, setMatch, reset: () => { cache.clear(); lastError = ''; }, overview, timelineStatus, timelineDays, summary, pageStats, pageQueries, submit, feeds, syncAll, keywords, urlInfo, configured: async () => Boolean((await config()).key),
     start() {
       if (timers.length) return;
       const safe = () => syncAll().catch((err) => log.error('[bing]', err.message));

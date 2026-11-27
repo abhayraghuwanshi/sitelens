@@ -1,10 +1,10 @@
-import { Fragment } from 'preact';
 import { useEffect, useState } from 'preact/hooks';
 import { usePersistent, useAsync } from '../hooks.js';
 import { api } from '../api.js';
 import { Icon } from '../components/icons.jsx';
 import { Logo } from '../components/Logo.jsx';
 import { ErrorState } from '../components/ui.jsx';
+import { TimelineJobs } from './TimelineJobs.jsx';
 import { Timeline } from './Timeline.jsx';
 import { Setup } from '../pages/Setup.jsx';
 import { SiteAccess } from './SiteAccess.jsx';
@@ -27,6 +27,7 @@ import { Section, PickSite } from './Section.jsx';
 import { Jump } from './Jump.jsx';
 import { SECTIONS, resolve, hrefFor, viewsFor, hasWarehouse, PHONE_TABS, MORE_VIEWS } from './nav.js';
 import { SidePanel } from './Panel.jsx';
+import { ConfigFile } from './ConfigFile.jsx';
 import './next.css';
 
 // The app's one layout (docs/redesign/README.md). One scope switcher (a site, or
@@ -36,7 +37,7 @@ import './next.css';
 // Search, More); the scope list, More and the account menu open as sheets.
 // Routes are in nav.js; older links still land in the right place.
 const WIDE = { outcomes: Outcomes, extensions: Extensions, github: GitHub, posts: Posts, mentions: Mentions };
-const MORE_KEYS = new Set(['story', 'traffic', 'journeys', 'goals', 'diagnose', 'live', 'raw', 'account']);
+const MORE_KEYS = new Set([...MORE_VIEWS.map((v) => v.key), 'live', 'raw', 'account']);
 
 export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const { sites, auth } = state;
@@ -53,18 +54,17 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   useEffect(() => { setPop(null); }, [where]);
   useEffect(() => {
     const onKey = (e) => {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); setPop((p) => (p === 'jump' ? null : 'jump')); }
-      else if (e.key === 'Escape') setPop(null);
+      if (e.key === 'Escape') setPop(null);
     };
     addEventListener('keydown', onKey);
     return () => removeEventListener('keydown', onKey);
   }, []);
   const toggle = (name) => setPop((p) => (p === name ? null : name));
 
-  // Setup moved onto the site's Edit page; the sample site can't be edited, so it keeps a read-only page.
+  // Setup moved onto the site's Edit page, as its "Config file" part; the sample site can't be edited, so it keeps a read-only page.
   const setupMoved = view === 'setup' && site && !site.demo && !site.shared;
   useEffect(() => {
-    if (setupMoved) location.replace(`#/account?tab=sites&edit=${encodeURIComponent(site.id)}`);
+    if (setupMoved) location.replace(`#/account?tab=sites&edit=${encodeURIComponent(site.id)}&part=measures`);
   }, [setupMoved, site?.id]);
 
   const todos = useTodos({ status: 'open' });
@@ -105,11 +105,12 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   else if (view === 'live') body = site
     ? <Page title="Live" sub={`Who is on ${site.label} right now`}><LivePage key={site.id} site={site} /></Page>
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
-  else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} waiting={site ? { alerts: unread(site.id), todos: openTodos(site.id), goals: behindFor(site.id) } : null} />;
+  else if (view === 'jobs') body = <TimelineJobs site={site} sites={sites} />;
+  else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} />;
   else if (view === 'story') body = <Sites sites={sites} auth={auth} viewer={state.viewer} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
-  else if (view === 'setup' && site) body = <Page title="What Kauzl measures" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
+  else if (view === 'setup' && site) body = <Page title="Config file" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
   else if (SECTIONS[view] && !site) body = autoSite ? null : <PickSite view={view} sites={sites} />;
   else if (SECTIONS[view] && (view === 'journeys' || view === 'raw') && !hasWarehouse(site)) body = <Page title={SECTIONS[view].label}><p class="muted">{view === 'raw' ? 'Raw data' : 'Journeys'} need the site’s GA4 BigQuery export. Connect it in the <a href={editHref(site)}>site’s settings</a>.</p></Page>;
   else if (SECTIONS[view]) body = <Section key={`${site.id}:${view}`} view={view} tab={tab} site={site} params={route.params} auth={auth} ranges={state.ranges} />;
@@ -119,13 +120,15 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     body = <Page title={view[0].toUpperCase() + view.slice(1)}><View id={route.parts[1]} range={route.params.get('range') || '28d'} params={route.params} onChange={() => {}} sync={state.sources?.github} onSynced={() => {}} /></Page>;
   } else body = <ErrorState error={{ message: 'There’s nothing at this address.' }} />;
 
-  // Inside an existing site's Edit form: what Kauzl measures (goals, funnels, search, alerts).
+  // Inside an existing site's settings: its config file (goals, funnels, search, alerts).
   function siteMeasures(s) {
-    return <Setup site={s} connections={false} />;
+    return <ConfigFile site={s} />;
   }
-  // Under it: who can see the site, and which visits it leaves out.
-  function siteExtras(s) {
-    return <><SiteAccess site={s} hosted={state.hosted} /><LeaveOut site={s} onSaved={onReload} /></>;
+  // Two parts of a site's settings, each on its own: who it's shared with, and which visits it leaves out.
+  function siteExtras(s, which = '') {
+    const sharing = <SiteAccess site={s} hosted={state.hosted} browser={state.browser} />;
+    const leaveOut = <LeaveOut site={s} onSaved={onReload} />;
+    return which === 'sharing' ? sharing : which === 'leaveout' ? leaveOut : <>{sharing}{leaveOut}</>;
   }
 
   // Switching scope keeps the view where the new scope has it.
@@ -179,13 +182,13 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
   const userRows = (
     <div class="nx-pop-list" role="menu">
       {!state.viewer && <a role="menuitem" class="nx-pop-row" href="#/account"><Icon name="plug" />Sites and sign-ins</a>}
-      {!state.viewer && <a role="menuitem" class="nx-pop-row" href="#/account?tab=mcp"><Icon name="terminal" />Connect Claude (MCP)</a>}
+      {!state.viewer && !state.browser && <a role="menuitem" class="nx-pop-row" href="#/account?tab=mcp"><Icon name="terminal" />Connect Claude (MCP)</a>}
       <button type="button" role="menuitem" class="nx-pop-row" onClick={() => { onTheme(); setPop(null); }}><Icon name={themeIcon} />{themeIcon === 'sun' ? 'Light theme' : 'Dark theme'}</button>
       {state.hosted && (
         <>
           <hr />
-          <form method="post" action="/logout">
-            <button type="submit" role="menuitem" class="nx-pop-row"><Icon name="out" />{state.demo ? 'Leave demo' : 'Sign out'}</button>
+          <form method="post" action="/logout" onSubmit={(e) => { if (state.browser && !confirm('Forget this browser? Your sites, keys and notes here are deleted for good.')) e.preventDefault(); }}>
+            <button type="submit" role="menuitem" class="nx-pop-row"><Icon name="out" />{state.demo ? 'Leave demo' : state.browser ? 'Forget this browser' : 'Sign out'}</button>
           </form>
         </>
       )}
@@ -202,7 +205,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
         <span class="nx-mlive-go">See who →</span>
       </a>
       <div class="nx-mtiles">
-        {MORE_VIEWS.filter((v) => (!v.warehouse || hasWarehouse(site)) && !(v.allOnly && site)).map((v) => (
+        {MORE_VIEWS.filter((v) => (!v.warehouse || hasWarehouse(site)) && !(v.allOnly && site) && !(v.key === 'jobs' && site?.shared)).map((v) => (
           <a key={v.key} class={`nx-mtile${view === v.key ? ' on' : ''}`} href={linkFor(v.key)}>
             <span class="nx-mti"><Icon name={v.icon} size={18} /></span><b>{v.label}</b><small>{v.fact}</small>
           </a>
@@ -215,7 +218,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     </div>
   );
 
-  const inMore = MORE_KEYS.has(view);
+  const inMore = MORE_KEYS.has(view) || Boolean(SECTIONS[view]);
   const moreView = MORE_VIEWS.find((v) => v.key === view) || (view === 'live' ? { icon: 'pulse', label: 'Live' } : view === 'raw' ? { icon: 'layers', label: 'Raw data' } : view === 'account' ? { icon: 'settings', label: 'Account' } : null);
   const inboxN = waiting(site?.id);
 
@@ -233,18 +236,13 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           <span>{liveN == null ? 'Live' : <><b>{liveN}</b> on now</>}</span>
           <span class="nx-livelink-go">See who →</span>
         </a>
-        <button type="button" class="nx-jump" onClick={() => toggle('jump')}>
-          <Icon name="search" size={14} />Jump to…<kbd>⌘K</kbd>
-        </button>
         <nav class="nx-nav" aria-label="Views">
-          {views.map((v) => (
-            <Fragment key={v.key}>
-              {v.key === 'pages' && <span class="nx-label">Reports</span>}
-              <NavItem href={linkFor(v.key)} icon={v.icon} active={view === v.key || (v.key === 'journeys' && view === 'raw')}>
-                {v.key === 'story' && !site ? 'Sites' : v.label}
-                {v.key === 'inbox' && inboxN ? <span class="nx-count">{inboxN}</span> : null}
-              </NavItem>
-            </Fragment>
+          {/* Reports open from the Timeline; page checks open from each page's Checks. */}
+          {views.filter((v) => !v.report).map((v) => (
+            <NavItem key={v.key} href={linkFor(v.key)} icon={v.icon} active={view === v.key}>
+              {v.label}
+              {v.key === 'inbox' && inboxN ? <span class="nx-count">{inboxN}</span> : null}
+            </NavItem>
           ))}
         </nav>
         <div class="nx-foot nx-anchor">

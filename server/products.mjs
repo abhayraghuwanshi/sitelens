@@ -2,6 +2,7 @@
 // a shared daily axis. Config lives in studio.json `products`; every source is
 // fetched independently so a missing token or link only blanks its own tiles.
 
+import { EXTENSION_ID_RE } from './cws.mjs';
 import { runReport } from './ga-limit.mjs';
 import { hostFilter } from '../shared/sitelens/reports.js';
 import { baseDomain } from '../shared/sitelens/site.js';
@@ -12,7 +13,7 @@ import { createCache } from './cache.mjs';
 
 const DAY = 86_400_000;
 const TTL = 10 * 60_000;
-const EXT_RE = /^[a-p]{32}$/;
+const EXT_RE = EXTENSION_ID_RE;
 const REPO_RE = /^[\w.-]+\/[\w.-]+$/;
 const DOMAIN_RE = /^(?=.{4,253}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/;
 const PROJECT_RE = /^[a-z][a-z0-9-]{4,28}[a-z0-9]$/;
@@ -116,7 +117,7 @@ export function normalizeProduct(input = {}) {
   if (bad) throw new ValidationError(`“${bad}” isn’t an owner/name repo.`);
   const extensionIds = [...new Set((input.extensionIds || []).map((e) => String(e).trim()).filter(Boolean))];
   const badExt = extensionIds.find((e) => !EXT_RE.test(e));
-  if (badExt) throw new ValidationError(`“${badExt}” isn’t a Chrome extension ID.`);
+  if (badExt) throw new ValidationError(`“${badExt}” isn’t an extension ID from Chrome, Edge or Firefox.`);
   const siteId = String(input.siteId || '').trim();
   const domains = [];
   for (const d of input.domains || []) {

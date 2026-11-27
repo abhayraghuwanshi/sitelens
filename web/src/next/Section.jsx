@@ -3,7 +3,6 @@ import { Segmented, PullDown } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { Articles } from '../pages/Articles.jsx';
 import { ArticleEditor } from '../pages/ArticleEditor.jsx';
-import { ContentCycles } from '../pages/ContentCycles.jsx';
 import { AiSearch } from '../pages/AiSearch.jsx';
 import { Funnels } from '../pages/Funnels.jsx';
 import { Retention } from '../pages/Retention.jsx';
@@ -12,7 +11,6 @@ import { Sessions } from '../pages/Sessions.jsx';
 import { Explore as SqlConsole } from '../pages/Explore.jsx';
 import { Page, SectionTabs, SectionTitle, usePhoneWidth } from './Page.jsx';
 import { TrafficView } from './TrafficView.jsx';
-import { GoalsView } from './GoalsView.jsx';
 import { GoalsEdit } from './GoalsEdit.jsx';
 import { PagesList, PagesSort, PagesFilter } from './PagesList.jsx';
 import { PageView } from './PageView.jsx';
@@ -25,11 +23,10 @@ import { SECTIONS, hrefFor, hasWarehouse } from './nav.js';
 // The reports: Pages, Search, Traffic, Journeys, Goals and Raw data. Each is one
 // question with a few tabs. `mode` says which ranges a tab reads (GA4's API
 // ranges, BigQuery's 7/28/90 days); `own` tabs draw their own header and period;
-// `period: false` tabs have none (a cycle is its own period, Health its own).
+// `period: false` tabs have none (for example, Health).
 const TABS = {
   pages: {
     pages: { mode: 'content', component: PagesTab },
-    cycles: { mode: 'content', component: ContentCycles, period: false },
     health: { component: HealthView, period: false },
   },
   search: {
@@ -45,7 +42,8 @@ const TABS = {
     retention: { mode: 'warehouse', component: Retention },
   },
   goals: {
-    numbers: { mode: 'api', component: GoalsView },
+    // Never shown: the Goals page opens the Timeline's Goals view (see below).
+    numbers: { mode: 'api', component: () => null },
   },
   diagnose: {
     run: { own: DiagnoseView },
@@ -75,11 +73,17 @@ export function Section({ view, tab: wanted, site, params, auth, ranges: lists }
   if (page && !params.get('edit')) {
     return <PageView key={`${site.id}:${page}`} site={site} path={page} back={{ href: `#/site/${site.id}/pages`, label: 'All pages' }} />;
   }
-  // Edit goals: just the site's goals on their own screen, back to Goals when saved.
-  if (view === 'goals' && params.get('edit') === '1' && !site.demo && !site.shared) {
-    const goalsPage = `#/site/${site.id}/goals`;
+  // Goals live on the Timeline (its Goals view). The old Goals page opens it; ?edit=1 is
+  // the one place goals are edited, and goes back to the Timeline when saved.
+  const goalsTimeline = `#/site/${site.id}/timeline?by=goal`;
+  if (view === 'goals' && (params.get('edit') !== '1' || site.demo || site.shared)) {
+    location.replace(goalsTimeline);
+    return null;
+  }
+  if (view === 'goals') {
+    const goalsPage = goalsTimeline;
     return (
-      <Page title="Edit goals" sub={`What counts as a result on ${site.label}`} back={{ href: goalsPage, label: 'Goals' }}>
+      <Page title="Edit goals" sub={`What counts as a result on ${site.label}`} back={{ href: goalsPage, label: 'Timeline · Goals' }}>
         <GoalsEdit key={site.id} site={site} done={() => { location.hash = goalsPage; }} />
       </Page>
     );
