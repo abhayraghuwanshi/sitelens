@@ -1,0 +1,6 @@
+[mcp_servers.sitelens-dev]
+command = "node"
+args = [
+    "--no-warnings=ExperimentalWarning",
+    "server/mcp.mjs",
+]

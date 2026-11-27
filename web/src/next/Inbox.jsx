@@ -4,6 +4,9 @@ import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
+import { BrandIcon } from '../components/BrandIcon.jsx';
+import { SiteIcon } from '../components/SiteIcon.jsx';
+import { Logo } from '../components/Logo.jsx';
 import { useTodos, todoApi, NewTodo, TodoData, WriteUp, TodoGoal, CHANGED } from '../components/Todos.jsx';
 import { Page, usePhoneWidth } from './Page.jsx';
 import { Drawer, hrefWith } from './Drawer.jsx';
@@ -120,7 +123,8 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
 
   const markRead = (ids) => run('read', () => api.post('/alerts/read', { ids }));
   const row = (x) => {
-    const r = <Row key={x.id} item={x} labels={feed.data?.labels || {}} site={!site && sites.find((s) => s.id === (x.todo?.site || x.group?.[0].site))} on={open === x.id} />;
+    const r = <Row key={x.id} item={x} labels={feed.data?.labels || {}} site={!site && sites.find((s) => s.id === (x.todo?.site || x.group?.[0].site))} on={open === x.id}
+      onRead={x.kind === 'alert' && !x.done && !phone ? () => markRead(x.group.map((a) => a.id)) : null} />;
     // On a phone, swipe an unread alert left to mark it read.
     return x.kind === 'alert' && !x.done ? <Swipe key={x.id} label="Read" onAct={() => markRead(x.group.map((a) => a.id))}>{r}</Swipe> : r;
   };
@@ -141,7 +145,7 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
         </>
   );
   return (
-    <Page title="Inbox" sub={site ? `What is waiting on you for ${site.label}` : 'What is waiting on you, on every site'}
+    <Page title="Inbox" sub={loading ? (site ? `What is waiting on you for ${site.label}` : 'What is waiting on you, on every site') : <Summary items={items} behind={behind} site={site} />}
       corner={phone ? <span class="nx-corner-acts">{acts}</span> : null}
       actions={phone ? null : acts}>
       <div class="nx-chips" role="group" aria-label="Show">
@@ -163,14 +167,15 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
             {filter === 'goals' ? (
               myGoals.length ? GOAL_STATES.map(([k, l]) => {
                 const list = myGoals.filter((g) => g.status === k);
-                return list.length ? <section key={k} class="nx-inbox" aria-label={l}><h2 class="nx-label-sm nx-ibh">{l} · {list.length}</h2>{list.map(goalRow)}</section> : null;
+                return list.length ? <Group key={k} label={l} n={list.length}>{list.map(goalRow)}</Group> : null;
               }) : (
                 <p class="nx-empty">No goals set yet. Open a page from <a href={site ? `#/site/${site.id}/pages` : '#/pages'}>Pages</a> and save its next goal: it shows here, behind or on track, until it’s reached.</p>
               )
             ) : (
             <div class="nx-inbox">
-              {filter === 'all' && behind.map(goalRow)}
-              {now.length || (filter === 'all' && behind.length) ? now.map(row) : <p class="nx-empty">Nothing waiting{filter === 'alerts' ? ' in alerts' : filter === 'todos' ? ' in to-dos' : ''}.{filter !== 'alerts' && <> <a href={hrefWith('add', '1')}>Add a to-do</a></>}</p>}
+              {filter === 'all' && behind.length > 0 && <Group label="Goals behind" n={behind.length}>{behind.map(goalRow)}</Group>}
+              {now.length ? byWhen(now).map(([l, list]) => <Group key={l} label={l} n={list.length}>{list.map(row)}</Group>)
+                : !(filter === 'all' && behind.length) && <AllClear filter={filter} />}
             </div>
             )}
             {filter !== 'goals' && past.length > 0 && (
@@ -178,7 +183,7 @@ export function Inbox({ site, sites, tab, params, counts, goals }) {
                 <button type="button" class="todo-link nx-earlier" aria-expanded={earlier} onClick={() => setEarlier(!earlier)}>
                   {earlier ? 'Hide earlier' : `Earlier · ${past.length} read or done`}
                 </button>
-                {earlier && <div class="nx-inbox earlier">{past.map(row)}</div>}
+                {earlier && <div class="nx-inbox earlier"><Group label="Read or done" n={past.length}>{past.map(row)}</Group></div>}
               </>
             )}
             <p class="muted small m-0">
@@ -249,27 +254,137 @@ function grouped(alerts) {
   return [...groups.values()];
 }
 
-function Row({ item, labels, site, on }) {
+// Where an alert came from, drawn as that service's mark.
+const SOURCE = { traffic: 'analytics', search: 'search', issues: 'github', stars: 'github', installs: 'extensions', extUsers: 'extensions', rating: 'extensions' };
+function sourceOf(a) {
+  if (a.rule === 'mentions') return /reddit/i.test(a.title) ? 'reddit' : /product hunt/i.test(a.title) ? 'producthunt' : 'hn';
+  return SOURCE[a.rule] || null;
+}
+// The change, pulled out of the title ("+571%", "-14%"), or a plain count; the title keeps the words.
+const PCT = /\s*\(?([+\-−]\d[\d,.]*%)\)?/;
+function deltaOf(a) {
+  const m = a.title.match(PCT);
+  if (m) return m[1].replace('-', '−');
+  if (['issues', 'stars'].includes(a.rule) && a.change > 0) return `+${a.change}`;
+  return null;
+}
+function headline(a) {
+  let t = a.title;
+  const lead = `${a.subject?.label}: `;
+  if (a.subject?.label && t.startsWith(lead)) t = t.slice(lead.length);
+  return t.replace(PCT, '').replace(/^Mentioned on [^:]+:\s*/, '');
+}
+const shortName = (label = '') => label.split('/').pop();
+const fmtN = (n) => (Math.round(n * 10) / 10).toLocaleString('en-US');
+
+// Rows by when they last moved: Today, Yesterday, This week, then older.
+function byWhen(list) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const t0 = start.getTime(), dayMs = 864e5;
+  const label = (at) => at >= t0 ? 'Today' : at >= t0 - dayMs ? 'Yesterday' : at >= t0 - 6 * dayMs ? 'This week' : at >= t0 - 30 * dayMs ? 'This month' : 'Older';
+  const out = [];
+  for (const x of list) {
+    const l = label(x.at);
+    if (out.at(-1)?.[0] === l) out.at(-1)[1].push(x); else out.push([l, [x]]);
+  }
+  return out;
+}
+
+function Group({ label, n, children }) {
+  return (
+    <section class="nx-igroup" aria-label={label}>
+      <h2 class="nx-igh"><span>{label}</span><i>{n}</i></h2>
+      <div class="nx-ilist">{children}</div>
+    </section>
+  );
+}
+
+// The line under the page title: how much is waiting, and which way it leans.
+function Summary({ items, behind, site }) {
+  const open = items.filter((x) => !x.done);
+  const up = open.filter((x) => x.kind === 'alert' && x.group[0].direction === 'up').length;
+  const down = open.filter((x) => x.kind === 'alert' && x.group[0].direction !== 'up').length;
+  const todo = open.filter((x) => x.kind === 'todo').length;
+  const total = open.length + behind.length;
+  if (!total) return <span>Nothing waiting{site ? ` on ${site.label}` : ''}. Kauzl keeps watching.</span>;
+  const bits = [
+    up > 0 && <span key="u" class="nx-sum up">{up} went up</span>,
+    down > 0 && <span key="d" class="nx-sum down">{down} went down</span>,
+    todo > 0 && <span key="t" class="nx-sum">{todo} to-do{todo === 1 ? '' : 's'}</span>,
+    behind.length > 0 && <span key="g" class="nx-sum warn">{behind.length} goal{behind.length === 1 ? '' : 's'} behind</span>,
+  ].filter(Boolean);
+  return <span class="nx-sumline"><b>{total} waiting{site ? ` on ${site.label}` : ''}</b>{bits}</span>;
+}
+
+function AllClear({ filter }) {
+  return (
+    <div class="nx-clear">
+      <Logo size={52} title="" />
+      <b>All caught up</b>
+      <span>Nothing waiting{filter === 'alerts' ? ' in alerts' : filter === 'todos' ? ' in to-dos' : ''}. The owl checks again on the hour.</span>
+      {filter !== 'alerts' && <a class="btn" href={hrefWith('add', '1')}><Icon name="plus" size={13} /> Add a to-do</a>}
+    </div>
+  );
+}
+
+function Row({ item, labels, site, on, onRead }) {
+  const cls = `nx-irow${on ? ' on' : ''}${item.done ? ' read' : ''}`;
   if (item.kind === 'alert') {
     const a = item.group[0];
     const up = a.direction === 'up';
+    const src = sourceOf(a);
+    const delta = deltaOf(a);
+    const subj = a.subject?.label && a.subject.label !== site?.label && a.subject.type !== 'site' && a.subject.type !== 'mention' ? shortName(a.subject.label) : null;
     return (
-      <a class={`nx-msg${on ? ' on' : ''}${item.done ? ' read' : ''}`} href={hrefWith('open', item.id)}>
-        <span class={`nx-k ${up ? 'up' : 'down'}`} aria-label={up ? 'Went up' : 'Went down'}><Icon name="bell" size={14} /></span>
-        <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}{a.title}</span>
-        <small>{[labels[a.rule], formatRelative(a.at), item.group.length > 1 && `${item.group.length - 1} earlier`].filter(Boolean).join(' · ')}</small>
-      </a>
+      <div class={cls}>
+        <a class="nx-imain" href={hrefWith('open', item.id)}>
+          <span class="nx-ico">
+            {src ? <BrandIcon name={src} /> : <span class="brand-tile"><Icon name="bell" size={15} /></span>}
+            {a.rule !== 'mentions' && <span class={`nx-dir ${up ? 'up' : 'down'}`} aria-label={up ? 'Went up' : 'Went down'}><Icon name="trend" size={10} /></span>}
+          </span>
+          <span class="nx-ibody">
+            <span class="nx-ititle">{headline(a)}</span>
+            <span class="nx-imeta">
+              {site && <span class="nx-isite"><SiteIcon site={site} />{site.label}</span>}
+              {subj && <span>{subj}</span>}
+              <span class="nx-rule">{labels[a.rule] || 'Alert'}</span>
+              {item.group.length > 1 && <span>{item.group.length - 1} earlier</span>}
+            </span>
+          </span>
+          <span class="nx-iside">
+            {delta && <span class={`nx-delta ${up ? 'up' : 'down'}`}>{delta}</span>}
+            <small>{formatRelative(a.at)}</small>
+          </span>
+        </a>
+        {onRead && <button type="button" class="nx-iquick" title="Mark read" aria-label="Mark read" onClick={onRead}><Icon name="check" size={14} /></button>}
+      </div>
     );
   }
   const t = item.todo;
   const [stage, tone] = stageOf(t);
   const last = t.entries?.at(-1);
+  const who = last || (t.createdBy?.author === 'claude' ? t.createdBy : null);
   return (
-    <a class={`nx-msg${on ? ' on' : ''}${item.done ? ' read' : ''}`} href={hrefWith('open', item.id)}>
-      <span class="nx-k k-todo"><Icon name="check" size={14} /></span>
-      <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}{t.title} <span class={`nx-pill ${tone}`}>{stage}</span></span>
-      <small>{last ? `${agentOf(last).name} · ${day(last.at)}` : t.createdBy?.author === 'claude' ? `${agentOf(t.createdBy).name} added it · ${day(t.createdAt)}` : `To-do · added ${day(t.createdAt)}`}{t.entries?.length > 1 ? ` · ${t.entries.length} write-ups` : ''}</small>
-    </a>
+    <div class={cls}>
+      <a class="nx-imain" href={hrefWith('open', item.id)}>
+        <span class="nx-ico">
+          {who?.author === 'claude' ? <span class={`brand-tile nx-agent-tile ${agentOf(who).tone}`}>{agentOf(who).short}</span>
+            : <span class="brand-tile nx-todo-tile"><Icon name={item.done ? 'check' : 'pulse'} size={15} /></span>}
+        </span>
+        <span class="nx-ibody">
+          <span class="nx-ititle">{t.title}</span>
+          <span class="nx-imeta">
+            {site && <span class="nx-isite"><SiteIcon site={site} />{site.label}</span>}
+            <span>{last ? `${agentOf(last).name} wrote ${day(last.at)}` : who ? `${agentOf(who).name} added it` : 'To-do'}</span>
+            {t.entries?.length > 1 && <span>{t.entries.length} write-ups</span>}
+          </span>
+        </span>
+        <span class="nx-iside">
+          <span class={`nx-pill ${tone}`}>{stage}</span>
+          <small>{formatRelative(item.at)}</small>
+        </span>
+      </a>
+    </div>
   );
 }
 
@@ -278,14 +393,24 @@ function GoalRow({ g, site }) {
   const state = GOAL_STATES.find(([k]) => k === g.status) || GOAL_STATES[2];
   const due = new Date(`${g.checkBy}T00:00:00Z`).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' });
   return (
-    <a class="nx-msg nx-goalmsg" href={`#/site/${g.site}/pages?article=${encodeURIComponent(g.path)}`}>
-      <span class="nx-k goal"><Icon name="target" size={14} /></span>
-      <span class="nx-mt">{site && <span class="nx-tag">{site.label}</span>}<b>{g.title}</b>: {g.goal} <span class={`nx-pill ${state[2]}`}>{state[1]}</span></span>
-      <span class="nx-gbar">
-        {g.share !== null && <span class="nx-prog"><i style={`width:${Math.round(g.share * 100)}%`} /></span>}
-        <small>{g.now !== null ? `now ${goalValue(g, g.now)}, aiming` : 'Aiming'} for {goalValue(g, g.to)} · {g.status === 'reached' ? 'reached' : `check by ${due}`}</small>
-      </span>
-    </a>
+    <div class="nx-irow">
+      <a class="nx-imain" href={`#/site/${g.site}/pages?article=${encodeURIComponent(g.path)}`}>
+        <span class="nx-ico"><span class="brand-tile nx-goal-tile"><Icon name="target" size={15} /></span></span>
+        <span class="nx-ibody">
+          <span class="nx-ititle">{g.goal}</span>
+          <span class="nx-imeta">
+            {site && <span class="nx-isite"><SiteIcon site={site} />{site.label}</span>}
+            <span>{g.title}</span>
+            <span>{g.now !== null ? `now ${goalValue(g, g.now)}, aiming for ${goalValue(g, g.to)}` : `aiming for ${goalValue(g, g.to)}`}</span>
+          </span>
+        </span>
+        <span class="nx-iside">
+          <span class={`nx-pill ${state[2]}`}>{state[1]}</span>
+          {g.share !== null ? <span class="nx-prog nx-iprog"><i style={`width:${Math.round(g.share * 100)}%`} /></span> : null}
+          <small>{g.status === 'reached' ? 'reached' : `by ${due}`}</small>
+        </span>
+      </a>
+    </div>
   );
 }
 
@@ -293,10 +418,27 @@ function AlertPanel({ group, label, site, onClose, onRead }) {
   const [a, ...earlier] = group;
   const external = a.link?.startsWith('http');
   const iso = new Date(a.at).toISOString().slice(0, 10);
+  const up = a.direction === 'up';
+  const src = sourceOf(a);
+  const delta = deltaOf(a);
+  const cmp = ['traffic', 'search', 'extUsers', 'installs'].includes(a.rule) && Number.isFinite(a.value) && Number.isFinite(a.baseline);
   return (
     <Drawer title={a.title} onClose={onClose}>
-      <p class="nx-lead-line"><span class={`nx-pill ${a.direction === 'up' ? 'up' : 'down'}`}>{a.direction === 'up' ? 'Up' : 'Down'}</span> {label || 'Alert'} · {formatRelative(a.at)}{site ? ` · ${site.label}` : ''}</p>
-      {a.detail && <p class="nx-big">{a.detail}</p>}
+      <div class="nx-ahero">
+        {src ? <BrandIcon name={src} large /> : <span class="brand-tile lg"><Icon name="bell" size={18} /></span>}
+        <div>
+          {delta ? <span class={`nx-delta big ${up ? 'up' : 'down'}`}>{delta}</span> : <b>{up ? 'Went up' : 'Went down'}</b>}
+          <small>{[label || 'Alert', formatRelative(a.at), site?.label].filter(Boolean).join(' · ')}</small>
+        </div>
+      </div>
+      {cmp && (
+        <div class="nx-cmp" aria-label="Usual against this time">
+          <div><small>Usual</small><b>{fmtN(a.baseline)}{a.rule === 'traffic' || a.rule === 'search' ? <small> / day</small> : null}</b></div>
+          <span><Icon name="chevron" size={16} /></span>
+          <div><small>This time</small><b class={up ? 'good' : 'bad'}>{fmtN(a.value)}</b></div>
+        </div>
+      )}
+      {a.detail && <p class="nx-why">{a.detail}</p>}
       <div class="nx-btns">
         {a.link && <a class="btn primary" href={a.link} {...(external ? { target: '_blank', rel: 'noreferrer' } : {})}>Open what moved</a>}
         {site && <a class="btn" href={`#/site/${site.id}/timeline?month=${iso.slice(0, 7)}&day=${iso}`}>See the day</a>}
