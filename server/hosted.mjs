@@ -69,7 +69,7 @@ const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const USERINFO_URL = 'https://openidconnect.googleapis.com/v1/userinfo';
 // What a user's app may see of the server's environment.
-const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET', 'GITHUB_APP_SLUG', 'TZ'];
+const APP_ENV = ['GOOGLE_CLIENT_ID', 'GOOGLE_CLIENT_SECRET', 'BING_CLIENT_ID', 'BING_CLIENT_SECRET', 'VERCEL_CLIENT_ID', 'VERCEL_CLIENT_SECRET', 'VERCEL_INTEGRATION_SLUG', 'GITHUB_APP_CLIENT_ID', 'GITHUB_APP_CLIENT_SECRET', 'GITHUB_APP_SLUG', 'POSTHOG_API_KEY', 'POSTHOG_PROJECT_ID', 'POSTHOG_BASE_URL', 'CLOUDFLARE_ACCOUNT_ID', 'CLOUDFLARE_API_TOKEN', 'TZ'];
 
 const SECURITY_HEADERS = {
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
@@ -811,7 +811,7 @@ export function createGateway({
     // Here only to view: their own app answers reads, and can't connect or change anything.
     if (!invited) {
       const read = req.method === 'GET' || req.method === 'HEAD';
-      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|plausible|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
+      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|plausible|posthog|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
       if (!read || reaching) return jsonOut(res, 403, VIEW_ONLY);
     }
     return appFor(user).handle(req, res);

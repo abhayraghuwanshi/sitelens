@@ -13,6 +13,8 @@ import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
 import { PlausibleSettings } from './settings/PlausibleSettings.jsx';
+import { CloudflareAnalyticsSettings } from './settings/CloudflareAnalyticsSettings.jsx';
+import { PostHogSettings } from './settings/PostHogSettings.jsx';
 import { FlySettings } from './settings/FlySettings.jsx';
 import { NetlifySettings } from './settings/NetlifySettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
@@ -40,6 +42,9 @@ const PANELS = {
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
   plausible: { title: 'Plausible', render: () => <PlausibleSettings /> },
+  cloudflare: { title: 'Cloudflare Web Analytics', render: () => <CloudflareAnalyticsSettings /> },
+  'cloudflare-analytics': { title: 'Cloudflare Web Analytics', render: () => <CloudflareAnalyticsSettings /> },
+  posthog: { title: 'PostHog', render: () => <PostHogSettings /> },
   fly: { title: 'Fly.io', render: () => <FlySettings /> },
   netlify: { title: 'Netlify', render: () => <NetlifySettings /> },
   metrics: { title: 'Databases', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },

@@ -44,7 +44,7 @@ export const KINDS = {
 };
 
 // Studio's alert rules a site may tune; the rest aren't per site.
-const SITE_RULES = { traffic: 'Sessions & users (GA4 or Plausible)', search: 'Search Console clicks' };
+const SITE_RULES = { traffic: 'Sessions & users (GA4, Plausible or PostHog)', search: 'Search Console clicks' };
 export const GOAL_ALERT_DEFAULTS = Object.freeze({ when: 'drop', pct: 0.5, min: 5 });
 
 const TOP_KEYS = ['version', 'site', 'kind', 'goals', 'funnels', 'alerts', 'search', 'metrics'];

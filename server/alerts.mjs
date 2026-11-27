@@ -41,7 +41,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
 });
 
 export const RULE_LABELS = {
-  traffic: 'Sessions & users (GA4 or Plausible)',
+  traffic: 'Sessions & users (GA4, Plausible or PostHog)',
   search: 'Search Console clicks',
   installs: 'Web Store listing installs',
   extUsers: 'Extension users drop',
@@ -253,6 +253,9 @@ export function createAlerts({
   mentions = null,
   siteConfig = null,
   plausible = null,
+  posthog = null,
+  cloudflare = null,
+  cloudflareAnalytics = null,
   fetchImpl = fetch,
   now = () => Date.now(),
   notify = null,
@@ -330,7 +333,7 @@ export function createAlerts({
         search: { ...cfg.rules.search, ...own?.alerts?.search },
       };
       try {
-        // GA4 when the site has a property; otherwise Plausible, if connected.
+        // GA4 when the site has a property; otherwise Plausible, then PostHog, if connected.
         let traffic = null;
         if (site.demo || site.propertyId) {
           const [p] = await engines.portfolio([site], '90d');
@@ -350,6 +353,35 @@ export function createAlerts({
               source: 'plausible',
               sessions: (pa.series.visits || []).slice(-dates.length),
               users: (pa.series.visitors || []).slice(-dates.length),
+            };
+          }
+        }
+        // No GA4 and no Plausible match: fall back to PostHog, if connected.
+        if (!traffic && !site.demo && !site.propertyId && posthog) {
+          const ph = await posthog.analyticsForSite(site, '90d').catch((err) => {
+            if (err.kind === 'needs-posthog' || err.kind === 'posthog-unmatched') return null;
+            throw err;
+          });
+          if (ph) {
+            traffic = {
+              source: 'posthog',
+              sessions: (ph.series.sessions || ph.series.visits || []).slice(-dates.length),
+              users: (ph.series.visitors || []).slice(-dates.length),
+            };
+          }
+        }
+        // No GA4/Plausible/PostHog match: fall back to Cloudflare Web Analytics, if connected.
+        const cf = cloudflare || cloudflareAnalytics;
+        if (!traffic && !site.demo && !site.propertyId && cf) {
+          const ca = await cf.analyticsForSite(site, '90d').catch((err) => {
+            if (err?.kind === 'needs-cloudflare' || err?.kind === 'cloudflare-unmatched' || String(err?.kind || '').includes('cloudflare')) return null;
+            throw err;
+          });
+          if (ca) {
+            traffic = {
+              source: 'cloudflare',
+              sessions: (ca.series?.visits || ca.series?.pageviews || ca.series?.uniqueVisits || []).slice(-dates.length),
+              users: (ca.series?.visitors || ca.series?.uniqueVisits || []).slice(-dates.length),
             };
           }
         }

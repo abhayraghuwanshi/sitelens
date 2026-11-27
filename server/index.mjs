@@ -39,7 +39,9 @@ import { createBing, bingRoutes } from './bing.mjs';
 import { createVitals, vitalsRoutes } from './vitals.mjs';
 import { createAlerts, alertRoutes } from './alerts.mjs';
 import { createVercel, vercelRoutes } from './vercel.mjs';
+import { createCloudflareAnalytics, cloudflareRoutes } from './cloudflare-analytics.mjs';
 import { createPlausible, plausibleRoutes } from './plausible.mjs';
+import { createPostHog, posthogRoutes } from './posthog.mjs';
 import { createFly, flyRoutes } from './fly.mjs';
 import { createNetlify, netlifyRoutes } from './netlify.mjs';
 import { createMentions, mentionRoutes } from './mentions.mjs';
@@ -132,6 +134,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const githubSource = (sources) => (sources?.githubToken ? 'settings' : sources?.githubOAuth ? 'oauth' : env.GITHUB_TOKEN ? 'env' : '');
   const vercel = createVercel({ store, env, cacheDb, fetchImpl });
   const plausible = createPlausible({ store, env, cacheDb, fetchImpl });
+  const posthog = createPostHog({ store, env, cacheDb, fetchImpl });
+  const cloudflareAnalytics = createCloudflareAnalytics({ store, env, cacheDb, fetchImpl });
   const fly = createFly({ store, env, cacheDb, fetchImpl });
   const netlify = createNetlify({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
@@ -162,7 +166,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), cacheDb, repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, siteConfig, fetchImpl });
-  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, plausible, fetchImpl });
+  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, plausible, posthog, cloudflare: cloudflareAnalytics, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
   annotations.registerSource('fly', (q) => fly.annotations(q));
   annotations.registerSource('netlify', (q) => netlify.annotations(q));
@@ -192,7 +196,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   // Reddit posts planned by Claude, posted by you, measured in Reddit and GA4.
   const redditCycles = createRedditCycles({ dbPath: join(store.dir, 'reddit-cycles.db'), store, auth, mentions, posts, baseUrl: `http://127.0.0.1:${port}`, env, fetchImpl, mcpFetch: hosted ? (url, init) => selfFetch(handle, url, init) : fetchImpl });
   const customMetrics = createCustomMetrics({ store, siteConfig, env, fetchImpl, hosted });
-  const automaticJobs = createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly, netlify });
+  const automaticJobs = createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly, plausible, netlify });
   const timelineJobs = createTimelineJobs({ store, github, metrics: customMetrics, automaticJobs, fetchImpl });
   const connect = createConnect({ store, env, fetchImpl, baseUrl: env.STUDIO_HOST ? `https://${env.STUDIO_HOST}` : `http://127.0.0.1:${port}` });
   const calendar = createCalendar({ store, history, annotations, extensions, githubDbPath: () => (github.hasDb() ? github.dbPath : null), adDays, goalDays: outcomes.goalDays, customMetrics, citationDays: aiSearch.citationDays, jobSeries: timelineJobs.series, bingDays: bing.timelineDays });
@@ -259,6 +263,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
     ...plausibleRoutes({ plausible, store, siteOr404, auth }),
+    ...posthogRoutes({ posthog, store, siteOr404, auth }),
+    ...cloudflareRoutes({ cloudflareAnalytics, store, siteOr404, auth }),
     ...flyRoutes({ fly, store }),
     ...netlifyRoutes({ netlify, store }),
     ...firebaseRoutes({ firebase }),
@@ -359,8 +365,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const saved = await store.get();
       const src = saved.sources || {};
       const from = (settingsValue, envValue) => (settingsValue ? 'settings' : envValue ? 'env' : '');
-      const [firebaseStatus, vercelStatus, plausibleStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
-        firebase.status(), vercel.status(), plausible.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
+      const [firebaseStatus, vercelStatus, plausibleStatus, posthogStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
+        firebase.status(), vercel.status(), plausible.status(), posthog.status().catch(() => ({ keySource: '' })), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
       ]);
       return {
         hosted,
@@ -369,6 +375,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         firebase: { links: firebaseStatus.links.length, errors: firebaseStatus.links.filter((l) => l.error).map((l) => l.error) },
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
         plausible: { source: plausibleStatus.keySource, baseUrl: plausibleStatus.baseUrl, error: plausibleStatus.lastError },
+        posthog: { source: posthogStatus.keySource, projectId: posthogStatus.projectId || '', baseUrl: posthogStatus.baseUrl, error: posthogStatus.lastError || '' },
         fly: await fly.status().then((f) => ({ source: f.tokenSource, login: f.login, orgs: f.orgs.length, error: f.lastError })).catch(() => ({ source: '' })),
         netlify: await netlify.status().then((n) => ({ source: n.tokenSource, login: n.login, error: n.lastError })).catch(() => ({ source: '' })),
         // Each tracked extension, as its own row on Connections.
@@ -777,7 +784,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, fly, netlify, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, posthog, cloudflareAnalytics, fly, netlify, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
 }
 
 // Calls handle() as if over HTTP and returns a fetch Response.
