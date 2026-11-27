@@ -39,6 +39,7 @@ import { createBing, bingRoutes } from './bing.mjs';
 import { createVitals, vitalsRoutes } from './vitals.mjs';
 import { createAlerts, alertRoutes } from './alerts.mjs';
 import { createVercel, vercelRoutes } from './vercel.mjs';
+import { createPlausible, plausibleRoutes } from './plausible.mjs';
 import { createFly, flyRoutes } from './fly.mjs';
 import { createMentions, mentionRoutes } from './mentions.mjs';
 import { createFirebase, firebaseRoutes } from './firebase.mjs';
@@ -129,6 +130,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   }
   const githubSource = (sources) => (sources?.githubToken ? 'settings' : sources?.githubOAuth ? 'oauth' : env.GITHUB_TOKEN ? 'env' : '');
   const vercel = createVercel({ store, env, cacheDb, fetchImpl });
+  const plausible = createPlausible({ store, env, cacheDb, fetchImpl });
   const fly = createFly({ store, env, cacheDb, fetchImpl });
   // Which repos belong to a site: the same rule Articles and Funnels use (picked
   // for its product, its Vercel project's repo, or homepage set to the site). Cached so the tab stays quick; a changed link list misses.
@@ -158,7 +160,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
   const vitals = createVitals({ dbPath: join(store.dir, 'vitals.db'), store, env, getToken: () => auth.token(), bigquery, fetchImpl });
   const siteConfig = createSiteConfig({ dir: join(store.dir, 'config'), cacheDb, repos: async (site) => (await siteRepoScope(site)).repos, getToken: githubToken, fetchImpl });
   const mentions = createMentions({ dbPath: join(store.dir, 'mentions.db'), store, env, siteConfig, fetchImpl });
-  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, fetchImpl });
+  const alerts = createAlerts({ store, engines, github, extensions, auth, listingProperty, mentions, siteConfig, plausible, fetchImpl });
   annotations.registerSource('vercel', (q) => vercel.annotations(q));
   annotations.registerSource('fly', (q) => fly.annotations(q));
   annotations.registerSource('mentions', (q) => mentions.annotations(q));
@@ -253,6 +255,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     ...diagnoseRoutes({ diagnose, siteOr404 }),
     ...pageJourneyRoutes({ journey: pageJourney, siteOr404 }),
     ...vercelRoutes({ vercel, store, siteOr404, auth }),
+    ...plausibleRoutes({ plausible, store, siteOr404, auth }),
     ...flyRoutes({ fly, store }),
     ...firebaseRoutes({ firebase }),
     ...aiSearchRoutes({ aiSearch, siteOr404 }),
@@ -352,8 +355,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
       const saved = await store.get();
       const src = saved.sources || {};
       const from = (settingsValue, envValue) => (settingsValue ? 'settings' : envValue ? 'env' : '');
-      const [firebaseStatus, vercelStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
-        firebase.status(), vercel.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
+      const [firebaseStatus, vercelStatus, plausibleStatus, vitalsStatus, alertSettings, metricStatus] = await Promise.all([
+        firebase.status(), vercel.status(), plausible.status(), vitals.summary().catch(() => ({ key: { source: '' } })), alerts.settings().catch(() => ({})), customMetrics.status(),
       ]);
       return {
         hosted,
@@ -361,6 +364,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         github: { source: githubSource(src), ...github.status(), repos: github.hasDb() ? githubStatus(github.dbPath).repos || 0 : 0 },
         firebase: { links: firebaseStatus.links.length, errors: firebaseStatus.links.filter((l) => l.error).map((l) => l.error) },
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
+        plausible: { source: plausibleStatus.keySource, baseUrl: plausibleStatus.baseUrl, error: plausibleStatus.lastError },
         fly: await fly.status().then((f) => ({ source: f.tokenSource, login: f.login, orgs: f.orgs.length, error: f.lastError })).catch(() => ({ source: '' })),
         // Each tracked extension, as its own row on Connections.
         extensions: {
@@ -768,7 +772,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
     return serveStatic(url.pathname, res);
   }
 
-  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, fly, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
+  return { handle, store, auth, todos, engines, extensions, github, annotations, vitals, alerts, vercel, plausible, fly, mentions, firebase, posts, bing, aiSearch, redditCycles, calendar, history, customMetrics, timelineJobs };
 }
 
 // Calls handle() as if over HTTP and returns a fetch Response.

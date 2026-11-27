@@ -66,6 +66,13 @@ const GROUPS = [
           : { on: false, text: 'Needs an access token' }),
       },
       {
+        key: 'plausible', brand: 'plausible', name: 'Plausible', icon: 'trend', panel: 'plausible',
+        desc: 'Visitors, pageviews, bounce rate and goals from Plausible, hosted or self-hosted.',
+        status: ({ plausible: p }) => (p?.source
+          ? { on: !p.error, text: p.error || via(p.source, 'API key'), warn: Boolean(p.error) }
+          : { on: false, text: 'Needs an API key' }),
+      },
+      {
         key: 'bing', brand: 'bing', name: 'Bing Webmaster Tools', icon: 'search', panel: 'bing',
         desc: 'Bing search clicks, queries and crawl health. Also feeds DuckDuckGo, Copilot and ChatGPT search.',
         status: ({ bing: b }) => (b?.source ? { on: true, text: via(b.source, 'API key') } : { on: false, text: 'Needs an API key' }),
@@ -137,6 +144,7 @@ const HERO = {
   firebase: { tagline: 'Server-side page loads, AI crawlers, errors and deploys from your Cloud Run request log.', link: { label: 'Firebase console', href: 'https://console.firebase.google.com' } },
   fly: { tagline: 'Releases on each site’s Timeline, plus edge requests, errors, response time and machines per app.', link: { label: 'Fly dashboard', href: 'https://fly.io/dashboard' } },
   vercel: { tagline: 'Deployments and Web Analytics for projects hosted on Vercel.', link: { label: 'Vercel dashboard', href: 'https://vercel.com/dashboard' } },
+  plausible: { tagline: 'Visitors, pageviews, bounce rate and goals from Plausible, hosted or self-hosted.', link: { label: 'Plausible API keys', href: 'https://plausible.io/settings/api-keys' } },
   bing: { tagline: 'Bing search clicks, queries and crawl health. Bing also feeds DuckDuckGo, Copilot and ChatGPT search.', link: { label: 'Bing Webmaster Tools', href: 'https://www.bing.com/webmasters' } },
   anthropic: { tagline: 'Asks Claude, with live web search, the questions your customers ask, and tracks whether the answers name and cite you.', link: { label: 'Claude Console', href: 'https://console.anthropic.com/settings/keys' } },
   openrouter: { tagline: 'One key to ask the same questions in ChatGPT, Gemini, Perplexity and Grok.', link: { label: 'OpenRouter', href: 'https://openrouter.ai/keys' } },

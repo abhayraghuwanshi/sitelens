@@ -45,6 +45,15 @@ const MARKS = {
     </>
   ),
   vercel: <path d="M12 3.5l9.5 16.5h-19z" fill="currentColor" />,
+  // Plausible: three rising bars in its violet tile.
+  plausible: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="var(--brand-plausible)" />
+      <rect x="6.4" y="12.5" width="2.6" height="5.8" rx="1.3" fill="var(--brand-white)" />
+      <rect x="10.7" y="8.6" width="2.6" height="9.7" rx="1.3" fill="var(--brand-white)" />
+      <rect x="15" y="5.2" width="2.6" height="13.1" rx="1.3" fill="var(--brand-white)" />
+    </>
+  ),
   // BigQuery: a magnifier in a blue hexagon.
   bigquery: (
     <>
@@ -177,14 +186,14 @@ const MARKS = {
 };
 
 const NAMES = {
-  analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
+  analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', plausible: 'Plausible', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
   fly: 'Fly.io', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
   claude: 'Claude', openrouter: 'OpenRouter', hn: 'Hacker News', reddit: 'Reddit', producthunt: 'Product Hunt', pagespeed: 'PageSpeed', slack: 'Slack',
 };
 
 export const hasBrand = (name) => Boolean(MARKS[name]);
 
-/** A brand mark in a small tile (`large` for a panel header). `name` is a job source: analytics, search, bing, github, extensions, firebase, vercel, api or sql. */
+/** A brand mark in a small tile (`large` for a panel header). `name` is a job source: analytics, search, bing, github, extensions, firebase, vercel, plausible, api or sql. */
 export function BrandIcon({ name, large = false, small = false, title }) {
   const mark = MARKS[name];
   if (!mark) return null;

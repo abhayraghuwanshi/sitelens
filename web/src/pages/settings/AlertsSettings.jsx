@@ -16,7 +16,7 @@ const FIELDS = {
 };
 
 const LABELS = {
-  traffic: 'GA4 sessions & users',
+  traffic: 'Sessions & users (GA4 or Plausible)',
   search: 'Search Console clicks',
   installs: 'Web Store listing installs',
   extUsers: 'Extension users drop',

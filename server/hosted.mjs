@@ -811,7 +811,7 @@ export function createGateway({
     // Here only to view: their own app answers reads, and can't connect or change anything.
     if (!invited) {
       const read = req.method === 'GET' || req.method === 'HEAD';
-      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
+      const reaching = /^\/(api\/)?(auth|connect|google|github|vercel|plausible|mcp|bing\/auth|extensions)(\/|$)/.test(url.pathname);
       if (!read || reaching) return jsonOut(res, 403, VIEW_ONLY);
     }
     return appFor(user).handle(req, res);

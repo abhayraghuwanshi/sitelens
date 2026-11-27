@@ -12,6 +12,7 @@ import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
+import { PlausibleSettings } from './settings/PlausibleSettings.jsx';
 import { FlySettings } from './settings/FlySettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
@@ -37,6 +38,7 @@ const PANELS = {
   github: { title: 'GitHub', render: ({ state, onChange }) => <GitHubSettings state={state} sources={state.sources} onChange={onChange} /> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
+  plausible: { title: 'Plausible', render: () => <PlausibleSettings /> },
   fly: { title: 'Fly.io', render: () => <FlySettings /> },
   metrics: { title: 'Databases', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
   mentions: { title: 'Mentions', render: () => <MentionsSettings /> },
