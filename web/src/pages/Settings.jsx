@@ -13,6 +13,7 @@ import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
 import { SiteHealthCard } from './settings/SiteHealth.jsx';
 import { VercelSettings } from './settings/VercelSettings.jsx';
 import { FlySettings } from './settings/FlySettings.jsx';
+import { NetlifySettings } from './settings/NetlifySettings.jsx';
 import { FirebaseSettings } from './settings/FirebaseSettings.jsx';
 import { MentionsSettings } from './settings/MentionsSettings.jsx';
 import { IntegrationGrid, connectionHero } from './settings/Integrations.jsx';
@@ -38,6 +39,7 @@ const PANELS = {
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
   fly: { title: 'Fly.io', render: () => <FlySettings /> },
+  netlify: { title: 'Netlify', render: () => <NetlifySettings /> },
   metrics: { title: 'Databases', render: ({ state, params }) => <CustomMetricsSettings sites={state.sites} params={params} /> },
   mentions: { title: 'Mentions', render: () => <MentionsSettings /> },
   pagespeed: { title: 'PageSpeed & CrUX', render: () => <SiteHealthCard /> },
@@ -101,14 +103,15 @@ export function Settings({ state, params, onChange, siteExtras, siteMeasures }) 
 
 // One connection's own page: back link, its header (logo, name, live status,
 // what it gives, a link to the service), then its settings. Databases has its
-// own views (list, source form, metric editor), so it skips the header.
+// own views (list, source form, metric editor), and Netlify renders its header
+// from its own live status, so both skip the shared header.
 function ConnectionDetail({ panel, children }) {
   const data = useAsync(() => api.get('/integrations').catch(() => null), [panel]);
   useEffect(() => {
     window.addEventListener(CONNECTION_CHANGED, data.reload);
     return () => window.removeEventListener(CONNECTION_CHANGED, data.reload);
   }, [data.reload]);
-  const hero = panel === 'metrics' ? null : connectionHero(panel, data.data);
+  const hero = panel === 'metrics' || panel === 'netlify' ? null : connectionHero(panel, data.data);
   return (
     <div class="cx-page">
       <a class="back-link" href="#/account?tab=integrations">← All connections</a>
