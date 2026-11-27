@@ -45,6 +45,24 @@ const MARKS = {
     </>
   ),
   vercel: <path d="M12 3.5l9.5 16.5h-19z" fill="currentColor" />,
+  // Plausible: three rising bars in its violet tile.
+  plausible: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="var(--brand-plausible)" />
+      <rect x="6.4" y="12.5" width="2.6" height="5.8" rx="1.3" fill="var(--brand-white)" />
+      <rect x="10.7" y="8.6" width="2.6" height="9.7" rx="1.3" fill="var(--brand-white)" />
+      <rect x="15" y="5.2" width="2.6" height="13.1" rx="1.3" fill="var(--brand-white)" />
+    </>
+  ),
+  // PostHog: an orange tile with a simple hedgehog silhouette. A stand-in, not the logo.
+  posthog: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="var(--brand-posthog)" />
+      <path d="M7 17c0-3 2-4 3.5-4.5.4-1.2 1.2-2 2.5-2s2.1.8 2.5 2c1.5.5 3.5 1.5 3.5 4.5z" fill="var(--brand-white)" />
+      <circle cx="10.6" cy="14.2" r="0.7" fill="var(--brand-posthog)" />
+      <circle cx="13.4" cy="14.2" r="0.7" fill="var(--brand-posthog)" />
+    </>
+  ),
   // BigQuery: a magnifier in a blue hexagon.
   bigquery: (
     <>
@@ -83,6 +101,14 @@ const MARKS = {
       <path d="M12 2.5c-4 0-7 3-7 7 0 3.2 2.3 6 4.6 7.6h4.8C16.7 15.5 19 12.7 19 9.5c0-4-3-7-7-7z" fill="var(--brand-fly)" />
       <path d="M12 2.5c-1.5 1.8-2.2 4.3-2.2 7 0 2.8.8 5.5 1.9 7.6h.6c1.1-2.1 1.9-4.8 1.9-7.6 0-2.7-.7-5.2-2.2-7z" fill="var(--brand-fly-light)" />
       <rect x="9.6" y="18.6" width="4.8" height="3" rx="1" fill="var(--brand-fly)" />
+    </>
+  ),
+  // Netlify: a teal tile with the arrow of its mark. A stand-in, not the logo.
+  netlify: (
+    <>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="var(--brand-netlify)" />
+      <path d="M6.5 17.5 12 6l5.5 11.5z" fill="var(--brand-white)" />
+      <path d="M9.4 17.5 12 12.4l2.6 5.1z" fill="var(--brand-netlify)" />
     </>
   ),
   // Databases.
@@ -177,14 +203,14 @@ const MARKS = {
 };
 
 const NAMES = {
-  analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
-  fly: 'Fly.io', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
+  analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', plausible: 'Plausible', posthog: 'PostHog', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
+  fly: 'Fly.io', netlify: 'Netlify', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
   claude: 'Claude', openrouter: 'OpenRouter', hn: 'Hacker News', reddit: 'Reddit', producthunt: 'Product Hunt', pagespeed: 'PageSpeed', slack: 'Slack',
 };
 
 export const hasBrand = (name) => Boolean(MARKS[name]);
 
-/** A brand mark in a small tile (`large` for a panel header). `name` is a job source: analytics, search, bing, github, extensions, firebase, vercel, api or sql. */
+/** A brand mark in a small tile (`large` for a panel header). `name` is a job source: analytics, search, bing, github, extensions, firebase, vercel, plausible, api or sql. */
 export function BrandIcon({ name, large = false, small = false, title }) {
   const mark = MARKS[name];
   if (!mark) return null;

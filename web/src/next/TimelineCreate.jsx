@@ -23,6 +23,7 @@ const SOURCES = [
   { id: 'analytics', label: 'Google Analytics', fact: 'Visits, pages and where people came from', part: 'analytics' },
   { id: 'search', label: 'Search Console', fact: 'Google search clicks and queries', part: 'analytics' },
   { id: 'fly', label: 'Fly.io', fact: 'Releases, marked on the day they ship', href: '#/account?i=fly' },
+  { id: 'netlify', label: 'Netlify', fact: 'Production deploys, failed ones too, on the day they ship', href: '#/account?i=netlify' },
   { id: 'vercel', label: 'Vercel', fact: 'Production deploys, marked on the day they ship', part: 'hosting' },
   { id: 'firebase', label: 'Firebase App Hosting', fact: 'Rollouts, marked on the day they ship', part: 'hosting' },
   { id: 'github', label: 'GitHub', fact: 'Releases and repository activity', part: 'code' },

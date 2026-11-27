@@ -59,11 +59,32 @@ const GROUPS = [
           : { on: false, text: 'Needs an access token' }),
       },
       {
+        key: 'netlify', brand: 'netlify', name: 'Netlify', icon: 'rocket', panel: 'netlify',
+        desc: 'Production deploys on each site’s Timeline, including the ones that failed.',
+        status: ({ netlify: n }) => (n?.source
+          ? { on: !n.error, text: n.error || (n.login ? `Signed in as ${n.login}` : via(n.source, 'token')), warn: Boolean(n.error) }
+          : { on: false, text: 'Needs a personal access token' }),
+      },
+      {
         key: 'vercel', brand: 'vercel', name: 'Vercel', icon: 'triangle', panel: 'vercel',
         desc: 'Deployments and Web Analytics for projects hosted on Vercel.',
         status: ({ vercel: v }) => (v.source
           ? { on: !v.error, text: v.error || (v.login ? `Signed in as ${v.login}` : via(v.source, 'token')), warn: Boolean(v.error) }
           : { on: false, text: 'Needs an access token' }),
+      },
+      {
+        key: 'plausible', brand: 'plausible', name: 'Plausible', icon: 'trend', panel: 'plausible',
+        desc: 'Visitors, pageviews, bounce rate and goals from Plausible, hosted or self-hosted.',
+        status: ({ plausible: p }) => (p?.source
+          ? { on: !p.error, text: p.error || via(p.source, 'API key'), warn: Boolean(p.error) }
+          : { on: false, text: 'Needs an API key' }),
+      },
+      {
+        key: 'posthog', brand: 'posthog', name: 'PostHog', icon: 'trend', panel: 'posthog',
+        desc: 'Product & traffic analytics: visitors, pageviews, sessions, bounce rate, top pages, referrers and conversions, hosted or self-hosted.',
+        status: ({ posthog: p }) => (p?.source && p?.projectId
+          ? { on: !p.error, text: p.error || via(p.source, 'API key'), warn: Boolean(p.error) }
+          : { on: false, text: 'Needs an API key and project ID' }),
       },
       {
         key: 'bing', brand: 'bing', name: 'Bing Webmaster Tools', icon: 'search', panel: 'bing',
@@ -136,7 +157,10 @@ const HERO = {
   github: { tagline: 'Repo traffic, stars, clones and release downloads, synced hourly.', link: { label: 'GitHub tokens', href: 'https://github.com/settings/tokens' } },
   firebase: { tagline: 'Server-side page loads, AI crawlers, errors and deploys from your Cloud Run request log.', link: { label: 'Firebase console', href: 'https://console.firebase.google.com' } },
   fly: { tagline: 'Releases on each site’s Timeline, plus edge requests, errors, response time and machines per app.', link: { label: 'Fly dashboard', href: 'https://fly.io/dashboard' } },
+  netlify: { tagline: 'Production deploys on each site’s Timeline, including the ones that failed.', link: { label: 'Netlify tokens', href: 'https://app.netlify.com/user/applications#personal-access-tokens' } },
   vercel: { tagline: 'Deployments and Web Analytics for projects hosted on Vercel.', link: { label: 'Vercel dashboard', href: 'https://vercel.com/dashboard' } },
+  plausible: { tagline: 'Visitors, pageviews, bounce rate and goals from Plausible, hosted or self-hosted.', link: { label: 'Plausible API keys', href: 'https://plausible.io/settings/api-keys' } },
+  posthog: { tagline: 'Product & traffic analytics: visitors, pageviews, sessions, bounce rate, top pages, referrers and conversions.', link: { label: 'PostHog API keys', href: 'https://us.posthog.com/settings/user-api-keys' } },
   bing: { tagline: 'Bing search clicks, queries and crawl health. Bing also feeds DuckDuckGo, Copilot and ChatGPT search.', link: { label: 'Bing Webmaster Tools', href: 'https://www.bing.com/webmasters' } },
   anthropic: { tagline: 'Asks Claude, with live web search, the questions your customers ask, and tracks whether the answers name and cite you.', link: { label: 'Claude Console', href: 'https://console.anthropic.com/settings/keys' } },
   openrouter: { tagline: 'One key to ask the same questions in ChatGPT, Gemini, Perplexity and Grok.', link: { label: 'OpenRouter', href: 'https://openrouter.ai/keys' } },

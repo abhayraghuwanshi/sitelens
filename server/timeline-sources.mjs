@@ -5,7 +5,7 @@ import { githubStatus } from './github.mjs';
 const MIN = 60_000;
 export const SYNC_EVERY = { analytics: 30 * MIN, search: 30 * MIN, bing: 12 * 60 * MIN, github: 60 * MIN, extensions: 6 * 60 * MIN, firebase: 30 * MIN };
 
-export function createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly = null }) {
+export function createTimelineSources({ store, history, auth, github, githubSource, firebase, vercel, bing, fly = null, netlify = null }) {
   return async function automaticJobs(siteId) {
     const site = await store.site(siteId);
     if (!site || site.demo) return [];
@@ -84,7 +84,18 @@ export function createTimelineSources({ store, history, auth, github, githubSour
         });
       }
     }
-    // vercel and fly have no timer: they're read when the Timeline loads (every: null).
+    if (netlify && (await netlify.status()).tokenSource) {
+      const matched = await netlify.matches([site]).catch(() => ({}));
+      if (matched[siteId]?.siteId) {
+        const status = await netlify.status();
+        rows.push({
+          id: 'netlify', label: 'Netlify', output: 'Production deploys on Timeline',
+          status: status.lastError ? 'Connection needs attention' : 'Fetched when Timeline loads',
+          settings: '#/account?i=netlify', timeline: {},
+        });
+      }
+    }
+    // vercel, fly and netlify have no timer: they're read when the Timeline loads (every: null).
     return rows.map((row) => ({ ...row, every: SYNC_EVERY[row.id] ?? null }));
   };
 }

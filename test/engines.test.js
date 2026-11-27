@@ -5,7 +5,9 @@ import { createEngines } from '../server/engines.mjs';
 const engines = createEngines({ auth: {}, bigquery: {} });
 
 test('daily warehouse summary returns demo goal and returning-visit data', async () => {
-  const result = await engines.daySummary({ id: 'demo', demo: true }, new Date().toISOString().slice(0, 10), ['page:/']);
+  // The demo world ends yesterday, so pick the last day with sessions.
+  const day = new Date(Date.now() - 86_400_000).toISOString().slice(0, 10);
+  const result = await engines.daySummary({ id: 'demo', demo: true }, day, ['page:/']);
   assert.equal(result.source, 'demo');
   assert.ok(result.summary.sessions > 0);
   assert.ok(result.summary.returning <= result.summary.sessions);

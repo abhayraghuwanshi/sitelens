@@ -174,7 +174,7 @@ test('detectMcpClients: connected, stale and missing registrations', async () =>
     assert.equal(found.claudeCode.name, 'sitelens');
     assert.equal(found.claudeDesktop.state, 'stale');
     const none = await detectMcpClients({ mcpPath, home: join(home, 'nobody') });
-    assert.deepEqual(none, { claudeCode: { state: 'missing' }, claudeDesktop: { state: 'missing' } });
+    assert.deepEqual(none, { claudeCode: { state: 'missing' }, claudeDesktop: { state: 'missing' }, opencode: { state: 'missing' } });
   } finally {
     await rm(home, { recursive: true, force: true });
   }
