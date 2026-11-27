@@ -254,6 +254,8 @@ export function createAlerts({
   siteConfig = null,
   plausible = null,
   posthog = null,
+  cloudflare = null,
+  cloudflareAnalytics = null,
   fetchImpl = fetch,
   now = () => Date.now(),
   notify = null,
@@ -365,6 +367,21 @@ export function createAlerts({
               source: 'posthog',
               sessions: (ph.series.sessions || ph.series.visits || []).slice(-dates.length),
               users: (ph.series.visitors || []).slice(-dates.length),
+            };
+          }
+        }
+        // No GA4/Plausible/PostHog match: fall back to Cloudflare Web Analytics, if connected.
+        const cf = cloudflare || cloudflareAnalytics;
+        if (!traffic && !site.demo && !site.propertyId && cf) {
+          const ca = await cf.analyticsForSite(site, '90d').catch((err) => {
+            if (err?.kind === 'needs-cloudflare' || err?.kind === 'cloudflare-unmatched' || String(err?.kind || '').includes('cloudflare')) return null;
+            throw err;
+          });
+          if (ca) {
+            traffic = {
+              source: 'cloudflare',
+              sessions: (ca.series?.visits || ca.series?.pageviews || ca.series?.uniqueVisits || []).slice(-dates.length),
+              users: (ca.series?.visitors || ca.series?.uniqueVisits || []).slice(-dates.length),
             };
           }
         }

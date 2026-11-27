@@ -144,6 +144,12 @@ const MARKS = {
     </>
   ),
   d1: <path d="M17.6 18H6.2a3.7 3.7 0 0 1-.6-7.4 5.8 5.8 0 0 1 11.2-1.5A4.5 4.5 0 0 1 17.6 18z" fill="var(--brand-cloudflare)" />,
+  cloudflare: (
+    <>
+      <path d="M17.6 18H6.2a3.7 3.7 0 0 1-.6-7.4 5.8 5.8 0 0 1 11.2-1.5A4.5 4.5 0 0 1 17.6 18z" fill="var(--brand-cloudflare)" />
+      <path d="M9 12.5 12 9.5l3 3" fill="none" stroke="var(--brand-white)" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+    </>
+  ),
   sqlite: (
     <g fill="none" stroke="var(--brand-sqlite)" stroke-width="2">
       <ellipse cx="12" cy="5.5" rx="7.5" ry="3" />
@@ -204,7 +210,7 @@ const MARKS = {
 
 const NAMES = {
   analytics: 'Google Analytics', search: 'Google Search Console', bing: 'Bing', github: 'GitHub', extensions: 'Chrome Web Store', firebase: 'Firebase', vercel: 'Vercel', plausible: 'Plausible', posthog: 'PostHog', bigquery: 'BigQuery', api: 'JSON API', sql: 'SQL',
-  fly: 'Fly.io', netlify: 'Netlify', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', sqlite: 'SQLite',
+  fly: 'Fly.io', netlify: 'Netlify', google: 'Google', edge: 'Edge Add-ons', firefox: 'Firefox Add-ons', postgres: 'PostgreSQL', supabase: 'Supabase', neon: 'Neon', mysql: 'MySQL', planetscale: 'PlanetScale', turso: 'Turso', d1: 'Cloudflare D1', cloudflare: 'Cloudflare', sqlite: 'SQLite',
   claude: 'Claude', openrouter: 'OpenRouter', hn: 'Hacker News', reddit: 'Reddit', producthunt: 'Product Hunt', pagespeed: 'PageSpeed', slack: 'Slack',
 };
 
