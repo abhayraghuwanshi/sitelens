@@ -376,6 +376,7 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
         vercel: { source: vercelStatus.tokenSource, login: vercelStatus.login, error: vercelStatus.lastError },
         plausible: { source: plausibleStatus.keySource, baseUrl: plausibleStatus.baseUrl, error: plausibleStatus.lastError },
         posthog: { source: posthogStatus.keySource, projectId: posthogStatus.projectId || '', baseUrl: posthogStatus.baseUrl, error: posthogStatus.lastError || '' },
+        cloudflare: await cloudflareAnalytics.status().then((c) => ({ source: c.tokenSource, accountId: c.accountId || '', error: c.lastError || '' })).catch(() => ({ source: '' })),
         fly: await fly.status().then((f) => ({ source: f.tokenSource, login: f.login, orgs: f.orgs.length, error: f.lastError })).catch(() => ({ source: '' })),
         netlify: await netlify.status().then((n) => ({ source: n.tokenSource, login: n.login, error: n.lastError })).catch(() => ({ source: '' })),
         // Each tracked extension, as its own row on Connections.

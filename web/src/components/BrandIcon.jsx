@@ -144,6 +144,7 @@ const MARKS = {
     </>
   ),
   d1: <path d="M17.6 18H6.2a3.7 3.7 0 0 1-.6-7.4 5.8 5.8 0 0 1 11.2-1.5A4.5 4.5 0 0 1 17.6 18z" fill="var(--brand-cloudflare)" />,
+  cloudflare: <path d="M17.6 18H6.2a3.7 3.7 0 0 1-.6-7.4 5.8 5.8 0 0 1 11.2-1.5A4.5 4.5 0 0 1 17.6 18z" fill="var(--brand-cloudflare)" />,
   cloudflare: (
     <>
       <path d="M17.6 18H6.2a3.7 3.7 0 0 1-.6-7.4 5.8 5.8 0 0 1 11.2-1.5A4.5 4.5 0 0 1 17.6 18z" fill="var(--brand-cloudflare)" />
