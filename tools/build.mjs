@@ -14,7 +14,7 @@ import path from 'node:path';
 import { readFile } from 'node:fs/promises';
 import { createHash } from 'node:crypto';
 import { checkPage, checkGuide, checkSite, describe } from './seo-rules.mjs';
-import { owl, eye, owlSays } from './assets/lib/owl.js';
+import { owl } from './assets/lib/owl.js';
 import { COURSE, MODULES, COURSE_ORDER, PATHS, lessonNo, moduleOf, inCourseOrder } from './course.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
@@ -47,7 +47,6 @@ const ORDER = [
 ];
 
 // The owl's line on the course page before anyone has answered anything.
-const COURSE_WELCOME = 'New here? Three quick questions, and I’ll pick your lessons.';
 
 // 24px line icons, drawn with currentColor (no emoji).
 const ICON_PATHS = {
@@ -144,6 +143,51 @@ ${scripts.map((s) => `<script type="module" src="${BASE}/assets/${s}?v=${ASSET_V
 // Kauzl is invite-only: the call to action is the early-access form, posted to
 // the app's /waitlist (same origin when the tools are served at kauzl.com/tools/).
 // from= records where people joined: tools or guides.
+// A lesson body cut into its h2 sections, each shaped by what it holds, so
+// they don't all read as the same block: a number per section, "Choose X if /
+// Choose Y if" side by side, tables and code in their own frame.
+const anchor = (t) => strip(t).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 60);
+function sectionize(html) {
+  const parts = html.split(/(?=<h2[\s>])/);
+  const intro = /^\s*<h2[\s>]/.test(parts[0]) ? '' : parts.shift();
+  const secs = parts.map((p) => {
+    const m = p.match(/^<h2[^>]*>([\s\S]*?)<\/h2>/);
+    // A heading that already starts with "3. " keeps its own number, shown in the badge.
+    const own = m ? m[1].match(/^\s*(\d+)\.\s+/) : null;
+    const title = m ? (own ? m[1].slice(own[0].length) : m[1]) : '';
+    const rest = m ? p.slice(m[0].length) : p;
+    const kind = /<table/i.test(rest) ? 'table' : /<pre/i.test(rest) ? 'code' : /class="steps-list"/.test(rest) ? 'steps' : /^\s*choose\b/i.test(strip(title)) ? 'choose' : 'text';
+    return { title, rest, kind, id: anchor(title), no: own ? Number(own[1]) : null };
+  });
+  let n = 0;
+  const one = (s) => {
+    n = s.no ?? n + 1;
+    return `<section class="ls ls-${s.kind}" id="${s.id}"><h2><span class="ls-no">${String(n).padStart(2, '0')}<span class="sr"> </span></span>${s.title}</h2>${s.rest}</section>`;
+  };
+  let out = intro;
+  for (let i = 0; i < secs.length; i++) {
+    // Two "Choose …" sections in a row: one comparison, two cards.
+    if (secs[i].kind === 'choose' && secs[i + 1]?.kind === 'choose') {
+      out += `<div class="ls-pair">${one(secs[i])}${one(secs[i + 1])}</div>`;
+      i++;
+    } else out += one(secs[i]);
+  }
+  return { html: out, toc: secs.map((s) => ({ id: s.id, title: strip(s.title) })) };
+}
+
+// The end of a lesson: one short box in the reading column, no chart.
+function ctaCompact(from = 'guides') {
+  return `<aside class="cta-mini" id="early-access" aria-label="Get early access to Kauzl">
+<div><b>See what happened on your site, day by day.</b><p>Kauzl puts your traffic, search and AI answers on one calendar, next to what you shipped.</p></div>
+<form class="join" method="post" action="${APP}/waitlist">
+<input type="hidden" name="from" value="${from}">
+<label class="hp" aria-hidden="true">Leave this empty <input name="website" tabindex="-1" autocomplete="off"></label>
+<input type="email" name="email" required maxlength="254" autocomplete="email" placeholder="you@company.com" aria-label="Your email">
+<button class="btn amber" type="submit">Get early access</button>
+</form>
+</aside>`;
+}
+
 function cta(c = {}, from = 'tools') {
   return `<aside class="cta" id="early-access" aria-label="Get early access to Kauzl">
 <div class="cta-copy">${owl(56, { variant: 'paper' })}
@@ -178,7 +222,7 @@ ${cta(p.cta)}
 <article class="content">${p.content || ''}
 ${p.faq?.length ? `<h2>Questions</h2><div class="faq">${p.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : ''}
 </article>
-${reading.length ? `<h2 class="section-title">Learn it in the course</h2><div class="col more-guides"><ul>${reading.map(guideRow).join('')}</ul></div>` : ''}
+${reading.length ? `<h2 class="section-title">Learn it in the course</h2><ol class="clist">${reading.map(courseRow).join('')}</ol>` : ''}
 <h2 class="section-title">More free tools</h2>
 <div class="grid">${more.map(tile).join('')}</div>`;
   const ld = [{
@@ -202,20 +246,9 @@ ${reading.length ? `<h2 class="section-title">Learn it in the course</h2><div cl
 // truth; a guide must be listed there to get a lesson number, one that isn't is
 // appended at the end.
 
-// The two lessons at the top of the index, each with a small picture of its point.
-const GUIDE_FEATURED = {
-  'web-analytics-tools': {
-    line: 'Seven kinds of analytics tool, the one question each answers, and which your app needs first.',
-    visual: `<ul class="fv-map"><li><span>Who came, and from where?</span><b>GA4 · Plausible · Umami</b></li><li><span>What do users do?</span><b>PostHog · Mixpanel</b></li><li><span>Why did they leave?</span><b>Clarity · Hotjar</b></li><li><span>Did my change work?</span><b class="a">Kauzl</b></li></ul>`,
-  },
-  'generative-engine-optimization': {
-    line: 'Why AI assistants skip small products, and what gets you named. With numbers from our own sites.',
-    visual: `<div class="fv-ba"><span>Used as a source</span><span class="t"><i style="width:23%"></i></span><b>5 of 22</b><span>Recommended</span><span class="t a"><i style="width:14%"></i></span><b>3 of 22</b></div><p class="fv-foot">Claude’s answers about three small products · Nov 2026</p>`,
-  },
-};
 let ALL_GUIDES = [];
-const guideRow = (g) => `<li><a class="row" href="${ghref(g.slug)}"><span class="course-eyebrow">${eye('todo', 16)}<span class="ic num" aria-label="Lesson ${lessonNo(g, ALL_GUIDES)}">${lessonNo(g, ALL_GUIDES)}</span></span><span><b>${esc(g.short || g.h1 || g.title)}</b><small>${esc(g.blurb || g.description)}</small><small class="mins">${g.minutes} min read</small></span></a></li>`;
-const guideFeature = (g) => `<a class="feature" href="${ghref(g.slug)}"><div><p class="kick">Lesson ${lessonNo(g, ALL_GUIDES)} · ${g.minutes} min read</p><h3>${esc(g.short || g.h1)}</h3><p>${GUIDE_FEATURED[g.slug].line}</p><span class="go">Start the lesson →</span></div><div class="fv" aria-hidden="true">${GUIDE_FEATURED[g.slug].visual}</div></a>`;
+// One lesson in the course list: number, title, minutes.
+const courseRow = (g) => `<li><a class="lrow" href="${ghref(g.slug)}"><span class="lnum">${lessonNo(g, ALL_GUIDES)}</span><span class="ltitle">${esc(g.short || g.h1)}</span><span class="lmin">${g.minutes} min</span></a></li>`;
 const lessonLink = (g, dir) => g ? `<a class="lesson-link ${dir}" href="${ghref(g.slug)}"><span>${dir === 'prev' ? '← Previous' : 'Next →'} · Lesson ${lessonNo(g, ALL_GUIDES)}</span><b>${esc(g.short || g.h1)}</b></a>` : '<span></span>';
 
 // One lesson: hero with its place in the course, an "In short" box, the body,
@@ -239,27 +272,28 @@ function guidePage(g, guides, pages) {
   // Module crumb and breadcrumb: the module is a section of the course, so it
   // links there rather than to a lesson.
   const modCrumb = m >= 0 ? `<a href="${SITE}${GUIDES}/#module-${MODULES[m].id}">${esc(MODULES[m].name)}</a>` : esc(modName);
-  const sameModule = ordered.filter((o) => o !== g && moduleOf(o.slug) === m && m >= 0);
   const band = `<section class="band article-band"><div class="wrap band-in">
 <div class="band-copy"><p class="crumbs"><a href="${ghref('')}">${esc(COURSE.name)}</a><span aria-hidden="true"> / </span>${modCrumb}</p>
 <h1>${esc(g.h1 || g.title)}</h1><p class="lead">${g.lead || g.description}</p>
-<p class="article-meta"><span class="lesson-badge">Lesson ${n} of ${guides.length}</span><span class="lesson-head-eyes" aria-hidden="true">${m >= 0 ? MODULES[m].lessons.map((l) => eye('todo', 16)).join('') : ''}</span> By the Kauzl team · Updated <time datetime="${g.updated || g.published}">${fmtDate(g.updated || g.published)}</time> · ${g.minutes} min read</p></div>
-<div class="perch" aria-hidden="true">${owl(132, { variant: 'paper', className: 'hero-owl' })}<span class="branch"></span></div>
+<p class="article-meta"><span class="lesson-badge">Lesson ${n} of ${guides.length}</span> By the Kauzl team · Updated <time datetime="${g.updated || g.published}">${fmtDate(g.updated || g.published)}</time> · ${g.minutes} min read</p></div>
 </div></section>`;
+  const sec = sectionize(g.body);
+  const extra = [...(checkpoint(g) ? [{ id: 'checkpoint', title: 'Checkpoint' }] : []), ...(g.faq?.length ? [{ id: 'questions', title: 'Questions' }] : [])];
+  const toc = [...sec.toc, ...extra];
   const body = `
+<div class="lesson-wrap">
+${toc.length > 2 ? `<nav class="toc" aria-label="On this page"><div><p>On this page</p><ol>${toc.map((t) => `<li><a href="#${t.id}">${esc(t.title)}</a></li>`).join('')}</ol></div></nav>` : ''}
 <article class="content article">
 ${g.inShort?.length ? `<aside class="in-short"><p class="lbl">In short</p><ul>${g.inShort.map((x) => `<li>${x}</li>`).join('')}</ul></aside>` : ''}
-${g.goal?.length ? `<h2>By the end of this lesson</h2><ul>${g.goal.map((t) => `<li>${t}</li>`).join('')}</ul>` : ''}
-${g.body}
-${checkpoint(g)}
-${g.faq?.length ? `<h2>Questions</h2><div class="faq">${g.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div>` : ''}
+${g.goal?.length ? `<section class="ls-goal"><h2>By the end of this lesson</h2><ul>${g.goal.map((t) => `<li>${t}</li>`).join('')}</ul></section>` : ''}
+${sec.html}
+${checkpoint(g) ? `<section class="ls-wrap ls-check" id="checkpoint">${checkpoint(g)}</section>` : ''}
+${g.faq?.length ? `<section class="ls-wrap ls-faq" id="questions"><h2>Questions</h2><div class="faq">${g.faq.map(([q, a]) => `<details><summary>${q}</summary><p>${a}</p></details>`).join('')}</div></section>` : ''}
 </article>
-<div class="mark-done"><button type="button" class="btn" id="mark-done"><span class="eye" data-state="todo">${eye('todo', 16)}</span> Mark as done</button></div>
+</div>
 <nav class="lesson-nav" aria-label="Course lessons">${lessonLink(ordered[i - 1], 'prev')}${lessonLink(ordered[i + 1], 'next')}</nav>
-${cta(g.cta, 'guides')}
-${tools.length ? `<h2 class="section-title">Free tools for this</h2><div class="grid">${tools.map(tile).join('')}</div>` : ''}
-${sameModule.length ? `<h2 class="section-title">Also in ${esc(modName)}</h2>
-<div class="col more-guides"><ul>${sameModule.map(guideRow).join('')}</ul></div>` : ''}`;
+${tools.length ? `<section class="try"><h2>Try it with a free tool</h2><ul>${tools.map((p) => `<li><a href="${href(p.slug)}"><b>${esc(p.name)}</b><span>${esc(p.blurb || p.description)}</span></a></li>`).join('')}</ul></section>` : ''}
+${ctaCompact('guides')}`;
   const ld = [{
     '@context': 'https://schema.org', '@type': ['Article', 'LearningResource'], '@id': `${gurl(g.slug)}#lesson`,
     headline: g.h1 || g.title, description: g.description,
@@ -292,13 +326,10 @@ function guidesIndex(guides) {
 </div></section>`;
   const bySlug = Object.fromEntries(guides.map((g) => [g.slug, g]));
   const rest = ordered.filter((g) => !COURSE_ORDER.includes(g.slug));
-  const mod = (m, i) => `<section id="module-${m.id}" class="col module"><p class="mod-no">Module ${i + 1}</p><h3>${m.name}</h3><p class="col-sub">${m.sub}</p><ul>${m.lessons.filter((l) => bySlug[l.slug]).map((l) => guideRow(bySlug[l.slug])).join('')}</ul><div class="module-eyes" data-module="${m.id}">${m.lessons.filter((l) => bySlug[l.slug]).map((l) => eye('todo', 16)).join('')}</div></section>`;
-  const body = `<div id="course-welcome" class="course-welcome">${owlSays(COURSE_WELCOME, 44)}<div class="course-welcome-actions"><a class="btn amber" href="${ghref(ordered[0].slug)}">Start at lesson 1</a><button type="button" class="btn" id="pick-path">Pick my path</button></div></div>
-<section class="group"><h2 class="section-title">Start here</h2><p class="section-sub">The map of the market, and the question everyone is asking about AI search.</p>
-<div class="features">${Object.keys(GUIDE_FEATURED).filter((s) => bySlug[s]).map((s) => guideFeature(bySlug[s])).join('')}</div></section>
-<section class="group"><h2 class="section-title">The lessons</h2><p class="section-sub">In order, or jump to the module you need.</p>
-<div class="cols syllabus">${MODULES.map(mod).join('')}
-${rest.length ? `<div class="col module"><p class="mod-no">More</p><h3>More lessons</h3><ul>${rest.map(guideRow).join('')}</ul></div>` : ''}</div></section>
+  // One plain list: a short heading per module, then its lessons in order.
+  const mod = (m, i) => `<section id="module-${m.id}" class="cmod"><h2><span>Module ${i + 1}</span>${m.name}</h2><p>${m.sub}</p><ol class="clist">${m.lessons.filter((l) => bySlug[l.slug]).map((l) => courseRow(bySlug[l.slug])).join('')}</ol></section>`;
+  const body = `<div class="course">${MODULES.map(mod).join('')}
+${rest.length ? `<section class="cmod"><h2>More lessons</h2><ol class="clist">${rest.map(courseRow).join('')}</ol></section>` : ''}</div>
 ${cta({}, 'guides')}`;
   const courseUrl = `${SITE}${GUIDES}/#course`;
   const courseLd = {
@@ -374,7 +405,7 @@ const guides = await loadGuides();
 footer = `<footer class="foot"><div class="wrap">
 <div class="foot-brand">${owl(40)}<div><p class="word">kauzl</p><p>The owl that watches your site, day by day.</p></div></div>
 <div class="foot-lists"><p class="foot-h">Free tools</p><ul>${pages.map((p) => `<li><a href="${href(p.slug)}">${esc(p.name)}</a></li>`).join('')}</ul>
-<p class="foot-h">Course</p><ul>${guides.map((g) => `<li><a href="${ghref(g.slug)}">${esc(g.short || g.h1 || g.title)}</a></li>`).join('')}</ul></div>
+<p class="foot-h">Course</p><ul><li><a href="${ghref('')}">All ${guides.length} lessons →</a></li></ul></div>
 <p class="small">© ${new Date().getFullYear()} Kauzl · Free tools that run in your browser · <a href="${APP}">kauzl.com</a></p>
 </div></footer>`;
 

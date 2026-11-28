@@ -1,5 +1,6 @@
 import { createContext } from 'preact';
 import { useContext, useEffect, useRef, useState } from 'preact/hooks';
+import { useBottomSheet } from './sheet.js';
 import { Icon } from '../components/icons.jsx';
 import { SegmentedAsMenu } from '../components/ui.jsx';
 
@@ -64,6 +65,7 @@ export function OptionsSheet({ title, label = '', children }) {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState('');
   const box = useRef(null);
+  useBottomSheet(box, () => setOpen(false), { open, back: true });
   useEffect(() => {
     const read = () => {
       const on = [...(box.current?.querySelectorAll('[aria-pressed="true"], [aria-checked="true"]') || [])]

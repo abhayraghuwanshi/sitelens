@@ -1,11 +1,14 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { Icon } from '../components/icons.jsx';
+import { useBottomSheet } from './sheet.js';
 
 // Detail for one item (a to-do, an alert, a source, a search): a panel on the
 // right on desktop, a sheet from the bottom on phones. The list stays where it
 // was underneath. Escape or the scrim closes it.
-export function Drawer({ title, onClose, children, wide = false }) {
+// `back`: the phone's Back button closes it (for drawers not kept in the address).
+export function Drawer({ title, onClose, children, wide = false, back = false }) {
   const panel = useRef(null);
+  useBottomSheet(panel, onClose, { back });
   useEffect(() => {
     const onKey = (e) => e.key === 'Escape' && onClose();
     addEventListener('keydown', onKey);

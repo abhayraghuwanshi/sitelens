@@ -8,7 +8,7 @@ import { SiteIcon } from '../components/SiteIcon.jsx';
 import { Icon } from '../components/icons.jsx';
 import { ProductForm, ProductStages, productFormState, useFocusStage } from './settings/Products.jsx';
 import { BingSettings, KeyForm } from './settings/BingSettings.jsx';
-import { MoreAnalyticsSources, saveSourcePicks } from './settings/SiteSources.jsx';
+import { useOtherSources, OtherSourceFields, saveSourcePicks } from './settings/SiteSources.jsx';
 import { GitHubRepos } from './settings/GitHubRepos.jsx';
 import { AnthropicSettings } from './settings/AnthropicSettings.jsx';
 import { OpenRouterSettings } from './settings/OpenRouterSettings.jsx';
@@ -39,7 +39,7 @@ const TABS = [
 ];
 
 const PANELS = {
-  google: { title: 'Google account', render: ({ state, onChange }) => <ConnectCard auth={state.auth} onChange={onChange} browser={Boolean(state.browser)} /> },
+  google: { title: 'Google account', render: ({ state, onChange }) => <ConnectCard auth={state.auth} onChange={onChange} browser={Boolean(state.browser)} hosted={Boolean(state.hosted)} /> },
   github: { title: 'GitHub', render: ({ state, onChange }) => <><GitHubSettings state={state} sources={state.sources} onChange={onChange} /><GitHubRepos connected={Boolean(state.sources?.github?.tokenSource)} /></> },
   firebase: { title: 'Firebase App Hosting', render: ({ state }) => <FirebaseSettings auth={state.auth} /> },
   vercel: { title: 'Vercel', render: () => <VercelSettings /> },
@@ -509,7 +509,10 @@ function GitHubSettings({ state, sources, onChange }) {
   );
 }
 
-function ConnectCard({ auth, onChange, browser = false }) {
+// Hosted (kauzl.com): a service account key first, since signing in there only says who
+// you are; "Sign in with Google instead" stays for accounts on the Google app's test list.
+// Signed in with Google: BigQuery and Cloud logs are asked for only when allowed here.
+function ConnectCard({ auth, onChange, browser = false, hosted = false }) {
   const [token, setToken] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(null);
@@ -554,6 +557,13 @@ function ConnectCard({ auth, onChange, browser = false }) {
 
   const scopes = auth.scopes || [];
   const has = (s) => scopes.some((x) => x.endsWith(s));
+  const googleHref = (add = '') => (hosted ? `/login/google?connect=1${add ? `&add=${add}` : ''}` : `/auth/google${add ? `?add=${add}` : ''}`);
+  const bq = has('/bigquery') || has('cloud-platform');
+  const logs = has('logging.read') || has('cloud-platform');
+  // A missing extra on a Google sign-in can be allowed here; on a key or token it can't.
+  const extra = (on, key, label) => (on ? <span class="chip">✓ {label}</span>
+    : auth.mode === 'oauth' ? <a class="chip" href={googleHref(key)} title={`Ask Google for ${label} too`}>+ Allow {label}</a>
+    : <span class="chip">✗ {label}</span>);
   const tokenForm = (
     <form class="stack" onSubmit={paste}>
       <input type="password" placeholder="ya29.…" value={token} onInput={(e) => setToken(e.currentTarget.value)} aria-label="Access token" autocomplete="off" />
@@ -574,8 +584,8 @@ function ConnectCard({ auth, onChange, browser = false }) {
             <b>{auth.email || 'Connected'}</b>
             <span class="chip">{has('analytics.readonly') ? '✓' : '✗'} Analytics</span>
             <span class="chip">{has('webmasters.readonly') ? '✓' : '✗'} Search Console</span>
-            <span class="chip">{has('/bigquery') || has('cloud-platform') ? '✓' : '✗'} BigQuery</span>
-            <span class="chip">{has('logging.read') || has('cloud-platform') ? '✓' : '✗'} Cloud logs</span>
+            {extra(bq, 'bigquery', 'BigQuery')}
+            {extra(logs, 'logging', 'Cloud logs')}
             {auth.expiresAt && <span class="muted small">{auth.expired ? 'expired' : `expires ${new Date(auth.expiresAt).toLocaleTimeString()}`}</span>}
             <span class="grow" style={{ flex: 1 }} />
             <button class="btn ghost danger" type="button" onClick={async () => { await api.post('/auth/signout'); onChange(); }}>{auth.mode === 'service' ? 'Remove key' : 'Sign out'}</button>
@@ -591,7 +601,7 @@ function ConnectCard({ auth, onChange, browser = false }) {
         {auth.mode === 'service' && (
           <p class="note m-0">
             Add <code>{auth.email}</code> in GA4 (Admin → Property access management, Viewer) and in Search Console (Settings → Users and permissions, Restricted).
-            For BigQuery, give it BigQuery Data Viewer and Job User in the project.
+            For BigQuery, give it BigQuery Data Viewer and Job User in the project; for Firebase logs, Logs Viewer.
           </p>
         )}
         <form class="stack" onSubmit={useKey}>
@@ -607,10 +617,18 @@ function ConnectCard({ auth, onChange, browser = false }) {
         </form>
         <div class="stack">
           <div class="stack">
-            {auth.oauthAvailable ? (
+            {hosted ? (
+              <details class="advanced">
+                <summary>Or sign in with Google instead</summary>
+                <div class="stack">
+                  <p class="note m-0">Only for Google accounts on the test-user list of Kauzl’s Google app; the key above works for everyone. Asks for Analytics and Search Console; allow BigQuery and Cloud logs afterwards, if you use them.</p>
+                  <a class="btn self-start" href={googleHref()}>{auth.mode === 'oauth' ? 'Sign in with Google again' : 'Sign in with Google'}</a>
+                </div>
+              </details>
+            ) : auth.oauthAvailable ? (
               <>
-                <a class="btn primary self-start" href="/auth/google">{auth.connected ? 'Sign in again' : 'Continue with Google'}</a>
-                {auth.connected && <p class="note m-0">Signing in again picks up permissions added since you last connected, like Cloud logs for Firebase.</p>}
+                <a class="btn primary self-start" href={googleHref()}>{auth.connected ? 'Sign in again' : 'Continue with Google'}</a>
+                <p class="note m-0">Asks for Analytics and Search Console. BigQuery and Cloud logs are asked for separately, once you allow them here.</p>
               </>
             ) : (
               <p class="note">
@@ -727,6 +745,10 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
 
   // Plausible, PostHog and Cloudflare picks, saved once the site has an id.
   const [sourcePicks, setSourcePicks] = useState({});
+  const others = useOtherSources(initial.id || '', form.host, sourcePicks);
+  const pickOther = (key, value) => setSourcePicks((p) => ({ ...p, [key]: value }));
+  // Sources the user added from "Add a source" before giving them a value.
+  const [added, setAdded] = useState([]);
   const set = (patch) => setForm((f) => ({ ...f, ...patch }));
   const setBq = (patch) => setForm((f) => ({ ...f, bq: { ...f.bq, ...patch } }));
 
@@ -769,7 +791,7 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
       </div>}
       {error && <ErrorState error={error} />}
       {(!part || part === 'analytics' || part === 'bigquery') && (
-      <Card title={part === 'bigquery' ? 'BigQuery export' : part ? 'Analytics' : 'Your site'} sub={part === 'bigquery' ? 'GA4’s raw events, for Journeys and Raw data.' : part ? 'The site’s address and where its numbers come from.' : 'Its address, then where its numbers come from. Skip what you don’t use.'}
+      <Card title={part === 'bigquery' ? 'BigQuery export' : part ? 'Analytics' : 'Your site'} sub={part === 'bigquery' ? 'GA4’s raw events, for Journeys and Raw data.' : part ? 'The site’s address and where its numbers come from.' : 'Its address, then where its numbers come from.'}
         actions={!initial.id && (
           <button class="btn ghost" type="button" onClick={() => setForm((f) => ({ ...f, label: PUBLIC_SAMPLE.label, host: PUBLIC_SAMPLE.host, useBq: true, bq: { ...f.bq, ...PUBLIC_SAMPLE.bq } }))}>
             <Icon name="database" size={13} /> Use Google’s public GA4 sample
@@ -798,17 +820,11 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
             </label>
           </div>
 
-          <div class="an-sources">
-            <section class="an-src">
-              <div class="an-src-id">
-                <BrandIcon name="analytics" />
-                <div>
-                  <b>Google Analytics 4</b>
-                  <small>Visits, pages and where people came from.</small>
-                  <span class={`an-pill${form.propertyId ? ' on' : ''}`}>{form.propertyId ? 'Connected' : 'Recommended'}</span>
-                </div>
-              </div>
-              <div class="an-src-fields">
+          {(() => {
+            // Only the sources this site uses show; the rest wait in "Add a source".
+            const sources = [
+              { key: 'ga4', icon: 'analytics', name: 'Google Analytics 4', what: 'Visits, pages and where people came from.', on: Boolean(form.propertyId),
+                clear: () => set({ propertyId: '', streamName: '' }), fields: <>
                 <label class="field">Property
                   {properties.data?.length ? (
                     <select value={form.propertyId} onChange={(e) => set({ propertyId: e.currentTarget.value, streamName: '' })}>
@@ -830,19 +846,9 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
                   </select>
                   <small>Pick one when a property has several sites.</small>
                 </label>
-              </div>
-            </section>
-
-            <section class="an-src">
-              <div class="an-src-id">
-                <BrandIcon name="search" />
-                <div>
-                  <b>Search Console</b>
-                  <small>Google searches that show and click your site.</small>
-                  <span class={`an-pill${form.searchSite ? ' on' : ''}`}>{form.searchSite ? 'Connected' : 'Recommended'}</span>
-                </div>
-              </div>
-              <div class="an-src-fields">
+              </> },
+              { key: 'gsc', icon: 'search', name: 'Search Console', what: 'Google searches that show and click your site.', on: Boolean(form.searchSite),
+                clear: () => set({ searchSite: '', includeSubdomains: false }), fields: <>
                 <label class="field">Property
                   {searchSites.data?.length ? (
                     <select value={form.searchSite} onChange={(e) => set({ searchSite: e.currentTarget.value })}>
@@ -857,11 +863,39 @@ function SiteForm({ initial, auth, focus, part = '', measures = null, onCancel, 
                   <input type="checkbox" role="switch" checked={form.includeSubdomains} onChange={(e) => set({ includeSubdomains: e.currentTarget.checked })} />
                   <span><b>Include subdomains</b><small>Count blog.{form.host || 'example.com'} and the like as this site.</small></span>
                 </label>
+              </> },
+              ...(others || []).map((o) => ({ key: o.key, icon: o.key, name: o.name, what: o.what, on: Boolean(o.value),
+                clear: () => pickOther(o.key, ''), fields: <OtherSourceFields source={o} onPick={pickOther} /> })),
+            ];
+            const shown = sources.filter((x) => x.on || added.includes(x.key));
+            const rest = sources.filter((x) => !shown.includes(x));
+            return (
+              <div class="an-sources">
+                {shown.map((x) => (
+                  <section key={x.key} class="an-src">
+                    <div class="an-src-id">
+                      <BrandIcon name={x.icon} />
+                      <div>
+                        <b>{x.name}</b>
+                        <small>{x.what}</small>
+                        <button type="button" class="an-remove" onClick={() => { x.clear(); setAdded((a) => a.filter((k) => k !== x.key)); }}>Remove</button>
+                      </div>
+                    </div>
+                    <div class="an-src-fields">{x.fields}</div>
+                  </section>
+                ))}
+                {rest.length > 0 && (
+                  <label class="field an-add">{shown.length ? 'Add a source' : 'Where do this site’s numbers come from?'}
+                    <select value="" onChange={(e) => { const k = e.currentTarget.value; if (k) setAdded((a) => [...a, k]); }}>
+                      <option value="">{shown.length ? 'Choose another source…' : 'Choose a source…'}</option>
+                      {rest.map((x) => <option key={x.key} value={x.key}>{x.name}</option>)}
+                    </select>
+                    {!shown.length && <small>Google Analytics 4 and Search Console are the usual start. Add more any time.</small>}
+                  </label>
+                )}
               </div>
-            </section>
-
-            <MoreAnalyticsSources siteId={initial.id || ''} host={form.host} picks={sourcePicks} onPick={(key, value) => setSourcePicks((p) => ({ ...p, [key]: value }))} />
-          </div>
+            );
+          })()}
         </>
         )}
 

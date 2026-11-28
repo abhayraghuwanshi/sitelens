@@ -31,11 +31,11 @@ export default {
 <thead><tr><th></th><th>Plausible</th><th>Kauzl</th></tr></thead>
 <tbody>
 <tr><td>What it is</td><td>Privacy-first analytics</td><td>An analyst on top of your analytics</td></tr>
-<tr><td>Tracking script</td><td>Yes, its own, small and cookieless</td><td>None. Reads GA4</td></tr>
-<tr><td>Cookie banner needed</td><td>No</td><td>Whatever GA4 needs on your site</td></tr>
-<tr><td>Visits, sources, pages</td><td>Yes, in one clean dashboard</td><td>Yes, from GA4</td></tr>
+<tr><td>Tracking script</td><td>Yes, its own, small and cookieless</td><td>None. Reads Plausible or GA4</td></tr>
+<tr><td>Cookie banner needed</td><td>No</td><td>None of its own; your tracker decides</td></tr>
+<tr><td>Visits, sources, pages</td><td>Yes, in one clean dashboard</td><td>Yes, from Plausible or GA4</td></tr>
 <tr><td>Search Console data</td><td>Yes, search terms in the dashboard</td><td>Yes, plus Bing, and to-dos from it</td></tr>
-<tr><td>“Why did this move?” in sentences</td><td>No</td><td>Yes, the Story</td></tr>
+<tr><td>“Why did this move?” in sentences</td><td>No</td><td>Yes, on each day of the calendar</td></tr>
 <tr><td>Releases and posts on the same timeline</td><td>Not built in</td><td>Yes, from GitHub, stores, Reddit, Hacker News</td></tr>
 <tr><td>Each day against a normal day for that weekday</td><td>No</td><td>Yes</td></tr>
 <tr><td>Alerts</td><td>Traffic spike emails</td><td>Jumps and drops in traffic, search, goals and store users</td></tr>

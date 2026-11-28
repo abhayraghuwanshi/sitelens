@@ -285,7 +285,7 @@ export function createFirebase({ dbPath, store, getToken, bigquery = null, fetch
       throw new EngineError('Kauzl can’t read Cloud logs with this Google sign-in yet.', {
         status: 401,
         kind: 'needs-logging-scope',
-        hint: 'Settings → Google → Sign out, then sign in again and allow “View log data for your Google Cloud projects”.',
+        hint: 'Account → Connections → Google → Cloud logs → Allow, then let Google “View log data for your Google Cloud projects”.',
       });
     }
     if (res.status === 403) {

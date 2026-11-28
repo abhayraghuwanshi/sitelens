@@ -7,8 +7,8 @@
 
 // View registry. Report routes remain available for Timeline drill-downs.
 export const VIEWS = [
-  // 'story' is All sites' home: the Sites list. A site's home is its Timeline (Story was removed 2026-11-20).
-  { key: 'story', label: 'Sites', icon: 'grid', allOnly: true },
+  // 'story' is All sites' home: the start page (Sites.jsx). A site's home is its Timeline (Story was removed 2026-11-20).
+  { key: 'story', label: 'Home', icon: 'grid', allOnly: true },
   { key: 'timeline', label: 'Timeline', icon: 'calendar' },
   { key: 'jobs', label: 'Jobs', icon: 'database' },
   { key: 'inbox', label: 'Inbox', icon: 'inbox' },
@@ -110,7 +110,7 @@ export function viewsFor(site) {
 // Phone: Timeline and Inbox are the primary tabs.
 export const PHONE_TABS = ['timeline', 'inbox'];
 export const MORE_VIEWS = [
-  { key: 'story', icon: 'grid', label: 'Sites', fact: 'Every site at a glance', allOnly: true },
+  { key: 'story', icon: 'grid', label: 'Home', fact: 'Every site, and what’s waiting', allOnly: true },
   { key: 'jobs', icon: 'database', label: 'Jobs', fact: 'Fetch data for Timeline' },
   { key: 'journeys', icon: 'route', label: 'Journeys', fact: 'What people do once here', warehouse: true },
 ];

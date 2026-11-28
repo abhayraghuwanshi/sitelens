@@ -171,15 +171,37 @@ test('invited users sign in with a secure cookie', async () => {
   assert.match(done.headers['set-cookie'][0], /HttpOnly; Secure; SameSite=Lax/);
   const me = await call('/api/me', { cookie });
   assert.equal(JSON.parse(me.body).email, 'alice@example.com');
-  // Signing in connected Google too: no second step in the app.
+  // Signing in only says who you are: Google data isn't connected by it.
   const state = JSON.parse((await call('/api/state', { cookie })).body);
-  assert.equal(state.auth.connected, true);
-  assert.equal(state.auth.email, 'alice@example.com');
+  assert.equal(state.auth.connected, false);
   // Invite emails match whatever case Google returns.
   assert.equal((await signIn('bob@example.com')).done.headers.location, '/');
   // Signed in, / is the app and the home page's button goes straight in.
   assert.doesNotMatch((await call('/', { cookie })).body, /Did what you shipped/);
   assert.match((await call('/home', { cookie })).body, /href="\/">Open Kauzl/);
+});
+
+test('sign-in asks Google for openid email only; the Google card’s sign-in connects the data, extras only when asked', async () => {
+  const headers = { 'fly-client-ip': '203.0.113.40' };
+  const plain = new URL((await call('/login/google', { headers })).headers.location).searchParams;
+  assert.equal(plain.get('scope'), 'openid email');
+  assert.equal(plain.get('access_type'), null);
+
+  const connect = new URL((await call('/login/google?connect=1', { headers })).headers.location).searchParams;
+  assert.match(connect.get('scope'), /analytics\.readonly/);
+  assert.doesNotMatch(connect.get('scope'), /bigquery|logging/);
+  assert.equal(connect.get('access_type'), 'offline');
+  const done = await call(`/login/callback?code=alice@example.com&state=${connect.get('state')}`, { headers });
+  assert.equal(done.headers.location, '/#/account?i=google');
+  const cookie = String(done.headers['set-cookie']).split(';')[0];
+  const state = JSON.parse((await call('/api/state', { cookie })).body);
+  assert.equal(state.auth.connected, true);
+  assert.equal(state.auth.email, 'alice@example.com');
+
+  // BigQuery is asked for only when added; unknown names are dropped.
+  const more = new URL((await call('/login/google?connect=1&add=bigquery,evil', { headers })).headers.location).searchParams;
+  assert.match(more.get('scope'), /auth\/bigquery/);
+  assert.doesNotMatch(more.get('scope'), /logging|evil/);
 });
 
 test('cross-site writes are refused', async () => {

@@ -13,6 +13,7 @@ import { pushPanel } from './Panel.jsx';
 import { useSiteProduct } from '../product.js';
 import { People, REGION } from './Live.jsx';
 import { DayMap, dayPlaces } from './DayMap.jsx';
+import { TimelineTour } from './TimelineTour.jsx';
 import { HEAT, mix, amountFill, peakFill, shareFill, changeFill, amountLegendStops, changeLegendStops, changeTone, toneClass } from './heatmap.js';
 
 // Timeline (docs/redesign → Timeline): every day of a site as a map, with an
@@ -102,6 +103,11 @@ export function Timeline({ site, sites, params }) {
   const [menu, setMenu] = useState('');
   const [adding, setAdding] = useState(false);
   const phone = usePhone();
+  // The walk-through: once on a first visit, then from "Tour".
+  const [toured, setToured] = usePersistent('tour-timeline', false);
+  // ?tour=1 (Home's walk-through link) starts it on arrival.
+  const [touring, setTouring] = useState(() => params.has('tour'));
+  const endTour = () => { setTouring(false); setToured(true); if (params.has('tour')) go({ tour: '' }); };
 
   const go = (patch) => {
     const p = new URLSearchParams(params);
@@ -167,11 +173,20 @@ export function Timeline({ site, sites, params }) {
       .sort((a, b) => Number(b.isNew) - Number(a.isNew) || b.ratio - a.ratio)[0];
   };
   const focused = items.find((it) => it.key === focus) || (lens === 'citation' ? items.find((it) => it.key === 'citing') : lens === 'bing' ? items.find((it) => it.unit === 'clicks') : undefined);
+  // Sources, landing pages and searches add up to the day's total, so "All" is a real
+  // choice for them: the calendar shows the total and names the days one of them takes off;
+  // picking one plots it alone. Goals, metrics and the rest don't add up (installs + minutes
+  // means nothing), so for those you pick one.
+  const canAll = ['page', 'source', 'query'].includes(lens);
+  const showAll = canAll && !focused;
+  const pickOne = hasMetricPicker && !showAll;
+  const allMax = showAll ? Math.max(1, ...days.map((d) => map.get(d)?.[L.of] || 0)) : 1;
   const focusedPeak = hasMetricPicker && focused ? Math.max(1, ...focused.series.map((v) => v || 0)) : 1;
   const max = Math.max(1, ...days.map((d) => map.get(d)?.[metric] || 0));
   const fill = (d) => {
     const row = map.get(d);
     if (!hasMetricPicker && (!row || row[metric] === null)) return '';
+    if (showAll) return row?.[L.of] != null ? amountFill(row[L.of], allMax) : '';
     if (focused && hasMetricPicker) return peakFill(focused.byDate.get(d), focusedPeak, focused.color);
     if (focused) return shareFill(share(focused, d), focused.color);
     // Money is shaded by amount: a usual day of ad spend is usually nothing.
@@ -188,7 +203,7 @@ export function Timeline({ site, sites, params }) {
   // On a phone the calendar is the screen and one day (the picked one, else yesterday)
   // sits in a sheet docked above the tab bar (DaySheet).
   const phoneDay = picked && picked <= last ? picked : last;
-  const ctx = { map, metric, lens, items, hasMetricPicker, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today };
+  const ctx = { map, metric, lens, items, hasMetricPicker: pickOne, usual, fill, evOn, jumpOn, focused, share, last, picked: phone && zoom !== 'day' ? phoneDay : picked, L, phone, go, vf, vk, today };
   const touch = useRef(null);
   // A day picked on a phone stays in sight above the sheet that rose to show it, as Maps
   // keeps a picked place visible above its card.
@@ -264,14 +279,15 @@ export function Timeline({ site, sites, params }) {
     </span>
   );
   const jobsHref = site ? `#/site/${encodeURIComponent(site.id)}/jobs` : '#/jobs';
-  const addBtn = !site?.shared && <button type="button" class="nx-icon-btn" title="Add to Timeline" aria-label="Add to Timeline" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>;
+  const addBtn = !site?.shared && <button type="button" class="nx-icon-btn" data-tour="add" title="Add to Timeline" aria-label="Add to Timeline" onClick={() => setAdding(true)}><Icon name="plus" size={15} /></button>;
   const pickerLabel = { page: 'landing page', source: 'traffic source', query: 'search query', citation: 'citation source', goal: 'goal metric', metric: 'connected metric', job: 'job result', bing: 'Bing metric', custom: 'custom event type' }[lens];
   const pickerNames = { bing: 'Bing metrics', page: 'landing pages', source: 'traffic sources', query: 'searches', custom: 'event types' }[lens] || 'metrics';
-  const pickerPrompt = { page: 'Choose a landing page', source: 'Choose a source', query: 'Choose a search', custom: 'Choose an event type' }[lens] || 'Choose a metric';
+  const pickerPrompt = { page: 'All landing pages', source: 'All sources', query: 'All searches', custom: 'Choose an event type' }[lens] || 'Choose a metric';
+  const allTotal = canAll ? days.filter((d) => d <= last).reduce((a, d) => a + (map.get(d)?.[L.of] || 0), 0) : 0;
   const metricPicker = hasMetricPicker && (
     <select class="tl-pbtn tl-goal-metric" aria-label={`Timeline ${pickerLabel}`} value={focused?.key || ''}
       disabled={!items.length} onChange={(e) => go({ f: e.currentTarget.value })}>
-      <option value="" disabled={lens === 'citation' && items.length > 0}>{(custom ? events.loading : lead.loading) ? `Loading ${pickerNames}…` : items.length ? pickerPrompt : `No ${pickerNames} available`}</option>
+      <option value="" disabled={lens === 'citation' && items.length > 0}>{(custom ? events.loading : lead.loading) ? `Loading ${pickerNames}…` : items.length ? (canAll ? `${pickerPrompt} · ${metricNumber(allTotal)} ${L.of === 'clicks' ? 'clicks' : 'visits'}` : pickerPrompt) : `No ${pickerNames} available`}</option>
       {items.map((item) => {
         const period = item.summary === 'average' ? 'daily average' : item.summary === 'latest' ? 'latest' : 'total';
         const amount = item.total == null ? 'No data' : `${metricNumber(item.total)} ${lens === 'citation' ? 'answers' : item.unit && !['goal', 'metric'].includes(lens) ? item.unit : period}`;
@@ -322,20 +338,21 @@ export function Timeline({ site, sites, params }) {
         </div>
         {phone ? (
           <span class="tl-bar">
-            <OptionsSheet title="Timeline view" label="View options">
+            <span data-tour="opts"><OptionsSheet title="Timeline view" label="View options">
               <section class="nx-opts-sec"><h3 class="nx-label-sm">Colour the days</h3><div class="nx-pop-list">{lensItems}</div></section>
               {zoom !== 'day' && <section class="nx-opts-sec"><h3 class="nx-label-sm">Draw as</h3>{drawAs}</section>}
               <section class="nx-opts-sec"><h3 class="nx-label-sm">Marks on the days</h3><div class="nx-pop-list">{markRows}</div></section>
-            </OptionsSheet>
+              <section class="nx-opts-sec"><button type="button" class="nx-pop-row" onClick={() => setTimeout(() => setTouring(true), 300)}><Icon name="sparkles" size={14} />Take the tour</button></section>
+            </OptionsSheet></span>
             {addBtn}
           </span>
         ) : (
           <span class="tl-bar">
-            <span class="tl-filter-group">
+            <span class="tl-filter-group" data-tour="by">
               <Menu name="by" open={menu} setOpen={setMenu} label={<>{byLabel} <Icon name="updown" size={11} /></>} cls="nx-chip tl-breakdown" title="What colours the days">{lensItems}</Menu>
               {pickerSlot}
             </span>
-            <Menu name="marks" open={menu} setOpen={setMenu} label={<>{marksLabel} <Icon name="updown" size={11} /></>} cls="nx-chip">{markRows}</Menu>
+            <span data-tour="marks"><Menu name="marks" open={menu} setOpen={setMenu} label={<>{marksLabel} <Icon name="updown" size={11} /></>} cls="nx-chip">{markRows}</Menu></span>
             {zoom !== 'day' && drawAs}
             {addBtn}
           </span>
@@ -365,11 +382,20 @@ export function Timeline({ site, sites, params }) {
 
   const loading = !metrics.data || (custom && events.loading && !events.data) || (L && lead.data?.by !== lens && !lead.error);
   const err = metrics.error || events.error || lead.error;
+  const ready = !loading && !err && zoom !== 'day';
+  // First visit: start once the calendar has drawn.
+  useEffect(() => {
+    if (toured || touring || !ready) return undefined;
+    const t = setTimeout(() => setTouring(true), 600);
+    return () => clearTimeout(t);
+  }, [ready, toured]);
+  const tour = touring && ready && <TimelineTour phone={phone} onDone={endTour} />;
 
   if (phone && zoom !== 'day') {
     return (
       <div class="nx-page tl-phone">
         {addForm}
+        {tour}
         {controls}
         {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
           : loading ? <Loading height={320} owl label="Reading every day…" />
@@ -395,8 +421,10 @@ export function Timeline({ site, sites, params }) {
   }
 
   return (
-    <Page title="Timeline" sub={`Every day: how it went, where people landed, what shipped${site ? '' : ' · all sites'}`} actions={controls}>
+    <Page title="Timeline" sub={`Every day: how it went, where people landed, what shipped${site ? '' : ' · all sites'}`} actions={controls}
+      corner={zoom !== 'day' && <button type="button" class="tl-tour-btn" onClick={() => setTouring(true)} title="A quick walk through the Timeline"><Icon name="sparkles" size={13} />Tour</button>}>
       {site && <SetupNote site={site} />}
+      {tour}
       {addForm}
       {err ? <ErrorState error={err} onRetry={() => { metrics.reload(); events.reload(); lead.reload?.(); }} />
         : loading ? <Loading height={420} owl label="Reading every day…" />
@@ -428,59 +456,127 @@ export function Timeline({ site, sites, params }) {
 }
 
 // The phone's day sheet, docked above the tab bar like Maps' place card: peek (the
-// day's headline), half (its numbers) or full (everything). Drag the grip, or tap it
-// to step up; picking a day on the calendar lifts it to half. Swipe sideways for the
-// day before or after.
+// day's headline), half (its numbers) or full (everything). Drag it anywhere, or tap
+// the grip to step up; picking a day on the calendar lifts it to half. Swipe sideways
+// for the day before or after.
+//
+// Touch rules (as Maps): a vertical drag moves the sheet, not the page behind it,
+// unless the sheet is full and its content can scroll that way: then the content
+// scrolls, and once it is back at the top, dragging down lowers the sheet again.
 const SNAPS = ['peek', 'half', 'full'];
 function DaySheet({ picked, swipe, children }) {
   const [snap, setSnap] = useState('peek');
   const [dragH, setDragH] = useState(null);
-  const start = useRef(null);
+  const [, setVp] = useState(0);
+  const sheet = useRef(null);
   const body = useRef(null);
+  const g = useRef(null); // the gesture in progress
+  const tapped = useRef(false);
+  const snapRef = useRef(snap);
+  snapRef.current = snap;
   const sizes = () => {
-    const vh = window.innerHeight;
+    const vh = window.visualViewport?.height || window.innerHeight;
     const top = document.querySelector('.nx-ptop')?.getBoundingClientRect().bottom || 60;
     const bar = document.querySelector('.nx-tabbar')?.offsetHeight || 60;
     const full = Math.max(320, vh - top - bar - 8);
     return { peek: 136, half: Math.min(full, Math.round(vh * 0.52)), full, bar };
   };
   useEffect(() => { if (picked) setSnap((x) => (x === 'peek' ? 'half' : x)); }, [picked]);
-  useEffect(() => { if (body.current && snap === 'peek') body.current.scrollTop = 0; }, [snap]);
+  useEffect(() => { if (body.current && snap !== 'full') body.current.scrollTop = 0; }, [snap]);
+  // The browser's toolbars come and go as the page scrolls, which changes the room the
+  // sheet has: measure again when they do.
+  useEffect(() => {
+    const on = () => setVp((n) => n + 1);
+    const vv = window.visualViewport;
+    (vv || window).addEventListener('resize', on);
+    return () => (vv || window).removeEventListener('resize', on);
+  }, []);
   const z0 = sizes();
   const h = dragH ?? z0[snap];
   // The page leaves room under the calendar for the sheet, so any day can scroll above it.
   useEffect(() => {
     document.documentElement.style.setProperty('--tl-sheet-h', `${z0[snap]}px`);
     return () => document.documentElement.style.removeProperty('--tl-sheet-h');
-  }, [snap]);
-  const grip = {
-    onPointerDown: (e) => { start.current = { y: e.clientY, h, t: Date.now(), moved: false }; e.currentTarget.setPointerCapture(e.pointerId); },
-    onPointerMove: (e) => {
-      const st = start.current;
+  }, [snap, z0[snap]]);
+
+  // Touch listeners go on by hand: touchmove must be non-passive to stop the page
+  // behind from scrolling while the sheet is dragged.
+  useEffect(() => {
+    const el = sheet.current;
+    if (!el) return undefined;
+    const start = (e) => {
+      if (e.touches.length !== 1) { g.current = null; return; }
+      const t = e.touches[0];
+      g.current = { x: t.clientX, y: t.clientY, h: el.getBoundingClientRect().height, mode: null, samples: [[t.clientY, e.timeStamp]] };
+    };
+    const move = (e) => {
+      const st = g.current;
       if (!st) return;
-      const dy = e.clientY - st.y;
-      if (!st.moved && Math.abs(dy) < 6) return;
-      st.moved = true;
+      const t = e.touches[0];
+      const dx = t.clientX - st.x;
+      const dy = t.clientY - st.y;
+      // Decided on the first move: Chrome ignores preventDefault once a scroll has begun,
+      // and a cancelled first move would stop the content scrolling for the whole touch.
+      if (!st.mode) {
+        if (dx === 0 && dy === 0) return;
+        if (Math.abs(dx) > Math.abs(dy)) { st.mode = 'side'; return; } // a day swipe
+        const b = body.current;
+        const inBody = b && b.contains(e.target);
+        const atTop = !b || b.scrollTop <= 0;
+        const full = snapRef.current === 'full';
+        // Full sheet: content scrolls up freely, and down until it reaches the top.
+        st.mode = inBody && full && (dy < 0 || !atTop) ? 'scroll' : 'drag';
+      }
+      if (st.mode !== 'drag') return;
+      e.preventDefault();
       const z = sizes();
-      setDragH(Math.max(z.peek - 40, Math.min(z.full, st.h - dy)));
-    },
-    onPointerUp: (e) => {
-      const st = start.current;
-      start.current = null;
-      if (!st) return;
-      if (!st.moved) { setSnap((x) => SNAPS[(SNAPS.indexOf(x) + 1) % SNAPS.length]); return; }
+      const want = st.h - dy;
+      // Past either end the sheet gives a little, like a rubber band.
+      const hh = want > z.full ? z.full + (want - z.full) * 0.2 : want < z.peek ? z.peek - (z.peek - want) * 0.3 : want;
+      st.samples.push([t.clientY, e.timeStamp]);
+      if (st.samples.length > 5) st.samples.shift();
+      setDragH(hh);
+    };
+    const end = (e) => {
+      const st = g.current;
+      g.current = null;
+      if (!st || st.mode !== 'drag') return;
+      tapped.current = true; // a drag that ends on the grip is not a tap
+      setTimeout(() => { tapped.current = false; }, 400);
       const z = sizes();
-      const now = Math.max(z.peek, Math.min(z.full, st.h - (e.clientY - st.y)));
-      const v = (st.y - e.clientY) / Math.max(1, Date.now() - st.t); // px per ms, up is positive
+      const now = el.getBoundingClientRect().height;
+      const [y0, t0] = st.samples[0];
+      const [y1, t1] = st.samples[st.samples.length - 1];
+      const v = (y0 - y1) / Math.max(1, t1 - t0); // px per ms, up is positive
+      const cur = snapRef.current;
       let next = SNAPS.reduce((a, k) => (Math.abs(z[k] - now) < Math.abs(z[a] - now) ? k : a), 'peek');
-      if (Math.abs(v) > 0.5) next = SNAPS[Math.max(0, Math.min(2, SNAPS.indexOf(snap) + (v > 0 ? 1 : -1)))];
+      if (e.type !== 'touchcancel' && Math.abs(v) > 0.4) {
+        // A flick goes one step past wherever the sheet now is, in its direction.
+        const order = SNAPS.filter((k) => (v > 0 ? z[k] > now : z[k] < now));
+        next = order.length ? (v > 0 ? order[0] : order[order.length - 1]) : cur;
+      }
       setDragH(null);
       setSnap(next);
-    },
+    };
+    el.addEventListener('touchstart', start, { passive: true });
+    el.addEventListener('touchmove', move, { passive: false });
+    el.addEventListener('touchend', end);
+    el.addEventListener('touchcancel', end);
+    return () => {
+      el.removeEventListener('touchstart', start);
+      el.removeEventListener('touchmove', move);
+      el.removeEventListener('touchend', end);
+      el.removeEventListener('touchcancel', end);
+    };
+  }, []);
+
+  const step = () => {
+    if (tapped.current) return;
+    setSnap((x) => SNAPS[(SNAPS.indexOf(x) + 1) % SNAPS.length]);
   };
   return (
-    <section class={`tl-sheet ${snap}${dragH != null ? ' drag' : ''}`} style={`height:${h}px;bottom:${z0.bar}px`} aria-label="The picked day">
-      <button type="button" class="tl-sheet-grip" aria-label={snap === 'full' ? 'Lower the day' : 'Raise the day'} {...grip}><span class="nx-grab" aria-hidden="true" /></button>
+    <section ref={sheet} class={`tl-sheet ${snap}${dragH != null ? ' drag' : ''}`} style={`height:${h}px;bottom:${z0.bar}px`} aria-label="The picked day">
+      <button type="button" class="tl-sheet-grip" aria-label={snap === 'full' ? 'Lower the day' : 'Raise the day'} onClick={step}><span class="nx-grab" aria-hidden="true" /></button>
       <div class="tl-sheet-body" ref={body} {...swipe}>{children}</div>
     </section>
   );
@@ -591,11 +687,16 @@ function Cell({ d, ctx }) {
     val = <span class="tl-dv">{fmt(v)}{!ctx.phone && <small class="muted">{Math.round(ctx.share(ctx.focused, d) * 100)}%</small>}</span>;
   } else if (ctx.L) {
     const j = ctx.jumpOn(d);
+    const tot = ctx.L.of ? row?.[ctx.L.of] : null;
+    let jv = null;
     if (j) {
-      const what = j.isNew ? 'new' : `↑ ${j.ratio >= 10 ? Math.round(j.ratio) : j.ratio.toFixed(1)}× usual`;
-      val = ctx.phone ? <span class="tl-pbar" style={`background:${j.it.color}`} />
-        : <span class="tl-jmp" style={`--c:${j.it.color}`} title={`${j.it.key}: ${what}`}><b>{ctx.lens === 'page' ? pageName(j.it.key) : j.it.key}</b><small>{what}</small></span>;
+      const x = j.ratio >= 10 ? Math.round(j.ratio) : j.ratio.toFixed(1);
+      const what = j.isNew ? 'new' : '↑';
+      jv = ctx.phone ? <span class="tl-pbar" style={`background:${j.it.color}`} />
+        : <span class="tl-jmp" style={`--c:${j.it.color}`} title={`${j.it.key}: ${j.isNew ? 'new this day' : `${x}× its usual share`}`}><b>{ctx.lens === 'page' ? pageName(j.it.key) : j.it.key}</b><small>{what}</small></span>;
     }
+    // All: the day's total, and under it whichever one took off that day.
+    val = <span class="tl-dall">{tot != null && <span class="tl-dv">{ctx.phone ? kfmt(tot) : fmt(tot)}</span>}{jv}</span>;
   } else {
     const v = row[ctx.metric];
     const u = ctx.usual(d);
@@ -634,15 +735,15 @@ function WeekView({ days, ctx }) {
     <div class="tl-week">
       {days.map((d) => {
         const row = ctx.map.get(d);
-        const v = ctx.hasMetricPicker ? ctx.focused?.byDate.get(d) ?? null : row?.[ctx.metric] ?? null;
+        const v = ctx.hasMetricPicker ? ctx.focused?.byDate.get(d) ?? null : ctx.L?.of ? row?.[ctx.L.of] ?? null : row?.[ctx.metric] ?? null;
         const u = ctx.usual(d);
         const c = v != null && u ? v / u - 1 : null;
         return (
           <button key={d} type="button" class={`tl-wcol${ctx.picked === d ? ' sel' : ''}`} onClick={() => ctx.go({ day: ctx.picked === d ? '' : d })}>
             <span class="tl-wtop" style={ctx.fill(d)}>
               <span class="muted small">{fmtD(d, { weekday: 'short', day: 'numeric' })}</span>
-              <b>{ctx.hasMetricPicker ? metricNumber(v) : ctx.vf(v)}</b>
-              {ctx.lens !== 'amount' && !ctx.hasMetricPicker && <small class={toneClass(changeTone(c))}>{pct(c)} vs usual</small>}
+              <b>{ctx.hasMetricPicker ? metricNumber(v) : ctx.L ? fmt(v) : ctx.vf(v)}</b>
+              {ctx.lens !== 'amount' && !ctx.hasMetricPicker && !ctx.L && <small class={toneClass(changeTone(c))}>{pct(c)} vs usual</small>}
             </span>
             <span class="tl-wev">
               {ctx.L && !ctx.hasMetricPicker && (() => { const j = ctx.jumpOn(d); return j ? <span><i style={`background:${j.it.color}`} />{ctx.lens === 'page' ? pageName(j.it.key) : j.it.key}</span> : null; })()}
@@ -767,7 +868,7 @@ function ScaleKey({ ctx, asLine }) {
   if (asLine) return <p class="tl-scale">Each point is a day; click one to open it.</p>;
   if (ctx.hasMetricPicker) return <p class="tl-scale">{ctx.focused ? <><b>{ctx.focused.label}</b> per day. Darker days have higher values.</> : ctx.lens === 'citation' ? 'No AI answer checks recorded in this period.' : ctx.lens === 'custom' ? 'Choose an event type to see its daily values.' : ctx.lens === 'page' ? 'Choose a landing page to see its daily visits.' : ctx.lens === 'source' ? 'Choose a source to see its daily visits.' : ctx.lens === 'query' ? 'Choose a search to see its daily clicks.' : 'Choose a goal or metric to see its daily values.'}</p>;
   if (ctx.focused) return <p class="tl-scale"><b>{ctx.focused.key}</b>: its {ctx.L.unit || (ctx.L.of === 'clicks' ? 'clicks' : 'visits')} each day; darker is a bigger share. <button type="button" class="todo-link" onClick={() => ctx.go({ f: '' })}>Stop</button></p>;
-  if (ctx.L) return <p class="tl-scale">A day is named when something starts: a new {ctx.L.one}, or one rising to 2× its usual share.</p>;
+  if (ctx.L) return <p class="tl-scale">{ctx.L.of ? `Darker days had more ${ctx.L.of === 'clicks' ? 'clicks' : 'visits'}, from every ${ctx.L.one}. ` : ''}A day is named when something starts: a new {ctx.L.one}, or one rising to 2× its usual share.</p>;
   if (ctx.lens === 'amount' || MONEY.has(ctx.metric)) return <p class="tl-scale">{MONEY.has(ctx.metric) ? 'Less' : 'Fewer'} {amountLegendStops().map((p) => <i key={p} style={mix(HEAT.AMOUNT_COLOR, p)} />)} More</p>;
   const [strong, weak] = changeLegendStops();
   return (

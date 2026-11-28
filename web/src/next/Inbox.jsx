@@ -49,7 +49,7 @@ export function Agent({ entry, small = false }) {
 }
 
 // Where a to-do stands, from its write-ups.
-function stageOf(t) {
+export function stageOf(t) {
   if (t.status === 'done') return ['Done', 'up'];
   const last = t.entries?.at(-1);
   if (last?.author === 'claude') return [last.changes ? 'Needs your look' : 'Has a write-up', 'warn'];
@@ -244,7 +244,7 @@ function Swipe({ label, onAct, children }) {
 }
 
 // The same rule on the same thing is one row: the newest alert, earlier ones inside.
-function grouped(alerts) {
+export function grouped(alerts) {
   const groups = new Map();
   for (const a of alerts) {
     const key = `${a.rule}:${a.subject?.type}:${a.subject?.id}:${a.site}`;
@@ -268,7 +268,7 @@ function deltaOf(a) {
   if (['issues', 'stars'].includes(a.rule) && a.change > 0) return `+${a.change}`;
   return null;
 }
-function headline(a) {
+export function headline(a) {
   let t = a.title;
   const lead = `${a.subject?.label}: `;
   if (a.subject?.label && t.startsWith(lead)) t = t.slice(lead.length);

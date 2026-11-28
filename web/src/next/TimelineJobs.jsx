@@ -5,6 +5,7 @@ import { ErrorState, Loading } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { BrandIcon } from '../components/BrandIcon.jsx';
 import { Page } from './Page.jsx';
+import { useBottomSheet } from './sheet.js';
 import { TimelineDialog } from './TimelineDialog.jsx';
 
 const TYPES = { github: 'GitHub', api: 'JSON API', sql: 'SQL metric' };
@@ -218,6 +219,7 @@ function SchedRow({ row, href, onOpen, selected, now }) {
 // One side panel for the clicked job, like the app's day and page panels; a sheet on phones.
 function JobPanel({ row, close, now, children }) {
   const box = useRef(null);
+  useBottomSheet(box, () => { location.hash = close; });
   useEffect(() => {
     const onKey = (e) => { if (e.key === 'Escape') location.hash = close; };
     addEventListener('keydown', onKey);

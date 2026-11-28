@@ -81,7 +81,7 @@ export function privacyPage() {
 <p>Kauzl is an analytics calendar for website owners. It connects to the analytics and search tools you already use, puts your traffic and search results on one timeline next to your releases, posts and campaigns, and explains what changed. Kauzl only shows each user data about websites and accounts that user has connected.</p>
 
 <h2>2. Google user data Kauzl accesses</h2>
-<p>When you sign in with Google, Kauzl requests the following Google OAuth scopes. Kauzl only accesses the Google Analytics properties, Search Console sites, BigQuery datasets and Google Cloud projects that you choose inside Kauzl.</p>
+<p>Signing in to Kauzl asks Google only for your email address (openid, email). You can connect your Google data with a read-only service account key that you create, in which case no Google OAuth scopes are requested from you. If you instead choose to connect Google data by signing in with Google, Kauzl requests the Google Analytics and Search Console scopes below, and the BigQuery and Cloud Logging scopes only if you allow them separately. Kauzl only accesses the Google Analytics properties, Search Console sites, BigQuery datasets and Google Cloud projects that you choose inside Kauzl.</p>
 <h3>Basic profile: email address (openid, email)</h3>
 <p>We receive your Google account email address and a Google account ID. We do not receive your Google password.</p>
 <h3>Google Analytics, read-only (https://www.googleapis.com/auth/analytics.readonly)</h3>

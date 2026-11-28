@@ -10,16 +10,26 @@
 import { randomBytes, createSign, createPrivateKey } from 'node:crypto';
 import { cleanToken } from '../shared/sitelens/ga4.js';
 
-export const SCOPES = [
+// What signing in with Google asks for every time.
+export const BASE_SCOPES = [
   'openid',
   'email',
   'https://www.googleapis.com/auth/analytics.readonly',
   'https://www.googleapis.com/auth/webmasters.readonly',
-  // Query jobs need the full BigQuery scope; .readonly cannot always create jobs.
-  'https://www.googleapis.com/auth/bigquery',
-  // Firebase App Hosting request logs and rollouts (read-only).
-  'https://www.googleapis.com/auth/logging.read',
 ];
+// Asked for only when you turn them on (Account → Google): each is one more
+// sensitive permission Google has to verify before a published app may ask for it.
+export const EXTRA_SCOPES = {
+  // Query jobs need the full BigQuery scope; .readonly cannot always create jobs.
+  bigquery: 'https://www.googleapis.com/auth/bigquery',
+  // Firebase App Hosting request logs and rollouts (read-only).
+  logging: 'https://www.googleapis.com/auth/logging.read',
+};
+export const SCOPES = [...BASE_SCOPES, ...Object.values(EXTRA_SCOPES)];
+// The base scopes plus the extras named (unknown names are ignored).
+export function scopesFor(extras = []) {
+  return [...BASE_SCOPES, ...[...new Set(extras)].filter((k) => EXTRA_SCOPES[k]).map((k) => EXTRA_SCOPES[k])];
+}
 
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
 const AUTH_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
@@ -195,7 +205,9 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
       return { email: sa.clientEmail, scopes: SERVICE_SCOPES };
     },
 
-    startUrl() {
+    // extras: names from EXTRA_SCOPES to ask for on top of the base. Ones granted
+    // before stay granted (include_granted_scopes), so signing in again loses nothing.
+    startUrl(extras = []) {
       if (!this.oauthAvailable) throw new AuthError('Set GOOGLE_CLIENT_ID and GOOGLE_CLIENT_SECRET to enable Google sign-in.');
       const state = randomBytes(18).toString('base64url');
       pendingStates.set(state, Date.now() + 10 * 60_000);
@@ -203,7 +215,7 @@ export function createAuth({ store, port, env = process.env, fetchImpl = fetch }
         client_id: clientId,
         redirect_uri: redirectUri,
         response_type: 'code',
-        scope: SCOPES.join(' '),
+        scope: scopesFor(extras).join(' '),
         access_type: 'offline',
         prompt: 'consent',
         include_granted_scopes: 'true',

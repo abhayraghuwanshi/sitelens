@@ -2985,7 +2985,19 @@ document.addEventListener('change', (e) => {
   else if (window.innerWidth < 760) S.device = 'phone';
   if (p.get('embed') === '1') document.body.classList.add('embed');
   // ?only=timeline: just the Timeline page, no sidebar or tabs (the home page's "Look inside"). ?theme=dark|light pins the theme.
-  if (p.get('only') === 'timeline') { S.solo = true; S.view = 'timeline'; S.cal.lens = 'amount'; document.body.classList.add('solo'); }
+  if (p.get('only') === 'timeline') {
+    S.solo = true; S.view = 'timeline'; S.cal.lens = 'amount'; document.body.classList.add('solo');
+    // Framed by the home page: say how tall the Timeline is, so the frame fits it and nothing scrolls inside.
+    if (window.parent !== window) {
+      let last = 0;
+      const tell = () => {
+        const h = Math.ceil(document.querySelector('.app')?.getBoundingClientRect().height || document.documentElement.scrollHeight);
+        if (h && h !== last) { last = h; window.parent.postMessage({ kauzlTimelineHeight: h }, location.origin); }
+      };
+      new ResizeObserver(tell).observe(document.body);
+      tell();
+    }
+  }
   if (p.get('theme') === 'dark' || p.get('theme') === 'light') document.documentElement.dataset.theme = p.get('theme');
   const to = TO[p.get('to')];
   if (to) run(to); else render();

@@ -363,6 +363,16 @@ footer .wrap { display: grid; grid-template-columns: minmax(0, 1.4fr) repeat(3, 
 
 // tools: the free tools are served at /tools/ (TOOLS_ORIGIN is set), so link
 // them and borrow their site.js for the owl's moving eyes.
+// The home page's one script (/home.js): fit the Timeline frame to the Timeline,
+// so it never scrolls inside the frame. Only its own frame, on this origin, is listened to.
+export const HOME_JS = `const frame = document.querySelector('.showcase iframe');
+if (frame) addEventListener('message', (e) => {
+  if (e.origin !== location.origin || e.source !== frame.contentWindow) return;
+  const h = Number(e.data && e.data.kauzlTimelineHeight);
+  if (h > 300 && h < 4000) frame.style.height = h + 'px';
+});
+`;
+
 export function homePage({ signedIn = false, tools = false, ga = '', v = '' } = {}) {
   const q = v ? `?v=${encodeURIComponent(v)}` : '';
   // No sign-in needed: /start opens Kauzl in this browser.
@@ -463,7 +473,7 @@ curl -X POST https://kauzl.com/m/&lt;metric-key&gt; \\
     <div><p class="kicker">How it works</p><h2 class="title">Set up in a few minutes</h2>
     <p class="sub">No new tracking script. Connect what you already use, read-only, and your calendar fills in within minutes.</p></div>
     <ol class="steps">
-      <li><div><h3>Sign in with Google</h3><p>Pick your Analytics property and Search Console site. Read-only access.</p>
+      <li><div><h3>Connect Google</h3><p>Add a read-only Google key, then pick your Analytics property and Search Console site.</p>
         <div class="st-vis" aria-hidden="true">
           <div class="st-row"><span class="k">Google Analytics 4</span><span class="v">acme.com · web</span><span class="st-ok">✓ Read-only</span></div>
           <div class="st-row"><span class="k">Search Console</span><span class="v">sc-domain:acme.com</span><span class="st-ok">✓ Read-only</span></div>
@@ -517,6 +527,7 @@ ${tools ? `  <nav class="foot-col" aria-label="Free tools"><h2>Free tools</h2><u
     return `<li><a href="/guides/${slug}/">Lesson ${COURSE_ORDER.indexOf(slug) + 1} · ${lesson.name}</a></li>`;
   }).join('')}<li><a href="/guides/">All ${COURSE_ORDER.length} lessons →</a></li></ul></nav>
 ` : ''}</div></footer>
+<script src="/home.js${q}" defer></script>
 ${tools ? `<script type="module" src="/tools/assets/site.js${q}"></script>` : ''}
 ${tools && /^(GTM|G)-[A-Z0-9]+$/.test(ga) ? `<script defer src="/tools/assets/ga.js${q}" data-ga="${ga}"></script>` : ''}
 </body></html>`;

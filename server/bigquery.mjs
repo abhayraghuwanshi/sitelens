@@ -25,6 +25,7 @@ function hintFor(status, text) {
   if (t.includes('location')) return 'Set the dataset location (US, EU, asia-south1…) in the site settings.';
   if (t.includes('bytes billed') || t.includes('bytesbilled')) return 'Raise the scan cap for this site, or narrow the date range.';
   if (status === 401) return 'The Google session expired. Reconnect in Settings.';
+  if (status === 403 && /insufficient.*scope|access_token_scope_insufficient/.test(t)) return 'Allow BigQuery for this Google sign-in: Account → Connections → Google → BigQuery → Allow.';
   if (status === 403) return 'The token lacks the BigQuery scope, or the account cannot run jobs in the billing project.';
   return '';
 }

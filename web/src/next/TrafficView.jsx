@@ -248,7 +248,7 @@ function AddPanel({ d, product, onChanged, onClose }) {
   const [tab, setTab] = useState('add');
   const tabs = [['add', 'Add a post'], ['link', 'Make a tagged link'], ['accounts', 'Your accounts']];
   return (
-    <Drawer title="Add a post" onClose={onClose}>
+    <Drawer title="Add a post" onClose={onClose} back>
       <div class="tabs" role="tablist">
         {tabs.map(([k, label]) => <button key={k} type="button" role="tab" aria-selected={tab === k} class={`tab${tab === k ? ' active' : ''}`} onClick={() => setTab(k)}>{label}</button>)}
       </div>

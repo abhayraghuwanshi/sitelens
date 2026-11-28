@@ -43,10 +43,10 @@ import { createHash, hkdfSync, randomBytes, randomUUID } from 'node:crypto';
 import { createApp, selfFetch } from './index.mjs';
 import { createMcp } from './mcp.mjs';
 import { createStore } from './store.mjs';
-import { SCOPES } from './auth.mjs';
+import { scopesFor, EXTRA_SCOPES } from './auth.mjs';
 import { Agent } from 'undici';
 import { guardOutgoingFetch } from './net-guard.mjs';
-import { homePage } from './home.mjs';
+import { homePage, HOME_JS } from './home.mjs';
 import { privacyPage, termsPage } from './legal.mjs';
 import { loginPage, waitlistPage, adminPage, waitlistCsv, signedInPage } from './pages.mjs';
 import { siteRequest, viewerUrl, cleanEmail } from './sharing.mjs';
@@ -562,12 +562,12 @@ export function createGateway({
     const infoRes = await fetchImpl(USERINFO_URL, { headers: { Authorization: `Bearer ${token.access_token}` } });
     const info = await infoRes.json().catch(() => ({}));
     if (!infoRes.ok || !info.email || info.email_verified !== true) throw new Error('Google did not confirm an email address.');
-    return { email: String(info.email).toLowerCase(), token, consented: pending.consent, viewer: pending.viewer };
+    return { email: String(info.email).toLowerCase(), token, consented: pending.consent, viewer: pending.viewer, connect: pending.connect, extras: pending.extras || [] };
   }
 
-  // Signing in also connects Google (GA4, Search Console, BigQuery), so
-  // there's no second Google step inside the app. Returns false when Google
-  // held back a refresh token and the consent screen has to be shown once.
+  // "Sign in with Google" on the Google card (?connect=1): the sign-in also connects
+  // Google (GA4, Search Console, and BigQuery or logs if asked). Returns false when
+  // Google held back a refresh token and the consent screen has to be shown once.
   async function connectGoogle(user, email, token, consented) {
     const app = appFor(user);
     const previous = (await app.store.get()).auth;
@@ -645,6 +645,10 @@ export function createGateway({
     }
     for (const [k, v] of Object.entries(SECURITY_HEADERS)) res.setHeader(k, v);
 
+    // The home page's script: sizes the Timeline frame to the Timeline (server/home.mjs).
+    if (url.pathname === '/home.js') {
+      return res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(HOME_JS);
+    }
     if (url.pathname === '/robots.txt') {
       return res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'public, max-age=3600' }).end(robotsTxt(origin, { tools: Boolean(toolsOrigin) }));
     }
@@ -677,10 +681,15 @@ export function createGateway({
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
       const state = randomBytes(18).toString('base64url');
       const consent = url.searchParams.has('consent');
-      // Someone invited to view a shared site only needs to say who they are.
       const viewer = url.searchParams.has('viewer');
-      loginStates.set(state, { expires: now() + 10 * 60_000, consent, viewer });
-      const params = new URLSearchParams(viewer ? {
+      // Signing in only says who you are (openid email): nothing Google has to verify,
+      // so the Google app can be published without a test-user list. Google data comes
+      // from a service account key on the Google card; ?connect=1 (from that card) is
+      // the optional other way: sign in with Google for the data too (?add=bigquery,logging).
+      const connect = url.searchParams.has('connect') && !viewer;
+      const extras = String(url.searchParams.get('add') || '').split(',').filter((k) => Object.hasOwn(EXTRA_SCOPES, k));
+      loginStates.set(state, { expires: now() + 10 * 60_000, consent, viewer, connect, extras });
+      const params = new URLSearchParams(!connect ? {
         client_id: env.GOOGLE_CLIENT_ID,
         redirect_uri: `${origin}/login/callback`,
         response_type: 'code',
@@ -691,7 +700,7 @@ export function createGateway({
         client_id: env.GOOGLE_CLIENT_ID,
         redirect_uri: `${origin}/login/callback`,
         response_type: 'code',
-        scope: SCOPES.join(' '),
+        scope: scopesFor(extras).join(' '),
         access_type: 'offline',
         include_granted_scopes: 'true',
         prompt: consent ? 'consent select_account' : 'select_account',
@@ -703,7 +712,7 @@ export function createGateway({
       if (limited(req)) return redirectLogin(res, 'Too many sign-in attempts. Wait a few minutes.');
       try {
         if (url.searchParams.get('error')) throw new Error('Sign-in was cancelled.');
-        const { email, token, consented, viewer } = await finishLogin(url.searchParams.get('code'), url.searchParams.get('state'));
+        const { email, token, consented, viewer, connect, extras } = await finishLogin(url.searchParams.get('code'), url.searchParams.get('state'));
         if (!mayEnter(email)) {
           // They told us who they are, so they're on the waitlist now.
           if (!waitlistBusy()) joinWaitlist(email, 'sign-in');
@@ -712,9 +721,10 @@ export function createGateway({
         }
         const firstTime = !db.prepare('SELECT 1 FROM users WHERE email = ?').get(email);
         const user = startSession(res, email);
-        // Only invited people connect their Google data; viewers just look.
-        const done = allowedEmails.has(email) && !viewer ? await connectGoogle(user, email, token, consented) : true;
-        if (!done) return res.writeHead(302, { Location: '/login/google?consent=1' }).end();
+        // Only invited people connect their Google data, and only when they asked to.
+        const done = connect && allowedEmails.has(email) ? await connectGoogle(user, email, token, consented) : true;
+        if (!done) return res.writeHead(302, { Location: `/login/google?connect=1&consent=1${extras.length ? `&add=${extras.join(',')}` : ''}` }).end();
+        if (connect) return res.writeHead(302, { Location: '/#/account?i=google' }).end();
         // With kauzl.com's analytics on, pass through a page that records the sign-in.
         return res.writeHead(302, { Location: tagId ? `/signed-in?e=${firstTime ? 'sign_up' : 'login'}` : '/' }).end();
       } catch (err) {

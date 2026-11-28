@@ -313,12 +313,14 @@ button.nx-ssum-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .nx-promo-card .brand-tile { margin-bottom: 4px; }
 .nx-promo-card > .muted { font-size: var(--text-sm); }
 .nx-promo-go { margin-top: auto; padding-top: 6px; display: inline-flex; align-items: center; gap: 4px; font-size: var(--text-sm); font-weight: 600; color: var(--accent-ink); }
-.nx-signin { display: flex; align-items: center; justify-content: center; gap: 7px; margin: 2px 0 6px; font-weight: 600; }
-.nx-ptop .nx-signin.nx-ptop-btn { margin: 0; width: auto; min-width: 0; padding-inline: var(--space-12); }
-.nx-cloud { flex-direction: row; align-items: center; gap: var(--space-16); background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
-.nx-cloud-ico { flex: none; display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; color: var(--accent-ink, var(--accent)); background: color-mix(in srgb, var(--accent) 16%, var(--surface)); }
-.nx-cloud-text { flex: 1; display: grid; gap: 2px; min-width: 0; }
-@media (max-width: 640px) { .nx-cloud { flex-wrap: wrap; } .nx-cloud .btn { width: 100%; justify-content: center; } }
+/* No-sign-in browser mode (NextApp NoAccount): a box above the account button; on a phone, a chip that opens it. */
+.nx-noacct { display: grid; gap: 6px; padding: 10px 12px; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--bg); }
+.nx-noacct-h { display: flex; align-items: center; gap: 6px; color: var(--text); }
+.nx-noacct-t { color: var(--text-2); font-size: var(--text-sm); line-height: 1.4; }
+.nx-noacct .btn { justify-content: center; }
+.nx-noacct-sheet { padding: 4px 4px 8px; }
+.nx-noacct-sheet .nx-noacct { border: 0; padding: 6px 6px 10px; background: none; }
+.nx-noacct-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: none; color: var(--text-2); font: inherit; font-size: var(--text-sm); cursor: pointer; }
 .nx-step-later { flex: none; padding: 3px 10px; border-radius: var(--radius-pill); font-size: var(--text-xs); font-weight: 600; color: var(--text-3); background: var(--surface-2); border: 1px solid var(--border); }
 .nx-step-num { flex: none; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong); font-weight: 600; font-size: var(--text-sm); color: var(--text-2); }
 .nx-steps li.done .nx-step-num { background: var(--good); border-color: var(--good); color: var(--surface); }
@@ -456,7 +458,11 @@ button.nx-ssum-row:focus-visible { outline: 2px solid var(--accent); outline-off
 .alert-rule.off .alert-rule-name { color: var(--text-3); }
 .alert-rule.off .alert-limits { opacity: 0.45; }
 .alert-limits { display: grid; grid-template-columns: repeat(3, 116px); gap: 8px 14px; }
-@media (max-width: 640px) { .alert-limits { grid-template-columns: repeat(auto-fill, 116px); } }
+/* Phones: a rule's limits sit three across under its name, not one per line. */
+@media (max-width: 640px) {
+  .alert-limits { flex-basis: 100%; grid-template-columns: repeat(3, minmax(0, 1fr)); padding-left: 26px; }
+  .alert-num input { width: 100%; min-width: 0; }
+}
 .alert-earlier { list-style: none; margin: 6px 0 0; padding: 8px 12px; display: flex; flex-direction: column; gap: 4px; border-left: 2px solid var(--border); font-size: var(--text-sm); color: var(--text-2); }
 .alert-limit { display: flex; flex-direction: column; gap: 3px; font-size: var(--text-xs); color: var(--text-3); }
 .alert-num { display: flex; align-items: center; gap: 4px; }
@@ -719,6 +725,19 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
   .nx-drawer-grab { display: block; margin-top: 8px; }
   .nx-drawer-h { padding-top: 6px; }
 }
+/* Phone sheets (sheet.js): they slide up, pull down to close, and hold the page behind still. */
+@media (max-width: 820px) {
+  html.nx-sheet-open, html.nx-sheet-open body { overflow: hidden; }
+  .nx-scrim, .nx-drawer-scrim { touch-action: none; }
+  .nx-drawer, .nx-sheet { overscroll-behavior: contain; }
+  .nx-drawer-body { overscroll-behavior-y: contain; }
+}
+@media (max-width: 820px) and (prefers-reduced-motion: no-preference) {
+  .nx-drawer, .nx-sheet { animation: nx-sheet-in .26s cubic-bezier(.2, .8, .2, 1); }
+  .nx-drawer-scrim, .nx-scrim { animation: nx-fade-in .26s ease-out; }
+}
+@keyframes nx-sheet-in { from { transform: translateY(100%); } }
+@keyframes nx-fade-in { from { opacity: 0; } }
 
 /* Inbox */
 .nx-inbox { display: grid; gap: 22px; }
@@ -1104,6 +1123,11 @@ table.data tr.cmp-part .cmp-name { padding-left: 36px; }
 .tl-jmp b { font-size: var(--text-xs); }
 .tl-jmp small { font-size: var(--text-xs); color: var(--text-2); }
 .tl-pbar { display: block; height: 4px; border-radius: var(--radius-bar); }
+/* All sources / pages / searches: the total, then the one that took off, on one line. */
+.tl-dall { display: grid; gap: 2px; min-width: 0; flex: none; }
+.tl-dall .tl-jmp { display: flex; align-items: baseline; gap: 4px; }
+.tl-dall .tl-jmp b { flex: 0 1 auto; min-width: 0; }
+.tl-dall .tl-jmp small { flex: none; }
 .tl-dots { display: flex; gap: 2px; }
 .tl-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--brand-amber); }
 .tl-dots i.al { background: var(--critical-ink); }
@@ -2149,7 +2173,9 @@ a.qp-chip:hover { text-decoration: none; }
 .tl-sheet-grip { flex: none; display: grid; place-items: center; height: 22px; padding: 0; border: 0; background: none; cursor: grab; touch-action: none; }
 .tl-sheet-grip .nx-grab { margin: 0; }
 .tl-sheet-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior: contain; padding: 0 16px 16px; touch-action: pan-y; }
-.tl-sheet.peek .tl-sheet-body { overflow: hidden; }
+/* Below full the sheet itself moves under a finger, so its content stays put. */
+.tl-sheet:not(.full) .tl-sheet-body { overflow: hidden; }
+.tl-sheet { overscroll-behavior: contain; }
 .tl-sheet .tl-in-h { position: sticky; top: 0; z-index: 1; background: var(--surface); padding-bottom: 6px; }
 
 /* iOS-style pull-down (ui.jsx PullDown): phone page headers draw their segmented
@@ -2373,6 +2399,9 @@ table.data.tl-sched tbody tr.clickable:hover .tl-sched-go { color: var(--text); 
 .an-src-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; align-items: start; }
 .an-pill { margin-top: 4px; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-3); font-size: var(--text-xs); font-weight: 600; }
 .an-pill.on { background: var(--accent-soft); color: var(--accent); }
+.an-remove { margin-top: 4px; padding: 0; border: 0; background: none; color: var(--text-3); font: inherit; font-size: var(--text-sm); text-decoration: underline; cursor: pointer; }
+.an-remove:hover { color: var(--critical-ink); }
+.an-add { max-width: 360px; }
 .an-bq.on { border-color: var(--accent); }
 .an-switch { display: flex; align-items: flex-start; gap: 10px; padding-top: 22px; cursor: pointer; }
 .an-bq .an-switch { padding-top: 0; }
@@ -2594,3 +2623,59 @@ table.data.tl-sched tbody tr.clickable:hover .tl-sched-go { color: var(--text); 
 .fly-days > div > span { align-self: end; background: var(--accent); border-radius: var(--radius-xs) var(--radius-xs) 0 0; opacity: 0.8; }
 .fly-releases { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
 .fly-releases li { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; gap: 10px; align-items: baseline; }
+
+/* Timeline tour (TimelineTour.jsx): a ring around one part, a tip beside it. */
+.tl-tour { position: fixed; inset: 0; z-index: 70; }
+.tl-tour-block { position: absolute; inset: 0; }
+.tl-tour-ring { position: fixed; border-radius: var(--radius-lg); box-shadow: 0 0 0 2px var(--accent), 0 0 0 9999px var(--scrim); pointer-events: none; transition: top .2s, left .2s, width .2s, height .2s; }
+.tl-tour-tip { position: fixed; box-sizing: border-box; display: flex; flex-direction: column; gap: 6px; padding: 14px 16px 12px; border: 1px solid var(--border); border-radius: var(--radius-lg); background: var(--surface); box-shadow: var(--shadow-pop); transition: top .2s, left .2s; }
+.tl-tour-tip h3 { margin: 0; font-size: var(--text-base); }
+.tl-tour-tip p { margin: 0; color: var(--text-2); line-height: 1.5; flex: 1; }
+.tl-tour-n { color: var(--text-3, var(--text-2)); font-size: var(--text-xs); font-variant-numeric: tabular-nums; }
+.tl-tour-acts { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-top: 4px; }
+.tl-tour-acts > span { display: flex; gap: 6px; }
+.tl-tour-btn { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--radius-pill); background: none; color: var(--text-2); font: inherit; font-size: var(--text-sm); cursor: pointer; }
+.tl-tour-btn:hover { background: var(--surface-hover); color: var(--text); }
+
+/* Home (All sites' start page, Sites.jsx): two columns, like an editor's start page. */
+.nx-home { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: var(--space-22) 40px; align-items: start; }
+.nx-home-col { display: grid; gap: var(--space-22); min-width: 0; }
+.nx-home-sec { display: grid; gap: 8px; }
+.nx-home-sec > h2 { display: flex; align-items: baseline; gap: 8px; margin: 0; }
+.nx-home-note { font-weight: 400; letter-spacing: 0; text-transform: none; }
+.nx-home-n { padding: 0 7px; border-radius: var(--radius-pill); background: var(--surface-2); color: var(--text-2); letter-spacing: 0; }
+.nx-home-links { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.nx-home-links a { display: flex; align-items: flex-start; gap: 10px; padding: 6px 8px; margin: 0 -8px; border-radius: var(--radius-md); color: var(--accent-ink); text-decoration: none; }
+.nx-home-links a:hover { background: var(--surface-hover); }
+.nx-home-links a > svg { flex: none; margin-top: 2px; }
+.nx-home-links a > .brand-tile { flex: none; width: 22px; height: 22px; }
+.nx-home-links span { display: grid; gap: 1px; min-width: 0; }
+.nx-home-links small { color: var(--text-2); font-size: var(--text-sm); }
+.nx-home-more { justify-self: start; font-size: var(--text-sm); color: var(--accent-ink); text-decoration: none; }
+.nx-home-more:hover { text-decoration: underline; }
+.nx-home-sites { display: grid; border-top: 1px solid var(--border); }
+.nx-home-site { display: grid; grid-template-columns: minmax(140px, 200px) minmax(0, 1fr) 90px; gap: 16px; align-items: center; padding: 12px 8px; margin: 0 -8px; border-bottom: 1px solid var(--border); color: var(--text); text-decoration: none; }
+.nx-home-site:hover { background: var(--surface-hover); }
+.nx-home-sname { display: grid; gap: 1px; min-width: 0; }
+.nx-home-sname > * { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.nx-home-sline { color: var(--text-2); line-height: 1.45; }
+.nx-home-snum { display: grid; justify-items: end; font-variant-numeric: tabular-nums; }
+.nx-home-wait { list-style: none; margin: 0; padding: 0; display: grid; }
+.nx-home-wait a { display: flex; gap: 10px; align-items: flex-start; padding: 8px; margin: 0 -8px; border-radius: var(--radius-md); color: var(--text); text-decoration: none; }
+.nx-home-wait a:hover { background: var(--surface-hover); }
+.nx-home-wico { flex: none; display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%; background: var(--surface-2); color: var(--text-2); }
+.nx-home-wico.bad { background: color-mix(in srgb, var(--critical) 14%, var(--surface)); color: var(--critical-ink); }
+.nx-home-wtext { display: grid; gap: 1px; min-width: 0; }
+.nx-home-wtext b { font-weight: 500; line-height: 1.4; }
+@media (max-width: 980px) {
+  /* One column: what's waiting, your sites, then ways to start and learn. */
+  .nx-home { grid-template-columns: minmax(0, 1fr); }
+  .nx-home-col { display: contents; }
+  .nx-home .k-wait { order: 1; } .nx-home .k-sites { order: 2; } .nx-home .k-start { order: 3; } .nx-home .k-learn { order: 4; } .nx-home .k-more { order: 5; }
+}
+@media (max-width: 640px) {
+  .nx-home-site { grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; }
+  .nx-home-sline { grid-column: 1 / -1; grid-row: 2; font-size: var(--text-sm); }
+}
+.nx-pop-user .nx-noacct-sheet { display: none; }
+.nx-ptop .nx-noacct-chip.nx-ptop-btn { width: auto; height: 32px; border-radius: var(--radius-pill); white-space: nowrap; }

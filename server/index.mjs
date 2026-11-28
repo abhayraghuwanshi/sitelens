@@ -722,7 +722,8 @@ export function createApp({ store = createStore(), port = 4318, env = process.en
 
     if (url.pathname === '/auth/google') {
       try {
-        res.writeHead(302, { Location: auth.startUrl() }).end();
+        // ?add=bigquery,logging asks for those permissions too.
+        res.writeHead(302, { Location: auth.startUrl(String(url.searchParams.get('add') || '').split(',')) }).end();
       } catch (err) {
         redirectWithError(res, appUrl, err.message);
       }

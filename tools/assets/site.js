@@ -169,3 +169,21 @@ if (pageKind === 'guide') {
     }).observe(mark);
   }
 }
+
+// Lessons: highlight the section you're reading in "On this page".
+{
+  const links = [...document.querySelectorAll('.toc a')];
+  if (links.length && 'IntersectionObserver' in window) {
+    const byId = new Map(links.map((a) => [a.getAttribute('href').slice(1), a]));
+    const seen = new Set();
+    const mark = () => {
+      const first = links.find((a) => seen.has(a.getAttribute('href').slice(1)));
+      if (first) links.forEach((a) => a.classList.toggle('on', a === first));
+    };
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) e.isIntersecting ? seen.add(e.target.id) : seen.delete(e.target.id);
+      mark();
+    }, { rootMargin: '0px 0px -60% 0px' });
+    byId.forEach((_, id) => { const el = document.getElementById(id); if (el) io.observe(el); });
+  }
+}

@@ -15,7 +15,7 @@ export function Jump({ sites, scope, onClose, viewer }) {
   const list = [
     ...sites.map((s) => ({ t: s.label, m: s.demo ? 'Site · sample data' : 'Site', href: hrefFor(s.id, 'story'), i: 'grid' })),
     { t: 'All sites', m: 'Scope', href: '#/', i: 'grid' },
-    ...viewsFor(cur).map((v) => ({ t: v.key === 'story' && !cur ? 'Sites' : v.label, m: here, href: hrefFor(scope, v.key), i: v.icon })),
+    ...viewsFor(cur).map((v) => ({ t: v.label, m: here, href: hrefFor(scope, v.key), i: v.icon })),
     { t: 'Live', m: here, href: hrefFor(scope, 'live'), i: 'pulse' },
     ...(cur ? Object.entries(SECTIONS)
       .filter(([k]) => (k !== 'journeys' && k !== 'raw') || hasWarehouse(cur))

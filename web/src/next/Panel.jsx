@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'preact/hooks';
 import { api, qs } from '../api.js';
 import { useAsync } from '../hooks.js';
+import { useBottomSheet } from './sheet.js';
 import { Loading, ErrorState } from '../components/ui.jsx';
 import { Icon } from '../components/icons.jsx';
 import { useTodos } from '../components/Todos.jsx';
@@ -60,6 +61,7 @@ export function SidePanel({ site, sites, params }) {
   const box = useRef(null);
   const top = items.at(-1);
   const close = () => { location.hash = panelHref([]); };
+  useBottomSheet(box, close, { open: Boolean(top) });
   useEffect(() => {
     if (!top) return undefined;
     const onKey = (e) => e.key === 'Escape' && close();

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
+import { useBottomSheet } from './sheet.js';
 import { usePersistent, useAsync } from '../hooks.js';
 import { api } from '../api.js';
 import { Icon } from '../components/icons.jsx';
@@ -107,7 +108,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
     : <Page title="Live now" sub="Every site, right now"><LiveAll sites={sites} live={live} /></Page>;
   else if (view === 'jobs') body = <TimelineJobs site={site} sites={sites} />;
   else if (view === 'timeline') body = <Timeline key={site?.id || 'all'} site={site} sites={sites} params={route.params} />;
-  else if (view === 'story') body = <Sites sites={sites} auth={auth} viewer={state.viewer} browser={state.browser} />;
+  else if (view === 'story') body = <Sites sites={sites} auth={auth} viewer={state.viewer} browser={state.browser} goals={goals} />;
   else if (view === 'setup' && site?.shared) body = <ErrorState error={{ message: `Settings are for ${site.shared.by}, who shared ${site.label} with you to view.` }} />;
   else if (setupMoved) body = null;
   else if (view === 'setup' && site) body = <Page title="Config file" sub={`${site.label} is sample data, so this is read-only`}><Setup site={site} /></Page>;
@@ -182,6 +183,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
 
   const userRows = (
     <div class="nx-pop-list" role="menu">
+      {state.browser && <div class="nx-noacct-sheet"><NoAccount /></div>}
       {!state.viewer && <a role="menuitem" class="nx-pop-row" href="#/account"><Icon name="plug" />Sites and sign-ins</a>}
       {!state.viewer && !state.browser && <a role="menuitem" class="nx-pop-row" href="#/account?tab=mcp"><Icon name="terminal" />Connect Claude (MCP)</a>}
       <button type="button" role="menuitem" class="nx-pop-row" onClick={() => { onTheme(); setPop(null); }}><Icon name={themeIcon} />{themeIcon === 'sun' ? 'Light theme' : 'Dark theme'}</button>
@@ -237,9 +239,6 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           <span>{liveN == null ? 'Live' : <><b>{liveN}</b> on now</>}</span>
           <span class="nx-livelink-go">See who →</span>
         </a>
-        {state.browser && (
-          <a class="btn nx-signin" href="/login" title="Sign in to Kauzl to save your setup to the cloud"><Icon name="cloud" size={15} />Sign in to save</a>
-        )}
         <nav class="nx-nav" aria-label="Views">
           {/* Reports open from the Timeline; page checks open from each page's Checks. */}
           {views.filter((v) => !v.report).map((v) => (
@@ -250,6 +249,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
           ))}
         </nav>
         <div class="nx-foot nx-anchor">
+          {state.browser && <NoAccount />}
           {pop === 'user' && <div class="nx-pop nx-pop-user">{userRows}</div>}
           <button type="button" class={`nx-me${view === 'account' ? ' on' : ''}`} onClick={() => toggle('user')} aria-expanded={pop === 'user'} aria-haspopup="true">
             <span class="nx-avatar" aria-hidden="true">{initial(auth, state)}</span>
@@ -261,7 +261,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
       {/* Phone */}
       <header class="nx-ptop">
         {scopeBtn(true)}
-        {state.browser && <a class="btn nx-signin nx-ptop-btn" href="/login"><Icon name="cloud" size={15} />Sign in</a>}
+        {state.browser && <button type="button" class="nx-ptop-btn nx-noacct-chip" onClick={() => toggle('user')} aria-label="Saved on this browser: sign in to use Kauzl on any device"><Icon name="cloud" size={14} />Sign in</button>}
         <button type="button" class="nx-icon-btn nx-ptop-btn" onClick={() => toggle('jump')} aria-label="Jump to"><Icon name="search" size={16} /></button>
         <button type="button" class="nx-avatar nx-ptop-btn" onClick={() => toggle('user')} aria-label="Account and theme" aria-expanded={pop === 'user'}>{initial(auth, state)}</button>
       </header>
@@ -276,7 +276,7 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
             <a key={k} href={linkFor(k)} class={view === k ? 'on' : undefined} aria-current={view === k ? 'page' : undefined}>
               <Icon name={v.icon} size={21} />
               {k === 'inbox' && inboxN ? <span class="nx-badge">{inboxN}</span> : null}
-              <span>{k === 'story' && !site ? 'Sites' : v.label}</span>
+              <span>{v.label}</span>
             </a>
           );
         })}
@@ -287,13 +287,9 @@ export function NextApp({ state, route, onTheme, themeIcon, onReload }) {
       </nav>
 
       {(pop === 'scopes' || pop === 'more' || pop === 'user') && (
-        <div class="nx-sheet-wrap">
-          <div class="nx-scrim" onClick={() => setPop(null)} />
-          <div class="nx-sheet" role="dialog" aria-modal="true" aria-label={pop === 'scopes' ? 'Sites' : pop === 'more' ? 'More' : 'Account'}>
-            <span class="nx-grab" aria-hidden="true" />
-            {pop === 'scopes' ? scopeRows : pop === 'more' ? morePanel : userRows}
-          </div>
-        </div>
+        <PhoneSheet label={pop === 'scopes' ? 'Sites' : pop === 'more' ? 'More' : 'Account'} onClose={() => setPop(null)}>
+          {pop === 'scopes' ? scopeRows : pop === 'more' ? morePanel : userRows}
+        </PhoneSheet>
       )}
       {pop === 'jump' && <Jump sites={sites} scope={scopeId} viewer={state.viewer} onClose={() => setPop(null)} />}
     </div>
@@ -318,10 +314,37 @@ function DemoBanner({ site }) {
   );
 }
 
+// No-sign-in browser mode: say plainly where the setup lives, beside the account.
+// Signing in opens an account; this browser's setup doesn't move into it yet.
+function NoAccount() {
+  return (
+    <div class="nx-noacct" role="note">
+      <span class="nx-noacct-h"><Icon name="cloud" size={14} /><b>Saved on this browser</b></span>
+      <span class="nx-noacct-t">Sign in to use Kauzl on any device. What you set up here stays in this browser.</span>
+      <a class="btn primary small" href="/login">Sign in</a>
+    </div>
+  );
+}
+
 function NavItem({ href, icon, active, children }) {
   return (
     <a class={`nx-item${active ? ' active' : ''}`} href={href} aria-current={active ? 'page' : undefined}>
       <Icon name={icon} size={16} /> <span class="nx-item-text">{children}</span>
     </a>
+  );
+}
+
+// The phone's sites, More and account sheets: pull down, tap outside or press Back to close.
+function PhoneSheet({ label, onClose, children }) {
+  const box = useRef(null);
+  useBottomSheet(box, onClose, { back: true });
+  return (
+    <div class="nx-sheet-wrap">
+      <div class="nx-scrim" onClick={onClose} />
+      <div class="nx-sheet" ref={box} role="dialog" aria-modal="true" aria-label={label}>
+        <span class="nx-grab" aria-hidden="true" />
+        {children}
+      </div>
+    </div>
   );
 }

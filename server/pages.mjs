@@ -1,6 +1,6 @@
 // The hosted server's own small pages: sign-in, the early-access waitlist and
 // the admin page. Plain HTML forms, no script (the public CSP allows none inline).
-// Same look as the home page in dark: charcoal, the owl, amber only for actions.
+// Same look as the home page in dark: charcoal, the owl, and the app's green for actions.
 import { owl, FAVICON, FONTS } from './home.mjs';
 
 export const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -9,12 +9,12 @@ const G = '<svg viewBox="0 0 48 48" width="20" height="20" aria-hidden="true"><p
 const ARROW = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 
 const CSS = `
-  :root { color-scheme: dark; --ink: #0E0F12; --ink-2: #17181D; --ink-3: #1F2026; --line: #2A2C33; --text: #F4F4F5; --muted: #A1A1AA; --soft: #D4D4D8; --amber: #F5A524; --err: #FF8A80; --good: #5FD08A; }
+  :root { color-scheme: dark; --ink: #0E0F12; --ink-2: #17181D; --ink-3: #1F2026; --line: #2A2C33; --text: #F4F4F5; --muted: #A1A1AA; --soft: #D4D4D8; --amber: #F5A524; --accent: #2FA596; --accent-hi: #7FD1C4; --err: #FF8A80; --good: #5FD08A; }
   * { box-sizing: border-box; }
   body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
   body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
   a { color: var(--text); }
-  a:focus-visible, button:focus-visible, input:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+  a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; width: 100%; margin: 0 auto; padding: 0 24px; height: 64px; }
   .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 24px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; }
   header nav { display: flex; gap: 22px; }
@@ -38,19 +38,19 @@ const CSS = `
   .join { display: flex; gap: 8px; }
   .join input[type=email] { flex: 1; min-width: 0; min-height: 44px; padding: 10px 12px; border-radius: 11px; border: 1px solid var(--line); background: var(--ink); color: var(--text); font: inherit; }
   .join input[type=email]::placeholder { color: var(--muted); }
-  .join input[type=email]:focus { outline: none; border-color: var(--amber); }
+  .join input[type=email]:focus { outline: none; border-color: var(--accent); }
   .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 11px; border: 0; background: var(--amber); color: #121522; font: 600 14px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 11px; border: 0; background: var(--accent); color: #06201c; font: 600 14px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; text-decoration: none; }
   .btn:hover { filter: brightness(1.06); }
   .btn.quiet { background: transparent; border: 1px solid var(--line); color: var(--soft); min-height: 32px; padding: 5px 11px; font-size: 13px; }
   .btn.quiet:hover { border-color: var(--soft); color: #fff; filter: none; }
   .note { margin: 8px 0 0; font-size: 13px; color: var(--muted); }
   .links { display: flex; flex-direction: column; gap: 10px; margin-top: 20px; }
   .opt { display: flex; align-items: center; gap: 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; color: inherit; text-decoration: none; transition: border-color .15s, background .15s; }
-  .opt:hover { border-color: var(--amber); background: var(--ink-3); }
+  .opt:hover { border-color: var(--accent); background: var(--ink-3); }
   .opt span { flex: 1; display: flex; flex-direction: column; }
   .opt b { font-weight: 600; font-size: 14px; } .opt small { color: var(--muted); font-size: 13px; }
-  .opt svg { color: var(--muted); flex: none; } .opt:hover svg { color: var(--amber); }
+  .opt svg { color: var(--muted); flex: none; } .opt:hover svg { color: var(--accent); }
 `;
 
 // ga: the Google tag ID, when kauzl.com's analytics are on (scripts come from /tools/assets).
@@ -87,27 +87,57 @@ export function joinForm(from, { email = '' } = {}) {
   </form>`;
 }
 
+// The sign-in page. One clear way in (start in this browser, no account), then
+// the invited Google sign-in, then the smaller cases: a shared site, a look
+// inside first, or asking for an account.
+const LOGIN_CSS = `
+  main.card.login { max-width: 420px; padding-top: 56px; }
+  .login .lead { margin-bottom: 22px; }
+  .start { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 52px; border-radius: 12px; background: var(--accent); color: #06201c; font-weight: 700; font-size: 16px; text-decoration: none; box-shadow: inset 0 1px 0 rgb(255 255 255 / .25), 0 8px 24px rgb(47 165 150 / .25); transition: filter .15s; }
+  .start:hover { filter: brightness(1.07); }
+  .start svg { color: inherit; }
+  .perks { list-style: none; display: grid; gap: 7px; margin: 16px 0 0; padding: 0; color: var(--soft); font-size: 14px; }
+  .perks li { display: flex; gap: 9px; align-items: flex-start; }
+  .perks svg { flex: none; margin-top: 3px; color: var(--accent-hi); }
+  .google.second { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  .google.second:hover { filter: none; border-color: var(--soft); background: var(--ink-3); }
+  .login .note { text-align: center; }
+  .more { display: grid; gap: 4px; margin-top: 22px; padding-top: 16px; border-top: 1px solid var(--line); font-size: 14px; }
+  .more a, .more summary { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 7px 2px; color: var(--soft); text-decoration: none; cursor: pointer; list-style: none; }
+  .more summary::-webkit-details-marker { display: none; }
+  .more a:hover, .more summary:hover { color: #fff; }
+  .more svg { flex: none; color: var(--muted); }
+  .more details[open] summary svg { transform: rotate(90deg); }
+  .more details .join { margin: 6px 0 8px; }
+`;
+const CHECK = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>';
+
 export function loginPage(error, { tools = false, ga = '', joined = false, v = '' } = {}) {
   return shell({
     title: 'Sign in · Kauzl',
     ga,
     v,
+    extraCss: LOGIN_CSS,
     event: joined ? { name: 'waitlist_join', detail: 'sign-in' } : null,
     nav: `${tools ? '<a href="/tools/">Free tools</a>' : ''}<a href="/home">← Back to home</a>`,
-    body: `<div class="stage"><main class="card">
+    body: `<div class="stage"><main class="card login">
   ${owl(80, { variant: 'paper' })}
   <h1>Open Kauzl</h1>
-  <p class="lead">No sign-in needed. Your sites and keys stay with this browser; connect Google, GitHub and the rest with a key.</p>
-  ${error ? `<p class="err">${escapeHtml(error)}</p>` : ''}
-  <a class="google" href="/start">Start in this browser</a>
-  <p class="or">Have an invited account?</p>
-  <a class="google" href="/login/google">${G}Sign in with Google</a>
-  <p class="note">Signing in keeps syncs running while you’re away, and lets you share sites and connect Claude.</p>
-  <p class="or">Want an invited account?</p>
-  ${joinForm('login')}
-  <div class="links">
-    <a class="opt" href="/login/google?viewer=1"><span><b>Someone shared a site with you</b><small>Sign in to view it, read-only</small></span>${ARROW}</a>
-    <a class="opt" href="/demo"><span><b>Look around the demo</b><small>No sign-in needed</small></span>${ARROW}</a>
+  <p class="lead">See every day of your site on one calendar: visits, searches and what you shipped.</p>
+  ${error ? `<p class="err" role="alert">${escapeHtml(error)}</p>` : ''}
+  <a class="start" href="/start">Start now, no account ${ARROW}</a>
+  <ul class="perks">
+    <li>${CHECK}<span>No sign-up and no card. You’re in straight away.</span></li>
+    <li>${CHECK}<span>Connect Google Analytics, Search Console, Plausible or GitHub with a key.</span></li>
+    <li>${CHECK}<span>Your sites and keys are kept in this browser.</span></li>
+  </ul>
+  <p class="or">Have an account?</p>
+  <a class="google second" href="/login/google">${G}Sign in with Google</a>
+  <p class="note">With an account, syncs keep running while you’re away, and you can share sites and connect Claude.</p>
+  <div class="more">
+    <a href="/login/google?viewer=1">Shared a site with you? View it ${ARROW}</a>
+    <a href="/tour/">Look inside first, with sample data ${ARROW}</a>
+    <details${joined ? ' open' : ''}><summary>Want an account? Ask for early access ${ARROW}</summary>${joinForm('login')}</details>
   </div>
 </main></div>`,
   });

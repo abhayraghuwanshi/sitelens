@@ -75,3 +75,16 @@ test('a bad service account key is refused before anything is saved', async () =
   await assert.rejects(auth.useServiceAccount(keyFile), /Invalid JWT Signature/);
   assert.equal(state.auth, null);
 });
+
+test('Google sign-in asks for Analytics and Search Console; BigQuery and logs only when added', () => {
+  const auth = createAuth({ store: memoryStore({ auth: null }), port: 1, env, fetchImpl: async () => new Response('{}') });
+  const scope = (extras) => new URL(auth.startUrl(extras)).searchParams.get('scope');
+  assert.match(scope(), /analytics\.readonly/);
+  assert.match(scope(), /webmasters\.readonly/);
+  assert.doesNotMatch(scope(), /bigquery|logging/);
+  assert.match(scope(['bigquery']), /auth\/bigquery/);
+  assert.doesNotMatch(scope(['bigquery', 'nope']), /logging|nope/);
+  assert.match(scope(['logging']), /logging\.read/);
+  // A service account still gets every data scope: there's no consent screen to verify.
+  assert.ok(SERVICE_SCOPES.some((s) => s.endsWith('/bigquery')) && SERVICE_SCOPES.some((s) => s.endsWith('logging.read')));
+});
