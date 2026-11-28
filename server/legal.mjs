@@ -11,7 +11,7 @@ export const UPDATED = '22 November 2026';
 
 const CSS = `
 :root { color-scheme: light; --ink: #121522; --amber: #F5A524; --bg: #F6F7F9; --surface: #FFFFFF; --text: #121522; --text-2: #3A3F50; --muted: #5B6172; --line: #E3E6EC; --link: #121522;
-  --head: "Bricolage Grotesque", "Inter", system-ui, sans-serif; --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  --head: "Bricolage Grotesque", "Host Grotesk", system-ui, sans-serif; --font: "Host Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif; }
 @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #141519; --bg: #0E0F12; --surface: #18191E; --text: #F4F4F5; --text-2: #D4D4D8; --muted: #A1A1AA; --line: #2C2E36; --link: #F4F4F5; } }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 16px/1.65 var(--font); -webkit-font-smoothing: antialiased; }

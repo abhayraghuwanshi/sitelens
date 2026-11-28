@@ -54,7 +54,7 @@ const html = `<!doctype html>
 <meta name="description" content="Click through Kauzl with sample data: the Story, Timeline, Search, Traffic, Journeys and Goals.">
 <link rel="icon" type="image/svg+xml" href="/favicon.svg">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Host+Grotesk:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap">
 <style>${css}
 /* --- tour (scripts/build-tour.mjs) --- */
 .tour-bar { display: flex; align-items: center; gap: 12px 16px; flex-wrap: wrap; max-width: 1320px; margin: 0 auto; padding: 14px 16px; }

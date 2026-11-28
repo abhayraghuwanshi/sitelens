@@ -64,10 +64,10 @@
   --radius: 10px;
   --radius-lg: 14px;
   --radius-pill: 999px;
-  /* Inter Variable is bundled (@fontsource-variable/inter), so no network is needed. */
-  --font: "Inter Variable", Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-  /* Headings and big numbers only (page titles, event titles, headline figures); everything you read stays Inter. */
-  --display: "Bricolage Grotesque Variable", "Bricolage Grotesque", "Inter Variable", Inter, ui-sans-serif, sans-serif;
+  /* Host Grotesk Variable is bundled (@fontsource-variable/host-grotesk), so no network is needed. */
+  --font: "Host Grotesk Variable", "Host Grotesk", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  /* Headings and big numbers only (page titles, event titles, headline figures); everything you read stays Host Grotesk. */
+  --display: "Bricolage Grotesque Variable", "Bricolage Grotesque", "Host Grotesk Variable", "Host Grotesk", ui-sans-serif, sans-serif;
   /* Type scale: every font-size in the app is one of these. */
   --text-xs: 11px;
   --text-sm: 12px;
@@ -174,7 +174,6 @@ body {
   background: var(--bg);
   color: var(--text);
   font: var(--text-base)/1.5 var(--font);
-  font-feature-settings: "cv05", "cv08"; /* Inter: tailed l and serifed I, so l/I/1 never blur in data */
   -webkit-font-smoothing: antialiased;
 }
 a { color: var(--accent-ink); text-decoration: none; }
@@ -563,8 +562,7 @@ details.advanced[open] > summary { margin-bottom: 10px; }
   .integration.wide > .btn { margin-left: 48px; }
 }
 
-/* Tabular figures only where numbers line up in columns. Inter also widens
-   hyphens under tnum, so it can't be set page-wide. */
+/* Tabular figures only where numbers line up in columns, so prose keeps its natural spacing. */
 .kpi .value, .delta, table.data td.num, table.data th.num, .barlist-row .val, .chart .axis text, .segmented, .uptime-axis { font-variant-numeric: tabular-nums; }
 
 /* product journey: summary line, stage strip, day drawer */

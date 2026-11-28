@@ -11,12 +11,12 @@ const ARROW = '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" strok
 const CSS = `
   :root { color-scheme: dark; --ink: #0E0F12; --ink-2: #17181D; --ink-3: #1F2026; --line: #2A2C33; --text: #F4F4F5; --muted: #A1A1AA; --soft: #D4D4D8; --amber: #F5A524; --accent: #2FA596; --accent-hi: #7FD1C4; --err: #FF8A80; --good: #5FD08A; }
   * { box-sizing: border-box; }
-  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); color: var(--text); font: 15px/1.55 Inter, system-ui, sans-serif; }
+  body { margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--ink); color: var(--text); font: 15px/1.55 "Host Grotesk", system-ui, sans-serif; }
   body::before { content: ""; position: fixed; inset: 0; background-image: radial-gradient(rgb(255 255 255 / .07) 1px, transparent 1.2px); background-size: 22px 22px; pointer-events: none; }
   a { color: var(--text); }
   a:focus-visible, button:focus-visible, input:focus-visible, summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
   header { position: relative; display: flex; align-items: center; justify-content: space-between; gap: 16px; max-width: 1120px; width: 100%; margin: 0 auto; padding: 0 24px; height: 64px; }
-  .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 24px/1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.045em; }
+  .brand { display: flex; align-items: center; gap: 10px; color: inherit; text-decoration: none; font: 800 24px/1 "Bricolage Grotesque", "Host Grotesk", sans-serif; letter-spacing: -0.045em; }
   header nav { display: flex; gap: 22px; }
   header nav a { color: var(--soft); text-decoration: none; font-size: 14px; } header nav a:hover { color: #fff; }
   .stage { position: relative; flex: 1; display: grid; place-items: center; padding: 72px 16px 48px; }
@@ -25,7 +25,7 @@ const CSS = `
   svg.owl .eyes { transform-box: fill-box; transform-origin: center; animation: blink 7s infinite; }
   @keyframes blink { 0%, 94%, 100% { transform: scaleY(1); } 95.5% { transform: scaleY(.08); } 97% { transform: scaleY(1); } }
   @media (prefers-reduced-motion: reduce) { svg.owl .eyes { animation: none; } }
-  h1 { font: 800 28px/1.1 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.035em; margin: 0 0 8px; }
+  h1 { font: 800 28px/1.1 "Bricolage Grotesque", "Host Grotesk", sans-serif; letter-spacing: -0.035em; margin: 0 0 8px; }
   main.card h1, main.card .lead { text-align: center; }
   .lead { color: var(--soft); margin: 0 0 24px; }
   .google { display: flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; background: #fff; color: #1F1F1F; text-decoration: none; padding: 10px 16px; border-radius: 12px; font-weight: 600; transition: filter .15s; }
@@ -40,7 +40,7 @@ const CSS = `
   .join input[type=email]::placeholder { color: var(--muted); }
   .join input[type=email]:focus { outline: none; border-color: var(--accent); }
   .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
-  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 11px; border: 0; background: var(--accent); color: #06201c; font: 600 14px Inter, system-ui, sans-serif; cursor: pointer; white-space: nowrap; text-decoration: none; }
+  .btn { display: inline-flex; align-items: center; justify-content: center; min-height: 44px; padding: 10px 16px; border-radius: 11px; border: 0; background: var(--accent); color: #06201c; font: 600 14px "Host Grotesk", system-ui, sans-serif; cursor: pointer; white-space: nowrap; text-decoration: none; }
   .btn:hover { filter: brightness(1.06); }
   .btn.quiet { background: transparent; border: 1px solid var(--line); color: var(--soft); min-height: 32px; padding: 5px 11px; font-size: 13px; }
   .btn.quiet:hover { border-color: var(--soft); color: #fff; filter: none; }
@@ -185,11 +185,11 @@ export function signedInPage({ event, ga, v = '' }) {
 const ADMIN_CSS = `
   .admin { position: relative; max-width: 1120px; width: 100%; margin: 0 auto; padding: 24px 24px 64px; }
   .admin h1 { font-size: 32px; margin: 8px 0 4px; }
-  .admin h2 { font: 800 20px/1.2 "Bricolage Grotesque", Inter, sans-serif; letter-spacing: -0.02em; margin: 0; }
+  .admin h2 { font: 800 20px/1.2 "Bricolage Grotesque", "Host Grotesk", sans-serif; letter-spacing: -0.02em; margin: 0; }
   .admin .sub { color: var(--muted); margin: 0 0 24px; }
   .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 28px; }
   .stat { background: var(--ink-2); border: 1px solid var(--line); border-radius: 16px; padding: 16px 18px; }
-  .stat b { display: block; font: 800 30px/1.1 "Bricolage Grotesque", Inter, sans-serif; }
+  .stat b { display: block; font: 800 30px/1.1 "Bricolage Grotesque", "Host Grotesk", sans-serif; }
   .stat span { color: var(--muted); font-size: 13px; }
   .stat.live b { color: var(--good); }
   .panel { background: var(--ink-2); border: 1px solid var(--line); border-radius: 18px; padding: 20px; margin-bottom: 20px; }
@@ -211,7 +211,7 @@ const ADMIN_CSS = `
   .invite-form .btn { min-height: 40px; }
   .funnel { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; margin: 4px 0 20px; }
   .funnel .step { background: var(--ink); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
-  .funnel b { display: block; font: 800 24px/1.1 "Bricolage Grotesque", Inter, sans-serif; }
+  .funnel b { display: block; font: 800 24px/1.1 "Bricolage Grotesque", "Host Grotesk", sans-serif; }
   .funnel span { display: block; font-size: 13px; color: var(--soft); } .funnel small { color: var(--muted); font-size: 12px; }
   h3.mini { font-size: 13px; font-weight: 600; color: var(--muted); margin: 18px 0 10px; }
   .dau { display: grid; grid-template-columns: repeat(14, 1fr); gap: 6px; height: 110px; align-items: end; }

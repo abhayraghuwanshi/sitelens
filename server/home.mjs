@@ -16,7 +16,7 @@ export function owl(size = 64, { variant = 'ink', className = '' } = {}) {
 
 export const FAVICON = `data:image/svg+xml,${encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64"><rect x="2" y="2" width="60" height="60" rx="15" fill="#121522"/><path d="M14 30 L15 9 L27 18 L37 18 L49 9 L50 30 L50 41 Q50 56 32 56 Q14 56 14 41 Z" fill="#F6F7F9"/><circle cx="25" cy="35" r="7" fill="#F5A524"/><circle cx="39" cy="35" r="7" fill="#F5A524"/></svg>')}`;
 
-export const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap';
+export const FONTS = 'https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,700;12..96,800&family=Host+Grotesk:wght@400;500;600;700&display=swap';
 
 import { COURSE, MODULES, COURSE_ORDER } from '../tools/course.mjs';
 import { BRAND_MARKS, BRAND_NAMES } from '../shared/brand-marks.js';
@@ -116,7 +116,7 @@ const CSS = `
 :root { color-scheme: light; --ink: #121522; --ink-2: #1C2135; --ink-line: #2A3048; --ink-text: #C9CDD8; --accent: #2FA596; --accent-hi: #7FD1C4; --before: #9AA1B2;
   --bg: #F6F7F9; --surface: #FFFFFF; --sunk: #EEF0F4; --text: #121522; --text-2: #3A3F50; --muted: #5B6172; --line: #E3E6EC; --link: #121522; --accent-text: #0F766E;
   --good: #1F7A3D; --good-soft: #E4F4E9; --accent-soft: #DCEFEB; --label: #5B6172; --label-ink: #9AA1B2;
-  --head: "Bricolage Grotesque", "Inter", system-ui, sans-serif; --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif; }
+  --head: "Bricolage Grotesque", "Host Grotesk", system-ui, sans-serif; --font: "Host Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif; }
 /* Dark: neutral charcoal, not navy; green only for actions and "after"; amber only in the owl's eyes. */
 @media (prefers-color-scheme: dark) { :root { color-scheme: dark; --ink: #141519; --ink-2: #1B1C21; --ink-line: #2A2C33; --ink-text: #C4C4CC; --before: #8B8B94; --bg: #0E0F12; --surface: #18191E; --sunk: #111215; --text: #F4F4F5; --text-2: #D4D4D8; --muted: #A1A1AA; --line: #2C2E36; --link: #F4F4F5; --accent-text: #4FC0B0; --accent-soft: #13302C; --label: #A1A1AA; --label-ink: #A1A1AA; --good: #5FD08A; --good-soft: #13291C; } }
 * { box-sizing: border-box; }

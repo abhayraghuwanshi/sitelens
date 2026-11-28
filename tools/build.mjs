@@ -119,7 +119,7 @@ function layout({ slug, page = 'page:', canonical = url(slug), ogType = 'website
 <meta name="theme-color" content="#121522">
 <link rel="icon" type="image/svg+xml" href="${FAVICON}">
 <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Inter:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Host+Grotesk:wght@400;500;600;700&display=swap">
 <link rel="stylesheet" href="${BASE}/assets/site.css?v=${ASSET_V}">
 ${ld.map(jsonLd).join('\n')}
 </head><body data-page="${page}">

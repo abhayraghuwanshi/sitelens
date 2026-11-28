@@ -9,8 +9,8 @@
   --bg: #F6F7F9; --surface: #FFFFFF; --sunk: #EEF0F4; --text: #121522; --text-2: #3A3F50; --muted: #5B6172;
   --line: #E3E6EC; --link: #0F766E; --amber-soft: #DCEFEB; --label: #0F766E; --label-ink: #7FD1C4;
   --good: #1F7A3D; --good-soft: #E4F4E9; --bad: #B42318; --bad-soft: #FDE9E7;
-  --head: "Bricolage Grotesque", "Inter", system-ui, sans-serif;
-  --font: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --head: "Bricolage Grotesque", "Host Grotesk", system-ui, sans-serif;
+  --font: "Host Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
   --r: 16px;
   --read: 680px;
