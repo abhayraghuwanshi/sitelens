@@ -19,6 +19,8 @@ export const MODULES = [
       { slug: 'google-analytics-4-setup', name: 'Set up Google Analytics 4' },
       { slug: 'what-is-a-utm-code', name: 'What is a UTM code?' },
       { slug: 'search-console-vs-google-analytics', name: 'Search Console vs Google Analytics' },
+      { slug: 'bounce-rate-ga4', name: 'Bounce rate vs engagement rate' },
+      { slug: 'bing-webmaster-tools', name: 'Set up Bing Webmaster Tools' },
     ],
   },
   {
@@ -28,11 +30,16 @@ export const MODULES = [
     teaches: 'Compare the kinds of analytics tool, and pick the two or three you need.',
     lessons: [
       { slug: 'google-analytics-alternatives', name: 'Google Analytics alternatives' },
+      { slug: 'plausible-alternatives', name: 'Plausible alternatives' },
       { slug: 'open-source-web-analytics', name: 'Open-source web analytics compared' },
       { slug: 'product-analytics-tools', name: 'Product analytics for your app' },
       { slug: 'session-replay-heatmaps', name: 'Session replay and heatmaps' },
+      { slug: 'hotjar-alternatives', name: 'Hotjar alternatives' },
       { slug: 'seo-tools-compared', name: 'SEO tools compared' },
+      { slug: 'semrush-alternatives', name: 'Semrush alternatives' },
       { slug: 'kauzl-vs-plausible', name: 'Kauzl vs Plausible' },
+      { slug: 'website-traffic-checker', name: 'Check any website’s traffic' },
+      { slug: 'similarweb-alternatives', name: 'Similarweb alternatives' },
     ],
   },
   {
@@ -44,6 +51,7 @@ export const MODULES = [
       { slug: 'simple-google-analytics-dashboard', name: 'A simpler GA4 dashboard' },
       { slug: 'ga4-bigquery-export', name: 'Connect GA4 to BigQuery' },
       { slug: 'did-a-website-change-work', name: 'Did a website change work?' },
+      { slug: 'google-update-traffic-drop', name: 'Was it a Google update?' },
       { slug: 'statistical-significance-ab-testing', name: 'Statistical significance, explained' },
     ],
   },
@@ -55,10 +63,13 @@ export const MODULES = [
     lessons: [
       { slug: 'track-chatgpt-traffic-google-analytics', name: 'Track ChatGPT traffic in GA4' },
       { slug: 'what-is-aeo', name: 'What is AEO?' },
+      { slug: 'google-ai-overviews', name: 'Get cited in AI Overviews' },
+      { slug: 'google-ai-mode', name: 'Google AI Mode and your traffic' },
       { slug: 'generative-engine-optimization', name: 'Get recommended by AI' },
       { slug: 'ai-crawlers-robots-txt', name: 'Which AI crawlers to block' },
       { slug: 'openai-crawlers', name: 'OpenAI’s crawlers explained' },
       { slug: 'claude-crawlers', name: 'ClaudeBot and Claude’s crawlers' },
+      { slug: 'llms-txt', name: 'What is llms.txt?' },
     ],
   },
   {
@@ -80,7 +91,7 @@ const lesson = (slug) => MODULES.flatMap((m) => m.lessons).find((l) => l.slug ==
 // '*' as a wildcard; the first matching rule wins, ending in a default.
 export const PATHS = {
   'app|*|changes': ['web-analytics-tools', 'google-analytics-4-setup', 'product-analytics-tools', 'did-a-website-change-work', 'statistical-significance-ab-testing', 'session-replay-heatmaps'],
-  '*|*|ai': ['web-analytics-tools', 'track-chatgpt-traffic-google-analytics', 'what-is-aeo', 'generative-engine-optimization', 'ai-crawlers-robots-txt', 'openai-crawlers', 'claude-crawlers'],
+  '*|*|ai': ['web-analytics-tools', 'track-chatgpt-traffic-google-analytics', 'what-is-aeo', 'google-ai-overviews', 'google-ai-mode', 'generative-engine-optimization', 'bing-webmaster-tools', 'ai-crawlers-robots-txt', 'llms-txt'],
   '*|*|*': ['web-analytics-tools', 'google-analytics-4-setup', 'google-analytics-alternatives', 'simple-google-analytics-dashboard', 'track-chatgpt-traffic-google-analytics', 'google-analytics-mcp-server'],
 };
 
